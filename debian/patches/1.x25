@@ -1,0 +1,636 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x25) focal; urgency=medium
+ .
+   * text wrapping
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-04-23
+
+--- edor-1.orig/.github/workflows/deb.yml
++++ edor-1/.github/workflows/deb.yml
+@@ -11,13 +11,14 @@ jobs:
+       path: in
+    - uses: actions/checkout@master
+      with:
+-      repository: colin-i/test
++      repository: colin-i/sync
+       path: in2
++      ref: edor
+    - name: Run a multi-line script
+      run: |
+       name=`cat in/debian/changelog | head -1 | grep -o ^[^\ ]*`
+-      cp -r in2/sync/${name}/debian/patches in/debian
+-      cp -r in2/sync/${name}/.pc in
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo apt install -y devscripts debhelper
+       fi
+--- edor-1.orig/configure.ac
++++ edor-1/configure.ac
+@@ -13,8 +13,16 @@ AC_ARG_ENABLE(cpp,
+   AS_HELP_STRING([--enable-cpp],[enable cpp, default: yes]),
+   [case "${enableval}" in yes) cpp=true ;; no) cpp=false ;; *) AC_MSG_ERROR([bad value ${enableval} for --enable-cpp]) ;; esac],
+   [cpp=true])
+-AM_CONDITIONAL(CPP, test x"$cpp" = x"true")
++AM_CONDITIONAL(CPP, test x"${cpp}" = x"true")
+ 
++# Check for CFLAGS
++AC_MSG_CHECKING([whether configure should try to set CFLAGS])
++if test "x${CFLAGS+set}" = xset; then
++enable_cflags_setting=no
++else
++enable_cflags_setting=yes
++fi
++AC_MSG_RESULT($enable_cflags_setting)
+ # Checks for programs.
+ AC_PROG_CC
+ 
+@@ -55,7 +63,7 @@ AC_COMPILE_IFELSE(
+ )
+ CFLAGS="$start_cflgs"
+ 
+-AS_IF([test x"$cpp" = x"true"],[
++AS_IF([test x"${cpp}" = x"true"],[
+ AC_LANG([C++])
+ AC_MSG_CHECKING([for std::filesystem::preferred_separator])
+ AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+@@ -91,6 +99,10 @@ return sizeof(long)==sizeof(int);//0 is
+ }
+ ])], [AC_DEFINE(PLATFORM64, 1, "64")], [])
+ 
++#back at CFLAGS
++test "x${enable_cflags_setting}" = xyes && CFLAGS="-O1 -s"
++#O3 is not removing symbols
++
+ # Checks for library functions.
+ 
+ AM_INIT_AUTOMAKE
+--- edor-1.orig/s/Makefile.am
++++ edor-1/s/Makefile.am
+@@ -1,7 +1,7 @@
+ AUTOMAKE_OPTIONS = subdir-objects
+ 
+ bin_PROGRAMS = edor
+-edor_SOURCES = main.c bar.c sep.c
++edor_SOURCES = main.c bar.c sep.c tw.c
+ edor_LDFLAGS = -rdynamic
+ edor_LDADD = -lcurses
+ edor_CFLAGS = @CSS@
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -383,13 +383,7 @@ static bool finding(size_t cursor,size_t
+ 	if(f/*true*/)return findingf(cursor,r,c);
+ 	return findingb(cursor,r,c);
+ }
+-void position(int rw,int cl){
+-	size_t y=ytext+(size_t)rw;size_t x;
+-	if(y>=rows_tot){y=rows_tot-1;x=rows[y].sz;}
+-	else{
+-		x=xtext+c_to_xc(cl,rw);
+-		if(x>rows[y].sz)x=rows[y].sz;
+-	}
++void position_core(size_t y,size_t x){
+ 	char posbuf[10+1+10+1];
+ 	int n=sprintf(posbuf,protocol "," protocol,y+1,x+1);
+ 	int dif=getmaxx(poswn)-n;
+@@ -406,8 +400,16 @@ void position(int rw,int cl){
+ 	mvwaddstr(poswn,0,0,posbuf);
+ 	wnoutrefresh(poswn);
+ }
+-void centering2(WINDOW*w,size_t*rw,size_t*cl,bool right){
+-	position(0,0);
++void position(int rw,int cl){
++	size_t y=ytext+(size_t)rw;size_t x;
++	if(y>=rows_tot){y=rows_tot-1;x=rows[y].sz;}
++	else{
++		x=xtext+c_to_xc(cl,rw);
++		if(x>rows[y].sz)x=rows[y].sz;
++	}
++	position_core(y,x);
++}
++void centering3(WINDOW*w,size_t*prw,size_t*pxc,bool right){
+ 	int mx=getmaxx(w);
+ 	int wd=mx/3;
+ 	if(right/*true*/)wd=mx-wd;
+@@ -418,14 +420,18 @@ void centering2(WINDOW*w,size_t*rw,size_
+ 		xtext--;
+ 		c+=d[xtext]=='\t'?tab_sz:1;
+ 	}while(c<wd);
++	size_t hg=centeringy(w);
++	wmove(w,(int)hg,c);
++	if(prw!=nullptr){
++		prw[0]=hg;pxc[0]=xc-xtext;
++	}
++}
++size_t centeringy(WINDOW*w){
+ 	size_t hg=(size_t)getmaxy(w)/2;
+ 	if((int)(ytext-hg)<0){hg=ytext;ytext=0;}
+ 	else ytext=ytext-hg;
+ 	refreshpage(w);
+-	wmove(w,(int)hg,c);
+-	if(rw!=nullptr){
+-		rw[0]=hg;cl[0]=xc-xtext;
+-	}
++	return hg;
+ }
+ static void colorfind(int a,int y,size_t pos,size_t sz){
+ 	attrset(COLOR_PAIR(a));
+@@ -683,7 +689,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 			if(undo_del_backward(un,y1,xb,y2,xe)/*true*/)return false;
+ 			deleting(y1,xb,y2,xe);
+ 			ytext=y1;xtext=xb;
+-			centering(w,nullptr,nullptr);
++			centering_simple(w);
+ 		}
+ 	}else{
+ 		if(d!=nullptr){
+@@ -701,7 +707,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 			free(d);
+ 			ytext=y1;xtext=1;
+ 			centering2(w,nullptr,nullptr,true);
+-	}else{
++		}else{
+ 			void*mem=malloc(y1-y2);
+ 			if(mem==nullptr)return false;
+ 			undo_ind_del(un,y2,y1,(char*)mem);
+@@ -711,7 +717,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 				rows[i].sz--;
+ 			}
+ 			ytext=y2;xtext=0;
+-			centering(w,nullptr,nullptr);
++			centering_simple(w);
+ 		}
+ 	}
+ 	undos_tot+=vl;
+@@ -941,10 +947,8 @@ static void command_rewrite(int y,int x,
+ }
+ static int word_at_cursor(char*z){
+ 	WINDOW*w=quick_get(z);
+-	size_t y=(size_t)getcury(w);
+-	size_t x=c_to_xc(getcurx(w),(int)y);
+-	y+=ytext;x+=xtext;
+-	fixmembuf(&y,&x);
++	size_t y;size_t x;
++	fixed_yx(&y,&x,getcury(w),getcurx(w));
+ 	size_t sz=rows[y].sz;
+ 	if(x==sz)return 0;
+ 	char*d=rows[y].data;
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -1,9 +1,10 @@
+ 
++//main
++//bar
+ bool no_char(char);
+ void refreshrowsbot(WINDOW*,int,int);
+ #define refreshrows(w,i) refreshrowsbot(w,i,getmaxy(w))
+ #define refreshpage(w) refreshrows(w,0)
+-size_t c_to_xc(int,int);
+ bool row_alloc(row*,size_t,size_t,size_t);
+ void row_set(row*,size_t,size_t,size_t,const char*);
+ bool deleting_init(size_t,size_t,size_t,size_t);
+@@ -14,18 +15,27 @@ void mod_set_off_wrap();
+ size_t sizemembuf(size_t,size_t,size_t,size_t);
+ void cpymembuf(size_t,size_t,size_t,size_t,char*);
+ bool paste(size_t,size_t,size_t*,char*,size_t,size_t,bool);
+-void vis(char,WINDOW*);
+-void visual(char);
+-void fixmembuf(size_t*y,size_t*x);
+ void editing_rebase();
+ void restore_rebase();
++void vis(char,WINDOW*);
++size_t c_to_xc(int,int);
++//tw
++int movment(int,WINDOW*);
++int xc_to_c(size_t,int);
++//bar,tw
++void visual(char);
++void fixed_yx(size_t*,size_t*,int,int);
+ 
++//bar
++//main
+ const char*bar_init(void);
+ int save(void);
+ int saving_base(char*);
+ int question(const char*);
+ int command(char*);
+-void centering2(WINDOW*,size_t*,size_t*,bool);
++#define centering2(w,prw,pxc,right) position(0,0);centering3(w,prw,pxc,right)
++#define centering(w,prw,pxc) centering2(w,prw,pxc,false)
++#define centering_simple(w) centering(w,nullptr,nullptr)
+ WINDOW*position_init(void);
+ void position(int,int);
+ void position_reset(void);
+@@ -47,15 +57,22 @@ bool is_dir(int);
+ void err_set(WINDOW*);
+ int open_new(char*);
+ void texter_macro(const char*);
++//tw
++void position_core(size_t,size_t);
++void centering3(WINDOW*,size_t*,size_t*,bool);
++size_t centeringy(WINDOW*);
+ 
++//tw
++bool text_wrap(WINDOW*);
++
++//main,bar
+ extern char ln_term[3];
+ extern size_t ln_term_sz;
+ extern char*textfile;
++extern bool mod_flag;
++extern bool insensitive;
++//main,bar,tw
+ extern row*rows;
+ extern size_t rows_tot;
+ extern size_t ytext;
+ extern size_t xtext;
+-extern bool mod_flag;
+-extern bool insensitive;
+-
+-#define centering(w,rw,cl) centering2(w,rw,cl,false)
+--- edor-1.orig/s/inc/curses.h
++++ edor-1/s/inc/curses.h
+@@ -14,14 +14,11 @@ typedef unsigned int chtype;
+ extern "C" {
+ #endif
+ 
++//main/bar
+ int move(int,int);
+ int wmove(WINDOW*,int,int);
+ int getch(void);
+-int wgetch(WINDOW*);
+ int getmaxy(const WINDOW*);
+-int getmaxx(const WINDOW*);
+-int getcury(const WINDOW*);
+-int getcurx(const WINDOW*);
+ int addch(const chtype);
+ int waddch(WINDOW*,const chtype);
+ int mvaddch(int,int,const chtype);
+@@ -32,6 +29,11 @@ int attrset(int);
+ int wattrset(WINDOW*,int);
+ int COLOR_PAIR(int);
+ WINDOW*newwin(int,int,int,int);
++//main/bar/tw
++int getcurx(const WINDOW*);
++int getcury(const WINDOW*);
++int getmaxx(const WINDOW*);
++int wgetch(WINDOW*);
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/inc/main/curses.h
++++ edor-1/s/inc/main/curses.h
+@@ -79,7 +79,7 @@ int keypad(WINDOW*,bool);
+ int getmouse(MEVENT*);
+ int nodelay(WINDOW*,bool);
+ void wtimeout(WINDOW*,int);
+-int doupdate(void);
++//int doupdate(void);
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/inc/stdlib.h
++++ edor-1/s/inc/stdlib.h
+@@ -1,15 +1,24 @@
+ 
+-#if defined(is_main_c)||defined(is_bar_c)
++#if defined(is_main_c)||defined(is_bar_c)||defined(is_tw_c)
+ #include "inc/stddef.h"
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ void free(void*);
+-void*realloc(void*,size_t);
+ void*malloc(size_t);
+ #ifdef __cplusplus
+ }
+ #endif
++#endif
++
++#if defined(is_main_c)||defined(is_bar_c)
++#ifdef __cplusplus
++extern "C" {
++#endif
++void*realloc(void*,size_t);
++#ifdef __cplusplus
++}
++#endif
+ #endif
+ 
+ #if defined(is_main_c)||defined(is_sep_c)
+--- /dev/null
++++ edor-1/s/inc/tw/stdlib.h
+@@ -0,0 +1,3 @@
++
++#define is_tw_c
++#include "inc/stdlib.h"
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -145,7 +145,7 @@ bool mod_flag=true;
+ #define Char_Escape 27
+ static char*mapsel=nullptr;
+ //static char*text_file=nullptr;
+-static size_t rows_spc=1;
++static size_t rows_spc=1;//at rows_expand
+ static bool*x_right=nullptr;
+ static int*tabs=nullptr;
+ static int tabs_rsz;
+@@ -200,14 +200,15 @@ static char prefs_file[max_path_0]={'\0'
+ \nCtrl+e = disable/enable internal mouse/touch\
+ \nCtrl+n = disable/enable indentation\
+ \nCtrl+t = enable/disable insensitive search\
+-\nCtrl+q = quit"//32
++\nCtrl+w = text wrapping\
++\nCtrl+q = quit"//33
+ static bool visual_bool=false;
+ static char*cutbuf=nullptr;
+ static size_t cutbuf_sz=0;
+ static size_t cutbuf_spc=0;
+ static size_t cutbuf_r=1;
+ static char*text_init_b=nullptr;
+-static char*text_init_e;
++static char*text_init_e;//is init? malloc to new : realloc. and to free or not to free.
+ static int _rb;static int _cb;
+ static int _re;static int _ce;
+ static int topspace=1;
+@@ -541,7 +542,7 @@ static int home(WINDOW*w,size_t r){
+ 	}
+ 	return c;
+ }
+-static int xc_to_c(size_t col,int r){
++int xc_to_c(size_t col,int r){
+ 	int*p=&tabs[tabs_rsz*r];
+ 	int n=p[0];
+ 	for(int i=0;i<n;i++){
+@@ -562,7 +563,8 @@ size_t c_to_xc(int c,int r){
+ 	}
+ 	return (size_t)x;
+ }
+-void fixmembuf(size_t*y,size_t*x){
++
++static void fixmembuf(size_t*y,size_t*x){
+ 	if(y[0]>=rows_tot){
+ 		y[0]=rows_tot-1;
+ 		x[0]=rows[y[0]].sz;
+@@ -571,6 +573,12 @@ void fixmembuf(size_t*y,size_t*x){
+ 	size_t sz=rows[y[0]].sz;
+ 	if(x[0]>sz)x[0]=sz;
+ }
++void fixed_yx(size_t*y,size_t*x,int r,int c){
++	*y=ytext+(size_t)r;
++	*x=xtext+c_to_xc(c,r);
++	fixmembuf(y,x);
++}
++
+ static bool is_wordchar(char a){
+ 	return is_word_char(a);
+ }
+@@ -585,9 +593,8 @@ static void left(WINDOW*w,int c){
+ static void left_move(WINDOW*w,bool(*f)(char)){
+ 	int r=getcury(w);
+ 	int c=getcurx(w);
+-	size_t y=ytext+(size_t)r;
+-	size_t x=xtext+c_to_xc(c,r);
+-	fixmembuf(&y,&x);
++	size_t y;size_t x;
++	fixed_yx(&y,&x,r,c);
+ 	size_t sz=rows[y].sz;
+ 	char*d=rows[y].data;
+ 	if(x==sz||f(d[x])==false||x==0||f(d[x-1])==false){left(w,c);return;}
+@@ -621,9 +628,8 @@ static size_t right_long(size_t x,char*d
+ static void right_move(WINDOW*w,bool(*f)(char)){
+ 	int r=getcury(w);
+ 	int c=getcurx(w);
+-	size_t y=ytext+(size_t)r;
+-	size_t x=xtext+c_to_xc(c,r);
+-	fixmembuf(&y,&x);
++	size_t y;size_t x;
++	fixed_yx(&y,&x,r,c);
+ 	size_t sz=rows[y].sz;
+ 	char*d=rows[y].data;
+ 	if(right_short(f,x,d,sz)){
+@@ -652,7 +658,7 @@ static void right_move(WINDOW*w,bool(*f)
+ |BUTTON3_CLICKED|BUTTON3_PRESSED|BUTTON3_DOUBLE_CLICKED|BUTTON3_TRIPLE_CLICKED)
+ 
+ //1resize,0diff key,-1processed
+-static int movment(int c,WINDOW*w){
++int movment(int c,WINDOW*w){
+ 	if(c==KEY_MOUSE){
+ 		MEVENT e;
+ 		getmouse(&e);//==OK is when mousemask is 0, but then nothing at getch
+@@ -1373,9 +1379,8 @@ bool paste(size_t y,size_t x,size_t*xe,c
+ static void past(WINDOW*w){
+ 	if(cutbuf_sz!=0){
+ 		int r=getcury(w);
+-		size_t y=ytext+(size_t)r;
+-		size_t x=xtext+c_to_xc(getcurx(w),r);
+-		fixmembuf(&y,&x);
++		size_t y;size_t x;
++		fixed_yx(&y,&x,r,getcurx(w));
+ 		size_t xe;
+ 		if(paste(y,x,&xe,cutbuf,cutbuf_sz,cutbuf_r,true)/*true*/){
+ 			pasted(y-ytext,xe,w);
+@@ -1750,6 +1755,7 @@ static void indent(bool b,size_t ybsel,s
+ 		}else refreshrowsbot(w,rb,re);
+ 	}
+ }
++//true resize
+ static bool visual_mode(WINDOW*w,bool v_l){
+ 	visual('V');
+ 	int rw=getcury(w);int cl=getcurx(w);
+@@ -1848,7 +1854,7 @@ static bool find_mode(int nr,WINDOW*w){
+ static bool goto_mode(char*args,WINDOW*w){
+ 	int r=command(args);
+ 	if(r==1){
+-		centering(w,nullptr,nullptr);
++		centering_simple(w);
+ 	}
+ 	else if(r>-2)wmove(w,getcury(w),getcurx(w));
+ 	else return true;
+@@ -2029,6 +2035,7 @@ static bool loopin(WINDOW*w){
+ 				wmove(w,getcury(w),getcurx(w));
+ 				setprefs(mask_insensitive,insensitive);
+ 			}
++			else if(strcmp(s,"^W")==0){if(text_wrap(w)/*true*/)return true;}
+ 			else type(c,w);
+ 			//continue;
+ 		}
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -18,9 +18,10 @@ enum{false=0!=0,true=1==1};
+ 
+ typedef struct{
+ 	char*data;
+-	unsigned int spc;
++	unsigned int spc;//at row_alloc(type,undo,...),pasting,enter
+ 	unsigned int sz;
+ }row;
++//typedef struct {}rowwrap;
+ 
+ #define Char_Return 0xd
+ #define row_pad 0xF
+--- /dev/null
++++ edor-1/s/tw.c
+@@ -0,0 +1,143 @@
++
++#include "top.h"
++//bool,nullptr,...
++
++#ifdef HAVE_STDLIB_H
++#include<stdlib.h>
++#else
++#include"inc/tw/stdlib.h"
++#endif
++#ifdef HAVE_CURSES_H
++#include<curses.h>
++#else
++#include"inc/curses.h"
++#endif
++
++#include "base.h"
++
++typedef struct{
++	size_t ytext;
++	size_t xtext;
++}rowwrap;//is used as an array allocated, to combine need to add this at row, memory waste
++
++static row*rowswrap;
++static row*store_rows;
++static size_t store_rows_tot;
++
++static void tw_unlock(size_t y,size_t x,WINDOW*w){
++	//restore variables
++	rows=store_rows;
++	rows_tot=store_rows_tot;
++	ytext=y;
++	xtext=x;
++	centering3(w,nullptr,nullptr,false);
++	free(rowswrap);
++}
++
++bool text_wrap(WINDOW*w){
++	//calculate rows required
++	int max=getmaxx(w);
++	size_t n=0;
++	for(size_t i=0;i<rows_tot;i++){
++		row*r=&rows[i];
++		if(r->sz==0)n++;
++		else{
++			unsigned int sz=r->sz;
++
++			//add tabs
++			char*s=r->data;
++			int j;for (j=0; s[j]!='\0'; s[j]=='\t' ? j++ : *s++);
++			sz+=(tab_sz-1)*j;
++
++			n+=sz/max;
++
++			int rem=sz%max;
++			if(rem!=0){//without !=0 is same asm,ok? only for "true" let dependent, else independent
++				if(r->data[r->sz-1]!='\t'||rem>=tab_sz)n++;
++				//else last char is tab and is on two wrapped rows,do not split the tab on two rows
++			}
++		}
++	}
++
++	rowswrap=(row*)malloc((n*sizeof(row))+(n*sizeof(rowwrap)));//add it after rows, for easy free
++	if(rowswrap!=nullptr){
++		rowwrap*rowswrap_add=(rowwrap*)(&rowswrap[n]);
++
++		//non-wrapped x,y
++		size_t realy;size_t realx;
++		fixed_yx(&realy,&realx,getcury(w),getcurx(w));
++		//and to stay in wrapped view
++		if(realx==rows[realy].sz&&realx!=0)realx--;
++
++		size_t y,x;
++		size_t j=0;
++		for(size_t i=0;i<rows_tot;i++){
++			if(i==realy){
++				y=j;//the new y pos
++			}
++			row*r_in=&rows[i];
++			size_t k;size_t l=0;size_t m=0;size_t delim=max;
++			for(k=0;k<r_in->sz;){
++				if(r_in->data[k]=='\t')m+=tab_sz;
++				else m++;
++				k++;
++				if(m>=delim){
++					row*r_out=&rowswrap[j];
++					r_out->data=&r_in->data[l];
++					r_out->sz=k-l;
++
++					//for position
++					rowswrap_add[j].ytext=i;
++					rowswrap_add[j].xtext=l;
++
++					l=k;delim+=max;j++;
++				}
++			}
++			if(k==0||l!=k){//empty rows,reminder of rows
++				row*r_out=&rowswrap[j];
++				r_out->data=&r_in->data[l];
++				r_out->sz=k-l;
++
++				//for position
++				rowswrap_add[j].ytext=i;
++				rowswrap_add[j].xtext=l;
++
++				j++;
++			}
++		}
++		//and set new x/y
++		x=realx;
++		size_t yy=y;
++		do{y++;}
++		while(y<j&&rowswrap_add[y].ytext==realy&&realx>=rowswrap_add[y].xtext);
++		y--;
++		if(yy<y)x-=rowswrap_add[y].xtext;//x is on a wrap part
++
++		//visual
++		visual('W');//without stdscr refresh is not ok
++
++		//tw store some variables
++		store_rows=rows;rows=rowswrap;
++		store_rows_tot=rows_tot;rows_tot=j;
++
++		//window
++		ytext=y;xtext=0;
++		size_t r=centeringy(w);
++		wmove(w,r,xc_to_c(x,r));
++
++		//loop
++		int z;
++		do{
++			int b=wgetch(w);
++			z=movment(b,w);
++			if(z==1){tw_unlock(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x,w);return true;}
++
++			fixed_yx(&y,&x,getcury(w),getcurx(w));
++			position_core(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x);
++		}while(z!=0);
++
++		visual(' ');
++		tw_unlock(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x,w);
++	}
++	return false;
++}
