@@ -1,0 +1,399 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+85) xenial; urgency=medium
+ .
+   * sizes at templates
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-05-06
+
+--- ocompiler-1.orig/.github/workflows/deb.yml
++++ ocompiler-1/.github/workflows/deb.yml
+@@ -16,12 +16,19 @@ jobs:
+    - uses: actions/checkout@v3
+      with:
+       path: in
++   - uses: actions/checkout@master
++     with:
++      repository: colin-i/sync
++      path: in2
++      ref: ocompiler
+    #Runs a set of commands using the runners shell
+    - name: Run a multi-line script
+      run: |
+       if [ -n "${{ env.init }}" ]; then
+        exit
+       fi
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
+       sudo dpkg --add-architecture i386
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo add-apt-repository -y ppa:colin-i/ppa
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -343,6 +343,7 @@
+ 	When a function is declared all the variables declared in the function can not be used outside that function because they are in the function scope.
+ 	<br>
+ 	The "!" character represents the data section cursor and can be used in place of a number. "!X" represents the nobits data section cursor if applicable.
++	"!!function" will retrieve the virtual size of that entry.
+ 	<br>
+ 	The ":" character represents the size of an integer and can be used in the place of a number. Returns 4B on 32-bits, 8B on 64-bits.
+ 	<br>
+--- ocompiler-1.orig/ostrip/Makefile
++++ ocompiler-1/ostrip/Makefile
+@@ -5,6 +5,10 @@ ifndef nobits_virtual
+ nobits_virtual=1
+ endif
+ 
++ifndef linkerflags
++linkerflags=-O1 -s
++endif
++
+ strippy=ostriputil
+ 
+ OFLAGS=${OFLAGSEXTRA}
+@@ -26,8 +30,7 @@ OUNUSED=../ounused/ounused
+ %.o: ${FULLOBJS}
+ 	${OCOMP} $< ${OFLAGS}
+ 
+-syms =-s
+-ATCCCOM = $(CC) ${syms} -o ${OB}
++ATCCCOM = $(CC) ${linkerflags} -o ${OB}
+ 
+ ostrip: ${OBJ}
+ 	${OUNUSED} ${FULLOBJLOG}
+--- ocompiler-1.orig/ounused/Makefile
++++ ocompiler-1/ounused/Makefile
+@@ -11,11 +11,14 @@ ifndef OCOMP
+ OCOMP=../src/o
+ endif
+ 
++ifndef linkerflags
++linkerflags=-O1 -s
++endif
++
+ %.o: ${FULLOBJS}
+ 	${OCOMP} $< exit_end 1
+ 
+-syms =-s
+-ATLDCOM = $(LD) ${syms} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 -o $@ -lc -entry main
++ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 -o $@ -lc -entry main
+ 
+ ounused: ${OBJ}
+ 	${ATLDCOM} ${FULLOBJO}
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -12,8 +12,8 @@ ifndef OCOMP
+ OCOMP=o
+ endif
+ 
+-ifndef syms
+-syms=-s
++ifndef linkerflags
++linkerflags=-O1 -s
+ endif
+ 
+ #OFLAGS=
+@@ -29,7 +29,7 @@ endif
+ 	fi; \
+ 	mv ${FULLOBJO} . \
+ 
+-_ATLDCOM = $(LD) ${syms} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 -lc -entry main -o
++_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 -lc -entry main -o
+ ATLDCOM = ${_ATLDCOM} $@
+ 
+ o: ${OBJ}
+--- ocompiler-1.orig/src/files/actions/main.s
++++ ocompiler-1/src/files/actions/main.s
+@@ -138,7 +138,7 @@ While includesReg!=null
+ 
+ 						set skipfree 1
+ 
+-						set functionTagIndex 0   #used after pass_init for alloc,through pass_calls,pass_write with scope store/store class
++						set functionTagIndex 0   #used after pass_init for alloc,through pass_calls,pass_write with scope/class store
+ 						#and scopes alloc
+ 					endif
+ 				EndElse
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -491,17 +491,25 @@ endfunction
+ 
+ #err
+ function get_scope(sv pcontent,sd psize,sd sz,sv pscope)
++	sd pos
++	sd err;setcall err get_scope_pos(pcontent#,sz,#pos)
++	if err==(noerror)
++		inc sz
++		call advancecursors(pcontent,psize,sz)
++		setcall pscope# scopes_get_scope(pos)
++	endif
++	return err
++endfunction
++#err
++function get_scope_pos(ss content,sd sz,sv ppos)
+ 	data ptrfunctions%%ptr_functions
++	set ppos# 0
+ 	sd var
+-	sd pos=0
+-	setcall var vars_core_ref_scope(pcontent#,sz,ptrfunctions,(NULL),(TRUE),#pos)
+-	if var==(NULL)
+-		return "Undefined function name."
++	setcall var vars_core_ref_scope(content,sz,ptrfunctions,(NULL),(TRUE),ppos)
++	if var!=(NULL)
++		return (noerror)
+ 	endif
+-	inc sz
+-	call advancecursors(pcontent,psize,sz)
+-	setcall pscope# scopes_get_scope(pos)
+-	return (noerror)
++	return "Undefined function name."
+ endfunction
+ 
+ function function_in_code()
+--- ocompiler-1.orig/src/files/functions/scopes.s
++++ ocompiler-1/src/files/functions/scopes.s
+@@ -1,5 +1,11 @@
+ 
+-const sizeofclassinfo=dwsz+dwsz
++const sizeofclassinfostartdata=location
++const classinfostartdatax=sizeofclassinfostartdata
++const sizeofclassinfostarts=sizeofclassinfostartdata+location
++#                                                    datax
++const classinfosizedatax=sizeofclassinfostarts
++const sizeofclassinfo=sizeofclassinfostarts+location
++#                                           dataxsize
+ 
+ value scopesbag#1
+ data scopesbag_size#1
+@@ -74,7 +80,7 @@ function scopes_alloc(sd has_named_entry
+ 		sv pointer;set pointer start
+ 		add pointer i
+ 		if has_named_entry==(TRUE)
+-			#entry tag is, and is last, entry. can be used in functions
++			#entry tag is, and is last, entry. define global variable, use in function is practical
+ 			sub pointer :
+ 			sd scps%%ptr_scopes
+ 			set pointer# scps
+@@ -82,7 +88,7 @@ function scopes_alloc(sd has_named_entry
+ 		#alloc some dummy values
+ 		while start!=pointer
+ 			sub pointer :
+-			setcall pointer# memcalloc((sizeofscope+sizeofclassinfo)) #is calloc, needing reg 0, in case it is searched , and at freeings
++			setcall pointer# memcalloc((sizeofscope+sizeofclassinfo)) #is calloc, needing reg 0, in case it is searched , and at freeings, and at size (grab future)
+ 			if pointer#==(NULL)
+ 				return (error)
+ 			endif
+@@ -125,6 +131,12 @@ function scopes_store(sv scope)
+ 		add scope (sizeofcontainer)
+ 		add pointer (sizeofcontainer)
+ 	endwhile
++	#and set for class size, can have inter functions size for entry
++	add scope (location)
++	sd start;set start scope
++	add scope (location)
++	setcall scope#d^ get_img_vdata_dataSize()
++	sub scope#d^ start#
+ 	return (noerror)
+ endfunction
+ 
+@@ -164,7 +176,7 @@ function scopes_store_class()
+ 	sd scope;setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+ 	add scope (sizeofscope)
+ 	setcall scope# get_img_vdata_dataReg()  #and img_vdata ? at getarg will subtract from ptrdata# that is with the same img_vdata
+-	add scope (dwsz)
++	add scope (location)
+ 	setcall scope# get_img_vdata_dataSize()
+ endfunction
+ function scopes_get_class_data(sd scope,sd data)
+@@ -176,3 +188,45 @@ function scopes_get_class_data(sd scope,
+ 	endif
+ 	return scope#
+ endfunction
++
++#size
++function get_scope_datax_size(sd pos)
++	value entrybags%%ptr_scopes
++	vdata ptrfunctionTagIndex%ptrfunctionTagIndex
++	vdata ptrinnerfunction%globalinnerfunction
++	sd size
++	sd scope;setcall scope scopes_get_scope(pos)
++	if scope!=entrybags
++		if ptrfunctionTagIndex#==pos
++			if ptrinnerfunction#==(TRUE)
++				setcall size get_img_vdata_dataSize()
++				add scope (sizeofscope+classinfostartdatax)
++				sub size scope#
++				return size
++			endif
++			#will be 0 (from calloc)
++		endif
++		#another function
++		add scope (sizeofscope+classinfosizedatax)
++		return scope# #calloc at bigger
++	endif
++	#entry
++	if ptrinnerfunction#==(TRUE)
++		setcall scope scopes_get_scope(ptrfunctionTagIndex#)
++		add scope (sizeofscope+classinfostartdatax)
++		set size scope#
++	else
++		setcall size get_img_vdata_dataSize()
++	endelse
++	sv p%scopesbag_ptr
++	set p p#
++	sd last=:;mult last ptrfunctionTagIndex#
++	add last p
++	while p<^last
++		sd s;set s p#
++		add s (sizeofscope+classinfosizedatax)
++		sub size s#
++		incst p
++	endwhile
++	return size
++endfunction
+--- ocompiler-1.orig/src/files/functions/stack/stack.s
++++ ocompiler-1/src/files/functions/stack/stack.s
+@@ -101,7 +101,7 @@ function entryscope_verify_code()
+ 	data one=1
+ 	if ptrfnavailable#==one
+ 		data ptrinnerfunction%globalinnerfunction
+-		if ptrinnerfunction#!=one
++		if ptrinnerfunction#!=(TRUE)
+ 			data two=2
+ 			set ptrfnavailable# two
+ 			call entryscope()
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -170,29 +170,44 @@ function numbertoint(str content,data si
+ 			setcall outval# get_img_vdata_dataReg()
+ 			return (noerror)
+ 		endif
++		vdata p_parses%ptr_parses
++		inc content
++		charx against#1
++		set against content#
+ 		if size==2
+-			inc content
+-			charx against#1
+-			set against content#
+ 			if against!=(asciix)
+ 			#maybe is X
+ 				add against (AZ_to_az)
+ 			endif
+ 			if against==(asciix)
+-				#main.ptr_nobits_virtual not yet at ocompiler, we have WinMain or nothing at windows
++				#main.ptr_nobits_virtual not yet at ocompiler, we have WinMain/main or (NULL)
+ 				vdata ptr_nobits_virtual%ptr_nobits_virtual
+-				if ptr_nobits_virtual#==(Yes)
+-					#vdata pnobitsReg%ptrnobitsReg
+-					#set outval# pnobitsReg#
+-					setcall outval# get_dataSize()
+-					#add outval# get_img_vdata()
+-					return (noerror)
++				if ptr_nobits_virtual#==(No)
++					if p_parses#==(pass_init)
++						return "At the moment, !X is not implemented here."
++					endif
+ 				endif
+-				return "At the moment, !X is not calculated for this format (example: is calculated at object with nobits section)."
++				setcall outval# get_img_vdata_dataSize()
++				return (noerror)
+ 			endif
+ 			return "Expecting !X ."
+ 		endif
+-		str er="The text after the data cursor sign isn't recognized."
++		#size >=3
++		if against==data_cursor
++			if p_parses#==(pass_init)
++				return "At the moment, !! is not implemented here."
++			endif
++			inc content
++			sub size 2
++			#for virtual is implemented at the moment. if against==data_cursor !!!
++			sd pos
++			sd err;setcall err get_scope_pos(content,size,#pos)
++			if err==(noerror)
++				setcall outval# get_scope_datax_size(pos)
++			endif
++			return err
++		endif
++		vstr er="The text after the data cursor sign isn't recognized."
+ 		return er
+ 	#test for : sign (the size of a stack value, 4B on 32-bits, 8B on 64-bits)
+ 	char int_size=asciicolon
+--- ocompiler-1.orig/src/md
++++ ocompiler-1/src/md
+@@ -1,2 +1,2 @@
+ 
+-OFLAGS="function_name 1" make syms= $@
++OFLAGS="function_name 1" make linkerflags= $@
+--- /dev/null
++++ ocompiler-1/tests/a
+@@ -0,0 +1,4 @@
++
++../src/o ${1}.s && \
++cc ${1}.o && \
++./a.out
+--- /dev/null
++++ ocompiler-1/tests/b
+@@ -0,0 +1,4 @@
++
++edb --run ../src/o ${1}.s && \
++cc ${1}.o && \
++./a.out
+--- /dev/null
++++ ocompiler-1/tests/c
+@@ -0,0 +1,4 @@
++
++rm ./a.out
++rm ./*.o
++rm ./*.log
+--- /dev/null
++++ ocompiler-1/tests/sizeof.s
+@@ -0,0 +1,29 @@
++
++format elfobj64
++
++importx "printf" printf
++
++#data *#!!main  #!! error
++data *#1;datax *#1;data *#1
++
++function f1()
++data *#1;datax *#2;data *#1
++call printf("%u\n",(!!f1))    #8
++datax *#1
++endfunction
++
++data *#1;datax *#3;data *#1
++
++function f2()
++data *#1;datax *#4;data *#1
++call printf("%u\n",(!!f1))    #12
++call printf("%u\n",(!!main))  #16
++endfunction
++
++data *#1;datax *#1;data a=!!main
++
++entry main()
++call f1()
++call f2()
++call printf("%u\n",a)         #20
++return 0
