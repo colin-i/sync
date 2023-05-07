@@ -1,0 +1,404 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x27) focal; urgency=medium
+ .
+   * find numbers
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-05-07
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -67,6 +67,8 @@ static size_t cursorr=0;
+ #define get_right getbegx(poswn)-1
+ static char inputf[max_path_0];
+ static int cursorf=0;
++static int number2;//number is also negative
++static int number3;
+ 
+ typedef struct{
+ size_t yb;
+@@ -675,12 +677,12 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 		if(d!=nullptr){
+ 			if(y1==y2&&d[0]==ln_term[0]){
+ 				if(undo_replace(un,d,y1,xb,xe,vl!=1)/*true*/)return false;
+-				centering2(w,nullptr,nullptr,true);
++				centering2(w,nullptr,nullptr,true)
+ 			}else{
+ 				if(paste(y1,xb,&xe,d,xe,y2-y1+1,false)==false)return false;
+ 				un->xe=xe;un->data=nullptr;
+ 				ytext=y2;xtext=xe;
+-				centering2(w,nullptr,nullptr,true);
++				centering2(w,nullptr,nullptr,true)
+ 				free(d);
+ 			}
+ 		}
+@@ -689,7 +691,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 			if(undo_del_backward(un,y1,xb,y2,xe)/*true*/)return false;
+ 			deleting(y1,xb,y2,xe);
+ 			ytext=y1;xtext=xb;
+-			centering_simple(w);
++			centering_simple(w)
+ 		}
+ 	}else{
+ 		if(d!=nullptr){
+@@ -706,7 +708,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 			}
+ 			free(d);
+ 			ytext=y1;xtext=1;
+-			centering2(w,nullptr,nullptr,true);
++			centering2(w,nullptr,nullptr,true)
+ 		}else{
+ 			void*mem=malloc(y1-y2);
+ 			if(mem==nullptr)return false;
+@@ -717,7 +719,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 				rows[i].sz--;
+ 			}
+ 			ytext=y2;xtext=0;
+-			centering_simple(w);
++			centering_simple(w)
+ 		}
+ 	}
+ 	undos_tot+=vl;
+@@ -728,8 +730,9 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 	else mod_set_off_wrap();//only if not
+ 	return true;
+ }
++#define maxint_nul 11
+ static void undo_show(size_t n){
+-	char nr[11];
++	char nr[maxint_nul];
+ 	int a=sprintf(nr,protocol,n);
+ 	texter(nr);
+ 	undo_erase(a);
+@@ -826,6 +829,45 @@ static bool replace(size_t cursor){
+ 	}
+ 	return true;
+ }
++
++static void finds_clean(){
++	move(0,number3);//clear finds
++	clrtoeol();//even at resize
++}
++static void finds_big_clean(){
++	finds_clean();
++	wnoutrefresh(stdscr);
++	number3=getmaxx(stdscr);number2=0;
++}
++static int finds(bool phase,int number,bool*header_was){
++	if(*header_was==false){
++		if(phase/*true*/){
++			*header_was=true;
++		}
++		return 0;
++	}
++
++	char buf[1+maxint_nul];
++	if(number==0){
++		finds_big_clean();//can be 1
++		return 0;//0, in case was forward, then backward
++	}
++
++	int r=number;
++	if(number<0){
++		number*=-1;
++	}
++	if(phase/*true*/){
++		number2=sprintf(buf,"/%u",number);
++		mvaddstr(0,getmaxx(stdscr)-number2,buf);
++		r=0;
++	}
++	number3=getmaxx(stdscr)-number2-sprintf(buf,"%u",number);
++	mvaddstr(0,number3,buf);
++	wnoutrefresh(stdscr);
++	return r;
++}
++
+ static bool delim_touch(size_t y1,size_t x1,size_t c){return ytext==y1&&(xtext==x1||(xtext<x1&&xtext+c>x1));}
+ static bool delimiter(size_t y1,size_t x1,int y,size_t pos,size_t sz,size_t c,bool phase){
+ 	if(delim_touch(y1,x1,c)/*true*/){
+@@ -839,8 +881,98 @@ static bool delimiter(size_t y1,size_t x
+ 	}
+ 	return false;
+ }
++
+ #define quick_get(z) ((WINDOW**)((void*)z))[1]
+-//1,0,-2resz
++
++//1,0cancel,-2resz
++static int find_core(WINDOW*w,size_t cursor,size_t xr,size_t xc,int y,size_t pos,size_t sz){
++	bool forward=true;
++	size_t y1=ytext;size_t x1=xtext;
++	bool phase=false;
++	wnoutrefresh(stdscr);
++	centering(w,&xr,&xc)
++	bool untouched=true;bool delimiter_touched=false;
++	char prev_key=' ';
++	bool is_for_forward=true;//last key only at next/prev/replace
++
++	int number=0;bool header_was=true;int at_number;
++	number2=0;
++	number3=getmaxx(stdscr);//in case is required at clean
++
++	for(;;){
++		int a=wgetch(w);
++		if(a==Char_Return){
++			if(is_for_forward)xc+=cursor;//add only when last was simple find
++			else is_for_forward=true;//modify only if was replace
++			forward=true;
++			at_number=1;
++		}else if(a==prev_key){
++			forward=false;is_for_forward=true;
++			at_number=-1;
++		}else if(a==KEY_LEFT){
++			size_t iferrory=ytext;size_t iferrorx=xtext;
++			if(untouched/*true*/){
++				if(number3!=getmaxx(stdscr)){
++					finds_big_clean();//wnoutrefresh when not on delimiter
++					if(number!=0)header_was=false;//is only at untouched at the moment
++				}
++
++				ytext+=xr;xtext+=xc;
++				if(replace(cursor)/*true*/){ytext=iferrory;xtext=iferrorx;continue;}
++				if(delim_touch(y1,x1,cursorr)/*true*/){
++					delimiter_touched=true;
++				}
++				if(forward){xtext+=cursorr;centering2(w,&xr,&xc,true)}
++				else{centering(w,&xr,&xc)}
++				untouched=false;
++				is_for_forward=false;
++				continue;
++			}
++			if(finding(cursor,xr,xc,forward)/*true*/){
++				if(replace(cursor)/*true*/){ytext=iferrory;xtext=iferrorx;continue;}
++				phase=delimiter(y1,x1,y,pos,sz,cursorr,phase);
++				if(phase/*true*/)delimiter_touched=true;
++				else if(ytext==y1&&xtext<x1)x1-=cursor-cursorr;
++				if(forward){xtext+=cursorr;centering2(w,&xr,&xc,true)}
++				else{centering(w,&xr,&xc)}
++				is_for_forward=false;
++				continue;
++			}
++			return 1;
++		}else if(a=='r'){
++			cursorr=0;wattrset(w,COLOR_PAIR(2));
++			int rstart=getcury(w);
++			if(replace_text(w,rstart,getcurx(w),rstart,rstart+1)/*true*/)return -2;
++			continue;
++		}else if(a=='R'){
++			wattrset(w,COLOR_PAIR(2));
++			int yb=getcury(w);int xb=getcurx(w);
++			int rstart=yb;int rstop=yb+1;
++			for(size_t i=0;i<cursorr;i++){
++				replace_text_add(w,inputr[i],&rstart,&rstop);
++			}
++			if(replace_text(w,yb,xb,rstart,rstop)/*true*/)return -2;
++			continue;
++		}else if(a=='c'){
++			return 0;
++		}else{
++			return a==KEY_RESIZE?-2:1;
++		}
++		if(finding(cursor,xr,xc,forward)==false){
++			//was last replace
++			return 1;
++		}
++		phase=delimiter(y1,x1,y,pos,sz,cursor,phase);
++
++		if(delimiter_touched/*true*/){
++			y1=ytext;x1=xtext;
++			delimiter_touched=false;
++		}else number=finds(phase,number+at_number,&header_was);
++		untouched=true;
++		centering(w,&xr,&xc)
++	}
++}
++//same
+ static int find(char*z,size_t cursor,size_t pos,size_t visib,int y){
+ 	/*warning: cast from
+       'char *' to 'size_t *' (aka
+@@ -858,76 +990,9 @@ static int find(char*z,size_t cursor,siz
+ 	colorfind(1,y,pos,sz);
+ 	//
+ 	if(finding(cursor,xr,xc,true)/*true*/){
+-		bool forward=true;
+-		size_t y1=ytext;size_t x1=xtext;
+-		bool phase=false;
+-		wnoutrefresh(stdscr);
+-		centering(w,&xr,&xc);
+-		bool untouched=true;bool delimiter_touched=false;
+-		char prev_key=' ';
+-		bool is_for_forward=true;//last key only at next/prev/replace
+-		for(;;){
+-			int a=wgetch(w);
+-			if(a==Char_Return){
+-				if(is_for_forward)xc+=cursor;//add only when last was simple find
+-				else is_for_forward=true;//modify only if was replace
+-				forward=true;
+-			}else if(a==prev_key){
+-				forward=false;is_for_forward=true;
+-			}else if(a==KEY_LEFT){
+-				size_t iferrory=ytext;size_t iferrorx=xtext;
+-				if(untouched/*true*/){
+-					ytext+=xr;xtext+=xc;
+-					if(replace(cursor)/*true*/){ytext=iferrory;xtext=iferrorx;continue;}
+-					if(delim_touch(y1,x1,cursorr)/*true*/)delimiter_touched=true;
+-					if(forward){xtext+=cursorr;centering2(w,&xr,&xc,true);}
+-					else{centering(w,&xr,&xc);}
+-					untouched=false;
+-					is_for_forward=false;
+-					continue;
+-				}
+-				if(finding(cursor,xr,xc,forward)/*true*/){
+-					if(replace(cursor)/*true*/){ytext=iferrory;xtext=iferrorx;continue;}
+-					phase=delimiter(y1,x1,y,pos,sz,cursorr,phase);
+-					if(phase/*true*/)delimiter_touched=true;
+-					else if(ytext==y1&&xtext<x1)x1-=cursor-cursorr;
+-					if(forward){xtext+=cursorr;centering2(w,&xr,&xc,true);}
+-					else{centering(w,&xr,&xc);}
+-					is_for_forward=false;
+-					continue;
+-				}
+-				return 1;
+-			}else if(a=='r'){
+-				cursorr=0;wattrset(w,COLOR_PAIR(2));
+-				int rstart=getcury(w);
+-				if(replace_text(w,rstart,getcurx(w),rstart,rstart+1)/*true*/)return -2;
+-				continue;
+-			}else if(a=='R'){
+-				wattrset(w,COLOR_PAIR(2));
+-				int yb=getcury(w);int xb=getcurx(w);
+-				int rstart=yb;int rstop=yb+1;
+-				for(size_t i=0;i<cursorr;i++){
+-					replace_text_add(w,inputr[i],&rstart,&rstop);
+-				}
+-				if(replace_text(w,yb,xb,rstart,rstop)/*true*/)return -2;
+-				continue;
+-			}else if(a=='c'){
+-				return 0;
+-			}else{
+-				return a==KEY_RESIZE?-2:1;
+-			}
+-			if(finding(cursor,xr,xc,forward)==false){
+-				//was last replace
+-				return 1;
+-			}
+-			phase=delimiter(y1,x1,y,pos,sz,cursor,phase);
+-			if(delimiter_touched/*true*/){
+-				y1=ytext;x1=xtext;
+-				delimiter_touched=false;
+-			}
+-			untouched=true;
+-			centering(w,&xr,&xc);
+-		}
++		int r=find_core(w,cursor,xr,xc,y,pos,sz);
++		finds_clean();
++		return r;
+ 	}
+ 	int a=getch();
+ 	if(a=='c'){
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -33,7 +33,7 @@ int save(void);
+ int saving_base(char*);
+ int question(const char*);
+ int command(char*);
+-#define centering2(w,prw,pxc,right) position(0,0);centering3(w,prw,pxc,right)
++#define centering2(w,prw,pxc,right) position(0,0);centering3(w,prw,pxc,right);
+ #define centering(w,prw,pxc) centering2(w,prw,pxc,false)
+ #define centering_simple(w) centering(w,nullptr,nullptr)
+ WINDOW*position_init(void);
+--- edor-1.orig/s/inc/curses.h
++++ edor-1/s/inc/curses.h
+@@ -29,6 +29,7 @@ int attrset(int);
+ int wattrset(WINDOW*,int);
+ int COLOR_PAIR(int);
+ WINDOW*newwin(int,int,int,int);
++int clrtoeol(void);
+ //main/bar/tw
+ int getcurx(const WINDOW*);
+ int getcury(const WINDOW*);
+--- edor-1.orig/s/inc/main/curses.h
++++ edor-1/s/inc/main/curses.h
+@@ -70,7 +70,6 @@ int nonl(void);
+ int delwin(WINDOW*);
+ int waddstr(WINDOW*,const char*);
+ int waddnstr(WINDOW*,const char*,int);
+-int clrtoeol(void);
+ int wclrtoeol(WINDOW*);
+ int use_default_colors(void);
+ int start_color(void);
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -1557,7 +1557,7 @@ static bool enter(size_t y,size_t x,int*
+ 	if(rows_expand(1)/*true*/)return true;
+ 	char*b=rows[y].data;
+ 	char*d=b;
+-	if(indent_flag){
++	if(indent_flag/*true*/){
+ 		char*e=b+x;
+ 		while(d<e&&d[0]=='\t')d++;
+ 	}
+@@ -1854,7 +1854,7 @@ static bool find_mode(int nr,WINDOW*w){
+ static bool goto_mode(char*args,WINDOW*w){
+ 	int r=command(args);
+ 	if(r==1){
+-		centering_simple(w);
++		centering_simple(w)
+ 	}
+ 	else if(r>-2)wmove(w,getcury(w),getcurx(w));
+ 	else return true;
+@@ -2016,23 +2016,30 @@ static bool loopin(WINDOW*w){
+ 				return false;
+ 			}
+ 			else if(strcmp(s,"^E")==0){
+-				if(stored_mouse_mask!=0){stored_mouse_mask=mousemask(0,nullptr);setprefs(mask_mouse,false);}
+-				else{stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);setprefs(mask_mouse,true);}
++				bool b;char c;
++				if(stored_mouse_mask!=0){stored_mouse_mask=mousemask(0,nullptr);b=false;c='e';}
++				else{stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);b=true;c='E';}
++				vis(c,w);
++				setprefs(mask_mouse,b);
+ 			}
+ 			else if(strcmp(s,"^N")==0){
+-				if(indent_flag/*true*/)indent_flag=false;else indent_flag=true;
++				char c;
++				if(indent_flag/*true*/){indent_flag=false;c='n';}
++				else{indent_flag=true;c='N';}
++				vis(c,w);
+ 				setprefs(mask_indent,indent_flag);
+ 			}
+ 			else if(strcmp(s,"^T")==0){
++				char c;
+ 				if(insensitive/*true*/){
+ 					insensitive=false;
+-					visual('t');
++					c='t';
+ 				}else{
+ 					insensitive=true;
+-					visual('T');
++					c='T';
+ 				}
+ 				//doupdate();will change cursor
+-				wmove(w,getcury(w),getcurx(w));
++				vis(c,w);
+ 				setprefs(mask_insensitive,insensitive);
+ 			}
+ 			else if(strcmp(s,"^W")==0){if(text_wrap(w)/*true*/)return true;}
