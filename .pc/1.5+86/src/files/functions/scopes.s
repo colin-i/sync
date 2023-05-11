@@ -1,0 +1,232 @@
+
+const sizeofclassinfostartdata=location
+const classinfostartdatax=sizeofclassinfostartdata
+const sizeofclassinfostarts=sizeofclassinfostartdata+location
+#                                                    datax
+const classinfosizedatax=sizeofclassinfostarts
+const sizeofclassinfo=sizeofclassinfostarts+location
+#                                           dataxsize
+
+value scopesbag#1
+data scopesbag_size#1
+const scopesbag_ptr^scopesbag
+const scopesbag_size_ptr^scopesbag_size
+function scopes_free()
+	sv s%scopesbag_ptr
+	if s#!=(NULL)
+		sv start;set start s#
+		add s :
+		sv pointer;set pointer s#d^
+		add pointer start
+		if start!=pointer
+			sub pointer :
+			sd scps%%ptr_scopes
+			if pointer#!=scps
+				add pointer :
+			endif
+			#else let named entry like it was
+			while start!=pointer
+				sub pointer :
+				sv cursor_first;set cursor_first pointer#
+				if cursor_first!=(NULL)
+					sv cursor=sizeofscope
+					add cursor cursor_first
+					while cursor_first!=cursor
+						#reversed order for speed reasons here, not care about alloc order
+						sub cursor (sizeofcontainer)
+						call enumbags_free(cursor) #this has check against NULL
+					endwhile
+					call free(cursor_first)
+				endif
+			endwhile
+		endif
+		call free(start)
+	endif
+endfunction
+
+#err
+function scopes_alloc(sd has_named_entry,sd i)
+	#now at three pass the fns are mixed with imports
+	#sv ptrfunctions%ptrfunctions
+	#sd i=0
+	#sd fns
+	#sv last
+	#call getcontandcontReg(ptrfunctions,#fns,#last)
+	#add last fns
+	#while fns!=last
+	#	add fns (nameoffset)
+	#	addcall fns strlen(fns)
+	#	inc fns
+	#	inc i
+	#endwhile
+	#mult i :
+	#
+	#sd almost_same_size_container%ptrstackAlign
+	#call getcontReg(almost_same_size_container,#i)
+	#if has_named_entry==(FALSE)
+	#	sub i :
+	#endif
+	if has_named_entry==(TRUE)
+		inc i
+	endif
+	mult i :
+	#
+	sv s%scopesbag_ptr
+	setcall s# memcalloc(i)
+	sv start;set start s#
+	if start!=(NULL)
+		add s :
+		set s# i
+		sv pointer;set pointer start
+		add pointer i
+		if has_named_entry==(TRUE)
+			#entry tag is, and is last, entry. define global variable, use in function is practical
+			sub pointer :
+			sd scps%%ptr_scopes
+			set pointer# scps
+		endif
+		#alloc some dummy values
+		while start!=pointer
+			sub pointer :
+			setcall pointer# memcalloc((sizeofscope+sizeofclassinfo)) #is calloc, needing reg 0, in case it is searched , and at freeings, and at size (grab future)
+			if pointer#==(NULL)
+				return (error)
+			endif
+		endwhile
+		return (noerror)
+	endif
+	return (error)
+endfunction
+
+function scopes_get_scope(sd i)
+	sv s%scopesbag_ptr
+	set s s#
+	mult i :
+	add s i
+	return s#
+endfunction
+
+function scopes_store(sv scope)
+	sv s%scopesbag_ptr
+	mult scope :
+	add scope s#
+	set scope scope#
+	sd last=sizeofscope
+	sv pointer%%ptr_fnscopes
+	add last pointer
+	while pointer!=last
+		sd cont;sd contReg;call getcontandcontReg(pointer,#cont,#contReg)
+		#add new cont at fns
+		call setcontMax(pointer,(subscope))
+		sd err;setcall err enumbags_alloc(pointer)
+		if err!=(noerror)
+			return err
+		endif
+		# reg is zero outside (was from when there was only one scope)
+		#transfer cont to store
+		# max is not used
+		call setcont(scope,cont)
+		call setcontReg(scope,contReg)
+		#next
+		add scope (sizeofcontainer)
+		add pointer (sizeofcontainer)
+	endwhile
+	#and set for class size, can have inter functions size for entry
+	add scope (location)
+	sd start;set start scope
+	add scope (location)
+	setcall scope#d^ get_img_vdata_dataSize()
+	sub scope#d^ start#
+	return (noerror)
+endfunction
+
+function scopes_searchinvars(sd p_err,sv p_name)
+	sd psz%scopesbag_size_ptr
+	#now at three pass the fns are mixed with imports
+	sd sz;set sz psz#
+	div sz :
+	sd i=0
+
+	sv ptrfunctions%%ptr_functions
+	sd fns
+	call getcont(ptrfunctions,#fns)
+	while i!=sz
+		sd ibit;setcall ibit importbit(fns)
+		add fns (nameoffset)
+		if ibit==0
+			sd data
+			sd scope
+			setcall scope scopes_get_scope(i)
+			setcall data searchinvars_scope_warn(p_err,scope)
+			if data!=(NULL)
+				set p_name# fns
+				return data
+			endif
+			inc i
+		endif
+		addcall fns strlen(fns)
+		inc fns
+	endwhile
+	return (NULL)
+endfunction
+
+
+function scopes_store_class()
+	sd ptrfunctionTagIndex%ptrfunctionTagIndex
+	sd scope;setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+	add scope (sizeofscope)
+	setcall scope# get_img_vdata_dataReg()  #and img_vdata ? at getarg will subtract from ptrdata# that is with the same img_vdata
+	add scope (location)
+	setcall scope# get_img_vdata_dataSize()
+endfunction
+function scopes_get_class_data(sd scope,sd data)
+	add scope (sizeofscope)
+	sd expand;setcall expand expandbit(data)
+	if expand!=0
+		add scope (location)
+		return scope#
+	endif
+	return scope#
+endfunction
+
+#size
+function get_scope_datax_size(sd pos)
+	value entrybags%%ptr_scopes
+	vdata ptrfunctionTagIndex%ptrfunctionTagIndex
+	vdata ptrinnerfunction%globalinnerfunction
+	sd size
+	sd scope;setcall scope scopes_get_scope(pos)
+	if scope!=entrybags
+		if ptrfunctionTagIndex#==pos
+			if ptrinnerfunction#==(TRUE)
+				setcall size get_img_vdata_dataSize()
+				add scope (sizeofscope+classinfostartdatax)
+				sub size scope#
+				return size
+			endif
+			#will be 0 (from calloc)
+		endif
+		#another function
+		add scope (sizeofscope+classinfosizedatax)
+		return scope# #calloc at bigger
+	endif
+	#entry
+	if ptrinnerfunction#==(TRUE)
+		setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+		add scope (sizeofscope+classinfostartdatax)
+		set size scope#
+	else
+		setcall size get_img_vdata_dataSize()
+	endelse
+	sv p%scopesbag_ptr
+	set p p#
+	sd last=:;mult last ptrfunctionTagIndex#
+	add last p
+	while p<^last
+		sd s;set s p#
+		add s (sizeofscope+classinfosizedatax)
+		sub size s#
+		incst p
+	endwhile
+	return size
+endfunction

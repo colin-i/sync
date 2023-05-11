@@ -1,0 +1,914 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+86) xenial; urgency=medium
+ .
+   * resolve offsets across objects
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-05-11
+
+--- ocompiler-1.orig/.ocompiler.txt
++++ ocompiler-1/.ocompiler.txt
+@@ -26,63 +26,68 @@ logfile=1
+ 0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+ codeFnObj=2
+ 
+-7. CONST to unreferenced warnings, same as with FUNCTION. This will also log declared/used constants.
++7. CONST to unreferenced warnings, same as with FUNCTION. This will also log declared constants.
+ [if orphans is 1]
+ 0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+ const_warn=2
+ 
+-8. Include active folder. Change the active directory when including and stepping into a file.
++8. Variables to unreferenced warnings, same as with CONST.
++[if orphans is 1]
++0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
++offset_warn=2
++
++9. Include active folder. Change the active directory when including and stepping into a file.
+ 0 is No; 1 is Yes
+ includedir=1
+ 
+-9. Write the function names above the function in code section, useful when debugging asm instructions.
++10. Write the function names above the function in code section, useful when debugging asm instructions.
+ 0 is No; 1 is Yes
+ function_name=0
+ 
+-10. Ignore elfobj64
++11. Ignore elfobj64
+ 0 is No,use linux convention if ocompiler was compiled for linux,else use microsoft; 1 is Yes; 2 is No,and cross-compile
+ conv_64=0
+ 
+-11. Zeroset reserved data section declarations.
++12. Zeroset reserved data section declarations.
+ 0 is No; 1 is Yes
+ nul_res_pref=0
+ 
+-12. SD as SV (old programs don't have sv and may be with 64 logic).
++13. SD as SV (old programs don't have sv and may be with 64 logic).
+ 0 is No; 1 is Yes
+ sd_as_sv=0
+ 
+-13. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
++14. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
+ 0 is Zero; 1 is Addend
+ inplace_reloc=1
+ 
+-14. At objects, when on 64 format, relocs are R_X86_64_64.
++15. At objects, when on 64 format, relocs are R_X86_64_64.
+ 0 is No; 1 is Yes
+ reloc_64=1
+ 
+-15. Remove leading underscore at IMPORT?
++16. Remove leading underscore at IMPORT?
+ 0 is No; 1 is Yes
+ underscore_pref=0
+ 
+-16. RETURNs at main scope like EXIT.
++17. RETURNs at main scope like EXIT.
+ 0 is No; 1 is Yes
+ exit_end=0
+ 
+-17. Take second file path at INCLUDE statement.
++18. Take second file path at INCLUDE statement.
+ 0 is No; 1 is Yes
+ include_sec=0
+ 
+-18. Ignore FORMAT ...SO .
++19. Ignore FORMAT ...SO .
+ 0 is No; 1 is Yes
+ ignore_format_so=0
+ 
+-19. At 64, before a call, align stack. Cases for arguments and shadow(windows only).
++20. At 64, before a call, align stack. Cases for arguments and shadow(windows only).
+ 0 is No; 1 is Yes; 2 is Yes for arguments and shadow; 3 is Yes for arguments
+ call_align=1
+ 
+-20. Virtual data to a SHT_NOBITS at object
++21. Virtual data to a SHT_NOBITS at object
+ 0 is No; 1 is Yes
+ nobits_virtual=1
+ 
+-21. Debug section at object.
++22. Debug section at object.
+ 0 is No; 1 is Yes
+ has_debug=0
+\ No newline at end of file
+--- ocompiler-1.orig/ounused/files.s
++++ ocompiler-1/ounused/files.s
+@@ -39,7 +39,7 @@ function fileentry_add(sd full,sd len)
+ 					add previous_file (2*size_cont)
+ 					call adddwordtocont(previous_file,offset)
+ 				endif
+-				return (void)
++				ret
+ 			endif
+ 			call fileentry_uninit(init)
+ 			call free(init)
+@@ -61,7 +61,7 @@ function fileentry(sd s,sd sz)
+ 	if temp!=(NULL)
+ 		call fileentry_exists(temp)
+ 		call free(temp)
+-		return (void)
++		ret
+ 	endif
+ 	call erExit("realpath error")
+ endfunction
+@@ -86,10 +86,10 @@ function fileentry_exists(sd s)
+ 			sub p init
+ 			add wf (size_cont)
+ 			call adddwordtocont(wf,p)
+-			return (void)
++			ret
+ 		endif
+ 		incst p
+-	#set p fls#d^;add fls (dword);set fls fls#;add p fls;while fls!=p;sd b;setcall b fileentry_compare(fls#,s,sz);if b==0;call skip_set();return (void);endif;incst fls
++	#set p fls#d^;add fls (dword);set fls fls#;add p fls;while fls!=p;sd b;setcall b fileentry_compare(fls#,s,sz);if b==0;call skip_set();ret;endif;incst fls
+ 	endwhile
+ 	call fileentry_add(s,sz)
+ endfunction
+--- ocompiler-1.orig/ounused/header.h
++++ ocompiler-1/ounused/header.h
+@@ -30,3 +30,6 @@ importx "feof" feof
+ importx "free" free
+ importx "chdir" chdir
+ importx "stdout" stdout
++
++#uconstres
++importx "memchr" memchr
+--- ocompiler-1.orig/ounused/loop.s
++++ ocompiler-1/ounused/loop.s
+@@ -1,6 +1,6 @@
+ 
+ const NULL=0
+-const void=0
++#const void=0
+ const asciiperiod=0x2E
+ const asciio=0x6F
+ 
+@@ -40,7 +40,7 @@ function log_file(ss file)
+ 		if link==(TRUE)
+ 			call printlink(file)
+ 		endif
+-		return (void)
++		ret
+ 	endif
+ 	call erExit("fopen error")
+ endfunction
+@@ -52,25 +52,34 @@ function log_line(ss s,sd sz,sd plink)
+ 	inc s;dec sz
+ 	sd skip
+ 	if plink#==(TRUE)
+-		if type==(log_declare)
++		if type==(log_offset)
+ 			setcall skip skip_test()
+ 			if skip==(FALSE)
++				call constant_add(s,sz) #same as with const, except it has a dot
++			endif
++			ret
++		elseif type==(log_declare)
++			setcall skip skip_test() #skip same included file
++			if skip==(FALSE)
+ 				call constant_add(s,sz)
+ 			endif
+-			return (void)
++			ret
+ 		elseif type==(log_import)
+ 			setcall skip skip_test()
+ 			if skip==(FALSE)
+ 				call import_add(s,sz)
+ 			endif
+-			return (void)
++			ret
+ 		elseif type==(log_constant)
+ 			call uconst_add(s,sz)
+-			return (void)
++			ret
+ 		elseif type==(log_function)
+ 			sv fns%fn_mem_p
+ 			call addtocont(fns,s,sz)
+-			return (void)
++			ret
++		elseif type==(log_variable)
++			call uconst_add(s,sz)
++			ret
+ 		endelseif
+ 	endif
+ 	if type==(log_pathname)
+@@ -168,7 +177,7 @@ function printlink(sd file)
+ 							setCall len fprintf(st#,file)
+ 							sub back file
+ 							if len==back
+-								return (void)
++								ret
+ 							endif
+ 						endif
+ 						call erExit("fprintf error.")
+--- ocompiler-1.orig/ounused/mem.s
++++ ocompiler-1/ounused/mem.s
+@@ -5,7 +5,7 @@ function alloc(sd p)
+ 	sd er
+ 	setcall er alloc_throwless(p)
+ 	if er==(NULL)
+-		return (void)
++		ret
+ 	endif
+ 	call erExit(er)
+ endfunction
+@@ -14,7 +14,7 @@ function ralloc(sv p,sd sz)
+ 	sd er
+ 	setcall er ralloc_throwless(p,sz)
+ 	if er==(NULL)
+-		return (void)
++		ret
+ 	endif
+ 	call erExit(er)
+ endfunction
+--- ocompiler-1.orig/ounused/resolve.s
++++ ocompiler-1/ounused/resolve.s
+@@ -10,7 +10,7 @@ function resolve(sd j)
+ 	#set mem cont#d^;add cont (dword);set p cont#;add mem p
+ 	sv imps%imp_mem_p
+ 	sd i=0
+-	str f="function"
++	vstr f="function"
+ 	while p!=mem
+ 		sd len
+ 		set len p#
+@@ -23,8 +23,9 @@ function resolve(sd j)
+ 		add p len
+ 		inc i
+ 	endwhile
+-	str c="constant"
+-	call uconst_resolve(c)
++	vstr c="constant"
++	vstr v="variable"
++	call uconst_resolve(c,v)
+ 	sd k
+ 	setcall k uconst_resolved(2)
+ 	#
+@@ -36,7 +37,7 @@ function resolve(sd j)
+ 	setcall imps_sz importssize()
+ 	sd const_sz
+ 	setcall const_sz constssize()
+-	Call fprintf(st#,"%u logs, %u files, %u unique imports, %u %s, %u %s resolved, %u %s resolved.",j,fls,imps_sz,const_sz,c,i,f,k,c)
++	Call fprintf(st#,"%u logs, %u files, %u unique imports, %u %s/%s, %u %s resolved, %u %s/%s resolved.",j,fls,imps_sz,const_sz,c,v,i,f,k,c,v)
+ 	call messagedelim()
+ 
+ 	sv so^stdout
+--- ocompiler-1.orig/ounused/uconst.s
++++ ocompiler-1/ounused/uconst.s
+@@ -73,23 +73,28 @@ function uconst_unused(sv cont,sd ofs)
+ 	while cursor!=end
+ 		sd offset
+ 		set offset cursor#
+-		if offset<=ofs
+-			if offset==ofs
+-				#move to doubleunused
+-				call adddwordtocont(cont,offset)
+-				sub end (dword)
+-				sd pointer;set pointer cursor
+-				while cursor!=end
+-					add cursor (dword)
+-					set pointer# cursor#
+-					add pointer (dword)
+-				endwhile
+-				call ralloc(uns,(-dword))
+-				return (void)
+-			endif
+-			add cursor (dword)
+-		else
+-			return (void)
+-		endelse
++
++		#if offset<=ofs
++		#this is not ordered since mixing const and variables
++
++		if offset==ofs
++			#move to doubleunused
++			call adddwordtocont(cont,offset)
++			sub end (dword)
++			sd pointer;set pointer cursor
++			while cursor!=end
++				add cursor (dword)
++				set pointer# cursor#
++				add pointer (dword)
++			endwhile
++			call ralloc(uns,(-dword))
++			ret
++		endif
++		add cursor (dword)
++
++		#else
++		#	ret
++		#endelse
++
+ 	endwhile
+ endfunction
+--- ocompiler-1.orig/ounused/uconstres.s
++++ ocompiler-1/ounused/uconstres.s
+@@ -57,7 +57,7 @@ function uconstres_search(sv f,sd is_new
+ 	endwhile
+ endfunction
+ 
+-function uconst_resolve(ss const_str)
++function uconst_resolve(ss const_str,ss var_str)
+ 	sv fls%files_p
+ 	sv cursor
+ 	set cursor fls#
+@@ -76,7 +76,13 @@ function uconst_resolve(ss const_str)
+ 			sd offset
+ 			set offset cursor#d^
+ 			add cursor (dword)
+-			call wrongExit(const_str,cursor,offset)
++
++			sd is_var;setcall is_var memchr(cursor,(asciiperiod),offset)
++			if is_var!=(NULL)
++				call wrongExit(var_str,cursor,offset)
++			else
++				call wrongExit(const_str,cursor,offset)
++			endelse
+ 		endif
+ 		add cursor :
+ 	endwhile
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -16,6 +16,10 @@ ifndef linkerflags
+ linkerflags=-O1 -s
+ endif
+ 
++ifndef linker
++linker=/lib/ld-linux.so.2
++endif
++
+ #OFLAGS=
+ 
+ %.o: ${FULLOBJS}
+@@ -29,7 +33,7 @@ endif
+ 	fi; \
+ 	mv ${FULLOBJO} . \
+ 
+-_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 -lc -entry main -o
++_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=${linker} -lc -entry main -o
+ ATLDCOM = ${_ATLDCOM} $@
+ 
+ o: ${OBJ}
+@@ -59,6 +63,7 @@ uninstall:
+ 
+ test:
+ 	echo "test"
+-	cd linux; ../o o.s nul_res_pref 1; mv o z; /lib/ld-linux.so.2 ./z o.s nul_res_pref 1; diff o z
++	cd linux; ../o o.s nul_res_pref 1; mv o z; ${linker} ./z o.s nul_res_pref 1; diff o z
++#/home/bc/Desktop/out/libc6-i386.AppImage /home/bc/o/ocompiler-1/src/linux/z /home/bc/o/ocompiler-1/src/linux/o.s nul_res_pref 1
+ 
+ .PHONY: all install clean distclean uninstall test
+--- ocompiler-1.orig/src/files/actions/main/index/endfunction.s
++++ ocompiler-1/src/files/actions/main/index/endfunction.s
+@@ -7,6 +7,7 @@ if parses==(pass_init)
+ 		Set errormsg unexeferr
+ 	else
+ 		Set innerfunction false
++		call vars_log_reset() #to let next variables be ".var"
+ 	endelse
+ else
+ 	if parses==(pass_write)
+--- ocompiler-1.orig/src/files/functions/actions/declare.s
++++ ocompiler-1/src/files/functions/actions/declare.s
+@@ -99,35 +99,38 @@ function declare(sv pcontent,sd pcomsize
+ 					#                                                                            since %%|
+ 				endif
+ 			else
+-				if unitsize==0
+-				#ss?
+-					if sign!=(assignsign)
+-						call advancecursors(pcontent,pcomsize,pcomsize#)
+-						return (noerror)
+-					endif
+-					#ss =% ""/x/{}
+-				else
+-				#search for data%  with R_X86_64_64
+-					if relocbool==(TRUE)
+-						if mask==0
+-						#data str
+-						#strs are without ""
+-							vdata is_64_and_pref_is_rx866464%p_elf64_r_info_type
+-							if is_64_and_pref_is_rx866464#==(R_X86_64_64)
+-								set unitsize (qwsz)
++				setcall err vars_log_prepare(pcontent#,valsize)
++				if err==(noerror)
++					if unitsize==0
++					#ss?
++						if sign!=(assignsign)
++							call advancecursors(pcontent,pcomsize,pcomsize#)
++							return (noerror)
++						endif
++						#ss =% ""/x/{}
++					else
++					#search for data%  with R_X86_64_64
++						if relocbool==(TRUE)
++							if mask==0
++							#data str
++							#strs are without ""
++								vdata is_64_and_pref_is_rx866464%p_elf64_r_info_type
++								if is_64_and_pref_is_rx866464#==(R_X86_64_64)
++									set unitsize (qwsz)
++								endif
+ 							endif
+ 						endif
+-					endif
+-				endelse
+-				setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,is_stack) #there is 1 more argument but is not used
+-				#                                                                               since %%|
+-				if is_expand==(FALSE)
+-					sd pdataReg%%ptr_dataReg
+-					add pdataReg# unitsize    ##this is init by 0
+-				else
+-					sd pnobitsReg%ptrdataSize
+-					add pnobitsReg# unitsize    ##this is init by 0
+-				endelse
++					endelse
++					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,is_stack) #there is 1 more argument but is not used
++					#                                                                               since %%|
++					if is_expand==(FALSE)
++						sd pdataReg%%ptr_dataReg
++						add pdataReg# unitsize    ##this is init by 0
++					else
++						sd pnobitsReg%ptrdataSize
++						add pnobitsReg# unitsize    ##this is init by 0
++					endelse
++				endif
+ 			endelse
+ 		else
+ 			if typenumber==(constantsnumber)
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -94,6 +94,8 @@ Function parsefunction(data ptrcontent,d
+ 				return err
+ 			endif
+ 
++			call vars_log((set),content,sz)
++
+ 			Data mask#1
+ 			#Data ptrobjfnmask%ptrobjfnmask
+ 			if el_or_e==(TRUE)
+--- ocompiler-1.orig/src/files/functions/argument/comwrite.s
++++ ocompiler-1/src/files/functions/argument/comwrite.s
+@@ -209,7 +209,7 @@ Function writeoperation_take(sd p_errnr,
+ 
+ 	setcall errnr writetake_offset(takeindex,location)
+ 	If errnr!=noerr
+-		set p_errnr# errnr;return (void)
++		set p_errnr# errnr;ret
+ 	EndIf
+ 
+ 	sd v_64
+--- ocompiler-1.orig/src/files/functions/commons/base.s
++++ ocompiler-1/src/files/functions/commons/base.s
+@@ -131,14 +131,19 @@ function log_term(sd psz)
+ 	return #textterm
+ endfunction
+ #err
++function addtolog_term(sd filehandle)
++	sd sz
++	ss text;setcall text log_term(#sz)
++	sd err
++	setcall err writefile_errversion(filehandle,text,sz)
++	return err
++endfunction
++#err
+ function addtolog_handle(ss content,sd sizetowrite,sd filehandle)
+ 	sd err
+ 	setcall err writefile_errversion(filehandle,content,sizetowrite)
+ 	if err!=(noerror);return err;endif
+-
+-	sd sz
+-	ss text;setcall text log_term(#sz)
+-	setcall err writefile_errversion(filehandle,text,sz)
++	setcall err addtolog_term(filehandle)
+ 	return err
+ endfunction
+ #err
+@@ -176,6 +181,26 @@ function addtolog_withchar(ss content,sd
+ 	return err
+ endfunction
+ #err
++function addtolog_array_withchar(sv array,sd type)
++	vdata ptrfilehandle%ptrlogfile
++	if ptrfilehandle#!=-1
++		sd err
++		setcall err writefile_errversion(ptrfilehandle#,#type,1)
++		if err==(noerror)
++			while array#!=(NULL)
++				sd val;set val array#
++				incst array
++				setcall err writefile_errversion(ptrfilehandle#,val,array#d^)
++				if err!=(noerror);return err;endif
++				add array (dwsz)
++			endwhile
++			setcall err addtolog_term(ptrfilehandle#)
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++#err
+ function addtolog_withchar_parses(ss content,sd type,sd both)
+ 	sd err
+ 	if both==(FALSE)
+--- ocompiler-1.orig/src/files/functions/commons/vars.s
++++ ocompiler-1/src/files/functions/commons/vars.s
+@@ -1,12 +1,26 @@
+ 
+ 
+ #same or zero
+-function warn_or_log(sd type,sd return_value,ss symbolname,sd log_option,sd p_err)
++function warn_or_log(sd type,sd return_value,ss symbolname,sd log_option,sd p_err,sd size)
+ 	data ptrobject%ptrobject
+ 	if ptrobject#==(TRUE)
+ 		if log_option==(log_warn)
+-			add symbolname (dwsz)
+-			setcall p_err# addtolog_withchar(symbolname,type) #is not calling atunused version, that will return noerror at object false
++			setcall p_err# addtolog_withchar_ex(symbolname,size,type) #is not calling atunused version, that will return noerror at object false
++			if p_err#==(noerror)
++				return 0
++			endif
++		endif
++	endif
++	return return_value
++endfunction
++#same function, except the array
++function warn_or_log_vars(sd return_value,ss symbolname,sd p_err,sd size)
++	data ptrobject%ptrobject
++	if ptrobject#==(TRUE)
++		data p_o_w%%p_offset_warn
++		if p_o_w#==(log_warn)
++			sd vals;setcall vals vars_log((get),symbolname,size)
++			setcall p_err# addtolog_array_withchar(vals,(log_variable))
+ 			if p_err#==(noerror)
+ 				return 0
+ 			endif
+@@ -15,6 +29,37 @@ function warn_or_log(sd type,sd return_v
+ 	return return_value
+ endfunction
+ 
++function vars_log(sd type,sd val,sd sz)
++	char dot=asciidot
++	#at unnamed entry is: .val , first can be size 0
++	value a#1;data as#1
++	value *^dot;data *=1
++	value c#1;data cs#1
++	value *=NULL
++	if type==(set)
++		set a val
++		set as sz
++	else
++		set c val
++		set cs sz
++		return #a
++	endelse
++endfunction
++function vars_log_reset()
++	call vars_log((set),"",0)
++endfunction
++#err
++function vars_log_prepare(ss content,sd size)
++	data ptrobject%ptrobject
++	if ptrobject#==(TRUE)
++		sd vals;setcall vals vars_log((get),content,size)
++		sd err
++		setcall err addtolog_array_withchar(vals,(log_offset))
++		return err
++	endif
++	return (noerror)
++endfunction
++
+ function vars_core_ref(ss content,sd size,sv ptrstructure,sv warningssearch,sd setref)
+ 	sd data
+ 	setcall data vars_core_ref_scope(content,size,ptrstructure,warningssearch,setref,(NULL))
+@@ -25,7 +70,7 @@ endfunction
+ function vars_core_ref_scope(ss content,sd size,sv ptrstructure,data warningssearch,sd setref,sd position_pointer)
+ 	Data zero=0
+ 	Data varsize#1
+-	Data dwlen=dwsz
++	#Data dwlen=dwsz
+ 	Data blen=bsz
+ 
+ 	Str container#1
+@@ -39,11 +84,15 @@ function vars_core_ref_scope(ss content,
+ 	add end containerReg
+ 	While container!=end
+ 		Set entrypoint container
+-		Add container dwlen
++		Add container (location)
++		sd pmask;set pmask container
++		Add container (masksize) #add here, not twice, inside warn_or_log and outside (since logging all variables)
+ 		If warningssearch!=(NULL)
++			SetCall varsize strlen(container)
++
+ 			Data ReferenceBit=referencebit
+ 			Data checkvalue#1
+-			Set checkvalue container#
++			Set checkvalue pmask#
+ 			And checkvalue ReferenceBit
+ 			data ptrconstants%%ptr_constants;sd cb
+ 			If checkvalue==zero
+@@ -52,14 +101,14 @@ function vars_core_ref_scope(ss content,
+ 				#
+ 				data ptrfunctions%%ptr_functions
+ 				if ptrfunctions==ptrstructure
+-					Set checkvalue container#
++					Set checkvalue pmask#
+ 					sd against_idata=idatabitfunction
+ 					and against_idata checkvalue
+ 					if against_idata==0
+ 						and checkvalue (x86_64bit)
+ 						if checkvalue==0
+ 							data ptrcodeFnObj%ptrcodeFnObj
+-							setcall returnvalue warn_or_log((log_function),returnvalue,container,ptrcodeFnObj#,warningssearch)
++							setcall returnvalue warn_or_log((log_function),returnvalue,container,ptrcodeFnObj#,warningssearch,varsize)
+ 						else
+ 							#functionx are extern
+ 							set returnvalue 0
+@@ -67,18 +116,16 @@ function vars_core_ref_scope(ss content,
+ 					endif
+ 				elseif ptrconstants==ptrstructure
+ 					setcall cb constants_bool((const_warn_get))
+-					setcall returnvalue warn_or_log((log_constant),returnvalue,container,cb,warningssearch)
+-				endelseif
++					setcall returnvalue warn_or_log((log_constant),returnvalue,container,cb,warningssearch,varsize)
++				else
++					setcall returnvalue warn_or_log_vars(returnvalue,container,warningssearch,varsize)
++				endelse
+ 				if returnvalue!=zero
+ 					Return returnvalue
+ 				endif
+ 			endIf
+ 			#elseIf ptrconstants==ptrstructure 0x72
+-			Add container dwlen
+-			SetCall varsize strlen(container)
+ 		Else
+-			sd pmask;set pmask container
+-			Add container dwlen
+ 			SetCall varsize strlen(container)
+ 			If varsize==size
+ 				Data cmpret#1
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.s
++++ ocompiler-1/src/files/functions/pref/preffuncs.s
+@@ -16,6 +16,7 @@ Function warnings(sd p_err,sd has_named_
+ 		setcall var scopes_searchinvars(p_err,#fn_name)
+ 		If var==(NULL)
+ 			if has_named_entry==(FALSE)
++				call vars_log_reset()
+ 				SetCall var searchinvars((NULL),0,(NULL),p_err) #,setref unused
+ 				if var!=(NULL)
+ 					set fn_name "(entry)"
+@@ -154,6 +155,7 @@ function initpreferences()
+ 	sd ptrlogbool%ptrlogbool
+ 	sd ptrcodeFnObj%ptrcodeFnObj
+ 	sd cb;setcall cb constants_bool((const_warn_get_init))
++	sd p_o_w%%p_offset_warn
+ 	sd ptrincludedir%ptrincludedir
+ 	sd text_fn_info;setcall text_fn_info fn_text_info()
+ 	sd conv_64;setcall conv_64 p_neg_is_for_64()
+@@ -179,6 +181,7 @@ function initpreferences()
+ 	set ptrlogbool# true
+ 	set ptrcodeFnObj# (log_warn)
+ 	set cb# (log_warn)
++	set p_o_w# (log_warn)
+ 	set ptrincludedir# true
+ 	set text_fn_info# false
+ 	set conv_64# (direct_convention_input)
+@@ -197,9 +200,9 @@ function initpreferences()
+ 	#this is used also at arguments
+ 
+ 	sv q%nr_of_prefs_pointers_p
+-	set q# ptrwarningsbool;    incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug
++	set q# ptrwarningsbool;    incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w
+ 	sv t%nr_of_prefs_strings_p
+-	set t# "orphans";          incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug"
++	set t# "orphans";          incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"
+ endfunction
+ 
+ #void
+@@ -215,7 +218,7 @@ function setpreferences(str scrpath)
+ 	setcall err prefextra(preferences,ptrpreferencessize,ptrpreferencescontent)
+ 	If err!=noerr
+ 		data null=0
+-		data void#1
++		#data void#1
+ 
+ 		str folders#1
+ 		setcall folders endoffolders(scrpath)
+@@ -235,7 +238,7 @@ function setpreferences(str scrpath)
+ 		setcall err memoryalloc(total,allocptrmem)
+ 		if err!=noerr
+ 			call Message(err)
+-			return void
++			ret
+ 		endif
+ 
+ 		call memtomem(ptrmem,scrpath,folders)
+--- ocompiler-1.orig/src/files/functions/scopes.s
++++ ocompiler-1/src/files/functions/scopes.s
+@@ -153,10 +153,12 @@ function scopes_searchinvars(sd p_err,sv
+ 	while i!=sz
+ 		sd ibit;setcall ibit importbit(fns)
+ 		add fns (nameoffset)
++		sd size;setcall size strlen(fns)
+ 		if ibit==0
+ 			sd data
+ 			sd scope
+ 			setcall scope scopes_get_scope(i)
++			call vars_log((set),fns,size)
+ 			setcall data searchinvars_scope_warn(p_err,scope)
+ 			if data!=(NULL)
+ 				set p_name# fns
+@@ -164,7 +166,7 @@ function scopes_searchinvars(sd p_err,sv
+ 			endif
+ 			inc i
+ 		endif
+-		addcall fns strlen(fns)
++		add fns size
+ 		inc fns
+ 	endwhile
+ 	return (NULL)
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -47,7 +47,7 @@ Const noerror=0
+ Const error=-1 #is also for some windows
+ Const FORWARD=1
+ Const BACKWARD=-1
+-Const void=0
++#Const void=0
+ 
+ Data bytesize=bsz
+ Data wordsize=wsz
+@@ -65,3 +65,6 @@ const dw_char=10
+ const dw_char_0=dw_char+1
+ 
+ const sym_with_size=dwsz
++
++const set=0
++const get=1
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -337,6 +337,9 @@ const ptrcodeFnObj^codeFnObj
+ const const_warn_get=0
+ const const_warn_get_init=1
+ 
++datax offset_warn#1
++const p_offset_warn^offset_warn
++
+ 
+ #main alloc error msg
+ Data fnavailable#1
+@@ -418,7 +421,7 @@ const p_hidden_pref^hidden_pref
+ Data safecurrentdirtopath#1
+ const p_safecurrentdirtopath^safecurrentdirtopath
+ 
+-const nr_of_prefs=21
++const nr_of_prefs=22
+ const nr_of_prefs_jumper=nr_of_prefs*:
+ 
+ vdata nr_of_prefs_pointers#nr_of_prefs;vdata nr_of_prefs_strings#nr_of_prefs
+--- ocompiler-1.orig/src/files/headers/log.h
++++ ocompiler-1/src/files/headers/log.h
+@@ -20,3 +20,10 @@ const log_declare=0x64
+ 
+ #r
+ const log_reusable=0x72
++
++#v
++const log_variable=0x76
++#Characteristic that can present variation from one element to another of a collectivity.
++#o
++const log_offset=0x6F
++#a WEAK function can be in two objects (having same name for variable)
+--- ocompiler-1.orig/src/files/headers/logs.h
++++ ocompiler-1/src/files/headers/logs.h
+@@ -10,6 +10,6 @@ const log_expand=0x78
+ #extern shared with odbg
+ const log_line=0x6C
+ 
+-#QwERtyuIoP 5 5
++#QwERtyuIOP 6 4
+ #asDFghjkL  3 6
+-#zXCvbNm    3 4
++# zXCVbNm   4 3
+--- ocompiler-1.orig/src/files/inits/inits.s
++++ ocompiler-1/src/files/inits/inits.s
+@@ -106,3 +106,5 @@ vdata ptrprevLineD%%ptrprevLineD
+ #set ptrprevLineD# 0    #set acording to includes
+ vdata ptrcodeRegD%%ptrcodeRegD
+ set ptrcodeRegD# 0
++
++call vars_log_reset() #to let next variables be ".var"
+--- ocompiler-1.orig/src/md
++++ ocompiler-1/src/md
+@@ -1,2 +1,5 @@
+ 
+ OFLAGS="function_name 1" make linkerflags= $@
++
++#last working glibc linker: 2.36
++#linker=/home/bc/arh/libc6-i386/lib32/ld-linux.so.2 make test
+--- ocompiler-1.orig/src/windows/files/platform.s
++++ ocompiler-1/src/windows/files/platform.s
+@@ -29,7 +29,7 @@ function wide_to_ansi(ss in)
+ 		set x in#
+ 		set out# x
+ 		if x==n
+-			return (void)
++			ret
+ 		endif
+ 		add in 2
+ 	endwhile
+--- /dev/null
++++ ocompiler-1/sync
+@@ -0,0 +1,2 @@
++
++rsync -av .ocompiler.txt ~/
+--- ocompiler-1.orig/tests/a
++++ ocompiler-1/tests/a
+@@ -1,4 +1,15 @@
+ 
+-../src/o ${1}.s && \
+-cc ${1}.o && \
++if [ -z "${OCOMP}" ]; then OCOMP=../src/o; fi
++if [ -z "${OLINK}" ]; then OLINK=../ounused/ounused; fi
++
++logs=
++objs=
++for f in "${@}"; do
++	${OCOMP} ${f}.s || exit 1
++	logs+=" ${f}.s.log"
++	objs+=" ${f}.o"
++done
++${OLINK} ${logs} && \
++cc ${objs} && \
+ ./a.out
++echo $?
+--- /dev/null
++++ ocompiler-1/tests/template.s
+@@ -0,0 +1,17 @@
++
++format elfobj64
++
++function file()
++      valuex path#1
++      valuex lines#1
++endfunction
++
++entry main()
++value test#1;value test2#1
++sv aux^test
++
++set aux#:file.path 2
++set aux#:file.lines 3
++
++add test test2
++return test
+--- /dev/null
++++ ocompiler-1/tests/unref.h
+@@ -0,0 +1,6 @@
++
++const b=1
++function a()
++	datax c#1
++	datax d#1
++endfunction
+--- /dev/null
++++ ocompiler-1/tests/unref.s
+@@ -0,0 +1,7 @@
++
++format elfobj64
++
++include "unref.h"
++
++entry main()
++return a.d
+--- /dev/null
++++ ocompiler-1/tests/unref2.s
+@@ -0,0 +1,6 @@
++
++format elfobj64
++
++include "unref.h"
++
++call a(a.c,(b))
