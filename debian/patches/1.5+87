@@ -1,0 +1,163 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+87) xenial; urgency=medium
+ .
+   * fix a critical pointer error
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-05-23
+
+--- ocompiler-1.orig/src/files/functions/64/bit.s
++++ ocompiler-1/src/files/functions/64/bit.s
+@@ -141,8 +141,8 @@ function stack64_enlarge(sd val)
+ 	endif
+ 	return val
+ endfunction
+-function stack64_base(sv pdata)
+-	sd is_arg;setcall is_arg stackrelativebit(pdata#)
++function stack64_base(sv data)
++	sd is_arg;setcall is_arg stackrelativebit(data)
+ 	if is_arg==0
+ 		return 0
+ 	endif
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -407,12 +407,12 @@ function getarg_colon(sd content,sd args
+ 			sd entrybags%%ptr_scopes
+ 			if scope!=entrybags
+ 				#stored class info
+-				setcall subtract_base scopes_get_class_data(scope,ptrdata) # test expandbit is inside
++				setcall subtract_base scopes_get_class_data(scope,ptrdata#) # test expandbit is inside
+ 			else
+ 				setcall subtract_base get_img_vdata() #or img_nbdata if exec will have (test expandbit)
+ 			endelse
+ 		else
+-			setcall subtract_base stack64_base(ptrdata)
++			setcall subtract_base stack64_base(ptrdata#)
+ 		endelse
+ 	else
+ 		SetCall err varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
+@@ -425,12 +425,12 @@ function getarg_colon(sd content,sd args
+ 			if ptrinnerfunction#==(TRUE)
+ 				sd ptrfunctionTagIndex%ptrfunctionTagIndex
+ 				setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+-				setcall subtract_base scopes_get_class_data(scope,ptrdata)
++				setcall subtract_base scopes_get_class_data(scope,ptrdata#)
+ 			else
+ 				setcall subtract_base get_img_vdata() #or img_nbdata if exec will have (test expandbit)
+ 			endelse
+ 		else
+-			setcall subtract_base stack64_base(ptrdata)
++			setcall subtract_base stack64_base(ptrdata#)
+ 		endelse
+ 	endelse
+ 	char random#1
+@@ -463,7 +463,7 @@ function getarg_colon(sd content,sd args
+ 	if pointer_size!=0
+ 		#runtime
+ 		or pointer2# (suffixbit)
+-		add pointer2 (masksize)
++		add pointer2 (masksize) #note that here is not on nameoffset, is on data#3 value from temp
+ 		set pointer2# pointer#
+ 		set pointer# data#
+ 	else
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -3,30 +3,38 @@
+ #ref entry start
+ #bit offset 0: 1 means referenced
+ Const referencebit=0x01
++
+ #bit offset 1: 1 means idata function
+ Const idatabitfunction=0x02
++
+ #bit offset 2: 1 means stack variable
+ Const stackbit=0x04
++
+ #bit offset 3:
+ 	#stackbit: 1 means ebp fn arguments          #was bit offset 3,4,5: stack ebx/ebp
+ Const stackrelativebit=0x08
+ 	#nostackbit: datapointbit
+ Const datapointbit=0x08
++
+ #bit offset 4: 1 means is nobits
+ const expandbit=0x10
++
+ #bit offset 5: 1 means ignore aftercall
+ const aftercallthrowlessbit=0x20
++
+ #bit offset 6: is functionX/importX
+ const x86_64bit=0x40
++
+ #bit offset 7; pointer bit (sv# with rex, sd# without rex)
+ const pointbit=0x80
++
+ #bit offset 8; runtime sufix offset
+ const suffixbit=0x100
+ 
+ const dummy_mask=0
+ const valueslongmask=datapointbit|pointbit
+ const location_bits=stackbit|expandbit
+-const stack_location_bits=location_bits|stackrelativebit
++const stack_location_bits=location_bits|stackrelativebit    #and expandbit? will be always 0 at stack, keep it clean from what we combine
+ 
+ const location=dwsz
+ Const maskoffset=location
+--- ocompiler-1.orig/tests/template.s
++++ ocompiler-1/tests/template.s
+@@ -2,16 +2,33 @@
+ format elfobj64
+ 
+ function file()
+-      valuex path#1
+-      valuex lines#1
++	valuex path#1
++	valuex lines#1
++	datax a#1
+ endfunction
+ 
+-entry main()
+-value test#1;value test2#1
++function line()
++	datax a#1
++endfunction
++
++entry main(sd *,sd c)
++sd *#1
++sd n#2
++value *=0x77
++value test#1;value test2#1;data a#1
+ sv aux^test
++value auxdata^test
++
++set test:file.a 4
++set test:line.a 4
++set n:main.n 4
++set n:main.c 4
++
++#not this right now
++#set aux#:file.a 4
++set auxdata#:file.a 4
+ 
+ set aux#:file.path 2
+ set aux#:file.lines 3
+-
+ add test test2
+ return test
