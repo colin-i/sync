@@ -1,0 +1,45 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x29) focal; urgency=medium
+ .
+   * fix again for 100/100->1/100
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-05-25
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -867,11 +867,13 @@ static int finds(bool phase,int number,b
+ 		number2=sprintf(buf,"/%u",number);
+ 		mvaddstr(0,getmaxx(stdscr)-number2,buf);
+ 		r=0;
+-	}else if(positiveInt_length(fprevnumber)>positiveInt_length(number)){//fprevnumber
+-		mvaddch(0,number3,' ');
++	}else{//fprevnumber
++		int dif=positiveInt_length(fprevnumber)-positiveInt_length(number);
++		move(0,number3);
++		while(dif>0){addch(' ');dif--;}
+ 	}
+ 	int nr=sprintf(buf,"%u",number);
+-	fprevnumber=number;//for 10->9, 10/10->1/10, ...
++	fprevnumber=number;//for 10->9, 10/10->1/10, ... , 100/100->1/10, ...
+ 	number3=getmaxx(stdscr)-number2-nr;
+ 	mvaddstr(0,number3,buf);
+ 	wnoutrefresh(stdscr);
