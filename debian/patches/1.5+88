@@ -1,0 +1,642 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+88) xenial; urgency=medium
+ .
+   * size of var, and size of modifications
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-06-08
+
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -342,8 +342,8 @@
+ 	All the constants are in the global scope.
+ 	When a function is declared all the variables declared in the function can not be used outside that function because they are in the function scope.
+ 	<br>
+-	The "!" character represents the data section cursor and can be used in place of a number. "!X" represents the nobits data section cursor if applicable.
+-	"!!function" will retrieve the virtual size of that entry.
++	The "!" character represents the data section cursor and can be used in place of a number. "!!" represents the nobits data section cursor if applicable.
++	"!function" will retrieve the data section size of that entry and "!!function" the virtual size. "!scope.variable" will get the size of the entity.
+ 	<br>
+ 	The ":" character represents the size of an integer and can be used in the place of a number. Returns 4B on 32-bits, 8B on 64-bits.
+ 	<br>
+--- ocompiler-1.orig/src/files/functions.s
++++ ocompiler-1/src/files/functions.s
+@@ -55,3 +55,5 @@ Include "./functions/scopes.s"
+ Include "./functions/debug.s"
+ 
+ Include "./functions/index.s"
++
++Include "./functions/short.s"
+--- ocompiler-1.orig/src/files/functions/actions/declare.s
++++ ocompiler-1/src/files/functions/actions/declare.s
+@@ -125,10 +125,10 @@ function declare(sv pcontent,sd pcomsize
+ 					#                                                                               since %%|
+ 					if is_expand==(FALSE)
+ 						sd pdataReg%%ptr_dataReg
+-						add pdataReg# unitsize    ##this is init by 0
++						add pdataReg# unitsize
+ 					else
+ 						sd pnobitsReg%ptrdataSize
+-						add pnobitsReg# unitsize    ##this is init by 0
++						add pnobitsReg# unitsize
+ 					endelse
+ 				endif
+ 			endelse
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -249,7 +249,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 	return errnr
+ EndFunction
+ #err
+-function getarg_dot(sd content,sd argsize,sd container_sz,sd ptrdata,sd ptrlow,sd ptrsufix)
++function getarg_dot_any(sd content,sd argsize,sd container_sz,sd ptrdata,sd ptrlow,sd ptrsufix)
+ 	sd errnr
+ 	sd scope
+ 	setcall errnr get_scope(#content,#argsize,container_sz,#scope)
+@@ -257,6 +257,12 @@ function getarg_dot(sd content,sd argsiz
+ 		return errnr
+ 	endif
+ 	SetCall errnr varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
++	return errnr
++endfunction
++#err
++function getarg_dot(sd content,sd argsize,sd container_sz,sd ptrdata,sd ptrlow,sd ptrsufix)
++	sd errnr
++	setcall errnr getarg_dot_any(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix)
+ 	if errnr!=(noerror)
+ 		return errnr
+ 	endif
+--- ocompiler-1.orig/src/files/functions/commons/base.s
++++ ocompiler-1/src/files/functions/commons/base.s
+@@ -52,6 +52,7 @@ Const globalinnerfunction^innerfunction
+ 
+ #pdata
+ Function getstructcont(data typenumber)
++#structcont is not same as cont, it's easy to rename
+ 	Data dest#1
+ 	Data scopes%%ptr_scopes
+ 	Data sizeofdataset=sizeofcontainer
+--- ocompiler-1.orig/src/files/functions/commons/vars.s
++++ ocompiler-1/src/files/functions/commons/vars.s
+@@ -439,7 +439,10 @@ function cast_resolve(sd number,sd cast,
+ 			and data# (~pointbit)
+ 		else
+ 		#cast==(cast_value)
+-			or data# (pointbit)
++			sd for_64;setcall for_64 is_for_64()
++			if for_64!=0 #not at sizeof variable, will be xor
++				or data# (pointbit)
++			endif
+ 		endelse
+ 		return (FALSE)
+ 	endif
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -18,6 +18,9 @@ Function dataassign(sd ptrcontent,sd ptr
+ 	#Data pointer_structure#1
+ 	#at constants and at data^sd,str^ss
+ 
++	#for size of var
++	sd reg;sd ptr_reserve
++
+ 	if punitsize==(NULL)
+ 		if typenumber==constantsnr
+ 			#this can't go after dataparse, addvarref will increase the offset
+@@ -26,14 +29,30 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			#it is not a mistake to go with 0 mask in variable from here to addaref
+ 			If err!=noerr;Return err;EndIf
+ 		else
++			sd immovable_struct_cont
+ 			if stack==(TRUE)
+ 				sd sectiontypenumber=totalmemvariables
+ 				add sectiontypenumber typenumber
++				#
++				setcall immovable_struct_cont getstructcont(sectiontypenumber)
++				call getcontReg(immovable_struct_cont,#reg)
++				#
+ 				SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,sectiontypenumber,long_mask,0) #there is 1 more argument but is not used
+ 			else
++				#
++				setcall immovable_struct_cont getstructcont(typenumber)
++				call getcontReg(immovable_struct_cont,#reg)
++				#
+ 				SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,long_mask,0,is_expand)
+ 			endelse
+ 			If err!=noerr;Return err;EndIf
++
++			#for size of var
++			call getcont(immovable_struct_cont,#ptr_reserve)
++			add ptr_reserve reg
++			add ptr_reserve (maskoffset_reserve)
++			call i_to_s(1,ptr_reserve) #why not set # 1? anyone can modify in peace and not set this part if not required. is this a plan? don't care
++
+ 			if sign==nosign
+ 				#stack variable declared without assignation, only increment stack variables
+ 				call addramp(#err)
+@@ -208,7 +227,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			Return noerr
+ 		EndElse
+ 	ElseIf sign==(reserveascii)
+-		setcall err get_reserve_size(ptrcontent,ptrsize,size,ptrvalue,stack,typenumber,long_mask)
++		setcall err get_reserve_size(ptrcontent,ptrsize,size,ptrvalue,stack,typenumber,long_mask,ptr_reserve)
+ 		if err==(noerror)
+ 			if punitsize!=(NULL)
+ 				set punitsize# value
+@@ -421,7 +440,7 @@ function get_function_values(sd impbit,s
+ endfunction
+ 
+ #err
+-function get_reserve_size(sv ptrcontent,sd ptrsize,sd size,sd ptrvalue,sd is_stack,sd typenumber,sd long_mask)
++function get_reserve_size(sv ptrcontent,sd ptrsize,sd size,sd ptrvalue,sd is_stack,sd typenumber,sd long_mask,sd ptr_reserve)
+ 	sd err
+ 	SetCall err parseoperations(ptrcontent,ptrsize,size,ptrvalue,(TRUE))
+ 	If err!=(noerror)
+@@ -432,9 +451,17 @@ function get_reserve_size(sv ptrcontent,
+ 	If ptrvalue#<0
+ 		Return ptrnegreserve
+ 	EndIf
++
++	sd value;set value ptrvalue#
++	if value<=(wmax)
++		call i_to_s(value,ptr_reserve)
++	else
++		call i_to_s(0,ptr_reserve)
++	endelse
++
+ 	if is_stack==(FALSE)
+ 		If typenumber!=(charnumber)
+-			SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
++			SetCall err maxsectioncheck(value,ptrvalue)
+ 			If err==(noerror)
+ 				SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
+ 				If err==(noerror)
+@@ -445,7 +472,7 @@ function get_reserve_size(sv ptrcontent,
+ 			EndIf
+ 		EndIf
+ 	else
+-		SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
++		SetCall err maxsectioncheck(value,ptrvalue)
+ 		If err==(noerror)
+ 			SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
+ 			If err==(noerror)
+--- ocompiler-1.orig/src/files/functions/scopes.s
++++ ocompiler-1/src/files/functions/scopes.s
+@@ -1,11 +1,17 @@
+ 
+ const sizeofclassinfostartdata=location
++#                              data
+ const classinfostartdatax=sizeofclassinfostartdata
+ const sizeofclassinfostarts=sizeofclassinfostartdata+location
+ #                                                    datax
+-const classinfosizedatax=sizeofclassinfostarts
+-const sizeofclassinfo=sizeofclassinfostarts+location
+-#                                           dataxsize
++const classinfosizedata=sizeofclassinfostarts
++const sizeofclassinfosizedata=location
++#                             datasize
++const sizeofclassinfosize=sizeofclassinfosizedata+location
++#                                                 dataxsize
++const classinfosizedatax=sizeofclassinfosizedata
++
++const sizeofclassinfo=sizeofclassinfostarts+sizeofclassinfosize
+ 
+ value scopesbag#1
+ data scopesbag_size#1
+@@ -131,12 +137,19 @@ function scopes_store(sv scope)
+ 		add scope (sizeofcontainer)
+ 		add pointer (sizeofcontainer)
+ 	endwhile
+-	#and set for class size, can have inter functions size for entry
+-	add scope (location)
++
++	#and set for class size, can get fast inter functions size for entry, and also the size of it
+ 	sd start;set start scope
+-	add scope (location)
++	add scope (sizeofclassinfostarts)
++
++	setcall scope#d^ get_img_vdata_dataReg()
++	sub scope#d^ start#
++
++	add start (sizeofclassinfostartdata)
++	add scope (sizeofclassinfosizedata)
+ 	setcall scope#d^ get_img_vdata_dataSize()
+ 	sub scope#d^ start#
++
+ 	return (noerror)
+ endfunction
+ 
+@@ -192,7 +205,7 @@ function scopes_get_class_data(sd scope,
+ endfunction
+ 
+ #size
+-function get_scope_datax_size(sd pos)
++function get_scope_data_size(sd pos,sd is_expand)
+ 	value entrybags%%ptr_scopes
+ 	vdata ptrfunctionTagIndex%ptrfunctionTagIndex
+ 	vdata ptrinnerfunction%globalinnerfunction
+@@ -201,24 +214,39 @@ function get_scope_datax_size(sd pos)
+ 	if scope!=entrybags
+ 		if ptrfunctionTagIndex#==pos
+ 			if ptrinnerfunction#==(TRUE)
+-				setcall size get_img_vdata_dataSize()
+-				add scope (sizeofscope+classinfostartdatax)
++				add scope (sizeofscope)
++				if is_expand!=0
++					add scope (classinfostartdatax)
++					setcall size get_img_vdata_dataSize()
++				else
++					setcall size get_img_vdata_dataReg()
++				endelse
+ 				sub size scope#
+ 				return size
+ 			endif
+ 			#will be 0 (from calloc)
+ 		endif
+ 		#another function
+-		add scope (sizeofscope+classinfosizedatax)
++		add scope (sizeofscope+classinfosizedata)
++		if is_expand!=0
++			add scope (classinfosizedatax)
++		endif
+ 		return scope# #calloc at bigger
+ 	endif
+ 	#entry
+ 	if ptrinnerfunction#==(TRUE)
+ 		setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+-		add scope (sizeofscope+classinfostartdatax)
++		add scope (sizeofscope)
++		if is_expand!=0
++			add scope (classinfostartdatax)
++		endif
+ 		set size scope#
+ 	else
+-		setcall size get_img_vdata_dataSize()
++		if is_expand!=0
++			setcall size get_img_vdata_dataSize()
++		else
++			setcall size get_img_vdata_dataReg()
++		endelse
+ 	endelse
+ 	sv p%scopesbag_ptr
+ 	set p p#
+@@ -226,7 +254,10 @@ function get_scope_datax_size(sd pos)
+ 	add last p
+ 	while p<^last
+ 		sd s;set s p#
+-		add s (sizeofscope+classinfosizedatax)
++		add s (sizeofscope+classinfosizedata)
++		if is_expand!=0
++			add s (classinfosizedatax)
++		endif
+ 		sub size s#
+ 		incst p
+ 	endwhile
+--- /dev/null
++++ ocompiler-1/src/files/functions/short.s
+@@ -0,0 +1,17 @@
++
++function i_to_s(sd data,ss pshort)
++	set pshort# data
++	inc pshort
++	div data 0x100
++	set pshort# data
++endfunction
++
++function s_to_i(ss pshort)
++	sd out
++	set out pshort#
++	inc pshort
++	ss p^out
++	inc p
++	set p# pshort#
++	return out
++endfunction
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -163,52 +163,91 @@ EndFunction
+ #error
+ function numbertoint(str content,data size,data outval,data minusbool)
+ 	Data bool#1
+-	#test to see if the ! sign is present that means the current data cursor
++	#test to see if the ! sign is present
+ 	char data_cursor=asciiexclamationmark
+ 	if content#==data_cursor
+ 		if size==1
++			#the current data cursor
+ 			setcall outval# get_img_vdata_dataReg()
+ 			return (noerror)
+ 		endif
++
++		sd err
++
+ 		vdata p_parses%ptr_parses
+ 		inc content
+ 		charx against#1
+ 		set against content#
+-		if size==2
+-			if against!=(asciix)
+-			#maybe is X
+-				add against (AZ_to_az)
+-			endif
+-			if against==(asciix)
++		if against==(asciiexclamationmark)
++			if size==2
++				#the current virtual data cursor
+ 				#main.ptr_nobits_virtual not yet at ocompiler, we have WinMain/main or (NULL)
+ 				vdata ptr_nobits_virtual%ptr_nobits_virtual
+ 				if ptr_nobits_virtual#==(No)
+ 					if p_parses#==(pass_init)
+-						return "At the moment, !X is not implemented here."
++						return "At the moment, !! is not implemented here."
+ 					endif
+ 				endif
+ 				setcall outval# get_img_vdata_dataSize()
+ 				return (noerror)
+ 			endif
+-			return "Expecting !X ."
+-		endif
+-		#size >=3
+-		if against==data_cursor
+-			if p_parses#==(pass_init)
+-				return "At the moment, !! is not implemented here."
+-			endif
+ 			inc content
+ 			sub size 2
+-			#for virtual is implemented at the moment. if against==data_cursor !!!
+-			sd pos
+-			sd err;setcall err get_scope_pos(content,size,#pos)
+-			if err==(noerror)
+-				setcall outval# get_scope_datax_size(pos)
+-			endif
++			setcall err get_sizeoffunction(content,size,outval,(TRUE))
+ 			return err
+ 		endif
+-		vstr er="The text after the data cursor sign isn't recognized."
+-		return er
++
++		dec size
++		sd dot_offset;setcall dot_offset valinmem(content,size,(asciidot))
++		if dot_offset!=size
++			#size of variable, !a.b! offset
++			#suffixed,casted, nobody is stopping them (casted will not reach here, will be xor)
++			#	and suffix+0 at def, else is a comment;at code is ok
++			datax data#1;datax low#1;datax sufix#1
++			setcall err getarg_dot_any(content,size,dot_offset,#data,#low,#sufix)
++			if err==(noerror)
++				if low!=0
++					set outval# (bsz)
++				else
++					set outval# (dwsz)
++					sd test;setcall test stackbit(data)
++					if test==0
++						if sufix==0
++							setcall test datapointbit(data)
++							if test!=0
++								set outval# (qwsz)
++							endif
++						else
++							setcall test pointbit(data) #it has 64 check
++							if test!=0
++								set outval# (qwsz)
++							endif
++						endelse
++					else
++						if sufix==0
++							setcall outval# stack64_enlarge(outval#)
++						else
++							setcall test pointbit(data) #it has 64 check
++							if test!=0
++								set outval# (qwsz)
++							endif
++						endelse
++					endelse
++				endelse
++
++				if sufix==0
++					add data (maskoffset_reserve)
++					sd shortvalue;setcall shortvalue s_to_i(data)
++					if shortvalue==0
++						return "Great reserve size is not implemented yet."
++					endif
++					mult outval# shortvalue
++				endif
++			endif
++		else
++			setcall err get_sizeoffunction(content,size,outval,(FALSE))
++		endelse
++		return err
+ 	#test for : sign (the size of a stack value, 4B on 32-bits, 8B on 64-bits)
+ 	char int_size=asciicolon
+ 	elseif content#==int_size
+@@ -231,6 +270,21 @@ function numbertoint(str content,data si
+ 	return (noerror)
+ endfunction
+ 
++#size of function
++function get_sizeoffunction(sd content,sd size,sd outval,sd is_expand)
++	vdata p_parses%ptr_parses
++	if p_parses#==(pass_init)
++		return "At the moment, !func is not implemented here."  #after pass_init is the calloc for scopes
++	endif
++	sd err
++	sd pos
++	setcall err get_scope_pos(content,size,#pos)
++	if err==(noerror)
++		setcall outval# get_scope_data_size(pos,is_expand)
++	endif
++	return err
++endfunction
++
+ #err pointer
+ Function numbersconstants(str content,data size,data outval)
+ 	Str intconsterr="Integer(dec/hex) or constant value expected."
+--- ocompiler-1.orig/src/files/headers/ascii.h
++++ ocompiler-1/src/files/headers/ascii.h
+@@ -43,7 +43,7 @@ Const asciif=0x66
+ Const asciin=0x6E
+ Const asciir=0x72
+ Const asciit=0x74
+-Const asciix=0x78
++#Const asciix=0x78
+ Const asciiz=0x7A
+ #7b left curly bracket {
+ Const asciivbar=0x7C
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -29,6 +29,9 @@ Const bsz=1
+ Const wsz=2
+ Const dwsz=4
+ Const qwsz=8
++
++const wmax=0xffFF
++
+ Const A_from_AZ=asciiA
+ #Const Z_from_AZ=asciiZ
+ Const a_from_az=asciia
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -40,6 +40,7 @@ const location=dwsz
+ Const maskoffset=location
+ const masksize=dwsz
+ const location_and_mask=maskoffset+masksize
++const maskoffset_reserve=location_and_mask-wsz
+ Const nameoffset=location_and_mask
+ const addoffset=location_and_mask
+ 
+@@ -74,7 +75,7 @@ Const sizeofcontainer=3*dwsz
+ Const includesSize=50*includesetSz
+ #includesSize
+ 
+-#this, not yet at simple exec Const containersbegin=!x
++#this, not yet at simple exec Const containersbegin=!!
+ 
+ Datax includesMax#1
+ Datax includes#1
+@@ -230,7 +231,7 @@ Datax debugsec#1
+ Datax debugsecReg#1
+ Const ptr_debug^debugsecMax
+ 
+-#not yet at simple exec Const containerssize=!x-containersbegin
++#not yet at simple exec Const containerssize=!!-containersbegin
+ const containersbegin^includesMax
+ const containersalmostend^debugsecReg
+ data containerssize=containersalmostend+dwsz-containersbegin
+@@ -248,7 +249,7 @@ Const ptrdummyEntry^dummyEntryMax
+ #data *#1
+ #data nobitssecReg#1
+ #const ptrnobitsReg^nobitssecReg
+-#used at !x offset
++#used at !! offset
+ 
+ Data datasecSize#1
+ const ptrdataSize^datasecSize
+--- ocompiler-1.orig/tests/sizeof.s
++++ /dev/null
+@@ -1,29 +0,0 @@
+-
+-format elfobj64
+-
+-importx "printf" printf
+-
+-#data *#!!main  #!! error
+-data *#1;datax *#1;data *#1
+-
+-function f1()
+-data *#1;datax *#2;data *#1
+-call printf("%u\n",(!!f1))    #8
+-datax *#1
+-endfunction
+-
+-data *#1;datax *#3;data *#1
+-
+-function f2()
+-data *#1;datax *#4;data *#1
+-call printf("%u\n",(!!f1))    #12
+-call printf("%u\n",(!!main))  #16
+-endfunction
+-
+-data *#1;datax *#1;data a=!!main
+-
+-entry main()
+-call f1()
+-call f2()
+-call printf("%u\n",a)         #20
+-return 0
+--- /dev/null
++++ ocompiler-1/tests/sizeoffn.s
+@@ -0,0 +1,37 @@
++
++format elfobj64
++
++importx "printf" printf
++
++#data *#!main  #! error
++data *#1;datax *#1;data *#2
++
++vstr p="%u\n"
++
++function f1()
++data *#1;datax *#2;data *#2
++call printf(main.p,(!!f1))   #8
++call printf(main.p,(!f1))    #12
++data *#1;datax *#1
++endfunction
++
++data *#1;datax *#3;data *#2
++
++function f2()
++data *#1;datax *#4;data *#1
++call printf(main.p,(!!f1))   #12
++call printf(main.p,(!f1))    #16
++call printf(main.p,(!!main)) #16
++call printf(main.p,(!main))  #36
++endfunction
++
++data *#1;datax *#1
++
++entry main()
++#const not_here=!!f1         #same error
++call f1()
++call f2()
++
++call printf(p,(!!main))        #20
++call printf(p,(!main))        #40
++return 0
+--- /dev/null
++++ ocompiler-1/tests/sizeofvar.s
+@@ -0,0 +1,37 @@
++
++format elfobj64
++
++importx "printf" printf
++
++entry main()
++
++char a=1
++data b=2
++value c=3
++vdata d=1
++vstr e=1
++
++sv f=1
++
++char g#66123
++
++charx aa#2
++datax bb#3
++valuex cc#4
++
++call printf("%d\n",(!main.a))  #1
++call printf("%d\n",(!main.b))  #4
++call printf("%d\n",(!main.c))  #8
++call printf("%d\n",(!main.c#)) #8
++call printf("%d\n",(!main.d#)) #4
++call printf("%d\n",(!main.e#)) #1
++
++call printf("%d\n",(!main.f))  #8
++call printf("%d\n",(!main.f#)) #8
++
++call printf("%d\n",(!main.aa)) #2
++call printf("%d\n",(!main.bb)) #12
++call printf("%d\n",(!main.cc)) #32
++
++#return (!main.g)    #error
++return 0
