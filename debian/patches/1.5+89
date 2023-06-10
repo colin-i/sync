@@ -1,0 +1,348 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+89) xenial; urgency=medium
+ .
+   * critical undefined fix
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-06-10
+
+--- ocompiler-1.orig/src/files/actions/main/index.s
++++ ocompiler-1/src/files/actions/main/index.s
+@@ -158,7 +158,7 @@ if loop==1
+ 				Include "./index/endfunction.s"
+ 			ElseIf commandset==(cRET)
+ 		call entryscope_verify_code()
+-				Include "./index/ret.s"
++				setcall errormsg writeret()
+ 			ElseIf commandset==(cINCLUDELINK)
+ 				Include "./index/include.s"
+ 			ElseIf commandset==(cFORMAT)
+--- ocompiler-1.orig/src/files/actions/main/index/function.s
++++ ocompiler-1/src/files/actions/main/index/function.s
+@@ -26,9 +26,9 @@ Else
+ 		#Set objfnmask referencebit
+ 		if parses==(pass_write)
+ 			set fnavailable two
+-			if exit_end==(TRUE)
+-				set real_exit_end (TRUE)
+-			endif
++			#??? is not working for override. if exit_end==(TRUE)
++			#	set real_exit_end (TRUE)
++			#endif
+ 		endif
+ 	Else
+ 		#Set objfnmask null
+--- ocompiler-1.orig/src/files/actions/main/index/ret.s
++++ /dev/null
+@@ -1,14 +0,0 @@
+-
+-sd termswitch
+-sd continuation
+-sd continuationsize
+-setcall termswitch is_linux_end()
+-if termswitch==(TRUE)
+-	setcall errormsg getexit(#continuation,#continuationsize)
+-	if errormsg==(noerror)
+-		setcall errormsg addtosec(continuation,continuationsize,ptrcodesec)
+-	endif
+-else
+-	setcall continuationsize getreturn(#continuation)
+-	setcall errormsg addtosec(continuation,continuationsize,ptrcodesec)
+-endelse
+--- ocompiler-1.orig/src/files/functions.s
++++ ocompiler-1/src/files/functions.s
+@@ -37,6 +37,7 @@ Include "./functions/actions/declare.s"
+ 
+ Include "./functions/commands/cond.s"
+ Include "./functions/commands/lib.s"
++Include "./functions/commands/ret.s"
+ 
+ Include "./functions/pref/preffuncs.s"
+ Include "./functions/pref/sdsv.s"
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.s
++++ ocompiler-1/src/files/functions/actions/dataparse.s
+@@ -21,7 +21,7 @@ Function entryvarsfns(data content,data
+ EndFunction
+ 
+ #relocated offset or for objects
+-function get_img_vdata()
++function get_img_vdata()   #(exandbit & nobits) = .nbsection
+ 	Data value#1
+ 	Data inter#1
+ 
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -516,8 +516,8 @@ endfunction
+ 
+ #bool
+ function is_linux_end()
+-	sd p_real_exit_end%p_real_exit_end
+-	return p_real_exit_end#
++	sd p_exit_end%p_exit_end ;#real_
++	return p_exit_end#
+ endfunction
+ #er
+ function entryraw_top()
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -415,7 +415,7 @@ function getarg_colon(sd content,sd args
+ 				#stored class info
+ 				setcall subtract_base scopes_get_class_data(scope,ptrdata#) # test expandbit is inside
+ 			else
+-				setcall subtract_base get_img_vdata() #or img_nbdata if exec will have (test expandbit)
++				setcall subtract_base get_img_vdata() #if exe will get nobits add one argument, get_img_vdata is also called at datareg and datasize
+ 			endelse
+ 		else
+ 			setcall subtract_base stack64_base(ptrdata#)
+@@ -433,7 +433,7 @@ function getarg_colon(sd content,sd args
+ 				setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+ 				setcall subtract_base scopes_get_class_data(scope,ptrdata#)
+ 			else
+-				setcall subtract_base get_img_vdata() #or img_nbdata if exec will have (test expandbit)
++				setcall subtract_base get_img_vdata() #if exe will get nobits add one argument, get_img_vdata is also called at datareg and datasize
+ 			endelse
+ 		else
+ 			setcall subtract_base stack64_base(ptrdata#)
+@@ -636,7 +636,6 @@ function argfilters_helper(sd ptrconditi
+ 	Return err
+ EndFunction
+ 
+-
+ function prefix_bool()
+ 	data value#1
+ 	data p^value
+--- /dev/null
++++ ocompiler-1/src/files/functions/commands/ret.s
+@@ -0,0 +1,20 @@
++
++#err
++function writeret()
++	sd err
++	sd termswitch
++	sd continuation
++	sd continuationsize
++	setcall termswitch is_linux_end()
++	if termswitch==(TRUE)
++		setcall err getexit(#continuation,#continuationsize)
++		if err==(noerror)
++			Data ptrcodesec%%ptr_codesec
++			setcall err addtosec(continuation,continuationsize,ptrcodesec)
++		endif
++	else
++		setcall continuationsize getreturn(#continuation)
++		setcall err addtosec(continuation,continuationsize,ptrcodesec)
++	endelse
++	return err
++endfunction
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -453,11 +453,15 @@ function get_reserve_size(sv ptrcontent,
+ 	EndIf
+ 
+ 	sd value;set value ptrvalue#
+-	if value<=(wmax)
+-		call i_to_s(value,ptr_reserve)
+-	else
+-		call i_to_s(0,ptr_reserve)
+-	endelse
++	vdata p_parses%ptr_parses
++	if p_parses==(pass_write)
++	#ptr_reserve is undefined at another pass (and theoretically at constants)
++		if value<=(wmax)
++			call i_to_s(value,ptr_reserve)
++		else
++			call i_to_s(0,ptr_reserve)
++		endelse
++	endif
+ 
+ 	if is_stack==(FALSE)
+ 		If typenumber!=(charnumber)
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -164,8 +164,7 @@ EndFunction
+ function numbertoint(str content,data size,data outval,data minusbool)
+ 	Data bool#1
+ 	#test to see if the ! sign is present
+-	char data_cursor=asciiexclamationmark
+-	if content#==data_cursor
++	if content#==(asciiexclamationmark)
+ 		if size==1
+ 			#the current data cursor
+ 			setcall outval# get_img_vdata_dataReg()
+@@ -200,50 +199,57 @@ function numbertoint(str content,data si
+ 		dec size
+ 		sd dot_offset;setcall dot_offset valinmem(content,size,(asciidot))
+ 		if dot_offset!=size
+-			#size of variable, !a.b! offset
+ 			#suffixed,casted, nobody is stopping them (casted will not reach here, will be xor)
+ 			#	and suffix+0 at def, else is a comment;at code is ok
++			ss pointer=-1;add pointer content;add pointer size
+ 			datax data#1;datax low#1;datax sufix#1
+-			setcall err getarg_dot_any(content,size,dot_offset,#data,#low,#sufix)
+-			if err==(noerror)
+-				if low!=0
+-					set outval# (bsz)
+-				else
+-					set outval# (dwsz)
+-					sd test;setcall test stackbit(data)
+-					if test==0
+-						if sufix==0
+-							setcall test datapointbit(data)
+-							if test!=0
+-								set outval# (qwsz)
+-							endif
+-						else
+-							setcall test pointbit(data) #it has 64 check
+-							if test!=0
+-								set outval# (qwsz)
+-							endif
+-						endelse
++			if pointer#!=(asciiexclamationmark)
++				#size of variable
++				setcall err getarg_dot_any(content,size,dot_offset,#data,#low,#sufix)
++				if err==(noerror)
++					if low!=0
++						set outval# (bsz)
+ 					else
+-						if sufix==0
+-							setcall outval# stack64_enlarge(outval#)
++						set outval# (dwsz)
++						sd test;setcall test stackbit(data)
++						if test==0
++							if sufix==0
++								setcall test datapointbit(data)
++								if test!=0
++									set outval# (qwsz)
++								endif
++							else
++								setcall test pointbit(data) #it has 64 check
++								if test!=0
++									set outval# (qwsz)
++								endif
++							endelse
+ 						else
+-							setcall test pointbit(data) #it has 64 check
+-							if test!=0
+-								set outval# (qwsz)
+-							endif
++							if sufix==0
++								setcall outval# stack64_enlarge(outval#)
++							else
++								setcall test pointbit(data) #it has 64 check
++								if test!=0
++									set outval# (qwsz)
++								endif
++							endelse
+ 						endelse
+ 					endelse
+-				endelse
+ 
+-				if sufix==0
+-					add data (maskoffset_reserve)
+-					sd shortvalue;setcall shortvalue s_to_i(data)
+-					if shortvalue==0
+-						return "Great reserve size is not implemented yet."
++					if sufix==0
++						add data (maskoffset_reserve)
++						sd shortvalue;setcall shortvalue s_to_i(data)
++						if shortvalue==0
++							return "Great reserve size is not implemented yet."
++						endif
++						mult outval# shortvalue
+ 					endif
+-					mult outval# shortvalue
+ 				endif
+-			endif
++			else
++				# !a.b! offset
++				dec size
++				return "to do" #return "Not using offset of suffix."
++			endelse
+ 		else
+ 			setcall err get_sizeoffunction(content,size,outval,(FALSE))
+ 		endelse
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -450,8 +450,8 @@ const p_underscore_pref^underscore_pref
+ #exit end preference
+ data exit_end#1
+ const p_exit_end^exit_end
+-data real_exit_end#1
+-const p_real_exit_end^real_exit_end
++#data real_exit_end#1
++#const p_real_exit_end^real_exit_end
+ 
+ data include_sec#1
+ const p_include_sec^include_sec
+--- ocompiler-1.orig/src/files/inits/inits.s
++++ ocompiler-1/src/files/inits/inits.s
+@@ -81,8 +81,6 @@ endelse
+ sd rel64_blankinit%p_elf64_r_info_type
+ set rel64_blankinit# (R_X86_64_32)
+ 
+-set real_exit_end (FALSE)
+-
+ sd el_or_e=FALSE
+ 
+ #needing also at pass call and pass write
+--- /dev/null
++++ ocompiler-1/tests/ret.s
+@@ -0,0 +1,9 @@
++
++format elf
++
++entry main()
++ret
++override exit_end 1
++ret
++override exit_end 0
++exit 2
+--- ocompiler-1.orig/tests/template.s
++++ ocompiler-1/tests/template.s
+@@ -1,6 +1,9 @@
+ 
+ format elfobj64
+ 
++valuex x#1
++valuex y#1
++
+ function file()
+ 	valuex path#1
+ 	valuex lines#1
+@@ -24,11 +27,16 @@ set test:line.a 4
+ set n:main.n 4
+ set n:main.c 4
+ 
++set test:main.y 4
++add test:y 4
++add test:main.test 4
++add test:test 4
++
+ #not this right now
+ #set aux#:file.a 4
+ set auxdata#:file.a 4
+ 
+ set aux#:file.path 2
+-set aux#:file.lines 3
++add aux#:file.lines 2
+ add test test2
+-return test
++return test    ##20
