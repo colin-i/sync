@@ -1,0 +1,527 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+90) xenial; urgency=medium
+ .
+   * override fix, offset of variable, call..ret
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-06-12
+
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -344,6 +344,7 @@
+ 	<br>
+ 	The "!" character represents the data section cursor and can be used in place of a number. "!!" represents the nobits data section cursor if applicable.
+ 	"!function" will retrieve the data section size of that entry and "!!function" the virtual size. "!scope.variable" will get the size of the entity.
++	"!scope.variable!" is the offset of the variable in the scope.
+ 	<br>
+ 	The ":" character represents the size of an integer and can be used in the place of a number. Returns 4B on 32-bits, 8B on 64-bits.
+ 	<br>
+--- ocompiler-1.orig/src/files/actions/main.s
++++ ocompiler-1/src/files/actions/main.s
+@@ -9,6 +9,9 @@ data dot_comma_end#1;set dot_comma_end 0
+ 
+ #data logbackup#1
+ 
++#backup prefs between passes, this can also be here: comline args, this, actions.s
++call pref_store()
++
+ set parses (pass_init)
+ 
+ While includesReg!=null
+@@ -106,10 +109,8 @@ While includesReg!=null
+ 					set errormsg endfnexp
+ 					Call Message(errormsg)
+ 				Else
++					call pref_restore()
+ 					if parses==(pass_init)
+-						setcall errormsg align_alloc(functionTagIndex)
+-
+-						set parses (pass_calls)
+ 						set g_e_b_p# (FALSE)  #in case was set, for writes
+ 
+ 						set datasecSize datasecReg
+@@ -118,10 +119,14 @@ While includesReg!=null
+ 
+ 						#set logbackup logfile
+ 						#set logfile negative   #will reiterate tree. and will also have reusable,imports and constants
++
++						setcall errormsg align_alloc(functionTagIndex)
++						set parses (pass_calls)
+ 					else
+-						set parses (pass_write)
+ 						call align_resolve()
++
+ 						setcall errormsg scopes_alloc(el_or_e,functionTagIndex)
++						set parses (pass_write)
+ 					endelse
+ 					if errormsg==(noerror)
+ 						#used when having multiple includes
+--- ocompiler-1.orig/src/files/actions/main/index.s
++++ ocompiler-1/src/files/actions/main/index.s
+@@ -136,7 +136,7 @@ if loop==1
+ 					endif
+ 				endif
+ 			ElseIf commandset==(cDECLARE)
+-				Include "./index/declare.s"
++				setcall errormsg declare(pcontent,pcomsize,p_is_for_64_value#,subtype,parses)
+ 			ElseIf commandset==(cPRIMSEC)
+ 				Include "./index/primsec.s"
+ 			ElseIf commandset==(cONEARG)
+@@ -176,7 +176,7 @@ if loop==1
+ 				Include "./index/callex.s"
+ 			ElseIf commandset==(cOVERRIDE)
+ 				#is at all, example at write hidden_pref
+-				Include "./index/override.s"
++				setcall errormsg override_com(#content,#comsize)
+ 			ElseIf commandset==(cLIBRARY)
+ 				if parses==(pass_init);Include "./index/library.s"
+ 				else;Call advancecursors(pcontent,pcomsize,comsize);endelse
+--- ocompiler-1.orig/src/files/actions/main/index/call.s
++++ ocompiler-1/src/files/actions/main/index/call.s
+@@ -1,3 +1,8 @@
+ 
+ Data callfn=callfunction
+ SetCall errormsg parsefunction(pcontent,pcomsize,callfn,subtype) #there are 2 more arguments but are not used
++if parses==(pass_write)
++	if errormsg==(noerror)
++		setcall errormsg after_after_call(subtype)
++	endif
++endif
+--- ocompiler-1.orig/src/files/actions/main/index/callex.s
++++ ocompiler-1/src/files/actions/main/index/callex.s
+@@ -45,6 +45,9 @@ if errormsg==(noerror)
+ 				SetCall errormsg addtosec(callex_data,callex_sz,ptrcodesec)
+ 				if errormsg==(noerror)
+ 					setcall errormsg write_function_call(top_data,bool_indirect,(TRUE))
++					if errormsg==(noerror)
++						setcall errormsg after_after_call(subtype)
++					endif
+ 				endif
+ 			endif
+ 		endif
+--- ocompiler-1.orig/src/files/actions/main/index/declare.s
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-setcall errormsg declare(pcontent,pcomsize,p_is_for_64_value#,subtype,parses)
+--- ocompiler-1.orig/src/files/actions/main/index/override.s
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-setcall errormsg override_com(#content,#comsize)
+--- ocompiler-1.orig/src/files/functions.s
++++ ocompiler-1/src/files/functions.s
+@@ -41,6 +41,7 @@ Include "./functions/commands/ret.s"
+ 
+ Include "./functions/pref/preffuncs.s"
+ Include "./functions/pref/sdsv.s"
++Include "./functions/pref/backup.s"
+ 
+ Include "./functions/64/bit.s"
+ Include "./functions/64/reloc.s"
+--- ocompiler-1.orig/src/files/functions/64/bit.s
++++ ocompiler-1/src/files/functions/64/bit.s
+@@ -40,10 +40,13 @@ function is_for_64_is_impX_or_fnX_set(sd
+ 		if val==(x86_64bit)
+ 			setcall p_b is_for_64_is_impX_or_fnX_p_get()
+ 			set p_b# (TRUE)
+-		elseif subtype==(x_callx_flag)
+-			setcall p_b is_for_64_is_impX_or_fnX_p_get()
+-			set p_b# (TRUE)
+-		endelseif
++		else
++			setcall subtype callx_flag(subtype)
++			if subtype!=0
++				setcall p_b is_for_64_is_impX_or_fnX_p_get()
++				set p_b# (TRUE)
++			endif
++		endelse
+ 	endif
+ 	#is this required anymore? set p_b# (FALSE)
+ endfunction
+@@ -51,7 +54,8 @@ function is_for_64_is_impX_or_fnX_set_fo
+ 	sd b
+ 	setcall b is_for_64()
+ 	if b==(TRUE)
+-		if subtype==(x_callx_flag)
++		setcall subtype callx_flag(subtype)
++		if subtype!=0
+ 			sd p_b
+ 			setcall p_b is_for_64_is_impX_or_fnX_p_get()
+ 			set p_b# (TRUE)
+@@ -59,6 +63,11 @@ function is_for_64_is_impX_or_fnX_set_fo
+ 	endif
+ endfunction
+ 
++function callx_flag(sd subtype)
++	and subtype (x_callx_flag)
++	return subtype
++endfunction
++
+ #get
+ function nr_of_args_64need_p_get();data n#1;return #n;endfunction
+ function nr_of_args_64need_count()
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -400,26 +400,10 @@ function getarg_colon(sd content,sd args
+ 	sd test
+ 	setcall container_sz valinmem(content,argsize,(asciidot))
+ 	if container_sz!=argsize
+-		setcall err get_scope(#content,#argsize,container_sz,#scope)
++		setcall err getarg_base(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix,#subtract_base)
+ 		if err!=(noerror)
+ 			return err
+ 		endif
+-		SetCall err varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
+-		if err!=(noerror)
+-			return err
+-		endif
+-		setcall test stackbit(ptrdata#)
+-		if test==0
+-			sd entrybags%%ptr_scopes
+-			if scope!=entrybags
+-				#stored class info
+-				setcall subtract_base scopes_get_class_data(scope,ptrdata#) # test expandbit is inside
+-			else
+-				setcall subtract_base get_img_vdata() #if exe will get nobits add one argument, get_img_vdata is also called at datareg and datasize
+-			endelse
+-		else
+-			setcall subtract_base stack64_base(ptrdata#)
+-		endelse
+ 	else
+ 		SetCall err varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
+ 		if err!=(noerror)
+@@ -491,6 +475,34 @@ function getarg_testdot(sd content,sd si
+ 	return errnr
+ endfunction
+ 
++#err
++function getarg_base(sd content,sd argsize,sd container_sz,sv ptrdata,sd ptrlow,sd ptrsufix,sd p_subtract_base)
++	sd err
++	sd scope
++	setcall err get_scope(#content,#argsize,container_sz,#scope)
++	if err!=(noerror)
++		return err
++	endif
++	SetCall err varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
++	if err!=(noerror)
++		return err
++	endif
++	sd test
++	setcall test stackbit(ptrdata#)
++	if test==0
++		sd entrybags%%ptr_scopes
++		if scope!=entrybags
++			#stored class info
++			setcall p_subtract_base# scopes_get_class_data(scope,ptrdata#) # test expandbit is inside
++		else
++			setcall p_subtract_base# get_img_vdata() #if exe will get nobits add one argument, get_img_vdata is also called at datareg and datasize
++		endelse
++	else
++		setcall p_subtract_base# stack64_base(ptrdata#)
++	endelse
++	return (noerror)
++endfunction
++
+ function there_is_nothing_there()
+ 	return "Stack variables are not relevant for scope.variable."
+ endfunction
+--- ocompiler-1.orig/src/files/functions/commands/ret.s
++++ ocompiler-1/src/files/functions/commands/ret.s
+@@ -18,3 +18,14 @@ function writeret()
+ 	endelse
+ 	return err
+ endfunction
++
++#err
++function after_after_call(sd subtype)
++	and subtype (call_ret_flag)
++	if subtype!=0
++		sd err
++		setcall err writeret()
++		return err
++	endif
++	return (noerror)
++endfunction
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -406,9 +406,10 @@ Const compointersloc^pointers
+ Data pointersvars#numberofcommandsvars+1
+ Const compointersvarsloc^pointersvars
+ 
+-const x_call_flag=0x80000000
+-const x_func_flag=0x80000000
+-const x_callx_flag=0x40000000
++const x_call_flag=0x80000000   #at setcall...
++const x_func_flag=0x80000000   #at def, varargs
++const call_ret_flag=0x80000000 #at call
++const x_callx_flag=0x40000000 ;#at call and setcall..., call a variable/function/import like functionx/importx
+ 
+ #declare coresp
+ function commandSubtypeDeclare_to_typenumber(sd subtype,sd p_is_expand)
+@@ -463,19 +464,26 @@ Function getcommand(data pcontent,data p
+ 
+ 		If command==(cPRIMSEC)
+ 			Set extstr call
++		elseif command==(cCALL)
++		vstr call_ret_str="RET"
++			set extstr call_ret_str
+ 		Elseif command==(cSTARTFUNCTION)
+ 			sd is_x;setcall is_x is_funcx_subtype(ptrsubtype#)
+ 			if is_x==(TRUE)
+-				Set extstr "X"
++				Set extstr "X" #varargs
+ 			endif
++		elseif command==(cCALLEX)
++			set extstr call_ret_str
+ 		endElseif
+ 
+ 		SetCall result stringsatmemspc(pcontent,psize,offset,spacebool,extstr,extbool)
+ 		If extbooldata==true
++		#here firstAndSecond part was recognized
+ 			If command==(cPRIMSEC)
+ 				#or first byte at subcommand to recognize the xcall at two args
+ 				or ptrsubtype# (x_call_flag)
+ 				if result==(FALSE)
++				#here there was not a space
+ 					setcall result stratmemspc(pcontent,psize,"X",spacebool)
+ 					if result==(TRUE)
+ 						or ptrsubtype# (x_callx_flag)
+@@ -484,15 +492,21 @@ Function getcommand(data pcontent,data p
+ 					endelse
+ 				endif
+ 			Else
+-			#funcx
+ 				if result==(FALSE)
++				#here there was not a space
+ 					break
+ 				endif
+-				#allow the command at 64 but not consider it
+-				sd for64;setcall for64 is_for_64()
+-				if for64==(TRUE)
+-					or ptrsubtype# (x_func_flag)
+-				endif
++				If command==(cSTARTFUNCTION)
++				#functionx/entry [x] , varargs
++					#allow the command at 64
++					sd for64;setcall for64 is_for_64()
++					if for64==(TRUE)
++						or ptrsubtype# (x_func_flag)
++					endif
++				else
++				#call[ex][x]ret
++					or ptrsubtype# (call_ret_flag)
++				endelse
+ 			endElse
+ 			return command
+ 		elseIf result==true
+--- /dev/null
++++ ocompiler-1/src/files/functions/pref/backup.s
+@@ -0,0 +1,28 @@
++
++function pref_store()
++	sv src%nr_of_prefs_pointers_p
++	sd dest%prefs_backup_p
++
++	sd max=nr_of_prefs_jumper
++	add max src
++	while src!=max
++		sd p;set p src#
++		set dest# p#
++		incst src
++		add dest (dwsz)
++	endwhile
++endfunction
++
++function pref_restore()
++	sd src%prefs_backup_p
++	sv dest%nr_of_prefs_pointers_p
++
++	sd max=nr_of_prefs_jumper
++	add max dest
++	while dest!=max
++		sd p;set p dest#
++		set p# src#
++		incst dest
++		add src (dwsz)
++	endwhile
++endfunction
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -248,7 +248,15 @@ function numbertoint(str content,data si
+ 			else
+ 				# !a.b! offset
+ 				dec size
+-				return "to do" #return "Not using offset of suffix."
++
++				setcall err getarg_base(content,size,dot_offset,#data,#low,#sufix,outval)
++				if err==(noerror)
++					if sufix!=0
++						return "Not using offset of suffix."
++					endif
++					sub outval# data#
++					neg outval#
++				endif
+ 			endelse
+ 		else
+ 			setcall err get_sizeoffunction(content,size,outval,(FALSE))
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -435,6 +435,8 @@ const nr_of_prefs_jumper=nr_of_prefs*:
+ 
+ vdata nr_of_prefs_pointers#nr_of_prefs;vdata nr_of_prefs_strings#nr_of_prefs
+ const nr_of_prefs_pointers_p^nr_of_prefs_pointers;const nr_of_prefs_strings_p^nr_of_prefs_strings
++data prefs_backup#nr_of_prefs
++const prefs_backup_p^prefs_backup
+ 
+ data inplace_reloc_pref#1
+ const p_inplace_reloc_pref^inplace_reloc_pref
+--- ocompiler-1.orig/tests/a
++++ ocompiler-1/tests/a
+@@ -5,11 +5,18 @@ if [ -z "${OLINK}" ]; then OLINK=../ounu
+ logs=
+ objs=
+ for f in "${@}"; do
+-	${OCOMP} ${f}.s || exit 1
++	if [ "${edb}" = "0" ]; then
++		edb --run ${OCOMP} ${f}.s || exit 1
++	else
++		${OCOMP} ${f}.s || exit 1
++	fi
+ 	logs+=" ${f}.s.log"
+ 	objs+=" ${f}.o"
+ done
+ ${OLINK} ${logs} && \
+ cc ${objs} && \
+-./a.out
++if [ -z "${edb}" ]; then ./a.out
++else edb --run a.out
++fi
++
+ echo $?
+--- ocompiler-1.orig/tests/b
++++ ocompiler-1/tests/b
+@@ -1,4 +1,2 @@
+ 
+-edb --run ../src/o ${1}.s && \
+-cc ${1}.o && \
+-./a.out
++edb=0 ./a $@
+--- /dev/null
++++ ocompiler-1/tests/call-ret.s
+@@ -0,0 +1,13 @@
++
++format elfobj64
++
++function a()
++endfunction
++
++entry main()
++
++sv b
++hex 144;call a()
++hex 144;callex a b 2
++hex 144;callret a()
++hex 144;callexret a b 2
+--- /dev/null
++++ ocompiler-1/tests/callx.s
+@@ -0,0 +1,13 @@
++
++format elfobj64
++
++value a#1
++function b()
++endfunction
++
++entry main()
++hex 144;call a(1)
++hex 144;call b(1)
++hex 144;callx a(1)
++hex 144;callx b(1)
++i3
+--- /dev/null
++++ ocompiler-1/tests/offsetofvar.s
+@@ -0,0 +1,27 @@
++
++format elfobj64
++
++data *#7
++data b#1
++
++function a()
++data *#3
++data b#1
++datax *#5
++datax c#1
++sd *
++sd d
++endfunction
++
++entry main()
++
++importx "printf" printf
++
++vstr info="%d\n"
++
++call printf(info,(!a.b!))    #12
++call printf(info,(!a.c!))    #20
++call printf(info,(!a.d!))    #8
++call printf(info,(!main.b!)) #28
++
++return 0
+--- ocompiler-1.orig/tests/ret.s
++++ ocompiler-1/tests/ret.s
+@@ -5,5 +5,4 @@ entry main()
+ ret
+ override exit_end 1
+ ret
+-override exit_end 0
+ exit 2
+--- ocompiler-1.orig/tests/template.s
++++ ocompiler-1/tests/template.s
+@@ -16,7 +16,8 @@ endfunction
+ 
+ entry main(sd *,sd c)
+ sd *#1
+-sd n#2
++sd n#1
++sd nn#1
+ value *=0x77
+ value test#1;value test2#1;data a#1
+ sv aux^test
+@@ -24,8 +25,9 @@ value auxdata^test
+ 
+ set test:file.a 4
+ set test:line.a 4
++
+ set n:main.n 4
+-set n:main.c 4
++add n:main.c 4
+ 
+ set test:main.y 4
+ add test:y 4
+@@ -39,4 +41,5 @@ set auxdata#:file.a 4
+ set aux#:file.path 2
+ add aux#:file.lines 2
+ add test test2
+-return test    ##20
++add test nn
++return test    ##28
