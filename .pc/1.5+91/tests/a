@@ -1,0 +1,22 @@
+
+if [ -z "${OCOMP}" ]; then OCOMP=../src/o; fi
+if [ -z "${OLINK}" ]; then OLINK=../ounused/ounused; fi
+
+logs=
+objs=
+for f in "${@}"; do
+	if [ "${edb}" = "0" ]; then
+		edb --run ${OCOMP} ${f}.s || exit 1
+	else
+		${OCOMP} ${f}.s || exit 1
+	fi
+	logs+=" ${f}.s.log"
+	objs+=" ${f}.o"
+done
+${OLINK} ${logs} && \
+cc ${objs} && \
+if [ -z "${edb}" ]; then ./a.out
+else edb --run a.out
+fi
+
+echo $?
