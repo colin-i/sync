@@ -1,0 +1,220 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-jammy13) jammy; urgency=medium
+ .
+   * fix windows sizes
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-06-22
+
+--- torra-1.orig/.github/workflows/deb.yml
++++ torra-1/.github/workflows/deb.yml
+@@ -11,13 +11,21 @@ jobs:
+       path: in
+    - uses: actions/checkout@master
+      with:
+-      repository: colin-i/test
++      repository: colin-i/sync
+       path: in2
++      ref: torra
++   - uses: actions/checkout@master
++     with:
++      repository: colin-i/sync
++      path: in3
++      ref: torra-impish
+    - name: Run a multi-line script
+      run: |
+       name=`cat in/debian/changelog | head -1 | grep -o ^[^\ ]*`
+-      cp -r in2/sync/${name}/debian/patches in/debian
+-      cp -r in2/sync/${name}/.pc in
++      #
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
++      #
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo apt install -y devscripts debhelper dh-python python3-all
+        #python3-setuptools is already
+@@ -29,6 +37,9 @@ jobs:
+        ln -s ${origf} ${origln}
+       fi
+       cd in
++      files=( `cat impish` )
++      for var in "${files[@]}"; do mv ../in3/.pc/${var} .pc; done
++      for var in "${files[@]}"; do mv ../in3/debian/patches/${var} debian/patches; done
+       debuild -S -us -uc
+    - name: unsigned debs
+      uses: actions/upload-artifact@v3
+--- torra-1.orig/README.md
++++ torra-1/README.md
+@@ -22,7 +22,6 @@ From pypi:
+ ```sh
+ pip3 install torra
+ ```
+-And having the dependencies.
+ 
+ ## From source
+ Using libtorrent (arvidn) with python bindings (example: python3-libtorrent, or unofficial binaries python package python-libtorrent-bin).\
+--- torra-1.orig/a
++++ torra-1/a
+@@ -7,3 +7,6 @@ shift
+ fi
+ 
+ ${z} -m torra.main $@
++
++#bitstorm starred/forked
++#rtorrent at debian/ubuntu
+--- torra-1.orig/arh/pub
++++ torra-1/arh/pub
+@@ -1,5 +1,6 @@
+ 
+ last=$(curl https://api.github.com/repos/colin-i/$(cat debian/control | grep "^Homepage" | grep -o [^/]*$)/releases/latest -s | jq .tag_name -r) && echo ${last} && \
++~/test/pyver && \
+ ~/test/debinit "${1}" && \
+ ~/test/pub deb && \
+ ~/test/keyring2 && \
+--- /dev/null
++++ torra-1/impish
+@@ -0,0 +1 @@
++1 1.jammy5 4
+\ No newline at end of file
+--- /dev/null
++++ torra-1/parent
+@@ -0,0 +1 @@
++impish
+\ No newline at end of file
+--- torra-1.orig/setup-with-requirements.py
++++ torra-1/setup-with-requirements.py
+@@ -5,11 +5,14 @@ import sys
+ try:
+    import libtorrent
+ except Exception:
+-	test=subprocess.run([sys.executable,'-m','pip','install','python-libtorrent-bin>=1.2.9'])
++	#test=subprocess.run([sys.executable,'-m','pip','install','python-libtorrent-bin>=1.2.9'])
++	#if test.returncode:
++	#	subprocess.run([sys.executable,'-m','pip','install','python-libtorrent>=1.2.9'])
++	#	if test.returncode:
++	#		exit(test.returncode)
++	subprocess.run([sys.executable,'-m','pip','install','libtorrent'])
+ 	if test.returncode:
+-		subprocess.run([sys.executable,'-m','pip','install','python-libtorrent>=1.2.9'])
+-		if test.returncode:
+-			exit(test.returncode)
++		exit(test.returncode)
+ 	import libtorrent
+ print('libtorrent found')
+ 
+--- torra-1.orig/torra/confs.py
++++ torra-1/torra/confs.py
+@@ -35,10 +35,10 @@ def read_opt(window):
+ 	try:
+ 		with open(configs_filename) as f:
+ 			dict=json.load(f)
++			k.gtk_window_set_default_size(window,dict['width'],dict['height'])  #to comeback here from maximize
++			k.gtk_test_widget_wait_for_draw(window)  #widget_get_width and maximize without this? no
+ 			if dict['max']:
+ 				k.gtk_window_maximize(window)
+-			else:
+-				k.gtk_window_set_default_size(window,dict['width'],dict['height'])
+ 			width=-2 if dict['min'] else -1
+ 			#
+ 			a=dict['download_folder'].encode()
+--- torra-1.orig/torra/gtk.py
++++ torra-1/torra/gtk.py
+@@ -172,6 +172,7 @@ k.gtk_tree_view_new_with_model.argtypes
+ k.gtk_tree_view_set_activate_on_single_click.argtypes = [c_void_p,c_int]
+ #WID
+ k.gtk_widget_add_controller.argtypes = [c_void_p,c_void_p]
++k.gtk_widget_get_height.argtypes=[c_void_p]
+ k.gtk_widget_get_root.restype=c_void_p
+ k.gtk_widget_get_root.argtypes=[c_void_p]
+ k.gtk_widget_get_width.argtypes=[c_void_p]
+--- torra-1.orig/torra/layout.py
++++ torra-1/torra/layout.py
+@@ -44,7 +44,7 @@ def columns_add(tree,n,i,w):
+ 	if(w>0):
+ 		k.gtk_tree_view_column_set_fixed_width(column,w)
+ def columns(tree,w):#gtk_window_remembered_size is forcing *height=priv->height
+-	w=int(w/COLUMNS.n)
++	w=int(w/COLUMNS.n)      #to shrink window size, it is required to move them manually, then resize
+ 	columns_add(tree,b"Name",COLUMNS.NAME,w)
+ 	columns_add(tree,b"Path",COLUMNS.PATH,w)
+ 	columns_add(tree,b"Uploaded",COLUMNS.UP,w)
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -40,7 +40,6 @@ def activate(app):
+ 	confs.read_opt(window)
+ 	wd=confs.width
+ 	if wd<0:
+-		k.gtk_test_widget_wait_for_draw(window)
+ 		confs.width=k.gtk_widget_get_width(window)
+ 		if wd==-2:
+ 			k.gtk_window_minimize(window)
+--- torra-1.orig/torra/meninfo.py
++++ torra-1/torra/meninfo.py
+@@ -12,13 +12,10 @@ def go(path,window):
+ 		dialog = k.gtk_dialog_new_with_buttons (b"Info",window,
+ 			gtk.GtkDialogFlags.GTK_DIALOG_DESTROY_WITH_PARENT | gtk.GtkDialogFlags.GTK_DIALOG_MODAL,
+ 			b"_OK",gtk.GtkResponseType.GTK_RESPONSE_NONE,None)
+-		if k.gtk_window_is_maximized(window):
+-			k.gtk_window_maximize(dialog)
+-		else:
+-			width=gtk.c_int()
+-			height=gtk.c_int()
+-			k.gtk_window_get_default_size (window, gtk.byref(width), gtk.byref(height))
+-			k.gtk_window_set_default_size(dialog,width,height)
++
++		#same like settings
++		k.gtk_window_set_default_size(dialog,k.gtk_widget_get_width(window),k.gtk_widget_get_height(window))
++
+ 		k.g_signal_connect_data (dialog,b"response",k.gtk_window_destroy,None,None,0)
+ 		box=k.gtk_dialog_get_content_area(dialog)
+ 		#
+--- torra-1.orig/torra/sets.py
++++ torra-1/torra/sets.py
+@@ -28,13 +28,15 @@ def sets(window):
+ 	dialog = k.gtk_dialog_new_with_buttons (b"Settings",window,
+ 		gtk.GtkDialogFlags.GTK_DIALOG_DESTROY_WITH_PARENT | gtk.GtkDialogFlags.GTK_DIALOG_MODAL,
+ 		b"_OK",gtk.GtkResponseType.GTK_RESPONSE_NONE,None)
+-	if k.gtk_window_is_maximized(window):
+-		k.gtk_window_maximize(dialog)
+-	else:
+-		width=gtk.c_int()
+-		height=gtk.c_int()
+-		k.gtk_window_get_default_size (window, gtk.byref(width), gtk.byref(height))
+-		k.gtk_window_set_default_size(dialog,width,height)
++
++	#width=gtk.c_int()
++	#height=gtk.c_int()
++	#k.gtk_window_get_default_size (window, gtk.byref(width), gtk.byref(height))  #this is not the maximized sizes(when maximized)
++	#k.gtk_window_set_default_size(dialog,width,height)     #this is also good when unmaximizing
++	#if k.gtk_window_is_maximized(window):
++	#	k.gtk_window_maximize(dialog) #this was working, now, a dialog has the button but is doing nothing, here
++	k.gtk_window_set_default_size(dialog,k.gtk_widget_get_width(window),k.gtk_widget_get_height(window))
++
+ 	k.g_signal_connect_data (dialog,b"response",response,window,None,0)
+ 	#
+ 	box=k.gtk_box_new(gtk.GtkOrientation.GTK_ORIENTATION_VERTICAL,0)
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.32
+\ No newline at end of file
++1.0.33
+\ No newline at end of file
