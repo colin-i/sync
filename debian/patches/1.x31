@@ -1,0 +1,375 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x31) focal; urgency=medium
+ .
+   * existent content indicators
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-06-22
+
+--- edor-1.orig/s/inc/bar/curses.h
++++ edor-1/s/inc/bar/curses.h
+@@ -5,7 +5,6 @@
+ extern "C"{
+ #endif
+ 
+-int mvwaddch(WINDOW*,int,int,const chtype);
+ int addchnstr(const chtype *chstr, int n);
+ int addnstr(const char*,int);
+ int mvaddstr(int,int,const char*);
+--- edor-1.orig/s/inc/curses.h
++++ edor-1/s/inc/curses.h
+@@ -22,6 +22,7 @@ int getmaxy(const WINDOW*);
+ int addch(const chtype);
+ int waddch(WINDOW*,const chtype);
+ int mvaddch(int,int,const chtype);
++int mvwaddch(WINDOW*,int,int,const chtype);
+ int addstr(const char*);
+ const char*keyname(int);
+ int wnoutrefresh(WINDOW*);
+--- edor-1.orig/s/inc/main/curses.h
++++ edor-1/s/inc/main/curses.h
+@@ -62,6 +62,7 @@ WINDOW*initscr(void);
+ int endwin(void);
+ int ungetch(int);
+ chtype winch(WINDOW*);
++chtype mvwinch(WINDOW*,int,int);
+ int winnstr(WINDOW*,char*,int);
+ mmask_t mousemask(mmask_t,mmask_t*);
+ int noecho(void);
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -172,10 +172,11 @@ static char prefs_file[max_path_0]={'\0'
+ // skip_unrestoredfilecheck_flag
+ #define hel2 " [filepath [line_termination: rn/r/n]]\
+ \nINPUT\
+-\nhelp: q(uit),up/down,mouse/touch v.scroll\
+-\n[Ctrl/Alt/Shift +]arrows/home/end/del,page up,page down,backspace,enter\
+-\np.s.: Ctrl+ left/right/del breaks at white-spaces and (),[]{}\
+-\nmouse/touch click and v.scroll\
++\nthis help: q(uit),up/down,mouse/touch V.scroll\
++\nMovement:\
++\n    [Ctrl/Alt/Shift +]arrows/home/end/del,page up,page down,backspace,enter\
++\n    p.s.: Ctrl+ left/right/del breaks at white-spaces and (),[]{}\
++\n    mouse/touch Click and V.scroll\
+ \nCtrl+v = visual mode; Alt+v = visual line mode\
+ \n    c = copy\
+ \n    d = delete\
+@@ -200,8 +201,8 @@ static char prefs_file[max_path_0]={'\0'
+ \nCtrl+e = disable/enable internal mouse/touch\
+ \nCtrl+n = disable/enable indentation\
+ \nCtrl+t = enable/disable insensitive search\
+-\nCtrl+w = text wrapping\
+-\nCtrl+q = quit"//33
++\nCtrl+w = text wrapping (movement. another key to return)\
++\nCtrl+q = quit"//34
+ static bool visual_bool=false;
+ static char*cutbuf=nullptr;
+ static size_t cutbuf_sz=0;
+@@ -214,11 +215,14 @@ static int _re;static int _ce;
+ static int topspace=1;
+ #define view_margin 8
+ #define known_stdin 0
++static WINDOW*leftcontent;
++static WINDOW*rightcontent;
++static char at_right_mark='>';
++static char at_left_mark='<';
++static char at_content_nomark=' ';
+ 
+ bool no_char(char z){return z<32||z>=127;}
+-static void tab_grow(WINDOW*w,int r,char*a,size_t sz,int*ptr){
+-	x_right[r]=xtext<sz;
+-	if(x_right[r]==false)return;
++static size_t tab_grow(WINDOW*w,char*a,size_t sz,int*ptr){
+ 	int c=0;int cr=0;
+ 	int max=getmaxx(w);
+ 	size_t i=xtext;size_t j=i;
+@@ -232,7 +236,6 @@ static void tab_grow(WINDOW*w,int r,char
+ 			ptr[ptr[0]+1]=c;ptr[0]++;
+ 			j=i+1;
+ 			cr+=tab_sz-1;
+-			//wmove(w,r,c);
+ 			int k;if(cr>max)k=max;
+ 			else k=cr;
+ 			for(;c<k;c++){
+@@ -244,10 +247,15 @@ static void tab_grow(WINDOW*w,int r,char
+ 			c+=i-j+1;j=i+1;
+ 		}
+ 	}
+-	if(c<max){
+-		char aux=a[i];
+-		a[i]='\0';waddstr(w,a+j);a[i]=aux;
++	if(c<max){//we are here because there is space to maxx (if was ended in a tab or no_char, it is not this case)
++		if(i!=j){//[j,i) is normal text
++			char aux=a[i];
++			a[i]='\0';waddstr(w,a+j);a[i]=aux;
++			c+=i-j;//to compare if still there is space to maxx
++		}
++		if(c<max)wclrtoeol(w);//blank space until maxx
+ 	}
++	return i;
+ }
+ void refreshrowsbot(WINDOW*w,int i,int maxy){
+ 	size_t maxx=xtext+(size_t)getmaxx(w);
+@@ -255,15 +263,44 @@ void refreshrowsbot(WINDOW*w,int i,int m
+ 		size_t j=ytext+(size_t)i;
+ 		int*ptr=&tabs[tabs_rsz*i];ptr[0]=0;
+ 		wmove(w,i,0);
++		char at_left=at_content_nomark;char at_right=at_content_nomark;
+ 		if(j<rows_tot){
+ 			size_t sz=rows[j].sz;
+-			if(sz>maxx)sz=maxx;
+-			tab_grow(w,i,rows[j].data,sz,ptr);
+-			if(getcury(w)==i)wclrtoeol(w);
+-		}else{x_right[i]=false;wclrtoeol(w);}
++			if(xtext>0)if(sz>0)at_left=at_left_mark;//there is text at left
++
++			size_t maxsz=sz>maxx?maxx:sz;
++			x_right[i]=xtext<maxsz;
++			if(x_right[i]==false)//the text is left of xtext, or is not
++				wclrtoeol(w);//clear here is all, another clear is in tab_grow
++			else{
++				size_t x=tab_grow(w,rows[j].data,maxsz,ptr);
++				if(x<sz)at_right=at_right_mark;//there is text at right
++			}
++
++			//if(getcury(w)==i)wclrtoeol(w);
++			//this was the case when there was nothing on the row or xtext was big and nothing to print
++			//was moved inside tab_grow
++		}else{
++			x_right[i]=false;
++			wclrtoeol(w);
++		}
++		mvwaddch(leftcontent,i,0,at_left);
++		mvwaddch(rightcontent,i,0,at_right);
+ 		i++;
+ 	}while(i<maxy);
++	wnoutrefresh(leftcontent);
++	wnoutrefresh(rightcontent);
++}
++static void content_at_right(int i){
++	mvwaddch(rightcontent,i,0,at_right_mark);
++	wnoutrefresh(rightcontent);
++}
++static void no_content_at_right(int i){
++	mvwaddch(rightcontent,i,0,at_content_nomark);
++	wnoutrefresh(rightcontent);
+ }
++#define no_content_at_right_if(i) if((char)mvwinch(rightcontent,i,0)==at_right_mark)no_content_at_right(i);
++
+ static void bmove(WINDOW*w,int r,int c,bool back){
+ 	wmove(w,r,c);
+ 	char chr=(char)winch(w);
+@@ -1414,12 +1451,18 @@ static void delete_fast(WINDOW*w,int r,i
+ 				while(j<tab_sz){
+ 					mapsel[k+j]=' ';
+ 					j++;
+-					c++;if(c==max)break;
++					c++;
++					if(c==max){
++						break;
++					}
+ 				}
+ 				k+=j;
+ 			}
+ 			else{mapsel[k]=no_char(ch)/*true*/?'?':ch;c++;k++;}
+-			if(c==max)break;
++			if(c==max){
++				if(x+1==sz)no_content_at_right(r);
++				break;
++			}
+ 			x++;
+ 		}
+ 		waddnstr(w,mapsel,k);
+@@ -1433,7 +1476,7 @@ static void rowfixdel(WINDOW*w,int r,int
+ 	int*t=&tabs[tabs_rsz*r];
+ 	int a=t[0]+1;
+ 	size_t mx=rw->sz;
+-	while(c<wd&&i<mx){
++	while(i<mx){
+ 		char ch=d[i];
+ 		if(ch!='\t'){
+ 			c++;waddch(w,no_char(ch)/*true*/?'?':ch);
+@@ -1442,6 +1485,10 @@ static void rowfixdel(WINDOW*w,int r,int
+ 			c+=tab_sz;wmove(w,r,c);
+ 		}
+ 		i++;
++		if(c==wd){
++			if(i<mx)content_at_right(r);
++			break;
++		}
+ 	}
+ 	x_right[r]=mx!=0;
+ }
+@@ -1569,7 +1616,7 @@ static bool enter(size_t y,size_t x,int*
+ 	if(v==nullptr)return true;
+ 	if(undo_add(y,x,y+1,tb)==false){
+ 		row rw;
+-		memset(v,'\t',tb);
++		memset(v,'\t',tb);//tb can be 0
+ 		memcpy(v+tb,b+x,s);
+ 		rows[y].sz-=s;
+ 		rw.data=v;rw.sz=sze;rw.spc=spc;
+@@ -1590,8 +1637,11 @@ static bool enter(size_t y,size_t x,int*
+ 				}
+ 				t[0]-=z-p;
+ 				c[0]=(int)(tb-xtext)*tab_sz;
++
+ 				wclrtoeol(w);
++				no_content_at_right_if(row)
+ 				x_right[row]=xtext<rows[y].sz;
++
+ 				refreshrows(w,row+1);
+ 				return false;
+ 			}
+@@ -1637,7 +1687,7 @@ static void type(int cr,WINDOW*w){
+ 		position(rw,cl);
+ 	}
+ 	else if(cr==KEY_DC){if(delete_key(y,x,rw,&cl,w)/*true*/)return;}
+-	else if(cr==KEY_SDC){if(del_key(y,x,rw,&cl,w,true)/*true*/)return;}
++	else if(cr==KEY_SDC){if(del_key(y,x,rw,&cl,w,true)/*true*/)return;}//shift+delete example: xtext>0 and at center, will move the page not the right text
+ 	else{
+ 		const char*knm=keyname(cr);
+ 		if(strcmp(knm,"kDC5")==0){multidel(is_textchar,r,x,y,cl,rw,w)}
+@@ -1661,12 +1711,14 @@ static void type(int cr,WINDOW*w){
+ 				}while(cl>=max);
+ 				refreshpage(w);
+ 			}else{
+-				wmove(w,rw,colmn);
++				wmove(w,rw,colmn);//if cursor was adjusted and page was refreshed
+ 				int n=max-cl;
+ 				winnstr(w,mapsel,n);
+ 				int*t=&tabs[tabs_rsz*rw];
+ 				int a=t[0];
+-				if(a!=0)if(t[a]+s>=max){t[0]--;a--;}
++
++				if(a!=0)if((t[a]+s)>=max){t[0]--;a--;}
++
+ 				int i=1;
+ 				for(;i<=a;i++){
+ 					if(colmn<=t[i])break;
+@@ -1685,7 +1737,13 @@ static void type(int cr,WINDOW*w){
+ 						t[j]=t[j]+1;j--;
+ 					}
+ 				}
++
+ 				waddstr(w,mapsel);
++				char marker=(char)mvwinch(rightcontent,rw,0);
++				if(marker!=at_right_mark){
++					int newright=xc_to_c(r->sz-xtext-1,rw);
++					if(newright>=max)content_at_right(rw);
++				}
+ 				x_right[rw]=true;
+ 			}
+ 			position(rw,cl);
+@@ -1736,6 +1794,10 @@ static void indent(bool b,size_t ybsel,s
+ 	if(b/*true*/){
+ 		if(xbsel!=nullptr){
+ 			xbsel[0]++;xesel[0]++;
++			if(xtext==0){//add at left markers for content
++				for(int i=rb;i<re;i++)mvwaddch(leftcontent,i,0,at_left_mark);
++				wnoutrefresh(leftcontent);
++			}
+ 			xtext++;
+ 			if(rb!=0)refreshrowsbot(w,0,rb);
+ 			if(re<max)refreshrowsbot(w,re,max);
+@@ -1745,6 +1807,12 @@ static void indent(bool b,size_t ybsel,s
+ 			if(xtext!=0){
+ 				xbsel[0]--;xesel[0]--;
+ 				xtext--;
++				if(xtext==0){
++					if(xtext==0){//add at left markers for content
++						for(int i=rb;i<re;i++)mvwaddch(leftcontent,i,0,at_content_nomark);
++						wnoutrefresh(leftcontent);
++					}
++				}
+ 				if(rb!=0)refreshrowsbot(w,0,rb);
+ 				if(re<max)refreshrowsbot(w,re,max);
+ 			}else{
+@@ -1874,7 +1942,7 @@ static bool savetofile(WINDOW*w,bool has
+ 				write_title();
+ 			}
+ 
+-			if(mod_flag/*true*/){bar_clear();texter_macro("Saved");}
++			if(mod_flag/*true*/){bar_clear();texter_macro("Saved");}//it is not my fault that the position is gone, all that is done is write Saved and blind clean the visual flag, curses is cleaning in between
+ 			//there are some cases here:
+ 			//	open with forced new line and save
+ 			//	open with std input and save
+@@ -2328,30 +2396,33 @@ static void proced(char*comline){
+ 		int cy=0;int cx=0;
+ 		int r=getmaxy(stdscr)-1;
+ 		int old_r=r-1;//set -1 because at first compare is erasing new_visual
++		int lrsize=1;//left right space
+ 		do{
+ 			void*a=realloc(x_right,(size_t)r);
+ 			if(a==nullptr)break;
+-			x_right=(bool*)a;
+-			int c=getmaxx(stdscr);
++			x_right=(bool*)a;//is text,[xtext+nothing
++			int maxx=getmaxx(stdscr);
++			int c=maxx-(2*lrsize);
+ 			tabs_rsz=1+(c/tab_sz);
+ 			if((c%tab_sz)!=0)tabs_rsz++;
+ 			void*b=realloc(tabs,sizeof(int)*(size_t)(r*tabs_rsz));
+ 			if(b==nullptr)break;
+-			tabs=(int*)b;
++			tabs=(int*)b;//is nroftabs,col0,col1,...; and int if 256 tabs. not short? moving like curses with the ints
+ 			a=realloc(mapsel,(size_t)c+1);
+ 			if(a==nullptr)break;
+-			mapsel=(char*)a;
++			mapsel=(char*)a;//cols+null
+ 
+ 			if(textfile!=nullptr){
+ 				move(0,0);//no clear, only overwrite, can resize left to right then back right to left
+ 				write_title();//this is also the first write
+ 			}
+ 
+-			WINDOW*w=newwin(r-topspace,c,topspace,0);
++			WINDOW*w=newwin(r-topspace,c,topspace,lrsize);
++			leftcontent=newwin(r-topspace,1,topspace,0);
++			rightcontent=newwin(r-topspace,1,topspace,maxx-1);
+ 			if(w!=nullptr){
+ 				keypad(w,true);
+-				refreshpage(w);
+-				wmove(w,cy,cx);
++
+ 				printhelp();
+ 				if(r<=old_r)clrtoeol();//resize to up,is over text
+ 				//or =, clear bar,visual and saves
+@@ -2361,6 +2432,10 @@ static void proced(char*comline){
+ 					else mod_visual(modif_visual);
+ 				}
+ 				else wnoutrefresh(stdscr);
++
++				refreshpage(w);//this must be after refresh stdscr, else first > at rightcontent will not show
++				wmove(w,cy,cx);
++
+ 				position_reset();
+ 				position(cy,cx);
+ 				loops=loopin(w);
+@@ -2374,7 +2449,7 @@ static void proced(char*comline){
+ 					cx=getcurx(w);
+ 					//c=getmaxx(w1);never if(cx>=c)
+ 				}
+-				delwin(w);
++				delwin(w);delwin(leftcontent);delwin(rightcontent);
+ 			}else break;
+ 		}while(loops/*true*/);
+ 		if(x_right!=nullptr){
