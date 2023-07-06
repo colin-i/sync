@@ -1,0 +1,116 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-impish14) impish; urgency=medium
+ .
+   * extra code
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-06
+
+--- torra-1.orig/torra/confs.py
++++ torra-1/torra/confs.py
+@@ -1,4 +1,12 @@
+ 
++import os.path
++import appdirs
++import pathlib
++def get_root_dir():
++	return pathlib.Path(appdirs.user_config_dir('torra'))
++def get_root_file(f):
++	return os.path.join(get_root_dir(),f)
++
+ import json
+ 
+ from . import gtk
+@@ -7,10 +15,9 @@ from . import ratio
+ from . import next
+ from . import log
+ from . import cons
+-from . import main
+ k=gtk.k
+ 
+-configs_filename = main.get_root_file('configs')
++configs_filename = get_root_file('configs')
+ 
+ def write_opt(window):
+ 	dict={}
+--- torra-1.orig/torra/listtor.py
++++ torra-1/torra/listtor.py
+@@ -1,13 +1,13 @@
+ import json
+ 
++from . import confs
+ from . import gtk
+ from . import layout
+ from . import torrent
+ from . import torben
+-from . import main
+ k=gtk.k
+ 
+-config_filename = main.get_root_file('config')
++config_filename = confs.get_root_file('config')
+ #in folder is ... (lib/python3.7/site-packages/) tora/config and ...tora/config
+ 
+ def write(lst):
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -2,19 +2,11 @@
+ torrent client
+ """
+ 
+-import appdirs
+-import os.path
+-import pathlib
+-def get_root_dir():
+-	return pathlib.Path(appdirs.user_config_dir('torra'))
+-get_root_dir().mkdir(exist_ok=True)
+-def get_root_file(f):
+-	return os.path.join(get_root_dir(),f)
+ import sys
+ 
++from . import confs
+ from . import gtk
+ from . import layout
+-from . import confs
+ from . import sets
+ from . import torrent
+ from . import overall
+@@ -46,6 +38,8 @@ def activate(app):
+ 	layout.layout(window)
+ 
+ def main():
++	confs.get_root_dir().mkdir(exist_ok=True)
++
+ 	if len(sys.argv)>1:
+ 		listtor.config_filename=sys.argv[1]
+ 	a=k.gtk_application_new(None,0)
+@@ -57,4 +51,4 @@ def main():
+ 	exit(r)
+ 
+ if __name__ == "__main__":
+-    main()
++	main()
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.33
+\ No newline at end of file
++1.0.34
+\ No newline at end of file
