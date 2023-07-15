@@ -1,0 +1,77 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ audapa (1-20) lunar; urgency=medium
+ .
+   * arrangements
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-15
+
+--- audapa-1.orig/arh/pub
++++ audapa-1/arh/pub
+@@ -1,7 +1,7 @@
+ 
+ #optional 2 dist
+ 
+-last=$(curl https://api.github.com/repos/colin-i/$(cat debian/control | grep "^Homepage" | grep -o [^/]*$)/releases/latest -s | jq .tag_name -r) && \
++last=$(curl https://api.github.com/repos/colin-i/$(cat debian/control | grep "^Homepage" | grep -o [^/]*$)/releases/latest -s | jq .tag_name -r) && echo ${last} && \
+ ~/test/pyver && \
+ ~/test/debinit "${1}" ${2} && \
+ ~/test/pub deb && \
+@@ -15,7 +15,6 @@ last=$(curl https://api.github.com/repos
+ ~/test/rel && \
+ ~/test/pub rel && \
+ ~/test/uprpm && \
+-~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+ ~/test/lp x && \
+--- audapa-1.orig/audapa/sets.py
++++ audapa-1/audapa/sets.py
+@@ -57,13 +57,11 @@ from . import point
+ 
+ def get_config_dir():
+ 	return pathlib.Path(appdirs.user_config_dir(pkgname))
+-get_config_dir().mkdir(exist_ok=True)
+ def get_config_file():
+ 	return os.path.join(get_config_dir(),'config.ini')
+ 
+ def get_data_dir():
+ 	return pathlib.Path(appdirs.user_data_dir(pkgname))
+-get_data_dir().mkdir(exist_ok=True)
+ def get_data_file(f):
+ 	return os.path.join(get_data_dir(),f)
+ 
+@@ -113,6 +111,8 @@ def sets(b,combo):
+ 	combo[0].set_child(bx)
+ 
+ def init():
++	get_config_dir().mkdir(exist_ok=True)
++	get_data_dir().mkdir(exist_ok=True)
+ 	config = configparser.ConfigParser()
+ 	if(config.read(get_config_file())):
+ 		c=config['conf']
+--- audapa-1.orig/v2
++++ audapa-1/v2
+@@ -1 +1 @@
+-1.0.12
+\ No newline at end of file
++1.0.13
+\ No newline at end of file
