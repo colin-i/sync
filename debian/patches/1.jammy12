@@ -1,0 +1,87 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ dicopp (1-jammy12) jammy; urgency=medium
+ .
+   * security guarantees
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-15
+
+--- dicopp-1.orig/dicopp/base.py
++++ dicopp-1/dicopp/base.py
+@@ -11,12 +11,13 @@ from . import com
+ import json
+ from gi.repository import Gdk
+ 
++pkname='dicopp'
++
+ import appdirs
+ import os.path
+ import pathlib
+ def get_client_dir():
+-	return pathlib.Path(appdirs.user_config_dir('dicopp'))
+-get_client_dir().mkdir(exist_ok=True)
++	return pathlib.Path(appdirs.user_config_dir(pkname))
+ def get_client():
+ 	return os.path.join(get_client_dir(),'config.json')
+ 
+@@ -39,6 +40,7 @@ def write(win):
+ 		json.dump(d, write_file)
+ 
+ def read(win):
++	get_client_dir().mkdir(exist_ok=True)
+ 	try:
+ 		with open(get_client()) as f:
+ 			d=json.load(f)
+--- dicopp-1.orig/dicopp/hubs.py
++++ dicopp-1/dicopp/hubs.py
+@@ -130,8 +130,12 @@ def ini_main(mixt):
+ 			else:
+ 				#if the module has never been imported before (== not present in sys.modules), then it is loaded and added to sys.modules.
+ 				import gzip
+-				import os.path
+-				with gzip.open(os.path.join(os.path.dirname(__file__),'hublist.xml.gz'), mode='r') as zipfile:
++
++				#https://setuptools.pypa.io/en/latest/userguide/datafiles.html
++				#import os.path
++				from importlib.resources import files
++				#with gzip.open(os.path.join(os.path.dirname(__file__),'hublist.xml.gz'), mode='r') as zipfile:
++				with gzip.open(files(base.pkname).joinpath('hublist.xml.gz'), mode='r') as zipfile:
+ 					root = ET.fromstring(zipfile.read())
+ 		ini_result(root)
+ 	return False
+--- dicopp-1.orig/setup.py
++++ dicopp-1/setup.py
+@@ -17,7 +17,7 @@ setup(name=pkname,
+ 	version=ver,
+ 	#opt
+ 	include_package_data=True,
+-	python_requires='>=3',
++	python_requires='>=3.9', #for importlib.resources.files
+ 	install_requires=["PyGObject>=3.40","requests>=2.21","appdirs>=1.4.3",\
+ 		"psutil>=5.5.1"],
+ 	description='Direct Connect ++ client',
+--- dicopp-1.orig/v2
++++ dicopp-1/v2
+@@ -1 +1 @@
+-1.0.36
+\ No newline at end of file
++1.0.37
+\ No newline at end of file
