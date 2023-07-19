@@ -1,0 +1,124 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ dicopp (1-jammy13) jammy; urgency=medium
+ .
+   * rem conf
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-19
+
+--- dicopp-1.orig/a
++++ dicopp-1/a
+@@ -1,9 +1,9 @@
+ 
+-if [ -z "$1" ]; then
+-z="python"
++if [ -z "${1}" ]; then
++	z="python"
+ else
+-z=${1}
+-shift
++	z=${1}
++	shift
+ fi
+ 
+ ${z} -m dicopp.main $@
+--- dicopp-1.orig/arh/pub
++++ dicopp-1/arh/pub
+@@ -21,6 +21,5 @@ pre=$(curl https://api.github.com/repos/
+ ~/test/lp && \
+ ~/test/lp x && \
+ ~/test/keyring && \
+-~/test/del x ${pre} && \
+ ~/test/arh2 ${pre} && \
+ ~/test/pypi
+--- dicopp-1.orig/dicopp/main.py
++++ dicopp-1/dicopp/main.py
+@@ -2,6 +2,9 @@ import gi
+ gi.require_version("Gtk", "4.0")
+ from gi.repository import Gtk,GLib
+ 
++import os
++import sys
++
+ from . import base
+ from . import layout 
+ from . import limit
+@@ -28,6 +31,9 @@ def quit(widget, mainloop):
+ 	return True
+ 
+ def main():
++	if len(sys.argv)>1:
++		cleanup()
++		return
+ 	first.ini()
+ 	mainloop = GLib.MainLoop()
+ 	win = Gtk.Window()
+@@ -49,5 +55,36 @@ def main():
+ 	win.show()
+ 	mainloop.run()
+ 
++def cleanup():
++	#remove config and exit
++	c=base.get_client_dir()
++	if os.path.isdir(c):
++		print("Would remove:");
++		f=base.get_client()
++		if os.path.isfile(f):
++			print(f)
++		else:
++			f=None
++		print(c)
++		print("yes ?");
++		str = ""
++		while True:
++			x = sys.stdin.read(1) # reads one byte at a time, similar to getchar()
++			if x == '\n':
++				break
++			str += x
++		if str=="yes":
++			r=" removed"
++			if f:
++				os.remove(f)
++				print(f+r)
++			if len(os.listdir(path=c))==0:
++				os.rmdir(c) #OSError if not empty
++				print(c.__str__()+r)
++			else:
++				print(c.__str__()+" is not empty.")
++		else:
++			print("expecting \"yes\"")
++
+ if __name__ == "__main__":
+     main()
+--- dicopp-1.orig/info.md
++++ dicopp-1/info.md
+@@ -1,3 +1,4 @@
+ DC++ client.\
+ Using [eiskaltdcpp-daemon](https://github.com/eiskaltdcpp/eiskaltdcpp).\
++To remove configuration launch the program with one argument.\
+ [Git Page](https://github.com/colin-i/dico)
+--- dicopp-1.orig/v2
++++ dicopp-1/v2
+@@ -1 +1 @@
+-1.0.37
+\ No newline at end of file
++1.0.38
+\ No newline at end of file
