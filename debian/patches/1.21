@@ -1,0 +1,216 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ audapa (1-21) lunar; urgency=medium
+ .
+   * points folder and cleanup
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-19
+
+--- audapa-1.orig/a
++++ audapa-1/a
+@@ -1,8 +1,9 @@
+ 
+ if [ -n "$1" ]; then
+-z=$1
++	z=$1
++	shift
+ else
+-z="python"
++	z="python"
+ fi
+ 
+-${z} -m audapa.main
++${z} -m audapa.main ${1}
+--- audapa-1.orig/arh/pub
++++ audapa-1/arh/pub
+@@ -19,6 +19,5 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp && \
+ ~/test/lp x && \
+ ~/test/keyring && \
+-~/test/del x ${last} && \
+ ~/test/arh2 ${last} && \
+ ~/test/pypi
+--- audapa-1.orig/audapa/main.py
++++ audapa-1/audapa/main.py
+@@ -12,6 +12,9 @@ from . import forms
+ from . import info
+ 
+ def main():
++	if len(sys.argv)>1:
++		cleanup()
++		return
+ 	sets.init()
+ 	win = Gtk.Window()
+ 	win.set_decorated(False)#such a heavy load here if True
+@@ -31,5 +34,53 @@ def main():
+ 	info.box=box
+ 	loop.main.run()
+ 
++import os
++import sys
++
++def cleanup():
++	#remove config and exit
++	c=sets.get_config_dir()
++	if os.path.isdir(c):
++		f=sets.get_config_file()
++		if not os.path.isfile(f):
++			f=None
++	else:
++		c=None
++	p=sets.get_data_dir()
++	if os.path.isdir(p):
++		if len(os.listdir(path=p))>0:
++			print(p.__str__()+" is not empty.")
++			p=None
++	else:
++		p=None
++	if c or p:
++		print("Would remove:");
++		if c:
++			if f:
++				print(f)
++			print(c)
++		if p:
++			print(p)
++		print("yes ?");
++		str = ""
++		while True:
++			x = sys.stdin.read(1) # reads one byte at a time, similar to getchar()
++			if x == '\n':
++				break
++			str += x
++		if str=="yes":
++			r=" removed"
++			if c:
++				if f:
++					os.remove(f)
++					print(f+r)
++				os.rmdir(c)
++				print(c.__str__()+r)
++			if p:
++				os.rmdir(p)
++				print(p.__str__()+r)
++		else:
++			print("expecting \"yes\"")
++
+ if __name__ == "__main__":
+     main()
+--- audapa-1.orig/audapa/points.py
++++ audapa-1/audapa/points.py
+@@ -105,9 +105,18 @@ def move_inter_end(forward,ix,dels):
+ 	elif ix>0:
+ 		dels.append([points[ix-1],points[ix]])
+ fpath_js='json'
+-def dpath(f_in):
++cachefolder='_'+sets.pkgname+'cache_'
++def dpath(f_in):  #f_in can be ../x.wav
+ 	p=os.path.dirname(f_in)
+-	return os.path.join(p,'_'+sets.pkgname+'cache_')
++	if sets.cache_at_home.get_active():
++		rootfolder=os.path.abspath(os.sep)  #this is tested also on windows
++		#os.path.abspath('.').split(os.sep)[0]+os.sep
++
++		relp=os.path.relpath(p,rootfolder)
++		p=os.path.join(pathlib.Path.home(),cachefolder,relp)
++	else:
++		p=os.path.join(p,cachefolder)
++	return p
+ def fpath(f_in,ext):
+ 	return os.path.join(dpath(f_in),os.path.basename(f_in)+'.'+ext)
+ def fpath_full(d_in,f_in):
+@@ -116,7 +125,8 @@ def write(f_in):
+ 	p=dpath(f_in)
+ 	f_out=fpath_full(p,f_in)
+ 	if len(points):
+-		pathlib.Path(p).mkdir(exist_ok=True)#parents=False, FileExistsError exceptions will be ignored
++		pathlib.Path(p).mkdir(exist_ok=True,parents=True) #FileExistsError exceptions will be ignored with exist_ok
++		#parents False is ok when is one folder but when cache is in home option, must create to there
+ 		with open(f_out,"w") as f:
+ 			d=[]
+ 			for po in points:
+--- audapa-1.orig/audapa/sets.py
++++ audapa-1/audapa/sets.py
+@@ -86,6 +86,7 @@ def get_fulleffect():
+ 	return full_effect.get_active()
+ distance=Gtk.EntryBuffer(text="10")
+ #(2*point.const).__str__() was good but will confilct with the example
++cache_at_home=Gtk.CheckButton(active=False)
+ 
+ def add(bx,tx,x,n):
+ 	return adder(bx,tx,colorEntry(x),n)
+@@ -105,6 +106,7 @@ def sets(b,combo):
+ 	n=adder(bx,"Turn the page at margin touch",turn_page,n)
+ 	n=adder(bx,forms.formal_write+" after a points effect",full_effect,n)
+ 	n=add(bx,"Minimum distance between points",distance,n)
++	n=adder(bx,"Cache dir for points in home folder",cache_at_home,n)
+ 	b=colorButton("Done", reset, "Return", {'c':combo,'t':
+ 		{'cl':color.get_text(),'fcl':fgcolor.get_text()}})
+ 	bx.attach(b,0,n,2,1)
+@@ -124,6 +126,7 @@ def init():
+ 		init_c(c,'turn',turn_page)
+ 		init_c(c,'effect',full_effect)
+ 		init_t(c,'distance',distance)
++		init_c(c,'homecache',cache_at_home)
+ def init_t(src,key,dst):
+ 	if key in src: #this is not checking values
+ 		dst.set_text(src[key],-1)
+@@ -143,6 +146,7 @@ def reset(b,di):
+ 	c['turn']=turn_page.get_active().__str__()
+ 	c['effect']=full_effect.get_active().__str__()
+ 	c['distance']=distance.get_text()
++	c['homecache']=cache_at_home.get_active().__str__()
+ 	with open(get_config_file(), "w") as configfile:
+ 		config.write(configfile)
+ 	win=di['c'][0]
+--- audapa-1.orig/info.md
++++ audapa-1/info.md
+@@ -1,8 +1,8 @@
+-Modified pyaudio rpm is [here](https://github.com/colin-i/pyaudioo/releases).\
++To remove configuration files launch the program with one argument.\
+ ```rpm -i --nodeps``` and ```yum remove --noautoremove``` to deal at pyaudioo...rpm, audapa...rpm and python3-pyaudio.\
+ PortAudio can ask for portaudio.h (the file is in portaudio19-dev).\
+-PortAudio and python 3.10 can report playback errors (install from [here](https://git.skeh.site/skeh/pyaudio) and add libportaudio2 package).\
++PyAudio and python 3.10 can report playback errors (install from [here](https://github.com/colin-i/pyaudio) and add libportaudio2 package).\
+ The audio records are saved where *appdirs.user_data_dir("audapa")* points at (example: ~/.local/share/audapa/1650089398.wav).\
+-The points are saved at the file folder plus *\_audapacache\_* folder (example: /home/x/audapa/\_audapacache\_/example.wav.json).\
+-In the root folder at source, write "example.wav" and click the build button from top-right.\
++The points are saved in the *\_audapacache\_* folder which is at the file folder or in the home folder if the option is selected. (example: /home/x/audapa/\_audapacache\_/example.wav.json or /home/x/\_audapacache\_/home/x/audapa/example.wav.json)\
++Knowing where the points are saved, in the root folder at source, write "example.wav" and click the build button from top-right.\
+ [Git Page](https://github.com/colin-i/audapa)
+--- audapa-1.orig/setup.py
++++ audapa-1/setup.py
+@@ -38,7 +38,7 @@ setup(name=pkname,
+ 	#	'build_py': BuildPyCommand
+ 	#},
+ 	#include_package_data=True,
+-	python_requires='>=3.8',
++	python_requires='>=3.8',   #for :=
+ 	install_requires=[
+ 		"pycairo>=1.20.0","PyGObject>=3.40",
+ 		"appdirs>=1.4.3",
+--- audapa-1.orig/v2
++++ audapa-1/v2
+@@ -1 +1 @@
+-1.0.13
+\ No newline at end of file
++1.0.14
+\ No newline at end of file
