@@ -1,0 +1,283 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ sirc (1-jammy8) jammy; urgency=medium
+ .
+   * remove config
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-22
+
+--- sirc-1.orig/.github/workflows/deb.yml
++++ sirc-1/.github/workflows/deb.yml
+@@ -11,13 +11,14 @@ jobs:
+       path: in
+    - uses: actions/checkout@master
+      with:
+-      repository: colin-i/test
++      repository: colin-i/sync
+       path: in2
++      ref: sirc
+    - name: Run a multi-line script
+      run: |
+       name=`cat in/debian/changelog | head -1 | grep -o ^[^\ ]*`
+-      cp -r in2/sync/${name}/debian/patches in/debian
+-      cp -r in2/sync/${name}/.pc in
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo apt install -y devscripts debhelper \
+                            libgtk-3-dev
+--- sirc-1.orig/arh/pub
++++ sirc-1/arh/pub
+@@ -19,8 +19,7 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp && \
+ ~/test/lp x && \
+ ~/test/keyring && \
+-~/test/del x ${last} x && \
+-~/test/arh2 ${last}
++~/test/arh2 ${last} 0
+ 
+ #ngircd starred
+ #also at debian/ubuntu
+--- /dev/null
++++ sirc-1/heads
+@@ -0,0 +1,8 @@
++
++cp Makefile mk
++a="\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1 \-DSTDC_HEADERS=1 \-DHAVE_LIBGEN_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_NETDB_H=1 \-DHAVE_NETINET_IN_H=1 \-DHAVE_OPENSSL_SSL_H=1 \-DHAVE_PTHREAD_H=1 \-DHAVE_SIGNAL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_SYS_SOCKET_H=1 \-DHAVE_TIME_H=1 \-DHAVE_UNISTD_H=1 \-DFN_G_MEMDUP2=1 \-DHAVE_GTK_GTK_H=1"
++grep --color "${a}" mk
++sed -i "s/${a}//g" mk
++grep --color "${a}" mk
++make -f mk
++rm mk
+--- sirc-1.orig/inc/gtk.h
++++ sirc-1/inc/gtk.h
+@@ -10,8 +10,8 @@ typedef unsigned int guint;
+ typedef unsigned int guint32;
+ typedef unsigned int gsize;
+ typedef guint32 GQuark;
+-typedef gsize GType;
+ typedef unsigned long gulong;
++typedef gulong GType;
+ //__extension__  `-pedantic' and other options cause warnings for many GNU C extensions.
+ //but still got warning
+ typedef signed long long gint64;
+--- sirc-1.orig/inc/stddef.h
++++ sirc-1/inc/stddef.h
+@@ -1,2 +1,2 @@
+ 
+-typedef unsigned int size_t;
++typedef long unsigned int size_t;
+--- sirc-1.orig/inc/stdio.h
++++ sirc-1/inc/stdio.h
+@@ -5,6 +5,7 @@
+ extern "C" {
+ #endif
+ 
++int getchar(void);
+ int printf( const char * format, ... );
+ int puts(const char*);
+ int sscanf(const char *str, const char *format, ...);
+--- sirc-1.orig/inc/unistd.h
++++ sirc-1/inc/unistd.h
+@@ -4,6 +4,8 @@
+ typedef int ssize_t;
+ typedef long off_t;
+ 
++#define F_OK 0
++
+ //#include <bits/seek_constants.h>
+ #define SEEK_SET 0
+ #define SEEK_END 2
+@@ -12,10 +14,12 @@ typedef long off_t;
+ extern "C" {
+ #endif
+ 
++int access(const char*,int);
+ int close(int);
+ off_t lseek(int,off_t,int);
+ ssize_t read(int,void*,size_t);
+ unsigned int sleep(unsigned int seconds);
++int unlink(const char*);
+ ssize_t write(int,const void*,size_t);
+ 
+ #ifdef __cplusplus
+--- sirc-1.orig/main.c
++++ sirc-1/main.c
+@@ -153,7 +153,7 @@ enum {
+   LIST_ITEM = 0,
+   N_COLUMNS
+ };//connections org,channels
+-#define number_of_args 22
++#define number_of_args 23
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wpadded"
+ struct stk_s{
+@@ -215,7 +215,7 @@ static BOOL can_send_data=FALSE;
+ #define counting_the_list_size (sizeof(chans_str)>sizeof(names_str)?sizeof(chans_str):sizeof(names_str))
+ #define list_end_str " listed\n"
+ #define autojoin_str "autojoin"
+-enum{autoconnect_id,autojoin_id,dimensions_id,chan_min_id,chans_max_id,connection_number_id,hide_id,ignore_id,log_id,maximize_id,minimize_id,nick_id,password_id,refresh_id,right_id,run_id,send_history_id,timestamp_id,user_id,visible_id,welcome_id,welcomeNotice_id};
++enum{autoconnect_id,autojoin_id,dimensions_id,chan_min_id,chans_max_id,connection_number_id,hide_id,ignore_id,log_id,maximize_id,minimize_id,nick_id,password_id,refresh_id,right_id,run_id,send_history_id,timestamp_id,user_id,visible_id,welcome_id,welcomeNotice_id,removeconf_id};
+ struct ajoin{
+ 	int c;//against get_active
+ 	char**chans;
+@@ -1768,7 +1768,7 @@ static void enter_callback( gpointer ps)
+ 	g_signal_handler_block(((struct stk_s*)ps)->con_entry,((struct stk_s*)ps)->con_entry_act);
+ 	enter_recallback(ps);
+ }
+-static BOOL info_path_name_set_val(const char*a,char*b,size_t i,size_t j){
++static void info_path_name_set_val(const char*a,char*b,size_t i,size_t j){
+ 	info_path_name=(char*)malloc(i+2+j+5);
+ 	if(info_path_name!=nullptr){
+ 		memcpy(info_path_name,a,i);
+@@ -1777,22 +1777,19 @@ static BOOL info_path_name_set_val(const
+ 		char*c=info_path_name+i+2;
+ 		memcpy(c,b,j);
+ 		memcpy(c+j,"info",5);
+-		return TRUE;
+ 	}
+-	return FALSE;
+ }
+-static BOOL info_path_name_set(char*a){
++static void info_path_name_set(char*a){
+ 	char*h=getenv("HOME");
+ 	if(h!=nullptr){
+ 		char*b=basename(a);
+ 		size_t i=strlen(h);
+ 		size_t j=strlen(b);
+-		return info_path_name_set_val(h,b,i,j);//sizeof(HOMEDIR)-1
++		info_path_name_set_val(h,b,i,j);//sizeof(HOMEDIR)-1
+ 	}
+-	return FALSE;
+ }
+ static void info_path_name_restore(GtkComboBoxText*cbt,GtkWidget*entext,struct stk_s*ps){
+-	if(info_path_name_set(ps->argv[0])){
++	if(info_path_name!=nullptr){
+ 		int f=open(info_path_name,O_RDONLY);
+ 		if(f!=-1){
+ 			size_t sz=(size_t)lseek(f,0,SEEK_END);
+@@ -2210,7 +2207,10 @@ activate (GtkApplication* app,
+ 	text_view=contf_get_textv(home_page);
+ 	ps->trv=(GtkWidget*)contf_get_treev(home_page);
+ 	channels=(GtkListStore*)gtk_tree_view_get_model((GtkTreeView*)ps->trv);
+-	ps->trvr=g_signal_handler_find(ps->trv,G_SIGNAL_MATCH_ID,g_signal_lookup("button-release-event", gtk_button_get_type()),0, nullptr, nullptr, nullptr);
++	//__asm("int $3");
++	GType trv_gt=gtk_button_get_type();
++	guint trv_gsl=g_signal_lookup("button-release-event", trv_gt);
++	ps->trvr=g_signal_handler_find(ps->trv,G_SIGNAL_MATCH_ID,trv_gsl,0,nullptr,nullptr,nullptr);
+ 	g_signal_handler_block(ps->trv,ps->trvr);//warning without
+ 	//
+ 	gtk_notebook_set_scrollable(ps->notebook,TRUE);
+@@ -2341,16 +2341,28 @@ static gboolean autoconnect_callback(con
+ 	else autoconnect=atoi(value);
+ 	return TRUE;
+ }
+-static gint handle_local_options (struct stk_s* ps, GVariantDict*options){
+-	int nr;
+-	if (g_variant_dict_lookup (options,ps->args[connection_number_id], "i", &nr)){//if 0 this is false here
+-		if(nr<con_nr_min||nr>con_nr_max){
+-			printf("%s must be from " con_nr_nrs " interval, \"%i\" given.\n",ps->args[7],nr);
+-			return 0;
++static void remove_config(){
++	if(info_path_name!=nullptr){
++		if(access(info_path_name,F_OK)==0){
++			puts("Would remove:");
++			puts(info_path_name);
++			puts("yes ?");
++			int e=getchar();
++			if(e=='y'){
++				e=getchar();
++				if(e=='e'){
++					e=getchar();
++					if(e=='s'){
++						if(unlink(info_path_name)==0)printf("%s removed\n",info_path_name);
++						return;
++					}
++				}
++			}
++			puts("expecting \"yes\"");
+ 		}
+-		ps->con_type=(unsigned char)nr;
+-	}else ps->con_type=default_connection_number;
+-	//
++	}
++}
++static gint handle_local_options (struct stk_s* ps, GVariantDict*options){
+ 	char*result;
+ 	if(g_variant_dict_lookup (options, ps->args[dimensions_id], "s", &result)){//missing argument is not reaching here
+ 		char*b=strchr(result,'x');
+@@ -2416,6 +2428,23 @@ static gint handle_local_options (struct
+ 	//
+ 	if (g_variant_dict_lookup (options,ps->args[send_history_id],"i",&ps->send_history)==FALSE)
+ 		ps->send_history=default_send_history;
++
++	//these are after allocs where set to allocated mem or 0/nullptr
++
++	if(g_variant_dict_contains(options,ps->args[removeconf_id])/*true*/){
++		remove_config();
++		return 0;
++	}
++
++	int nr;
++	if (g_variant_dict_lookup (options,ps->args[connection_number_id], "i", &nr)){//if 0 this is false here
++		if(nr<con_nr_min||nr>con_nr_max){
++			printf("%s must be from " con_nr_nrs " interval, \"%i\" given.\n",ps->args[connection_number_id],nr);
++			return 0;
++		}
++		ps->con_type=(unsigned char)nr;
++	}else ps->con_type=default_connection_number;
++
+ 	return -1;
+ }
+ int main (int    argc,
+@@ -2428,7 +2457,11 @@ int main (int    argc,
+ 		struct stk_s ps;
+ 		GtkApplication *app;
+ 		app = gtk_application_new (nullptr, G_APPLICATION_FLAGS_NONE);
++
+ 		//if(app!=nullptr){
++		//QWERTYUIOP
++		//ASDFgHJkL
++		// ZXCVbNM
+ 		ps.args[autoconnect_id]="autoconnect";ps.args_short[autoconnect_id]='a';
+ 		const GOptionEntry autoc[]={{ps.args[autoconnect_id],ps.args_short[autoconnect_id],G_OPTION_FLAG_IN_MAIN|G_OPTION_FLAG_OPTIONAL_ARG,G_OPTION_ARG_CALLBACK,(gpointer)autoconnect_callback,"[=INDEX] optional value: autoconnect to that index. Else, autoconnect to an autojoin connection (the reminder of unix days % autojoin total).","INDEX"}
+ 			,{nullptr,'\0',0,(GOptionArg)0,nullptr,nullptr,nullptr}};
+@@ -2475,15 +2508,18 @@ int main (int    argc,
+ 		g_application_add_main_option((GApplication*)app,ps.args[welcome_id],ps.args_short[welcome_id],G_OPTION_FLAG_IN_MAIN,G_OPTION_ARG_STRING,"Welcome message sent in response when someone starts a conversation.","TEXT");
+ 		ps.args[welcomeNotice_id]="welcome-notice";ps.args_short[welcomeNotice_id]='e';
+ 		g_application_add_main_option((GApplication*)app,ps.args[welcomeNotice_id],ps.args_short[welcomeNotice_id],G_OPTION_FLAG_IN_MAIN,G_OPTION_ARG_NONE,"Welcome message sent as a " not_msg_str " instead of " priv_msg_str ".",nullptr);
++		ps.args[removeconf_id]="remove-config";ps.args_short[removeconf_id]='q';
++		g_application_add_main_option((GApplication*)app,ps.args[removeconf_id],ps.args_short[removeconf_id],G_OPTION_FLAG_IN_MAIN,G_OPTION_ARG_NONE,"Remove configuration and exit.",nullptr);
+ 		g_signal_connect_data (app, "handle-local-options", G_CALLBACK (handle_local_options), &ps, nullptr,G_CONNECT_SWAPPED);
+ 		g_signal_connect_data (app, "activate", G_CALLBACK (activate), &ps, nullptr,(GConnectFlags) 0);
+ 		//  if(han>0)
+ 		ps.argc=argc;ps.argv=argv;
+ 		send_entry_list=g_queue_new();
+-		//
++
++		info_path_name_set(argv[0]);
+ 		g_application_run ((GApplication*)app, argc, argv);//gio.h>gapplication.h gio-2.0
+ 		g_object_unref (app);
+-		//
++
+ 		g_queue_free_full(send_entry_list,g_free);
+ 		if(ps.nick!=nullptr)g_free(ps.nick);
+ 		if(ps.welcome!=nullptr)g_free(ps.welcome);
