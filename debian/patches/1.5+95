@@ -1,0 +1,339 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+95) xenial; urgency=medium
+ .
+   * etc fix
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-24
+
+--- ocompiler-1.orig/.ocompiler.txt
++++ /dev/null
+@@ -1,93 +0,0 @@
+-This file is parsed by the program to set the preferences. "nameEQUALx" must be preserved.
+-
+-
+-1. Display unreferenced variables/functions/constants warning.
+-0 is Hide; 1 is Show
+-orphans=1
+-
+-2. Overflow at constants warning.
+-0 is Hide; 1 is Show
+-over_pref=1
+-
+-3. Hidden whitespaces warning.
+-0 is Hide; 1 is Show
+-hidden_pref=1
+-
+-4. Showed warnings as errors.
+-0 if False; 1 is True
+-w_as_e=1
+-
+-5. Log file. This option creates a file with string lines. The files tree and virtual offset are logged.
+-0 is No; 1 is Yes
+-logfile=1
+-
+-6. Take the following action at FUNCTION entries at the object format that are not referred in the object and when the reference warning is enabled. This will also log import functions.
+-[if orphans is 1]
+-0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+-codeFnObj=2
+-
+-7. CONST to unreferenced warnings, same as with FUNCTION. This will also log declared constants.
+-[if orphans is 1]
+-0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+-const_warn=2
+-
+-8. Variables to unreferenced warnings, same as with CONST.
+-[if orphans is 1]
+-0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+-offset_warn=2
+-
+-9. Include active folder. Change the active directory when including and stepping into a file.
+-0 is No; 1 is Yes
+-includedir=1
+-
+-10. Write the function names above the function in code section, useful when debugging asm instructions.
+-0 is No; 1 is Yes
+-function_name=0
+-
+-11. Ignore elfobj64
+-0 is No,use linux convention if ocompiler was compiled for linux,else use microsoft; 1 is Yes; 2 is No,and cross-compile
+-conv_64=0
+-
+-12. Zeroset reserved data section declarations.
+-0 is No; 1 is Yes
+-nul_res_pref=0
+-
+-13. SD as SV (old programs don't have sv and may be with 64 logic).
+-0 is No; 1 is Yes
+-sd_as_sv=0
+-
+-14. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
+-0 is Zero; 1 is Addend
+-inplace_reloc=1
+-
+-15. At objects, when on 64 format, relocs are R_X86_64_64.
+-0 is No; 1 is Yes
+-reloc_64=1
+-
+-16. Remove leading underscore at IMPORT?
+-0 is No; 1 is Yes
+-underscore_pref=0
+-
+-17. RETURNs at main scope like EXIT.
+-0 is No; 1 is Yes
+-exit_end=0
+-
+-18. Take second file path at INCLUDE statement.
+-0 is No; 1 is Yes
+-include_sec=0
+-
+-19. Ignore FORMAT ...SO .
+-0 is No; 1 is Yes
+-ignore_format_so=0
+-
+-20. At 64, before a call, align stack. Cases for arguments and shadow(windows only).
+-0 is No; 1 is Yes; 2 is Yes for arguments and shadow; 3 is Yes for arguments
+-call_align=1
+-
+-21. Virtual data to a SHT_NOBITS at object
+-0 is No; 1 is Yes
+-nobits_virtual=1
+-
+-22. Debug section at object.
+-0 is No; 1 is Yes
+-has_debug=0
+\ No newline at end of file
+--- ocompiler-1.orig/compiler.html
++++ ocompiler-1/compiler.html
+@@ -9,9 +9,9 @@
+ 	<br>
+ 	To compile a file there are two methods:
+ 	<br>
+-	1. <i>Windows only</i>. Start the program and select a file.
++	1. Start the program with one argument (ex: from the command line). Example: windows, <b>o.exe src/windows/o.o</b>; linux, <b>o "./src/linux/o.o"</b>
+ 	<br>
+-	2. Start the program with one argument (ex: from the command line). Example: windows, <b>o.exe src/windows/o.o</b>; linux, <b>./o "./src/linux/o.o"</b>
++	2. <i>Windows only</i>. Start the program and select a file.
+ 	<br>
+-	To disable warnings see the file '.ocompiler.txt'.
++	To disable warnings see the file 'ocompiler.conf'.
+ </p>
+\ No newline at end of file
+--- ocompiler-1.orig/makewin32
++++ ocompiler-1/makewin32
+@@ -17,7 +17,7 @@ rm ./src/windows/obj32.s.log && \
+ \
+ mkdir ocompiler && \
+ mv o.exe ocompiler && \
+-cp .ocompiler.txt ocompiler && \
++cp ocompiler.conf ocompiler && \
+ \
+ zip -r ocompiler.zip ocompiler && \
+ rm -r ./ocompiler && \
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -335,7 +335,7 @@
+ 	</p>
+ 
+ 	<p>
+-	To disable the unreferenced warning or to set options at symbols see '.ocompiler.txt' file.
++	To disable the unreferenced warning or to set options at symbols see 'ocompiler.conf' file.
+ 	<br>
+ 	<br>
+ 	The data declarations can be made in the global scope or in the function scope.
+@@ -959,7 +959,7 @@
+ 	</a>
+ 	</p>
+ 	<p>
+-	When the option function_name from the .ocompiler.txt file is set to Yes(1), the name is wrote in the code section above the function, for debugging asm code.<br>
++	When the option function_name from the ocompiler.conf file is set to Yes(1), the name is wrote in the code section above the function, for debugging asm code.<br>
+ 	The preferences file can be placed in HOME folder on linux.<br>
+ 	Lines are ended with new line(0xa),carriage return and new line(0xd,0xa) or semicolon(0x3B).<br>
+ 	The command line options are detailed at some point on the linux console std. On windows there some dialogs instead of console std.
+--- /dev/null
++++ ocompiler-1/ocompiler.conf
+@@ -0,0 +1,94 @@
++
++#This file is parsed by the program to set the preferences. "nameEQUALx" must be preserved.
++
++
++#1. Display unreferenced variables/functions/constants warning.
++#0 is Hide; 1 is Show
++orphans=1
++
++#2. Overflow at constants warning.
++#0 is Hide; 1 is Show
++over_pref=1
++
++#3. Hidden whitespaces warning.
++#0 is Hide; 1 is Show
++hidden_pref=1
++
++#4. Showed warnings as errors.
++#0 if False; 1 is True
++w_as_e=1
++
++#5. Log file. This option creates a file with string lines. The files tree and virtual offset are logged.
++#0 is No; 1 is Yes
++logfile=1
++
++#6. Take the following action at FUNCTION entries at the object format that are not referred in the object and when the reference warning is enabled. This will also log import functions.
++#[if orphans is 1]
++#0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
++codeFnObj=2
++
++#7. CONST to unreferenced warnings, same as with FUNCTION. This will also log declared constants.
++#[if orphans is 1]
++#0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
++const_warn=2
++
++#8. Variables to unreferenced warnings, same as with CONST.
++#[if orphans is 1]
++#0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
++offset_warn=2
++
++#9. Include active folder. Change the active directory when including and stepping into a file.
++#0 is No; 1 is Yes
++includedir=1
++
++#10. Write the function names above the function in code section, useful when debugging asm instructions.
++#0 is No; 1 is Yes
++function_name=0
++
++#11. Ignore elfobj64
++#0 is No,use linux convention if ocompiler was compiled for linux,else use microsoft; 1 is Yes; 2 is No,and cross-compile
++conv_64=0
++
++#12. Zeroset reserved data section declarations.
++#0 is No; 1 is Yes
++nul_res_pref=0
++
++#13. SD as SV (old programs don't have sv and may be with 64 logic).
++#0 is No; 1 is Yes
++sd_as_sv=0
++
++#14. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
++#0 is Zero; 1 is Addend
++inplace_reloc=1
++
++#15. At objects, when on 64 format, relocs are R_X86_64_64.
++#0 is No; 1 is Yes
++reloc_64=1
++
++#16. Remove leading underscore at IMPORT?
++#0 is No; 1 is Yes
++underscore_pref=0
++
++#17. RETURNs at main scope like EXIT.
++#0 is No; 1 is Yes
++exit_end=0
++
++#18. Take second file path at INCLUDE statement.
++#0 is No; 1 is Yes
++include_sec=0
++
++#19. Ignore FORMAT ...SO .
++#0 is No; 1 is Yes
++ignore_format_so=0
++
++#20. At 64, before a call, align stack. Cases for arguments and shadow(windows only).
++#0 is No; 1 is Yes; 2 is Yes for arguments and shadow; 3 is Yes for arguments
++call_align=1
++
++#21. Virtual data to a SHT_NOBITS at object
++#0 is No; 1 is Yes
++nobits_virtual=1
++
++#22. Debug section at object.
++#0 is No; 1 is Yes
++has_debug=0
+\ No newline at end of file
+--- ocompiler-1.orig/readme.md
++++ ocompiler-1/readme.md
+@@ -22,7 +22,7 @@ On Windows, <i>.windows.zip</i> file fro
+ 
+ ## Info
+ Documentation is at [o.html](https://htmlpreview.github.io/?https://github.com/colin-i/o/blob/master/o.html).\
+-[Preferences file](https://raw.githubusercontent.com/colin-i/o/master/.ocompiler.txt).
++[Preferences file](https://raw.githubusercontent.com/colin-i/o/master/ocompiler.conf).
+ 
+ ## Donations
+ The *donations* section is here
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -27,7 +27,7 @@ prefix=/usr
+ endif
+ 
+ #set preffile data
+-PREFFILE=.ocompiler.txt
++PREFFILE=ocompiler.conf
+ #there is not suposed to be a /usr/etc, /usr is read-only
+ ifeq ($(prefix),/usr)
+ 	PREFFILEFULL=$(DESTDIR)/etc/${PREFFILE}
+@@ -43,6 +43,7 @@ else
+ 	etc_helper=bin/o
+ endif
+ etcinclude=etcinclude.s
++#debian/ocompiler.install is forcing to usr/ / etc/
+ 
+ #OFLAGS=
+ 
+@@ -99,5 +100,6 @@ test:
+ 	cd linux; ../o o.s nul_res_pref 1; mv o z; ${linker} ./z o.s nul_res_pref 1; diff o z
+ #/home/bc/Desktop/out/libc6-i386.AppImage /home/bc/o/ocompiler-1/src/linux/z /home/bc/o/ocompiler-1/src/linux/o.s nul_res_pref 1
+ #2.36-0ubuntu4 (jammy) was ok, backportpackage is working for esm packages (tested)
++#DEB_BUILD_OPTIONS=nocheck debuild -us -uc
+ 
+ .PHONY: all install clean distclean uninstall test
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.s
++++ ocompiler-1/src/files/functions/pref/preffuncs.s
+@@ -207,7 +207,7 @@ endfunction
+ 
+ #void
+ function setpreferences(vstr scrpath)
+-	Str preferences=".ocompiler.txt"
++	Str preferences="ocompiler.conf"
+ 	data err#1
+ 	data noerr=noerror
+ 	Str preferencescontent#1
+--- ocompiler-1.orig/src/linux/files/prefextra.s
++++ ocompiler-1/src/linux/files/prefextra.s
+@@ -47,6 +47,7 @@ function prefextra_helper(ss prefpath,sd
+ 	endelse
+ 
+ 	#second verify in etc, more at Makefile about etcinclude
++
+ 	sd size;setcall size strlen(scrpath)
+ 	include "../../etcinclude.s"
+ 	if size>etchelper
+@@ -88,5 +89,5 @@ function prefextra_helper(ss prefpath,sd
+ 
+ 	call Message("No preferences file found in etc.")
+ 
+-	return "No preferences file found in HOME. The file is here: https://raw.githubusercontent.com/colin-i/o/master/.ocompiler.txt"
++	return "No preferences file found in HOME. The file is here: https://raw.githubusercontent.com/colin-i/o/master/ocompiler.conf"
+ endfunction
+--- ocompiler-1.orig/sync
++++ ocompiler-1/sync
+@@ -1,2 +1,2 @@
+ 
+-rsync -av .ocompiler.txt ~/
++rsync -av ocompiler.conf ~/
