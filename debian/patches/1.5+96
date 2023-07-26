@@ -1,0 +1,126 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+96) xenial; urgency=medium
+ .
+   * exit_end fix
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-26
+
+--- /dev/null
++++ ocompiler-1/ounused/md
+@@ -0,0 +1,2 @@
++
++OFLAGS="function_name 1" make linkerflags= $@
+--- ocompiler-1.orig/src/files/actions/main/index/function.s
++++ ocompiler-1/src/files/actions/main/index/function.s
+@@ -26,9 +26,10 @@ Else
+ 		#Set objfnmask referencebit
+ 		if parses==(pass_write)
+ 			set fnavailable two
+-			#??? is not working for override. if exit_end==(TRUE)
+-			#	set real_exit_end (TRUE)
+-			#endif
++
++			set exit_end forced_exit_end
++			#and overrides? who cares, can add a bool for every pref that was overrided that can also be at pref_store
++			#    this can be at all parses if needed
+ 		endif
+ 	Else
+ 		#Set objfnmask null
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -453,7 +453,7 @@ const p_underscore_pref^underscore_pref
+ #exit end preference
+ data exit_end#1
+ const p_exit_end^exit_end
+-#data real_exit_end#1
++data forced_exit_end#1
+ #const p_real_exit_end^real_exit_end
+ 
+ data include_sec#1
+--- ocompiler-1.orig/src/files/inits/inits.s
++++ ocompiler-1/src/files/inits/inits.s
+@@ -106,3 +106,6 @@ vdata ptrcodeRegD%%ptrcodeRegD
+ set ptrcodeRegD# 0
+ 
+ call vars_log_reset() #to let next variables be ".var"
++
++set forced_exit_end exit_end
++set exit_end (FALSE)
+--- ocompiler-1.orig/src/windows/files/wingetfile/getfilefromcommand.s
++++ ocompiler-1/src/windows/files/wingetfile/getfilefromcommand.s
+@@ -1,24 +1,25 @@
+ 
+ 
+ sd command_name
+-sd commname_size
++#sd commname_size
+ 
+ SetCall command_name GetCommandName()
+ 
+ #this is so bugged but accepted , strlen is ansi, but no wide path in this program, so first XX00h will stop
+-SetCall commname_size strlen(command_name)
+-If commname_size!=zero
+-	setcall argv CommandLineToArgvW(command_name,#argc)
+-	if argv!=(NULL)
+-		#here is the start of mem worries for windows
+-		call argv_to_ansi(argc,argv)
+-		if argc>0 #is this logic?
+-			call setpreferences(argv#)
+-			if argc>1
+-				set path_nofree argv
+-				incst path_nofree
+-				set path_nofree path_nofree#
+-			endif
++#anyway argv0 can't be '\0'
++#SetCall commname_size strlen(command_name)
++#If commname_size!=zero
++setcall argv CommandLineToArgvW(command_name,#argc)
++if argv!=(NULL)
++	#here is the start of mem worries for windows
++	call argv_to_ansi(argc,argv)
++	if argc>0 #is this logic?
++		call setpreferences(argv#)
++		if argc>1
++			set path_nofree argv
++			incst path_nofree
++			set path_nofree path_nofree#
+ 		endif
+ 	endif
+-EndIf
++endif
++#EndIf
+--- ocompiler-1.orig/src/windows/obj.s
++++ ocompiler-1/src/windows/obj.s
+@@ -1,7 +1,11 @@
+ 
+ Include "./head.h"
+ 
+-#i686-w64-mingw32-gcc will not argc argv, only x86_64-w64-mingw32-gcc
++#i686-w64-mingw32-gcc has main(argc,argv) but gcc want -8 at inplace instead of 0
+ 
+-Entry _WinMain@16(sd *argc,sd *argv)
++#gcc:
++#	int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nCmdShow)
++#but lpCmdLine is a structure, the string is after some bytes
++
++Entry _WinMain@16()
+ 	Include "./text.s"
