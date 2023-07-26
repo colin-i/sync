@@ -1,0 +1,201 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+97) xenial; urgency=medium
+ .
+   * fix exit_end again
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-26
+
+--- ocompiler-1.orig/makewin32
++++ ocompiler-1/makewin32
+@@ -8,7 +8,7 @@ OCOMP=$1
+ fi
+ 
+ ${OCOMP} ./src/windows/obj32.s inplace_reloc 0 && \
+-#argc argv?, no. gcc want -8 at rels and ld 0
++#argc argv? more info at obj.s
+ i686-w64-mingw32-ld -s -entry=_WinMain@16 ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
+ ounused ./src/windows/obj32.s.log && \
+ \
+--- ocompiler-1.orig/src/files/actions/main/index/function.s
++++ ocompiler-1/src/files/actions/main/index/function.s
+@@ -26,10 +26,6 @@ Else
+ 		#Set objfnmask referencebit
+ 		if parses==(pass_write)
+ 			set fnavailable two
+-
+-			set exit_end forced_exit_end
+-			#and overrides? who cares, can add a bool for every pref that was overrided that can also be at pref_store
+-			#    this can be at all parses if needed
+ 		endif
+ 	Else
+ 		#Set objfnmask null
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -517,8 +517,13 @@ endfunction
+ 
+ #bool
+ function is_linux_end()
+-	sd p_exit_end%p_exit_end ;#real_
+-	return p_exit_end#
++	sd ptrfnavailable%ptrfnavailable
++	if ptrfnavailable#==0  #one is default, two from multiple entry start detectors and from entry tags
++	#here innerfunction is also practical, but that is more for data offsets
++		sd p_exit_end%p_exit_end
++		return p_exit_end#
++	endif
++	return (FALSE) #not at inner functions
+ endfunction
+ #er
+ function entryraw_top()
+--- ocompiler-1.orig/src/files/functions/inits.s
++++ ocompiler-1/src/files/functions/inits.s
+@@ -72,7 +72,7 @@ function comline_pointer(ss a,sd p_p)
+ 			sd c
+ 			setcall c memcmp(a,b,a_len)
+ 			if c==0
+-				sub t (nr_of_prefs_jumper)
++				sub t (nr_of_prefs_jumper)  #this will subtract from strings and will be straight on the pointers
+ 				set p_p# t#
+ 				return (noerror)
+ 			endif
+--- ocompiler-1.orig/src/files/functions/override.s
++++ ocompiler-1/src/files/functions/override.s
+@@ -1,40 +1,39 @@
+ 
+ #err
+ function override_com(sd pcontent,sd psize)
+-	sd size
+-	setcall size valinmem(pcontent#,psize#,(asciispace))
+-	if size==0
++	sd name
++	sd namesize
++	setcall namesize valinmem(pcontent#,psize#,(asciispace))
++	if namesize==0
+ 		return "first argument is missing at override"
+ 	endif
+-	sd name
+ 	set name pcontent#
+-	call advancecursors(pcontent,psize,size)
++	call advancecursors(pcontent,psize,namesize)
+ 	call spaces(pcontent,psize)
+-	if size==0
++	if psize#==0
+ 		return "second argument is missing at override"
+ 	endif
+-	sd err
+-	ss t
+-	charx aux#1   #override is at all passes coming again here
+-	set t name;add t size;set aux t#;set t# 0
+ 	#work can be done do allow line comment here
+-	ss p
+-	set size psize#
+-	setcall err memoryalloc(size,#p)
+-	#it is file_get_content memwise (not strwise with null ending)
+-	#memoryalloc? the override mimics command line, but this can be changed
++
++	sd err
++	ss mem
++	sd valuesize;set valuesize psize#
++
++	sd allocsize=1+1;add allocsize valuesize
++	add allocsize namesize
++	setcall err memoryalloc(allocsize,#mem)
+ 	if err==(noerror)
+-		inc size
+-		call memtomem(p,pcontent#,size)
+-		dec size
+-		add p size;set p# 0
+-		sub p size
+-		setcall err prefs_set(name,p)
+-		call free(p)
++		ss p;set p mem
++		call memtomem(p,name,namesize);add p namesize
++		set p# 0;inc p
++		ss value;set value p
++		call memtomem(p,pcontent#,valuesize);add p valuesize
++		set p# 0
++		setcall err prefs_set(mem,value)
+ 		if err==(noerror)
+-			set t# aux
+-			call advancecursors(pcontent,psize,size)
++			call advancecursors(pcontent,psize,valuesize)
+ 		endif
++		call free(mem)
+ 	endif
+ 	return err
+ endfunction
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -450,11 +450,9 @@ const p_pref_reloc_64^pref_reloc_64
+ data underscore_pref#1
+ const p_underscore_pref^underscore_pref
+ 
+-#exit end preference
++#exit end preference at main scope
+ data exit_end#1
+ const p_exit_end^exit_end
+-data forced_exit_end#1
+-#const p_real_exit_end^real_exit_end
+ 
+ data include_sec#1
+ const p_include_sec^include_sec
+--- ocompiler-1.orig/src/files/inits/inits.s
++++ ocompiler-1/src/files/inits/inits.s
+@@ -106,6 +106,3 @@ vdata ptrcodeRegD%%ptrcodeRegD
+ set ptrcodeRegD# 0
+ 
+ call vars_log_reset() #to let next variables be ".var"
+-
+-set forced_exit_end exit_end
+-set exit_end (FALSE)
+--- ocompiler-1.orig/src/windows/obj.s
++++ ocompiler-1/src/windows/obj.s
+@@ -1,7 +1,8 @@
+ 
+ Include "./head.h"
+ 
+-#i686-w64-mingw32-gcc has main(argc,argv) but gcc want -8 at inplace instead of 0
++#gcc(i686/x86_64) will ask for WinMain, but it has argc,argv entry, there are some additional steps
++#old remark: gcc want -8 at inplace instead of 0
+ 
+ #gcc:
+ #	int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nCmdShow)
+--- ocompiler-1.orig/tests/ret.s
++++ ocompiler-1/tests/ret.s
+@@ -1,8 +1,16 @@
+ 
+-format elf
++format elfobj
++
++orphan off
++
++function inner()
++ret
++endfunction
+ 
+ entry main()
+ ret
+ override exit_end 1
+ ret
++override exit_end 0
++ret
+ exit 2
