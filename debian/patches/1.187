@@ -1,0 +1,1141 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-187) focal; urgency=medium
+ .
+   * remove user files
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-29
+
+--- ovideo-1.orig/.github/workflows/aiupdate.yml
++++ ovideo-1/.github/workflows/aiupdate.yml
+@@ -20,6 +20,7 @@ jobs:
+       chmod a+x ${runtime}
+       #
+       ver=`curl https://api.github.com/repos/colin-i/${ghname}/releases/latest -s | jq .tag_name -r`
++      echo ${ghname} ${ver}
+       #
+       wget https://github.com/colin-i/${ghname}/releases/download/${ver}/${name}.${aiarh}.AppImage -O a.AppImage
+       #
+--- ovideo-1.orig/.github/workflows/appimage.yml
++++ ovideo-1/.github/workflows/appimage.yml
+@@ -22,7 +22,7 @@ jobs:
+  # This workflow contains a single job called "build"
+  build:
+   # The type of runner that the job will run on
+-  runs-on: ubuntu-18.04
++  runs-on: ubuntu-20.04
+   # Steps represent a sequence of tasks that will be executed as part of the job
+   steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+@@ -120,76 +120,7 @@ jobs:
+        fi
+       fi
+       array=( \
+-       gcc-8-base:i386 glib-networking:i386 gstreamer1.0-gl:i386 \
+-       gstreamer1.0-plugins-base:i386 \
+-       gstreamer1.0-plugins-good:i386 gstreamer1.0-x:i386 \
+-       libaa1:i386 libasn1-8-heimdal:i386 libasound2:i386 \
+-       libasyncns0:i386 libatk1.0-0:i386 libavahi-client3:i386 \
+-       libavahi-common-data:i386 libavahi-common3:i386 libavc1394-0:i386 \
+-       libblkid1:i386 libbsd0:i386 \
+-       libbz2-1.0:i386 libc6:i386 libc6-i386 libcaca0:i386 libcairo-gobject2:i386 \
+-       libcairo2:i386 libcap2:i386 libcdparanoia0:i386 \
+-       libcom-err2:i386 libcroco3:i386 libcups2:i386 \
+-       libcurl3-gnutls:i386 libdatrie1:i386 libdb5.3:i386 libdbus-1-3:i386 \
+-       libdrm-amdgpu1:i386 \
+-       libdrm-intel1:i386 libdrm-nouveau2:i386 libdrm-radeon1:i386 libdrm2:i386 \
+-       libdv4:i386 libedit2:i386 libegl-mesa0:i386 \
+-       libegl1:i386 libelf1:i386 libexpat1:i386 libffi6:i386 \
+-       libfftw3-double3:i386 libflac8:i386 \
+-       libfontconfig1:i386 libfreetype6:i386 libfribidi0:i386 libgail-common:i386 \
+-       libgail18:i386 libgbm1:i386 libgcc1:i386 libgcrypt20:i386 \
+-       libgdk-pixbuf2.0-0:i386 libgl1:i386 libgl1-mesa-dri:i386 libglapi-mesa:i386 \
+-       libglib2.0-0:i386 libglvnd0:i386 libglx-mesa0:i386 libglx0:i386 \
+-       libgmp10:i386 libgnutls30:i386 libgomp1:i386 libgpg-error0:i386 libgpm2:i386 \
+-       libgraphene-1.0-0:i386 libgraphite2-3:i386 \
+-       libgssapi-krb5-2:i386 libgssapi3-heimdal:i386 \
+-       libgstreamer-gl1.0-0:i386 \
+-       libgstreamer-plugins-base1.0-0:i386 libgstreamer-plugins-good1.0-0:i386 \
+-       libgstreamer1.0-0:i386 libgtk2.0-0:i386 libgudev-1.0-0:i386 \
+-       libharfbuzz0b:i386 \
+-       libhcrypto4-heimdal:i386 libheimbase1-heimdal:i386 libheimntlm0-heimdal:i386 \
+-       libhogweed4:i386 libhx509-5-heimdal:i386 libicu60:i386 libidn2-0:i386 \
+-       libiec61883-0:i386 libilmbase12:i386 libjack-jackd2-0:i386 libjbig0:i386 \
+-       libjpeg-turbo8:i386 libjpeg8:i386 libk5crypto3:i386 \
+-       libkeyutils1:i386 libkrb5-26-heimdal:i386 libkrb5-3:i386 \
+-       libkrb5support0:i386 liblcms2-2:i386 libldap-2.4-2:i386 \
+-       libllvm6.0:i386 liblz4-1:i386 liblzma5:i386 \
+-       libmount1:i386 libmp3lame0:i386 \
+-       libmpg123-0:i386 \
+-       libncurses5:i386 libncursesw5:i386 libnettle6:i386 \
+-       libnghttp2-14:i386 libnuma1:i386 libogg0:i386 \
+-       libopenexr22:i386 \
+-       libopus0:i386 liborc-0.4-0:i386 libp11-kit0:i386 \
+-       libpango-1.0-0:i386 libpangocairo-1.0-0:i386 libpangoft2-1.0-0:i386 \
+-       libpciaccess0:i386 libpcre3:i386 libpixman-1-0:i386 libpng16-16:i386 \
+-       libproxy1v5:i386 libpsl5:i386 libpulse0:i386 libraw1394-11:i386 \
+-       libreadline7:i386 libroken18-heimdal:i386 librsvg2-2:i386 \
+-       librsvg2-common:i386 librtmp1:i386 libsamplerate0:i386 libsasl2-2:i386 \
+-       libsasl2-modules:i386 libsasl2-modules-db:i386 libsbc1:i386 libselinux1:i386 \
+-       libsensors4:i386 libshout3:i386 \
+-       libslang2:i386 libsnappy1v5:i386 libsndfile1:i386 \
+-       libsoup2.4-1:i386 \
+-       libspeex1:i386 libsqlite3-0:i386 \
+-       libssl1.1:i386 libstdc++6:i386 \
+-       libsystemd0:i386 libtag1v5:i386 libtag1v5-vanilla:i386 libtasn1-6:i386 \
+-       libthai0:i386 libtheora0:i386 libtiff5:i386 libtinfo5:i386 libtwolame0:i386 \
+-       libudev1:i386 libunistring2:i386 libusb-1.0-0:i386 libuuid1:i386 \
+-       libv4l-0:i386 libv4lconvert0:i386 \
+-       libvdpau1:i386 libvisual-0.4-0:i386 \
+-       libvorbis0a:i386 libvorbisenc2:i386 libvorbisfile3:i386 \
+-       libvpx5:i386 libwavpack1:i386 libwayland-client0:i386 \
+-       libwayland-egl1-mesa:i386 libwayland-server0:i386 libwebp6:i386 \
+-       libwebpmux3:i386 libwebrtc-audio-processing1:i386 \
+-       libwind0-heimdal:i386 libwrap0:i386 libx11-6:i386 \
+-       libx11-xcb1:i386 libxau6:i386 \
+-       libxcb-dri2-0:i386 libxcb-dri3-0:i386 libxcb-glx0:i386 libxcb-present0:i386 \
+-       libxcb-render0:i386 libxcb-shm0:i386 libxcb-sync1:i386 libxcb-xfixes0:i386 \
+-       libxcb1:i386 libxcomposite1:i386 libxcursor1:i386 libxdamage1:i386 \
+-       libxdmcp6:i386 libxext6:i386 libxfixes3:i386 libxi6:i386 libxinerama1:i386 \
+-       libxml2:i386 libxrandr2:i386 libxrender1:i386 libxshmfence1:i386 libxv1:i386 \
+-       libxxf86vm1:i386 \
+-       mesa-vdpau-drivers:i386 \
+-       vdpau-driver-all:i386 zlib1g:i386 \
++       gcc-10-base:i386 glib-networking:i386 gstreamer1.0-plugins-base:i386 gstreamer1.0-plugins-good:i386 gstreamer1.0-x:i386 libaa1:i386 libasn1-8-heimdal:i386 libasound2:i386 libasyncns0:i386 libatk1.0-0:i386 libatomic1:i386 libavahi-client3:i386 libavahi-common-data:i386 libavahi-common3:i386 libavc1394-0:i386 libblkid1:i386 libbrotli1:i386 libbsd0:i386 libbz2-1.0:i386 libc6:i386 libcaca0:i386 libcairo-gobject2:i386 libcairo2:i386 libcap2:i386 libcdparanoia0:i386 libcom-err2:i386 libcrypt1:i386 libcups2:i386 libcurl3-gnutls:i386 libdatrie1:i386 libdb5.3:i386 libdbus-1-3:i386 libdrm-amdgpu1:i386 libdrm-intel1:i386 libdrm-nouveau2:i386 libdrm-radeon1:i386 libdrm2:i386 libdv4:i386 libedit2:i386 libelf1:i386 libexpat1:i386 libffi7:i386 libfftw3-double3:i386 libflac8:i386 libfontconfig1:i386 libfreetype6:i386 libfribidi0:i386 libgail-common:i386 libgail18:i386 libgcc-s1:i386 libgcrypt20:i386 libgdk-pixbuf2.0-0:i386 libglib2.0-0:i386 libgmp10:i386 libgnutls30:i386 libgomp1:i386 libgpg-error-l10n libgpg-error0:i386 libgpm2:i386 libgraphite2-3:i386 libgssapi-krb5-2:i386 libgssapi3-heimdal:i386 libgssdp-1.2-0:i386 libgstreamer-plugins-base1.0-0:i386 libgstreamer-plugins-good1.0-0:i386 libgstreamer1.0-0:i386 libgtk2.0-0:i386 libgudev-1.0-0:i386 libgupnp-1.2-0:i386 libharfbuzz0b:i386 libhcrypto4-heimdal:i386 libheimbase1-heimdal:i386 libheimntlm0-heimdal:i386 libhogweed5:i386 libhx509-5-heimdal:i386 libicu66:i386 libidn2-0:i386 libiec61883-0:i386 libjack-jackd2-0:i386 libjbig0:i386 libjpeg-turbo8:i386 libjpeg8:i386 libk5crypto3:i386 libkeyutils1:i386 libkrb5-26-heimdal:i386 libkrb5-3:i386 libkrb5support0:i386 liblcms2-2:i386 libldap-2.4-2:i386 libllvm9:i386 liblz4-1:i386 liblzma5:i386 libmount1:i386 libmp3lame0:i386 libmpg123-0:i386 libncurses6:i386 libncursesw6:i386 libnettle7:i386 libnghttp2-14:i386 libnuma1:i386 libogg0:i386 libopenjp2-7:i386 libopus0:i386 liborc-0.4-0:i386 libp11-kit0:i386 libpango-1.0-0:i386 libpangocairo-1.0-0:i386 libpangoft2-1.0-0:i386 libpciaccess0:i386 libpcre2-8-0:i386 libpcre3:i386 libpixman-1-0:i386 libpng16-16:i386 libproxy1v5:i386 libpsl5:i386 libpulse0:i386 libraw1394-11:i386 libreadline8:i386 libroken18-heimdal:i386 librsvg2-2:i386 librsvg2-common:i386 librtmp1:i386 libsamplerate0:i386 libsasl2-2:i386 libsasl2-modules:i386 libsasl2-modules-db:i386 libsbc1:i386 libselinux1:i386 libshout3:i386 libslang2:i386 libsnappy1v5:i386 libsndfile1:i386 libsoup2.4-1:i386 libsoxr0:i386 libspeex1:i386 libsqlite3-0:i386 libssh-4:i386 libssl1.1:i386 libstdc++6:i386 libsystemd0:i386 libtag1v5:i386 libtag1v5-vanilla:i386 libtasn1-6:i386 libthai0:i386 libtheora0:i386 libtiff5:i386 libtinfo6:i386 libtwolame0:i386 libudev1:i386 libunistring2:i386 libusb-1.0-0:i386 libuuid1:i386 libv4l-0:i386 libv4lconvert0:i386 libvdpau1:i386 libvisual-0.4-0:i386 libvorbis0a:i386 libvorbisenc2:i386 libvorbisfile3:i386 libvpx6:i386 libvulkan1:i386 libwavpack1:i386 libwayland-client0:i386 libwayland-cursor0:i386 libwayland-egl1:i386 libwebp6:i386 libwebpmux3:i386 libwebrtc-audio-processing1:i386 libwind0-heimdal:i386 libwrap0:i386 libx11-6:i386 libx11-xcb1:i386 libxau6:i386 libxcb-dri2-0:i386 libxcb-dri3-0:i386 libxcb-present0:i386 libxcb-randr0:i386 libxcb-render0:i386 libxcb-shm0:i386 libxcb-sync1:i386 libxcb-xfixes0:i386 libxcb1:i386 libxcomposite1:i386 libxcursor1:i386 libxdamage1:i386 libxdmcp6:i386 libxext6:i386 libxfixes3:i386 libxi6:i386 libxinerama1:i386 libxkbcommon0:i386 libxml2:i386 libxrandr2:i386 libxrender1:i386 libxshmfence1:i386 libxss1:i386 libxv1:i386 libxxf86vm1:i386 libzstd1:i386 mesa-vdpau-drivers:i386 mesa-vulkan-drivers:i386 ocl-icd-libopencl1:i386 vdpau-driver-all:i386 zlib1g:i386 \
+       )
+       for var in "${array[@]}"
+       do
+@@ -203,15 +134,7 @@ jobs:
+        fi
+       done
+       array=( \
+-       freepats gstreamer1.0-plugins-bad:i386 i965-va-driver:i386 libass9:i386 libavcodec57:i386 libavutil55:i386 libbs2b0:i386 \
+-       libchromaprint1:i386 libcrystalhd3:i386 libdc1394-22:i386 libdca0:i386 libde265-0:i386 libdvdnav4:i386 libdvdread4:i386 \
+-       libfaad2:i386 libflite1:i386 libfluidsynth1:i386 libgme0:i386 libgsm1:i386 libgssdp-1.0-3:i386 libgstreamer-plugins-bad1.0-0:i386 \
+-       libgupnp-1.0-4:i386 libgupnp-igd-1.0-4:i386 libkate1:i386 liblilv-0-0:i386 libmjpegutils-2.1-0:i386 libmms0:i386 libmodplug1:i386 \
+-       libmpcdec6:i386 libmpeg2encpp-2.1-0:i386 libmplex2-2.1-0:i386 libnice10:i386 libofa0:i386 libopenal-data libopenal1:i386 \
+-       libopenjp2-7:i386 libopenmpt0:i386 libserd-0-0:i386 libshine3:i386 libsndio6.1:i386 libsord-0-0:i386 libsoundtouch1:i386 \
+-       libsoxr0:i386 libspandsp2:i386 libsratom-0-0:i386 libsrtp2-1:i386 libswresample2:i386 libva-drm2:i386 libva-x11-2:i386 \
+-       libva2:i386 libvo-aacenc0:i386 libvo-amrwbenc0:i386 libvulkan1:i386 libwildmidi-config libwildmidi2:i386 libx264-152:i386 \
+-       libx265-146:i386 libxvidcore4:i386 libzbar0:i386 libzvbi-common libzvbi0:i386 mesa-va-drivers:i386 va-driver-all:i386 \
++       gstreamer1.0-plugins-bad:i386 i965-va-driver:i386 intel-media-va-driver:i386 libaom0:i386 libass9:i386 libavcodec58:i386 libavutil56:i386 libbs2b0:i386 libchromaprint1:i386 libcodec2-0.9:i386 libdc1394-22:i386 libdca0:i386 libde265-0:i386 libdvdnav4:i386 libdvdread7:i386 libfaad2:i386 libflite1:i386 libfluidsynth2:i386 libgme0:i386 libgsm1:i386 libgstreamer-plugins-bad1.0-0:i386 libgupnp-igd-1.0-4:i386 libigdgmm11:i386 libilmbase24:i386 libinstpatch-1.0-2:i386 libkate1:i386 liblilv-0-0:i386 libmjpegutils-2.1-0:i386 libmms0:i386 libmodplug1:i386 libmpcdec6:i386 libmpeg2encpp-2.1-0:i386 libmplex2-2.1-0:i386 libnice10:i386 libofa0:i386 libopenal-data libopenal1:i386 libopenexr24:i386 libopenmpt0:i386 libsdl2-2.0-0:i386 libserd-0-0:i386 libshine3:i386 libsndio7.0:i386 libsord-0-0:i386 libsoundtouch1:i386 libspandsp2:i386 libsratom-0-0:i386 libsrt1:i386 libsrtp2-1:i386 libswresample3:i386 libusrsctp1:i386 libva-drm2:i386 libva-x11-2:i386 libva2:i386 libvo-aacenc0:i386 libvo-amrwbenc0:i386 libwildmidi2:i386 libx264-155:i386 libx265-179:i386 libxvidcore4:i386 libzbar0:i386 libzvbi-common libzvbi0:i386 mesa-va-drivers:i386 timgm6mb-soundfont va-driver-all:i386 \
+       )
+       for var in "${array[@]}"
+       do
+@@ -277,15 +200,16 @@ jobs:
+       #!/bin/bash
+       cd "\$(dirname "\$0")"
+       cd ../../
+-      loader="./lib32/ld-linux.so.2"
++      loader="./lib/ld-linux.so.2"
+       hom=\${HOME}/ovideo
+       mkdir -p "\${hom}"
+       gpmf=\${hom}/loaders.cache
+       rootbase=\$(pwd)
+-      LD_LIBRARY_PATH="\${rootbase}/lib32:\${rootbase}/usr/lib:\${rootbase}/usr/lib/i386-linux-gnu:\${rootbase}/lib/i386-linux-gnu" \
++      paths="\${rootbase}/lib:\${rootbase}/usr/lib:\${rootbase}/usr/lib/i386-linux-gnu:\${rootbase}/lib/i386-linux-gnu"
++      LD_LIBRARY_PATH="\${paths}" \
+        GDK_PIXBUF_MODULEDIR="\${rootbase}${gpixf}" \
+        \${loader} .${gpixd}gdk-pixbuf-query-loaders > "\${gpmf}"
+-      LD_LIBRARY_PATH="\${rootbase}/lib32:\${rootbase}/usr/lib:\${rootbase}/usr/lib/i386-linux-gnu:\${rootbase}/lib/i386-linux-gnu" \
++      LD_LIBRARY_PATH="\${paths}" \
+        GDK_PIXBUF_MODULE_FILE="\${gpmf}" \
+        GIO_EXTRA_MODULES="\${rootbase}/usr/lib/i386-linux-gnu/gio/modules" \
+        GST_PLUGIN_SCANNER="\${rootbase}/usr/lib/i386-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner" \
+--- ovideo-1.orig/.github/workflows/deb.yml
++++ ovideo-1/.github/workflows/deb.yml
+@@ -16,12 +16,24 @@ jobs:
+    - uses: actions/checkout@v3
+      with:
+       path: in
++   - uses: actions/checkout@master
++     with:
++      repository: colin-i/sync
++      path: in2
++      ref: ovideo
++   - uses: actions/checkout@master
++     with:
++      repository: colin-i/sync
++      path: in3
++      ref: ovideo-xenial
+    #Runs a set of commands using the runners shell
+    - name: Run a multi-line script
+      run: |
+       if [ -n "${{ env.init }}" ]; then
+        exit
+       fi
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
+       sudo dpkg --add-architecture i386
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo apt update #Err:1 http://ppa.launchpad.net ... libxml2-utils amd64 2.9.13 ... Not Found
+@@ -70,6 +82,11 @@ jobs:
+        ln -s ${origf} ${origln}
+       fi
+       cd in
++      #
++      files=( `cat xenial` )
++      for var in "${files[@]}"; do mv ../in3/.pc/${var} .pc; done
++      for var in "${files[@]}"; do mv ../in3/debian/patches/${var} debian/patches; done
++      #
+       debuild -S -us -uc
+       #cd ..
+       #ls -l
+--- ovideo-1.orig/arh/a
++++ ovideo-1/arh/a
+@@ -1,6 +1,22 @@
+ 
+ #first release, not a point release
+-#add universe,multiverse and remove -updates,-security
++#add universe,multiverse and remove updates,security
++
++sudo dpkg --add-architecture i386
++sudo apt update
++
++apt install --dry-run ovideo
++
++a=(`cat z | xargs`)
++for v in "${a[@]}"; do
++echo ${v}
++f=`apt policy ${v} | grep -Po "(?<=focal\/)[^ ]*" | head -1`
++if [ "$?" != "0" ]; then break; fi
++echo ${v} >> ${f}
++done
++echo ok
++
++cat main | xargs | xclip -selection clipboard
+ 
+ #as root. sudo echo permission denied
+ #at live unset updates,security and add universe,multiverse; cdrom if stays there will be error at update
+@@ -12,13 +28,10 @@
+ ##mv s2 sources.list
+ ##rm s
+ 
+-sudo dpkg --add-architecture i386
+-sudo apt update
+-
+-p="libc6-i386 libgtk2.0-0:i386 gstreamer1.0-plugins-good:i386 gstreamer1.0-plugins-bad:i386 libsoup2.4-1:i386 libjpeg8:i386 libasound2:i386"
++#p="libc6-i386 libgtk2.0-0:i386 gstreamer1.0-plugins-good:i386 gstreamer1.0-plugins-bad:i386 libsoup2.4-1:i386 libjpeg8:i386 libasound2:i386"
+ #apt depends ${p} --recurse  --no-recommends --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances --no-pre-depends  | grep "^\w" > 1
+ #dpkg -s libgtk2.0-0:i386
+-sudo apt install --dry-run ${p}
++#apt install --dry-run ${p}
+ 
+ #there are more ideas here: https://github.com/aferrero2707/appimage-helper-scripts/blob/master/bundle-gtk2.sh
+ 
+--- ovideo-1.orig/arh/pub
++++ ovideo-1/arh/pub
+@@ -1,9 +1,9 @@
+ 
+-#version.txt is still manual
+-#xenial has own arh/pub
++#1 msg  optional 2 dist
+ 
+ last=$(curl https://api.github.com/repos/colin-i/$(cat debian/control | grep "^Homepage" | grep -o [^/]*$)/releases/latest -s | jq .tag_name -r) && \
+-~/test/debinit2 "${1}" && \
++~/test/xver ./version.txt && \
++~/test/debinit2 "${1}" ${2} && \
+ ~/test/keyring2 && \
+ ~/test/deb && \
+ ~/test/publp && \
+@@ -23,5 +23,4 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp && \
+ ~/test/lp x && \
+ ~/test/keyring && \
+-~/test/del x ${last} x && \
+ ~/test/arh2 ${last}
+--- /dev/null
++++ ovideo-1/parent
+@@ -0,0 +1 @@
++xenial
+\ No newline at end of file
+--- ovideo-1.orig/src/Makefile
++++ ovideo-1/src/Makefile
+@@ -71,7 +71,7 @@ ${lprojname}: ${lshare} ${obs}
+ 	export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig/:${PKG_CONFIG_PATH}; \
+ 	$(LD) ${linkerflags} -melf_i386 --dynamic-linker=${dynlink} ${obs} -o ${lprojname} -lc -lm `pkg-config --libs gtk+-2.0 gstreamer-pbutils-1.0 gstreamer-app-1.0` -ljpeg -lsoup-2.4 -lasound -lgthread-2.0 -lpthread;
+ ${lshare}:
+-	echo char prestart=0x2e\;char simplestart=\"${sharefolderpackage}\"\;return \#simplestart > ${lshare}; \
++	echo char prestart=0x2e\;char simplestart=\"${sharefolderpackage}\"\;return \#simplestart > ${lshare}
+ 
+ else
+ 
+@@ -81,6 +81,9 @@ all: ${wprojname}
+ ${wprojname}: ${obs}
+ 	ounused ${logs}
+ 	@echo
++	#this is also working
++	#i686-w64-mingw32-gcc -Wl,--large-address-aware ${linkerflags} ${obs} -o ${wprojname} -Wl,--start-group \
++	#-Wl,--end-group
+ 	i686-w64-mingw32-ld --large-address-aware ${linkerflags} ${obs} -o ${wprojname} -entry _start --start-group \
+ 	`dpkg -L mingw-w64-i686-dev | grep '\.a' | sed 's/..$$//' | grep -o '[^\/]*$$' | sed 's/^lib/-l/' | xargs echo` \
+ 	--end-group -L`echo ~`/.wine/drive_c/gstreamer-sdk/0.10/x86/lib/ \
+--- ovideo-1.orig/src/_dif/difl.s
++++ ovideo-1/src/_dif/difl.s
+@@ -3,22 +3,22 @@ entryraw _start(sd argc,sv argv)
+ 
+ 
+ import "init_args" init_args
+-call init_args(argc,#argv)
+-
+-importx "_access" access
+-import "move_to_share_core" move_to_share_core
+-ss testfile="regforkoff"
+-call move_to_share_core(#testfile)
+-sd is
+-setcall is access(testfile,(F_OK))
+-if is==-1
+-	call gst_init(0,(NULL))
+-else
+-	#this is because fedora will wrong all plugin cache on 64 for 32
+-	sd argv0
+-	ss *argv1="--gst-disable-registry-fork"
+-	set argv0 argv
+-	set argc 2
+-	set argv #argv0
+-	call gst_init(#argc,#argv)
+-endelse
++sd bool;setcall bool init_args(argc,#argv)
++if bool!=(FALSE)
++	importx "access" access
++	import "move_to_share_core" move_to_share_core
++	ss testfile="regforkoff"
++	call move_to_share_core(#testfile)
++	sd is
++	setcall is access(testfile,(F_OK))
++	if is==-1
++		call gst_init(0,(NULL))
++	else
++		#this is because fedora will wrong all plugin cache on 64 for 32
++		sd argv0
++		ss *argv1="--gst-disable-registry-fork"
++		set argv0 argv
++		set argc 2
++		set argv #argv0
++		call gst_init(#argc,#argv)
++	endelse
+--- ovideo-1.orig/src/_dif/difw.s
++++ ovideo-1/src/_dif/difw.s
+@@ -1,4 +1,10 @@
+ 
++#entry _WinMain@16()
+ entry _start()
+ 
+-call gst_init(0,0)
++import "init_args" init_args
++
++sd cmp;setcall cmp init_args()
++
++if cmp!=0
++	call gst_init(0,0)
+--- ovideo-1.orig/src/_dif/dif~lin.s
++++ ovideo-1/src/_dif/dif~lin.s
+@@ -16,7 +16,6 @@ import "texter" texter
+ function movetoScriptfolder(data forward)
+ #on lin no, Script is alone in bin folder
+ #at this first call img/version and then sys
+-	call prog_init()
+ 	sd f
+ 	sd err
+ 	setcall f share_folder(#err,(NULL))
+@@ -46,21 +45,21 @@ function system_variables_alignment_pad(
+     return noalignment
+ endfunction
+ 
+-import "time" time
++importx "time" time
+ function timeNode(data ptrtime_t)
+     data time_t#1
+     setcall time_t time(ptrtime_t)
+     return time_t
+ endfunction
+ 
+-import "chdir" chd
++importx "chdir" chd
+ function chdr(str value)
+     data x#1
+     setcall x chd(value)
+     return x
+ endfunction
+ 
+-import "snprintf" snprintf
++importx "snprintf" snprintf
+ function c_snprintf_strvaluedisp(str display,data max,str format,str text,data part2)
+     call snprintf(display,max,format,text,part2)
+ endfunction
+@@ -102,7 +101,7 @@ const CLOCK_MONOTONIC=1
+ 
+ #milliseconds
+ function get_time()
+-    import "clock_gettime" clock_gettime
++    importx "clock_gettime" clock_gettime
+     data sec#1
+     data nanoseconds#1
+ 
+@@ -119,7 +118,7 @@ function get_time()
+ endfunction
+ 
+ function sleepMs(sd value)
+-    import "usleep" usleep
++    importx "usleep" usleep
+ 
+     #milliseconds in, convert to microseconds
+     mult value 1000
+@@ -238,20 +237,20 @@ function capture_alt_ev_set()
+ endfunction
+ ##events
+ function createevent(sd event)
+-    import "sem_init" sem_init
++    importx "sem_init" sem_init
+     call sem_init(event,0,0)
+     #0 ok,-1 error(bad argument?)
+ endfunction
+ function waitevent(sd event)
+-    import "sem_wait" sem_wait
++    importx "sem_wait" sem_wait
+     call sem_wait(event)
+ endfunction
+ function closeevent(sd event)
+-    import "sem_destroy" sem_destroy
++    importx "sem_destroy" sem_destroy
+     call sem_destroy(event)
+ endfunction
+ function setevent(sd event)
+-    import "sem_post" sem_post
++    importx "sem_post" sem_post
+     call sem_post(event)
+ endfunction
+ 
+@@ -322,7 +321,7 @@ function capture_alt_thread_proc(sd *noA
+         or value mask
+         call array_set_int(fds,elt,value)
+ 
+-        import "select" select
++        importx "select" select
+         sd tv_sec=100
+         sd *tv_usec=0
+         sd timeval^tv_sec
+@@ -365,21 +364,21 @@ const SND_PCM_FORMAT_S16_LE=2
+ const SND_PCM_NONBLOCK=1
+ #const SND_PCM_ASYNC=2
+ 
+-import "snd_pcm_open" snd_pcm_open
+-import "snd_pcm_hw_params_malloc" snd_pcm_hw_params_malloc
+-import "snd_pcm_hw_params_free" snd_pcm_hw_params_free
+-import "snd_pcm_close" snd_pcm_close
+-import "snd_pcm_writei" snd_pcm_writei
+-import "snd_pcm_avail_update" snd_pcm_avail_update
+-import "snd_pcm_get_params" snd_pcm_get_params
+-
+-import "snd_pcm_hw_params_any" snd_pcm_hw_params_any
+-import "snd_pcm_hw_params_set_access" snd_pcm_hw_params_set_access
+-import "snd_pcm_hw_params_set_format" snd_pcm_hw_params_set_format
+-import "snd_pcm_hw_params_set_rate" snd_pcm_hw_params_set_rate
+-import "snd_pcm_hw_params_set_channels" snd_pcm_hw_params_set_channels
+-import "snd_pcm_hw_params" snd_pcm_hw_params
+-import "snd_pcm_prepare" snd_pcm_prepare
++importx "snd_pcm_open" snd_pcm_open
++importx "snd_pcm_hw_params_malloc" snd_pcm_hw_params_malloc
++importx "snd_pcm_hw_params_free" snd_pcm_hw_params_free
++importx "snd_pcm_close" snd_pcm_close
++importx "snd_pcm_writei" snd_pcm_writei
++importx "snd_pcm_avail_update" snd_pcm_avail_update
++importx "snd_pcm_get_params" snd_pcm_get_params
++
++importx "snd_pcm_hw_params_any" snd_pcm_hw_params_any
++importx "snd_pcm_hw_params_set_access" snd_pcm_hw_params_set_access
++importx "snd_pcm_hw_params_set_format" snd_pcm_hw_params_set_format
++importx "snd_pcm_hw_params_set_rate" snd_pcm_hw_params_set_rate
++importx "snd_pcm_hw_params_set_channels" snd_pcm_hw_params_set_channels
++importx "snd_pcm_hw_params" snd_pcm_hw_params
++importx "snd_pcm_prepare" snd_pcm_prepare
+ 
+ #bool
+ function sound_preview_init()
+@@ -674,8 +673,8 @@ const SND_PCM_STATE_RUNNING=3
+ 
+ #bool
+ function sound_preview_end_and_no_errors()
+-    import "snd_pcm_status_malloc" snd_pcm_status_malloc
+-    import "snd_pcm_status_free" snd_pcm_status_free
++    importx "snd_pcm_status_malloc" snd_pcm_status_malloc
++    importx "snd_pcm_status_free" snd_pcm_status_free
+     sd handle
+     setcall handle sound_preview_playback_handle()
+     sd status
+@@ -693,8 +692,8 @@ function sound_preview_end_and_no_errors
+ endfunction
+ #bool
+ function sound_preview_end_and_no_errors_continuation(sd handle,sd status)
+-    import "snd_pcm_status" snd_pcm_status
+-    import "snd_pcm_status_get_state" snd_pcm_status_get_state
++    importx "snd_pcm_status" snd_pcm_status
++    importx "snd_pcm_status_get_state" snd_pcm_status_get_state
+     sd er
+     setcall er snd_pcm_status(handle,status)
+     if er<0
+@@ -814,6 +813,28 @@ function move_to_share_core(sv p)
+ 		endif
+ 	endif
+ endfunction
++importx "access" access
++#er
++function uninit_start()
++	sd f
++	sd er
++	setcall er home_folder(#f,(NULL))
++	if er==(noerror)
++		sd a;setcall a access(f,(F_OK))
++		if a==0
++			setcall er move_to_folder(f)
++		else
++			return (error)
++		endelse
++	endif
++	return er
++endfunction
++#path
++function real_path(sd p)
++importx "realpath" realpath
++	sd mem;setcall mem realpath(p,(NULL))
++	return mem
++endfunction
+ 
+ #e
+ function home_folder(sv pf,sv ph)
+@@ -847,15 +868,60 @@ function home_folder_r(sd p)
+ 	call texter(er)
+ 	return (NULL)
+ endfunction
++importx "strcmp" strcmp
+ function init_args(sd argc,sv argv)
++	#needed quick at regforkok for fedora
++	call prog_init()
++
+ 	value shareprefix#1
+ 	const shareprefix_p^shareprefix
+ 	if argc<2
+ 		set shareprefix (NULL)
+-		return (void)
++		return (FALSE)
+ 	endif
+ 	add argv :
++	sd cmp
++	setcall cmp strcmp(argv#,"d")
++	if cmp!=0
++		setcall cmp strcmp(argv#,"--help")
++		if cmp==0
++			call puts("
++	ovideo --help              This help
++	ovideo --remove-config     Remove configuration files
++	ovideo PATH_NAME           PATH_NAME=\"path to share folder\"
++	ovideo d PATH_NAME         same")
++			return (FALSE)
++		endif
++		setcall cmp strcmp(argv#,"--remove-config")
++		if cmp==0
++			sd er;setcall er uninit_start()
++			if er==(noerror)
++				import "uninit_print" uninit_print
++				import "uninit_print_entry" uninit_print_entry
++				sv c;sv s;setcall s uninit_print(#c)
++				vstr current_folder="."
++				call uninit_print_entry(current_folder)
++				import "uninit_decision" uninit_decision
++				sd b;setcall b uninit_decision()
++				if b==(TRUE)
++					import "uninit_delete" uninit_delete
++					call uninit_delete(s,c)
++					import "uninit_delete_folder" uninit_delete_folder
++					call uninit_delete_folder(current_folder)
++				endif
++			endif
++			return (FALSE)
++		endif
++	else
++	#share folder can be a reserved word. example: --help
++		if argc==2
++			call puts("Missing PATH_NAME")
++			return (FALSE)
++		endif
++		add argv :
++	endelse
+ 	set shareprefix argv#
++	return (TRUE)
+ endfunction
+ #string
+ function share_folder(sv p_err,sv prefix)
+@@ -868,6 +934,7 @@ function share_folder(sv p_err,sv prefix
+ 		setcall p_err# move_to_folder(a#)
+ 	else
+ 		set prefix# a#
++		set p_err# (noerror)
+ 	endelse
+ 	return #prestart
+ endfunction
+@@ -877,6 +944,7 @@ importx "malloc" malloc
+ importx "free" free
+ importx "strlen" strlen
+ importx "sprintf" sprintf
++importx "puts" puts
+ 
+ function prog_init()
+ 	sv a
+@@ -888,15 +956,15 @@ function prog_init()
+ 	vstr s="malloc error."
+ 	sd c
+ 	setcall c malloc((PATH_MAX))
+-	if a!=(NULL)
++	if c!=(NULL)
+ 		set a# c
+ 		setcall c malloc((PATH_MAX))
+-		if b!=(NULL)
++		if c!=(NULL)
+ 			set b# c
+ 			return (void)
+ 		endif
+ 	endif
+-	call texter(s)
++	call puts(s)
+ endfunction
+ function prog_free()
+ 	sv a
+--- ovideo-1.orig/src/_dif/dif~win.s
++++ ovideo-1/src/_dif/dif~win.s
+@@ -12,9 +12,10 @@ importx "_free" free
+ import "memoryalloc" memoryalloc
+ import "texter" texter
+ 
++const MAX_PATH=260
+ #err
+ function Scriptfullpath(sv ptrfullpath)
+-	data MAX_PATH=260
++	data MAX_PATH=MAX_PATH
+ 	sd err
+ 	setcall err memoryalloc(MAX_PATH,ptrfullpath)
+ 	if err==(noerror)
+@@ -114,14 +115,14 @@ function timeNode(data ptrtime_t)
+     return time_t
+ endfunction
+ 
+-import "_chdir" chd
++importx "_chdir" chd
+ function chdr(str value)
+     data x#1
+     setcall x chd(value)
+     return x
+ endfunction
+ 
+-import "_snprintf" snprintf
++importx "_snprintf" snprintf
+ function c_snprintf_strvaluedisp(str display,data max,str format,str text,data part2)
+     call snprintf(display,max,format,text,part2)
+ endfunction
+@@ -1068,3 +1069,51 @@ function stage_sound_buffer(sd gstappsin
+     importx "_gst_mini_object_unref" gst_mini_object_unref
+     call gst_mini_object_unref(buffer)
+ endfunction
++
++
++Importx "_GetCommandLineW@0" GetCommandName
++Importx "_CommandLineToArgvW@8" CommandLineToArgvW
++
++#cmp
++function init_args()
++	sd command_name
++	#sd commname_size
++	sd argc;sv argv
++
++	sd cmp=-1
++
++	SetCall command_name GetCommandName()
++
++	#this is so bugged but accepted , strlen is ansi, but no wide path in this program, so first XX00h will stop
++	#anyway argv0 can't be '\0'
++	#SetCall commname_size strlen(command_name)
++	#If commname_size!=0
++	setcall argv CommandLineToArgvW(command_name,#argc)
++	if argv!=(NULL)
++		if argc>1
++			set cmp 0
++			#sd a1=:;add a1 argv
++			#call wide_to_ansi(a1#) #same as ocompiler
++			#importx "_strcmp" strcmp
++			#setcall cmp strcmp(a1#,"--remove-config")
++
++			import "uninit_print" uninit_print
++			sv c;sv s;setcall s uninit_print(#c)
++			import "uninit_decision" uninit_decision
++			sd b;setcall b uninit_decision()
++			if b==(TRUE)
++				import "uninit_delete" uninit_delete
++				call uninit_delete(s,c)
++			endif
++		endif
++		call free(argv)
++	endif
++	#EndIf
++	return cmp
++endfunction
++importx "__fullpath" fullpath
++#path
++function real_path(sd path)
++	sd mem;setcall mem fullpath((NULL),path,(MAX_PATH))
++	return mem
++endfunction
+--- ovideo-1.orig/src/_dif/lin.s
++++ ovideo-1/src/_dif/lin.s
+@@ -1,9 +1,12 @@
+ 
+-#exit() do segmentation nowadays (in this context)
++endif
+ 
+-importx "getpid" getpid
+-importx "kill" kill
+-sd pid
+-setcall pid getpid()
+-call kill(pid,9)
++#old remark: exit() do segmentation nowadays (in this context)
++importx "exit" exit
++call exit(0)
+ 
++#importx "getpid" getpid
++#importx "kill" kill
++#sd pid
++#setcall pid getpid()
++#call kill(pid,9)
+--- ovideo-1.orig/src/_dif/win.s
++++ ovideo-1/src/_dif/win.s
+@@ -1,4 +1,5 @@
+ 
++endif
++
+ importx "_exit" exit
+ call exit(0)
+-
+--- ovideo-1.orig/src/_exec/capture/save.s
++++ ovideo-1/src/_exec/capture/save.s
+@@ -63,9 +63,9 @@ function recSignals(data bus,data dest)
+     call connect_signal(bus,error,errorfn)
+ endfunction
+ 
+-function capture_location()
++function capture_folder()
+ const capture_char_start=!
+-	char folder="captures/"
++	char folder="captures"
+ const capture_char=!-capture_char_start-1
+ 	return #folder
+ endfunction
+@@ -82,13 +82,13 @@ endfunction
+ 
+ import "move_to_home_core" move_to_home_core
+ function capture_path(ss format,sd extrabool,sd extranumber)
+-	char capture_data#capture_char+dword_max+1+dword_max+1+format_max+1
++	char capture_data#capture_char+1+dword_max+1+dword_max+1+format_max+1
+ 	ss capture_str^capture_data
+ 	ss folder
+-	setcall folder capture_location()
++	setcall folder capture_folder()
+ 	sd tm
+ 	setcall tm time(0)
+-	ss fmt="%s%s%u.%s"
++	ss fmt="%s/%s%u.%s"
+ 	ss extra
+ 	if extrabool==0
+ 		ss null=""
+--- ovideo-1.orig/src/_exec/init.s
++++ ovideo-1/src/_exec/init.s
+@@ -13,7 +13,7 @@ importx "_write" write
+ importx "_close" close
+ importx "_sprintf" sprintf
+ 
+-import "capture_location" capture_location
++import "capture_folder" capture_folder
+ import "sys_folder" sys_folder
+ import "chdr" chdr
+ import "move_to_home" move_to_home
+@@ -24,7 +24,7 @@ function init_user()
+ 	setcall err move_to_home()
+ 	if err==(noerror)
+ 		sd d
+-		setcall d capture_location()
++		setcall d capture_folder()
+ 		setcall err init_dir(d)
+ 		if err==(noerror)
+ 			setcall d sys_folder()
+@@ -37,7 +37,7 @@ function init_user()
+ 					sd x
+ 					setcall x chdr(d)
+ 					if x==0
+-						setcall err init_user_sys()
++						setcall err init_user_sys((NULL))
+ 						setcall x chdr(p)
+ 						if x!=0
+ 							set err cerr
+@@ -55,7 +55,7 @@ function init_user()
+ 	return err
+ endfunction
+ #e
+-function init_user_sys()
++function init_user_sys(sv forward)
+ 	const start=!
+ 	char a="capture"
+ 	const biggest_string=7
+@@ -93,7 +93,7 @@ function init_user_sys()
+ 	ss f^e
+ 	sd err=noerror
+ 	while c!=b
+-		setcall c init_sys(c,f#,#err)
++		setcall c init_sys(c,f#,#err,forward)
+ 		if err!=(noerror)
+ 			return err
+ 		endif
+@@ -102,14 +102,14 @@ function init_user_sys()
+ 	return (noerror)
+ endfunction
+ 
+-function init_sys(sd c,sd sz,sd perr)
++function init_sys(sd c,sd sz,sd perr,sv forward)
+ 	sd len
+ 	setcall len strlen(c)
+ 	sd f
+ 	set f c
+ 	add c len
+ 	inc c
+-	call init_sys_file(f,c,sz,perr)
++	call init_sys_file(f,c,sz,perr,forward)
+ 	add c sz
+ 	return c
+ endfunction
+@@ -128,23 +128,125 @@ function init_dir(sd f)
+ 	return (noerror)
+ endfunction
+ 
+-function init_sys_file(sd f,sd data,sd sz,sv perr)
++function init_sys_file(sd f,sd data,sd sz,sv perr,sv forward)
+ 	char buf#biggest_string+1+4+1
+ 	call sprintf(#buf,"%s.data",f)
+ 	sd is
+ 	setcall is access(#buf,(F_OK))
+-	if is==-1
+-		#open
+-		const O_WRONLY=0x0001
+-		sd fd
+-		setcall fd open(#buf,(O_WRONLY|flag_O_BINARY|flag_O_CREAT),(flag_fmode))
+-		#write
+-		sd len
+-		setcall len write(fd,data,sz)
+-		#close
+-		call close(fd)
+-		if len!=sz
+-			set perr# "write error at init user"
++	if forward==(NULL)
++		if is==-1
++			#open
++			const O_WRONLY=0x0001
++			sd fd
++			setcall fd open(#buf,(O_WRONLY|flag_O_BINARY|flag_O_CREAT),(flag_fmode))
++			#write
++			sd len
++			setcall len write(fd,data,sz)
++			#close
++			call close(fd)
++			if len!=sz
++				set perr# "write error at init user"
++			endif
+ 		endif
++	else
++		if is==0
++			call forward(#buf)
++		endif
++	endelse
++endfunction
++
++
++#d
++function uninit_folder(sd fn)
++	sd d;sd a
++	setcall d fn()
++	setcall a access(d,(F_OK))
++	if a==0
++		return d
+ 	endif
++	return (NULL)
++endfunction
++
++importx "_puts" puts
++import "sys_folder_enterleave" sys_folder_enterleave
++
++function uninit_sys_print()
++	call init_user_sys(uninit_print_entry)
++endfunction
++import "real_path" real_path
++function uninit_print_entry(sd f)
++	sd p;setcall p real_path(f)
++	if p!=(NULL)
++		call puts(p)
++		call free(p)
++	endif
++endfunction
++#sys folder
++function uninit_print(sv p_c)
++	call puts("Would remove:") #on linux there is main folder already
++	sd s;setcall s uninit_folder(sys_folder)
++	sd c;setcall c uninit_folder(capture_folder)
++	if s!=(NULL)
++		call sys_folder_enterleave(uninit_sys_print)
++		call uninit_print_entry(s)
++	endif
++	if c!=(NULL)
++		call uninit_print_entry(c)
++	endif
++	set p_c# c
++	return s
++endfunction
++importx "_getchar" getchar
++#b
++function uninit_decision()
++	call puts("yes ?")
++	sd c;setcall c getchar()
++	if c==(y)
++		setcall c getchar()
++		if c==(e)
++			setcall c getchar()
++			if c==(s)
++			#more chars can be, after this will exit anyway
++				return (TRUE)
++			endif
++		endif
++	endif
++	call puts("expecting \"yes\"")
++	return (FALSE)
++endfunction
++
++function uninit_delete(sd sys,sd captures)
++	if sys!=(NULL)
++		call sys_folder_enterleave(uninit_delete_sys)
++		call uninit_delete_folder(sys)
++	endif
++	if captures!=(NULL)
++		call uninit_delete_folder(captures)
++	endif
++endfunction
++function uninit_delete_sys()
++	call init_user_sys(uninit_delete_file)
++endfunction
++function uninit_delete_entry(sd entry,sd function)
++	sd p;setcall p real_path(entry)
++	if p!=(NULL)
++		sd x;setcall x function(p)
++		if x==0
++			call uninit_deleted(p)
++		endif
++		call free(p)
++	endif
++endfunction
++importx "_unlink" unlink
++function uninit_delete_file(sd file)
++	call uninit_delete_entry(file,unlink)
++endfunction
++importx "_printf" printf
++function uninit_deleted(sd s)
++	call printf("%s removed\n",s)
++endfunction
++importx "_rmdir" rmdir
++function uninit_delete_folder(sd folder)
++	call uninit_delete_entry(folder,rmdir)
++	#printf("%s ignored (maybe is not empty)\n",folder)
+ endfunction
+--- ovideo-1.orig/src/_include/files/ascii.h
++++ ovideo-1/src/_include/files/ascii.h
+@@ -120,7 +120,7 @@ Const u=0x75
+ Const v=0x76
+ #Const w=0x77
+ #Const x=0x78
+-#Const y=0x79
++Const y=0x79
+ #Const z=0x7A
+ #Const Openingbrace=0x7B
+ #Const Verticalbar=0x7C
+--- /dev/null
++++ ovideo-1/src/mk
+@@ -0,0 +1,10 @@
++
++if [ -z "${1}" ]; then
++a=all
++else
++a=${1}
++fi
++
++make ${a} prefix=/usr LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage items_prefix=`pwd`/
++#2.34-6ubuntu1.6 was ok
++#backportpackage -s focal -d focal -w . -k D51F0B6365EAB122 -u ppa:colin-i/ppa-staging binutils  #folder will gone (or error without the key), apt source to take it back
+--- /dev/null
++++ ovideo-1/src/test
+@@ -0,0 +1,6 @@
++
++if [ -z "${1}" ]; then
++	a=/home/bc/v/test
++	#this is a folder with symlinks that will break dpkg-source if let at ovideo-1. anyway test/usr/share/ovideo has 3 symlinks: html,img and version.txt
++else a=${1}; fi
++./ovideo ${a}
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.186
+\ No newline at end of file
++1.187
+\ No newline at end of file
+--- ovideo-1.orig/wmake
++++ ovideo-1/wmake
+@@ -1,81 +1,82 @@
+ 
+ #./wmake
++#make/copy to ./ovideo
+ 
+ #./wmake ../b
++#copy
+ 
+ #./wmake 1 clean
++#clean
+ 
+ #./wmake ../b all
+-#this is debug but tricking soundrecorder
++#make/copy ("src/wmake all" will do debug)
+ 
+ if [ -z "$1" ] || [ -n "$2" ]
+ then
+-cd src
+-./wmake $2
+-if [ "$?" != 0 ]; then
+-exit
+-fi
+-cd ..
++#make/clean
++	cd src
++	./wmake $2
++	if [ "$?" != 0 ]; then
++		exit
++	fi
++	cd ..
+ fi
+ 
+ 
+ 
+ if [ "$2" != "clean" ]; then
++#copy
++	if [ -z "$1" ]; then
++		f=ovideo
++	else
++		f=$1
++	fi
+ 
+-if [ -z "$1" ]; then
+-f=ovideo
+-else
+-f=$1
+-fi
+-
+-mkdir $f
+-rsync -a src/ovideo.exe $f
++	mkdir $f
++	rsync -a src/ovideo.exe $f
+ 
+-rsync -a -r build/img $f
++	rsync -a -r build/img $f
+ 
+-mkdir $f/html
+-rsync -a html/html/use.html $f/html
++	mkdir $f/html
++	rsync -a html/html/use.html $f/html
+ 
+-rsync -a version.txt $f
++	rsync -a version.txt $f
+ 
+-mkdir $f/sys
+-rsync -a build/sys/* $f/sys
+-
+-mkdir $f/captures
++	mkdir $f/sys
++	rsync -a build/sys/* $f/sys
+ 
++	mkdir $f/captures
+ fi
+ 
+ 
+ 
+ if [ -z "$1" ] || [ -n "$2" ]
+ then
+-cd soundrecorder
+-make $2
+-if [ "$?" != 0 ]; then
+-exit
+-fi
+-cd ..
++	cd soundrecorder
++	make $2
++	if [ "$?" != 0 ]; then
++		exit
++	fi
++	cd ..
+ fi
+ 
+ 
+ 
+ if [ "$2" != "clean" ]; then
++	rsync -a soundrecorder/src/soundrecorder.exe $f
++	rsync -a soundrecorder/options.txt $f
+ 
+-rsync -a soundrecorder/src/soundrecorder.exe $f
+-rsync -a soundrecorder/options.txt $f
+-
+-if [ -z "$1" ]
+-then
+-cd src
+-./wmake clean
+-cd ../soundrecorder
+-make clean
+-cd ..
+-zip -r ovideo.zip ovideo && \
+-rm -r ./ovideo && \
+-unzip -l ovideo.zip
+-fi
+-
++	if [ -z "$1" ]
++	then
++		cd src
++		./wmake clean
++		cd ../soundrecorder
++		make clean
++		cd ..
++		zip -r ovideo.zip ovideo && \
++		rm -r ./ovideo && \
++	unzip -l ovideo.zip
++	fi
+ fi
+ 
+ 
+--- /dev/null
++++ ovideo-1/xenial
+@@ -0,0 +1 @@
++1.158 1.159 1.160 1.161 1.162 1.163 1.165 1.166 1.170 1.171 1.172 1.173 1.174 1.175 1.176 1.177 1.178 1.179 1.180 1.186x 1.186x+2 186x+3
+\ No newline at end of file
