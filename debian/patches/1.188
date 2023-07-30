@@ -1,0 +1,270 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-188) bionic; urgency=medium
+ .
+   * --help extra
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-30
+
+--- ovideo-1.orig/.github/workflows/appimage.yml
++++ ovideo-1/.github/workflows/appimage.yml
+@@ -70,7 +70,7 @@ jobs:
+        inter=Packages${arch}${nr}
+        if [ ! -e "${inter}" ]; then
+         rep=${5}
+-        wget http://${src}/ubuntu/dists/bionic/${rep}/binary-${arch}/Packages.xz -O ${inter}.xz
++        wget http://${src}/ubuntu/dists/${6}/${rep}/binary-${arch}/Packages.xz -O ${inter}.xz
+         xz -d ${inter}.xz #f for multiple times
+        fi
+        #pipe to true to not stop the workflow if grep exits!=0
+@@ -92,13 +92,13 @@ jobs:
+       }
+       downdeb () {
+        if [ ! -e "${4}.deb" ]; then
+-        downdebok ${1} ${2} ${3} ${4} ${5}
++        downdebok ${1} ${2} ${3} ${4} ${5} focal
+        fi
+       }
+       if [ ! -e "ovideo.deb" ]; then
+        if [ "${{ github.event.inputs.unpublished }}" = "" ]; then
+         echo published
+-        downdebok "ppa.launchpadcontent.net/colin-i/ppa${{ github.event.inputs.ppa }}" i386 1 ovideo main
++        downdebok "ppa.launchpadcontent.net/colin-i/ppa${{ github.event.inputs.ppa }}" i386 1 ovideo main bionic
+        else
+         echo unpublished
+         #
+@@ -180,7 +180,7 @@ jobs:
+        #this is not ok: only when running the appimage file: when testing with GST_DEBUG=5: GST_PLUGIN_SYSTEM_PATH will miss /i386-linux-gnu
+        ln -s i386-linux-gnu/gstreamer-1.0 gstreamer-1.0
+        #this also at runtime, missing
+-       ln -s i386-linux-gnu/pulseaudio/libpulsecommon-11.1.so libpulsecommon-11.1.so
++       ln -s i386-linux-gnu/pulseaudio/libpulsecommon-13.99.so libpulsecommon-13.99.so
+       fi
+       cd ../../
+       #
+@@ -195,7 +195,8 @@ jobs:
+        #this is in tmp folder, don't check inside if loaders.cache exists
+        # --library-path \"${rootbase}...   will be with problems
+        #if there are problems, try this: GTK_MODULE_DIR
+-       #GST_PLUGIN_SCANNER weird: launch after appimage-extract twice, the second time will be ok
++       #GST_PLUGIN_SCANNER="\${rootbase}/usr/lib/i386-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner" \
++       #setting GST_PLUGIN_SCANNER will only add a warning, let the program find it. it is in libgstreamer1.0-0
+        cat > ovideo <<EOF
+       #!/bin/bash
+       cd "\$(dirname "\$0")"
+@@ -212,7 +213,6 @@ jobs:
+       LD_LIBRARY_PATH="\${paths}" \
+        GDK_PIXBUF_MODULE_FILE="\${gpmf}" \
+        GIO_EXTRA_MODULES="\${rootbase}/usr/lib/i386-linux-gnu/gio/modules" \
+-       GST_PLUGIN_SCANNER="\${rootbase}/usr/lib/i386-linux-gnu/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner" \
+        GST_PLUGIN_SYSTEM_PATH="\${rootbase}/usr/lib/gstreamer-1.0" \
+        \${loader} ./usr/bin/ostream "\${rootbase}"
+       EOF
+--- ovideo-1.orig/readme.md
++++ ovideo-1/readme.md
+@@ -21,14 +21,15 @@ yum install ovideo-*.*.rpm
+ ```
+ \
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/ostream/releases).\
+-<i>Gstreamer sdk</i> is [here](https://www.freedesktop.org/software/gstreamer-sdk/data/packages/windows/x86/).
++<i>Gstreamer sdk</i> x86 0.10 from [here](https://cgit.freedesktop.org/gstreamer/gstreamer/refs/heads).
+ 
+ ## From source
+ Compile with [O Compiler](https://github.com/colin-i/o) and link with
+ <i>binutils</i> and see the <i>Makefile</i> for requirements.
+ 
+ ## Info
+-[Video tutorials](https://www.youtube.com/channel/UC7I-BgCSgKI9uxvNsdkE-wg).
++[Video tutorials](https://www.youtube.com/channel/UC7I-BgCSgKI9uxvNsdkE-wg).\
++On Linux, follow ```ovideo --help``` to remove configuration data. On Windows, remove configuration with one argument at command line start.
+ 
+ ## Donations
+ The *donations* section is here
+--- ovideo-1.orig/src/_dif/dif~lin.s
++++ ovideo-1/src/_dif/dif~lin.s
+@@ -868,6 +868,7 @@ function home_folder_r(sd p)
+ 	call texter(er)
+ 	return (NULL)
+ endfunction
++
+ importx "strcmp" strcmp
+ function init_args(sd argc,sv argv)
+ 	#needed quick at regforkok for fedora
+@@ -885,11 +886,10 @@ function init_args(sd argc,sv argv)
+ 	if cmp!=0
+ 		setcall cmp strcmp(argv#,"--help")
+ 		if cmp==0
+-			call puts("
+-	ovideo --help              This help
+-	ovideo --remove-config     Remove configuration files
+-	ovideo PATH_NAME           PATH_NAME=\"path to share folder\"
+-	ovideo d PATH_NAME         same")
++			call puts("ovideo --help              This help
++ovideo --remove-config     Remove configuration files
++ovideo PATH_NAME           PATH_NAME=\"path to share folder\"
++ovideo d PATH_NAME         same")
+ 			return (FALSE)
+ 		endif
+ 		setcall cmp strcmp(argv#,"--remove-config")
+--- ovideo-1.orig/src/md
++++ ovideo-1/src/md
+@@ -16,4 +16,4 @@ fi
+ 
+ #make compile prefix=/usr && make linkapp linkerflags=
+ 
+-make ${a} prefix=/usr OFLAGSEXTRA="function_name 1" linkerflags= LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage items_prefix=`pwd`/
++LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu make ${a} prefix=/usr OFLAGSEXTRA="function_name 1" linkerflags= LD=/home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd items_prefix=`pwd`/
+--- ovideo-1.orig/src/mk
++++ ovideo-1/src/mk
+@@ -5,6 +5,6 @@ else
+ a=${1}
+ fi
+ 
+-make ${a} prefix=/usr LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage items_prefix=`pwd`/
++LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu make ${a} prefix=/usr LD=/home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd items_prefix=`pwd`/
+ #2.34-6ubuntu1.6 was ok
+ #backportpackage -s focal -d focal -w . -k D51F0B6365EAB122 -u ppa:colin-i/ppa-staging binutils  #folder will gone (or error without the key), apt source to take it back
+--- ovideo-1.orig/src/str/str.s
++++ ovideo-1/src/str/str.s
+@@ -4,31 +4,7 @@ format elfobj
+ include "../_include/include.h"
+ 
+ import "memoryalloc" memalloc
+-
+-function tostring(str string,data size)
+-        data zero=0
+-        str s#1
+-
+-        set s string
+-        add s size
+-        set s# zero
+-endfunction
+-
+-import "cpymem" cpymem
+-
+-#void/err
+-function memtostrFw_s(str mem,data size,str dest,data destsize,data forward)
+-    if size>destsize
+-        import "texter" texter
+-        vstr memtostrconflict="Mem2Str: destination is too small."
+-        call texter(memtostrconflict)
+-    endif
+-
+-    call cpymem(dest,mem,size)
+-    call tostring(dest,size)
+-
+-    call forward(dest)
+-endfunction
++import "texter" texter
+ 
+ #e
+ function slen_s(ss str,sd size,sd ptrszout)
+@@ -153,6 +129,9 @@ Function strinmem_portions_advance(sd st
+ EndFunction
+ 
+ importx "_free" free
++
++import "cpymem" cpymem
++
+ #e
+ function memtostrFw_data(sd mem,sd size,sd forward,sd data)
+     sd err
+--- ovideo-1.orig/src/util/update.s
++++ ovideo-1/src/util/update.s
+@@ -20,6 +20,8 @@ import "move_to_share_v" move_to_share_v
+ importx "_g_object_unref" g_object_unref
+ importx "_g_idle_add" g_idle_add
+ 
++importx "_free" free
++
+ #void
+ function update_async_callback(sd ses,sd msg) #,sd data
+ 	sd netmem
+@@ -36,7 +38,6 @@ function update_async_callback(sd ses,sd
+ 		setcall err file_get_content("version.txt",#size,#mem)
+ 		if err==(noerror)
+ 			call update_got_netversion(mem,size,netmem,netsize)
+-			importx "_free" free
+ 			call free(mem)
+ 		endif
+ 	endif
+@@ -50,22 +51,27 @@ function update_async_sync(sd ses)
+ endfunction
+ 
+ #void
+-function update_got_netversion(sd mem,sd size,sd netmem,sd netsize)
+-    #forward to view if it is a new version
+-    data compare#1
+-    import "cmpmem_s" cmpmem_s
+-    setcall compare cmpmem_s(netmem,netsize,mem,size)
+-
+-    data different=differentCompare
+-    if compare==different
+-        import "memtostrFw_s" memtostrFw_s
+-        const safeversion=1+1+3+1 #hard coded, hard to remember
+-        char newvers#safeversion
+-        vstr newv^newvers
+-        data sfsize=safeversion
+-        vdata fw^update_got_new
+-        call memtostrFw_s(netmem,netsize,newv,sfsize,fw)
+-    endif
++function update_got_netversion(sd mem,sd size,sd netmem,ss netsize)
++	import "memalloc" memalloc
++	sd sz=1;add sz netsize
++	sd newmem;setcall newmem memalloc(sz)
++	if newmem!=(NULL)
++		import "cmpmem_s" cmpmem_s
++		sd compare;setcall compare cmpmem_s(netmem,netsize,mem,size)
++
++		importx "_memcpy" memcpy
++		importx "_printf" printf
++		call memcpy(newmem,netmem,netsize)
++		add netsize newmem
++		set netsize# 0
++
++		if compare==(differentCompare)
++			call update_got_new(newmem)
++		else
++			call printf("version: %s\n",newmem)
++		endelse
++		call free(newmem)
++	endif
+ endfunction
+ 
+ function update()
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.187
+\ No newline at end of file
++1.188
+\ No newline at end of file
+--- ovideo-1.orig/wmake
++++ ovideo-1/wmake
+@@ -89,6 +89,8 @@ fi
+ #file:///d:/some/path/to/repos/on/d/drive
+ #file:///var/www/html/s.webm
+ 
++#0.10: /home/bc/u/download D:\b\Desktop\gstreamer
++
+ #gstreamer1.0-plugins-bad
+ #gst-launch-1.0 -v playbin uri=file:///home/bc/v/b/captures/1650430132.mxf
+ #./e && GST_DEBUG=2 ./a.out #7 is max
