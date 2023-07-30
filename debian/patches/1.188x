@@ -1,0 +1,569 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-188x) xenial; urgency=medium
+ .
+   * sync 188
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-07-30
+
+--- ovideo-1.orig/.github/workflows/deb.yml
++++ ovideo-1/.github/workflows/deb.yml
+@@ -16,12 +16,19 @@ jobs:
+    - uses: actions/checkout@v3
+      with:
+       path: in
++   - uses: actions/checkout@master
++     with:
++      repository: colin-i/sync
++      path: in2
++      ref: ovideo-xenial
+    #Runs a set of commands using the runners shell
+    - name: Run a multi-line script
+      run: |
+       if [ -n "${{ env.init }}" ]; then
+        exit
+       fi
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo apt install -y devscripts debhelper libgtk2.0-dev libsoup2.4-dev libasound2-dev build-essential
+        sudo apt install -y liborc-0.4-0
+--- ovideo-1.orig/arh/pub
++++ ovideo-1/arh/pub
+@@ -1,4 +1,5 @@
+ 
++git show master:version.txt > version.txt && \
+ ~/test/debinit2 "${1}" && \
+ ~/test/keyring && \
+ ~/test/deb && \
+--- ovideo-1.orig/readme.md
++++ ovideo-1/readme.md
+@@ -11,15 +11,16 @@ Install:
+ sudo apt-get install ovideo
+ ```
+ \
+-On Windows the program is at this [link](https://github.com/colin-i/ostream/releases).
+-The requirement is the program <i>gstreamer sdk x86 (0.10)</i>.
++On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/ostream/releases).\
++<i>Gstreamer sdk</i> x86 0.10 from [here](https://cgit.freedesktop.org/gstreamer/gstreamer/refs/heads).
+ 
+ ## From source
+ Compile with [O Compiler](https://github.com/colin-i/o) and link with
+ <i>binutils</i> and see the <i>Makefile</i> for requirements.
+ 
+ ## Info
+-[Video tutorials](https://www.youtube.com/channel/UC7I-BgCSgKI9uxvNsdkE-wg).
++[Video tutorials](https://www.youtube.com/channel/UC7I-BgCSgKI9uxvNsdkE-wg).\
++Remove configuration with one argument at command line start.
+ 
+ ## Donations
+ The *donations* section is here
+--- /dev/null
++++ ovideo-1/src/_dif/difl.s
+@@ -0,0 +1,8 @@
++
++entryraw _start(sd argc,sv *argv)
++
++import "init_args" init_args
++
++sd cmp;setcall cmp init_args(argc)
++
++if cmp!=0
+--- /dev/null
++++ ovideo-1/src/_dif/difw.s
+@@ -0,0 +1,8 @@
++
++entry _start()
++
++import "init_args" init_args
++
++sd cmp;setcall cmp init_args()
++
++if cmp!=0
+--- ovideo-1.orig/src/_dif/dif~lin.s
++++ ovideo-1/src/_dif/dif~lin.s
+@@ -812,6 +812,28 @@ function move_to_share_core(sv p)
+ 		endif
+ 	endif
+ endfunction
++importx "access" access
++#er
++function uninit_start()
++	sd f
++	sd er
++	setcall er home_folder(#f,(NULL))
++	if er==(noerror)
++		sd a;setcall a access(f,(F_OK))
++		if a==0
++			setcall er move_to_folder(f)
++		else
++			return (error)
++		endelse
++	endif
++	return er
++endfunction
++#path
++function real_path(sd p)
++importx "realpath" realpath
++	sd mem;setcall mem realpath(p,(NULL))
++	return mem
++endfunction
+ 
+ #e
+ function home_folder(sv pf,sv ph)
+@@ -850,6 +872,30 @@ function share_folder()
+ 	include "share.txt"
+ endfunction
+ 
++#cmp
++function init_args(sd argc)
++	if argc>1
++		sd er;setcall er uninit_start()
++		if er==(noerror)
++			import "uninit_print" uninit_print
++			import "uninit_print_entry" uninit_print_entry
++			sv c;sv s;setcall s uninit_print(#c)
++			vstr current_folder="."
++			call uninit_print_entry(current_folder)
++			import "uninit_decision" uninit_decision
++			sd b;setcall b uninit_decision()
++			if b==(TRUE)
++				import "uninit_delete" uninit_delete
++				call uninit_delete(s,c)
++				import "uninit_delete_folder" uninit_delete_folder
++				call uninit_delete_folder(current_folder)
++			endif
++		endif
++		return 0
++	endif
++	return -1
++endfunction
++
+ const PATH_MAX=4096
+ importx "malloc" malloc
+ importx "free" free
+@@ -866,10 +912,10 @@ function prog_init()
+ 	vstr s="malloc error."
+ 	sd c
+ 	setcall c malloc((PATH_MAX))
+-	if a!=(NULL)
++	if c!=(NULL)
+ 		set a# c
+ 		setcall c malloc((PATH_MAX))
+-		if b!=(NULL)
++		if c!=(NULL)
+ 			set b# c
+ 			return (void)
+ 		endif
+--- ovideo-1.orig/src/_dif/dif~win.s
++++ ovideo-1/src/_dif/dif~win.s
+@@ -12,9 +12,10 @@ importx "_free" free
+ import "memoryalloc" memoryalloc
+ import "texter" texter
+ 
++const MAX_PATH=260
+ #err
+ function Scriptfullpath(sv ptrfullpath)
+-	data MAX_PATH=260
++	data MAX_PATH=MAX_PATH
+ 	sd err
+ 	setcall err memoryalloc(MAX_PATH,ptrfullpath)
+ 	if err==(noerror)
+@@ -121,14 +122,14 @@ function timeNode(data ptrtime_t)
+     return time_t
+ endfunction
+ 
+-import "_chdir" chd
++importx "_chdir" chd
+ function chdr(str value)
+     data x#1
+     setcall x chd(value)
+     return x
+ endfunction
+ 
+-import "_snprintf" snprintf
++importx "_snprintf" snprintf
+ function c_snprintf_strvaluedisp(str display,data max,str format,str text,data part2)
+     call snprintf(display,max,format,text,part2)
+ endfunction
+@@ -938,3 +939,50 @@ function ulltoa(sd low,sd high,sd instr)
+ 	call ulltoa_extern(low,high,instr,10)
+ endfunction
+ 
++
++Importx "_GetCommandLineW@0" GetCommandName
++Importx "_CommandLineToArgvW@8" CommandLineToArgvW
++
++#cmp
++function init_args()
++	sd command_name
++	#sd commname_size
++	sd argc;sv argv
++
++	sd cmp=-1
++
++	SetCall command_name GetCommandName()
++
++	#this is so bugged but accepted , strlen is ansi, but no wide path in this program, so first XX00h will stop
++	#anyway argv0 can't be '\0'
++	#SetCall commname_size strlen(command_name)
++	#If commname_size!=0
++	setcall argv CommandLineToArgvW(command_name,#argc)
++	if argv!=(NULL)
++		if argc>1
++			set cmp 0
++			#sd a1=:;add a1 argv
++			#call wide_to_ansi(a1#) #same as ocompiler
++			#importx "_strcmp" strcmp
++			#setcall cmp strcmp(a1#,"--remove-config")
++
++			import "uninit_print" uninit_print
++			sv c;sv s;setcall s uninit_print(#c)
++			import "uninit_decision" uninit_decision
++			sd b;setcall b uninit_decision()
++			if b==(TRUE)
++				import "uninit_delete" uninit_delete
++				call uninit_delete(s,c)
++			endif
++		endif
++		call free(argv)
++	endif
++	#EndIf
++	return cmp
++endfunction
++importx "__fullpath" fullpath
++#path
++function real_path(sd path)
++	sd mem;setcall mem fullpath((NULL),path,(MAX_PATH))
++	return mem
++endfunction
+--- ovideo-1.orig/src/_dif/lin.s
++++ ovideo-1/src/_dif/lin.s
+@@ -1,9 +1,12 @@
+ 
+-#exit() do segmentation nowadays (in this context)
++endif
+ 
+-importx "getpid" getpid
+-importx "kill" kill
+-sd pid
+-setcall pid getpid()
+-call kill(pid,9)
++#old remark: exit() do segmentation nowadays (in this context)
++importx "exit" exit
++call exit(0)
+ 
++#importx "getpid" getpid
++#importx "kill" kill
++#sd pid
++#setcall pid getpid()
++#call kill(pid,9)
+--- ovideo-1.orig/src/_dif/win.s
++++ ovideo-1/src/_dif/win.s
+@@ -1,4 +1,5 @@
+ 
++endif
++
+ importx "_exit" exit
+ call exit(0)
+-
+--- ovideo-1.orig/src/_exec/capture/save.s
++++ ovideo-1/src/_exec/capture/save.s
+@@ -63,9 +63,9 @@ function recSignals(data bus,data dest)
+     call connect_signal(bus,error,errorfn)
+ endfunction
+ 
+-function capture_location()
++function capture_folder()
+ const capture_char_start=!
+-	char folder="captures/"
++	char folder="captures"
+ const capture_char=!-capture_char_start-1
+ 	return #folder
+ endfunction
+@@ -82,13 +82,13 @@ endfunction
+ 
+ import "move_to_home_core" move_to_home_core
+ function capture_path(ss format,sd extrabool,sd extranumber)
+-	char capture_data#capture_char+dword_max+1+dword_max+1+format_max+1
++	char capture_data#capture_char+1+dword_max+1+dword_max+1+format_max+1
+ 	ss capture_str^capture_data
+ 	ss folder
+-	setcall folder capture_location()
++	setcall folder capture_folder()
+ 	sd tm
+ 	setcall tm time(0)
+-	ss fmt="%s%s%u.%s"
++	ss fmt="%s/%s%u.%s"
+ 	ss extra
+ 	if extrabool==0
+ 		ss null=""
+--- ovideo-1.orig/src/_exec/init.s
++++ ovideo-1/src/_exec/init.s
+@@ -3,8 +3,6 @@ format elfobj
+ 
+ include "../_include/include.h" #files/olang.h
+ 
+-const F_OK=0
+-
+ importx "_strlen" strlen
+ importx "_access" access
+ importx "_mkdir" mkdir
+@@ -15,7 +13,7 @@ importx "_write" write
+ importx "_close" close
+ importx "_sprintf" sprintf
+ 
+-import "capture_location" capture_location
++import "capture_folder" capture_folder
+ import "sys_folder" sys_folder
+ import "chdr" chdr
+ import "move_to_home" move_to_home
+@@ -26,7 +24,7 @@ function init_user()
+ 	setcall err move_to_home()
+ 	if err==(noerror)
+ 		sd d
+-		setcall d capture_location()
++		setcall d capture_folder()
+ 		setcall err init_dir(d)
+ 		if err==(noerror)
+ 			setcall d sys_folder()
+@@ -39,7 +37,7 @@ function init_user()
+ 					sd x
+ 					setcall x chdr(d)
+ 					if x==0
+-						setcall err init_user_sys()
++						setcall err init_user_sys((NULL))
+ 						setcall x chdr(p)
+ 						if x!=0
+ 							set err cerr
+@@ -57,7 +55,7 @@ function init_user()
+ 	return err
+ endfunction
+ #e
+-function init_user_sys()
++function init_user_sys(sv forward)
+ 	const start=!
+ 	char a="capture"
+ 	const biggest_string=7
+@@ -95,7 +93,7 @@ function init_user_sys()
+ 	ss f^e
+ 	sd err=noerror
+ 	while c!=b
+-		setcall c init_sys(c,f#,#err)
++		setcall c init_sys(c,f#,#err,forward)
+ 		if err!=(noerror)
+ 			return err
+ 		endif
+@@ -104,14 +102,14 @@ function init_user_sys()
+ 	return (noerror)
+ endfunction
+ 
+-function init_sys(sd c,sd sz,sd perr)
++function init_sys(sd c,sd sz,sd perr,sv forward)
+ 	sd len
+ 	setcall len strlen(c)
+ 	sd f
+ 	set f c
+ 	add c len
+ 	inc c
+-	call init_sys_file(f,c,sz,perr)
++	call init_sys_file(f,c,sz,perr,forward)
+ 	add c sz
+ 	return c
+ endfunction
+@@ -130,23 +128,125 @@ function init_dir(sd f)
+ 	return (noerror)
+ endfunction
+ 
+-function init_sys_file(sd f,sd data,sd sz,sv perr)
++function init_sys_file(sd f,sd data,sd sz,sv perr,sv forward)
+ 	char buf#biggest_string+1+4+1
+ 	call sprintf(#buf,"%s.data",f)
+ 	sd is
+ 	setcall is access(#buf,(F_OK))
+-	if is==-1
+-		#open
+-		const O_WRONLY=0x0001
+-		sd fd
+-		setcall fd open(#buf,(O_WRONLY|flag_O_BINARY|flag_O_CREAT),(flag_fmode))
+-		#write
+-		sd len
+-		setcall len write(fd,data,sz)
+-		#close
+-		call close(fd)
+-		if len!=sz
+-			set perr# "write error at init user"
++	if forward==(NULL)
++		if is==-1
++			#open
++			const O_WRONLY=0x0001
++			sd fd
++			setcall fd open(#buf,(O_WRONLY|flag_O_BINARY|flag_O_CREAT),(flag_fmode))
++			#write
++			sd len
++			setcall len write(fd,data,sz)
++			#close
++			call close(fd)
++			if len!=sz
++				set perr# "write error at init user"
++			endif
++		endif
++	else
++		if is==0
++			call forward(#buf)
++		endif
++	endelse
++endfunction
++
++
++#d
++function uninit_folder(sd fn)
++	sd d;sd a
++	setcall d fn()
++	setcall a access(d,(F_OK))
++	if a==0
++		return d
++	endif
++	return (NULL)
++endfunction
++
++importx "_puts" puts
++import "sys_folder_enterleave" sys_folder_enterleave
++
++function uninit_sys_print()
++	call init_user_sys(uninit_print_entry)
++endfunction
++import "real_path" real_path
++function uninit_print_entry(sd f)
++	sd p;setcall p real_path(f)
++	if p!=(NULL)
++		call puts(p)
++		call free(p)
++	endif
++endfunction
++#sys folder
++function uninit_print(sv p_c)
++	call puts("Would remove:") #on linux there is main folder already
++	sd s;setcall s uninit_folder(sys_folder)
++	sd c;setcall c uninit_folder(capture_folder)
++	if s!=(NULL)
++		call sys_folder_enterleave(uninit_sys_print)
++		call uninit_print_entry(s)
++	endif
++	if c!=(NULL)
++		call uninit_print_entry(c)
++	endif
++	set p_c# c
++	return s
++endfunction
++importx "_getchar" getchar
++#b
++function uninit_decision()
++	call puts("yes ?")
++	sd c;setcall c getchar()
++	if c==(y)
++		setcall c getchar()
++		if c==(e)
++			setcall c getchar()
++			if c==(s)
++			#more chars can be, after this will exit anyway
++				return (TRUE)
++			endif
+ 		endif
+ 	endif
++	call puts("expecting \"yes\"")
++	return (FALSE)
++endfunction
++
++function uninit_delete(sd sys,sd captures)
++	if sys!=(NULL)
++		call sys_folder_enterleave(uninit_delete_sys)
++		call uninit_delete_folder(sys)
++	endif
++	if captures!=(NULL)
++		call uninit_delete_folder(captures)
++	endif
++endfunction
++function uninit_delete_sys()
++	call init_user_sys(uninit_delete_file)
++endfunction
++function uninit_delete_entry(sd entry,sd function)
++	sd p;setcall p real_path(entry)
++	if p!=(NULL)
++		sd x;setcall x function(p)
++		if x==0
++			call uninit_deleted(p)
++		endif
++		call free(p)
++	endif
++endfunction
++importx "_unlink" unlink
++function uninit_delete_file(sd file)
++	call uninit_delete_entry(file,unlink)
++endfunction
++importx "_printf" printf
++function uninit_deleted(sd s)
++	call printf("%s removed\n",s)
++endfunction
++importx "_rmdir" rmdir
++function uninit_delete_folder(sd folder)
++	call uninit_delete_entry(folder,rmdir)
++	#printf("%s ignored (maybe is not empty)\n",folder)
+ endfunction
+--- ovideo-1.orig/src/_exec/ostream.s
++++ ovideo-1/src/_exec/ostream.s
+@@ -10,7 +10,7 @@ importx "_gtk_main" gtk_main
+ 
+ import "initfn" initfn
+ 
+-entry _start()
++include "../_dif/difl.s" "../_dif/difw.s"
+ 
+ call gtk_init(0,0)
+ call gst_init(0,0)
+--- ovideo-1.orig/src/_include/files/ascii.h
++++ ovideo-1/src/_include/files/ascii.h
+@@ -120,7 +120,7 @@ Const u=0x75
+ Const v=0x76
+ #Const w=0x77
+ #Const x=0x78
+-#Const y=0x79
++Const y=0x79
+ #Const z=0x7A
+ #Const Openingbrace=0x7B
+ #Const Verticalbar=0x7C
+--- ovideo-1.orig/src/_include/files/commons.h
++++ ovideo-1/src/_include/files/commons.h
+@@ -15,6 +15,7 @@ Const SEEK_SET=0
+ Const SEEK_CUR=1
+ Const SEEK_END=2
+ 
++const F_OK=0
+ 
+ const bitsperbyte=8
+ 
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.186
+\ No newline at end of file
++1.188
+\ No newline at end of file
