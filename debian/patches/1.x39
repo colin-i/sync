@@ -1,0 +1,54 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x39) focal; urgency=medium
+ .
+   * fix cutbuf and line termination
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-08-10
+
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2336,7 +2336,7 @@ static bool help_cutbuffile_preffile(cha
+ 			if(info_sz<=max_path_0){
+ 			#define storeflname "%c.%sinfo"
+ 				sprintf(cutbuf_file,"%s" storeflname,h,path_separator,&s[i]);
+-				getfilebuf(cutbuf_file);
++				//this must be after line termination is observed: getfilebuf(cutbuf_file);
+ 
+ 				const char*conf=".config";
+ 				size_t csz=strlen(conf)+1;//plus separator
+@@ -2375,6 +2375,8 @@ static void color(){
+ }
+ 
+ static void proced(char*cutbuf_file,WINDOW*w1){
++	if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
++
+ 	bool loops=false;
+ 	int cy=0;int cx=0;
+ 	int r=getmaxy(stdscr)-1;
+@@ -2507,7 +2509,6 @@ static void action_go(int argc,char**arg
+ 	char*argfile=nullptr;//example when launching with no args
+ 	bool no_file=argc==1;
+ 	if(no_file==false){
+-
+ 		char*src=argv[1];
+ 		if(remove_config(src,cutbuf_file)/*true*/)return;
+ 		size_t f_slen=strlen(src);
