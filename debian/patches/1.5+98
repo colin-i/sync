@@ -1,0 +1,375 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+98) xenial; urgency=medium
+ .
+   * can comment pref in ocompiler.conf
+Author: bc <bc@bc-HP-Pavilion-x360-Convertible>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-08-16
+
+--- ocompiler-1.orig/ocompiler.conf
++++ ocompiler-1/ocompiler.conf
+@@ -1,94 +1,94 @@
+ 
+-#This file is parsed by the program to set the preferences. "nameEQUALx" must be preserved.
++#This file is parsed by the program to set the preferences.
+ 
+ 
+ #1. Display unreferenced variables/functions/constants warning.
+ #0 is Hide; 1 is Show
+-orphans=1
++#orphans=1
+ 
+ #2. Overflow at constants warning.
+ #0 is Hide; 1 is Show
+-over_pref=1
++#over_pref=1
+ 
+ #3. Hidden whitespaces warning.
+ #0 is Hide; 1 is Show
+-hidden_pref=1
++#hidden_pref=1
+ 
+ #4. Showed warnings as errors.
+ #0 if False; 1 is True
+-w_as_e=1
++#w_as_e=1
+ 
+ #5. Log file. This option creates a file with string lines. The files tree and virtual offset are logged.
+ #0 is No; 1 is Yes
+-logfile=1
++#logfile=1
+ 
+ #6. Take the following action at FUNCTION entries at the object format that are not referred in the object and when the reference warning is enabled. This will also log import functions.
+ #[if orphans is 1]
+ #0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+-codeFnObj=2
++#codeFnObj=2
+ 
+ #7. CONST to unreferenced warnings, same as with FUNCTION. This will also log declared constants.
+ #[if orphans is 1]
+ #0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+-const_warn=2
++#const_warn=2
+ 
+ #8. Variables to unreferenced warnings, same as with CONST.
+ #[if orphans is 1]
+ #0 is Ignore them; 1 is Show warning; 2 [if logfile is 1] is Write them to the logfile, else take 1
+-offset_warn=2
++#offset_warn=2
+ 
+ #9. Include active folder. Change the active directory when including and stepping into a file.
+ #0 is No; 1 is Yes
+-includedir=1
++#includedir=1
+ 
+ #10. Write the function names above the function in code section, useful when debugging asm instructions.
+ #0 is No; 1 is Yes
+-function_name=0
++#function_name=0
+ 
+ #11. Ignore elfobj64
+ #0 is No,use linux convention if ocompiler was compiled for linux,else use microsoft; 1 is Yes; 2 is No,and cross-compile
+-conv_64=0
++#conv_64=0
+ 
+ #12. Zeroset reserved data section declarations.
+ #0 is No; 1 is Yes
+-nul_res_pref=0
++#nul_res_pref=0
+ 
+ #13. SD as SV (old programs don't have sv and may be with 64 logic).
+ #0 is No; 1 is Yes
+-sd_as_sv=0
++#sd_as_sv=0
+ 
+ #14. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
+ #0 is Zero; 1 is Addend
+-inplace_reloc=1
++#inplace_reloc=1
+ 
+ #15. At objects, when on 64 format, relocs are R_X86_64_64.
+ #0 is No; 1 is Yes
+-reloc_64=1
++#reloc_64=1
+ 
+ #16. Remove leading underscore at IMPORT?
+ #0 is No; 1 is Yes
+-underscore_pref=0
++#underscore_pref=0
+ 
+ #17. RETURNs at main scope like EXIT.
+ #0 is No; 1 is Yes
+-exit_end=0
++#exit_end=0
+ 
+ #18. Take second file path at INCLUDE statement.
+ #0 is No; 1 is Yes
+-include_sec=0
++#include_sec=0
+ 
+ #19. Ignore FORMAT ...SO .
+ #0 is No; 1 is Yes
+-ignore_format_so=0
++#ignore_format_so=0
+ 
+ #20. At 64, before a call, align stack. Cases for arguments and shadow(windows only).
+ #0 is No; 1 is Yes; 2 is Yes for arguments and shadow; 3 is Yes for arguments
+-call_align=1
++#call_align=1
+ 
+ #21. Virtual data to a SHT_NOBITS at object
+ #0 is No; 1 is Yes
+-nobits_virtual=1
++#nobits_virtual=1
+ 
+ #22. Debug section at object.
+ #0 is No; 1 is Yes
+-has_debug=0
+\ No newline at end of file
++#has_debug=0
+\ No newline at end of file
+--- ocompiler-1.orig/src/files/actions/setdefdir.s
++++ ocompiler-1/src/files/actions/setdefdir.s
+@@ -40,35 +40,17 @@ Add safecurrentdirloc wordsize
+ Call memtomem(safecurrentdirloc,filenameloc,movesize)
+ 
+ if logbool==true
+-	char logfileextension=".log"
+-	str logextension^logfileextension
+-
+-	setcall errormsg maxpathverif(safecurrentdirtopath,logextension)
++	setcall errormsg openfile_write_add_extension(safecurrentdirtopath,".log",ptrlogfile)
+ 	if errormsg==noerr
+-		str appendextension#1
+-
+-		set appendextension safecurrentdirloc
+-		add appendextension movesize
+-		dec appendextension
+-
+-		data sizelogext#1
+-		setcall sizelogext strlen(logextension)
+-		inc sizelogext
+-		call memtomem(appendextension,logextension,sizelogext)
+-
+-		setcall errormsg openfile(ptrlogfile,safecurrentdirtopath,_open_write)
+-		if errormsg==noerr
+-			sd log_main_folder
+-			setcall log_main_folder getcwd((NULL),0)
+-			if log_main_folder==(NULL)
+-				char getcwd_first="first getcwd error"
+-				set errormsg #getcwd_first
+-			else
+-				setcall errormsg addtolog_withchar_parses(log_main_folder,(log_pathfolder),(TRUE))
+-				call free(log_main_folder)
+-			endelse
+-		endif
+-		set appendextension# null
++		sd log_main_folder
++		setcall log_main_folder getcwd((NULL),0)
++		if log_main_folder==(NULL)
++			char getcwd_first="first getcwd error"
++			set errormsg #getcwd_first
++		else
++			setcall errormsg addtolog_withchar_parses(log_main_folder,(log_pathfolder),(TRUE))
++			call free(log_main_folder)
++		endelse
+ 	endif
+ 	if errormsg!=noerr
+ 		Call msgerrexit(errormsg)
+--- ocompiler-1.orig/src/files/functions/commons/comfn.s
++++ ocompiler-1/src/files/functions/commons/comfn.s
+@@ -155,6 +155,21 @@ Function openfile(data pfile,str path,da
+ 	Data noerr=noerror
+ 	Return noerr
+ EndFunction
++#err
++function openfile_write_add_extension(ss path,ss extension,sd popen)
++	sd er
++	setcall er maxpathverif(path,extension)
++	if er==(noerror)
++		ss c;set c path
++		addcall c strlen(path)
++		ss b;setcall b strlen(extension)
++		inc b
++		call memtomem(c,extension,b)
++		setcall er openfile(popen,path,(_open_write))
++		set c# (asciinul)  #required in all cases
++	endif
++	return er
++endfunction
+ 
+ char writefile_err="Cannot write data to a file."
+ const writefile_err_p^writefile_err
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.s
++++ ocompiler-1/src/files/functions/pref/preffuncs.s
+@@ -69,9 +69,9 @@ Function warnings(sd p_err,sd has_named_
+ 	return (TRUE)
+ EndFunction
+ 
+-#void
++#bool
+ #parse and set the value, 0-9(one digit) values are expected here
+-function parsepreferences(sd ptrcontent,sd ptrsize,sd strs_pointers)
++function parsepreferences(sd ptrcontent,sd ptrsize)
+ 	Char searchsign="="
+ 	Data sizeuntilsign#1
+ 
+@@ -84,7 +84,8 @@ function parsepreferences(sd ptrcontent,
+ 	call advancecursors(ptrcontent,ptrsize,sizeuntilsign)
+ 
+ 	If sizeuntilsign!=size
+-		sd backp;setcall backp parsepreferences_back(sizeuntilsign,ptrcontent#,strs_pointers)
++		sd is_comment=FALSE
++		sd backp;setcall backp parsepreferences_back(sizeuntilsign,ptrcontent#,#is_comment)
+ 		Call stepcursors(ptrcontent,ptrsize)
+ 		if backp!=(NULL)
+ 			set size ptrsize#
+@@ -94,12 +95,19 @@ function parsepreferences(sd ptrcontent,
+ 				Set backp# content#
+ 				Sub backp# (asciizero)
+ 			endIf
+-		endif
++		else
++			if is_comment==(FALSE)
++				call Message("Unrecognized preference")
++			endif
++		endelse
++		return (TRUE)
+ 	EndIf
++	return (FALSE)
+ endfunction
+ #pointer/null
+-function parsepreferences_back(sd sizeback,ss content,sd strs_pointers)
+-	sd end;set end strs_pointers
++function parsepreferences_back(sd sizeback,ss content,sd p_is_comment)
++	sv strs_pointers%nr_of_prefs_strings_p
++	sv end;set end strs_pointers
+ 	add end (nr_of_prefs_jumper)
+ 	while strs_pointers!=end
+ 		sd i
+@@ -108,34 +116,48 @@ function parsepreferences_back(sd sizeba
+ 		if sizeback>=i
+ 			ss e;set e s;add e i
+ 			sd b
+-			setcall b parsepreferences_back_helper(content,e,s)
++			setcall b parsepreferences_back_helper(content,e,s,sizeback,i,p_is_comment)
+ 			if b==(TRUE)
+-				#and put this to last to not get it again without a fight
+-				sd test;set test strs_pointers
+-				sd test2;set test2 test;sub test2 (nr_of_prefs_jumper)
++				#and put this to last because it is not expected to get same preference more than one time
++				sv test;sv test2
++				set test2 strs_pointers;sub test2 (nr_of_prefs_jumper)
+ 				sd return
+-				set return test2#
+ 				sd store
++				set return test2#
+ 				set store strs_pointers#
+-				sd test3;set test3 test2
+ 				sub end :
+-				while test!=end
+-					incst test;incst test2
+-					set strs_pointers# test#
+-					set test3# test2#
+-					incst strs_pointers;incst test3
+-				endwhile
++
++				#this was before commenting preferences
++				#set test strs_pointers
++				#sd test3;set test3 test2
++				#while test!=end
++				#	incst test;incst test2
++				#	set strs_pointers# test#
++				#	set test3# test2#
++				#	incst strs_pointers;incst test3
++				#endwhile
++				#set test2# return
++
++				#this is now
++				set strs_pointers# end#
++				set test end
++				sub end (nr_of_prefs_jumper)
++				set test2# end#
++				set end# return
++
+ 				set test# store
+-				set test2# return
+ 				return return
+-			endif
++			elseif p_is_comment#==(TRUE)
++				#this is a recognized preference but it is commented, stop comparing characters
++				return (NULL)
++			endelseif
+ 		endif
+ 		incst strs_pointers
+ 	endwhile
+ 	return (NULL)
+ endfunction
+ #bool
+-function parsepreferences_back_helper(ss content,ss e,ss s)
++function parsepreferences_back_helper(ss content,ss e,ss s,sd sizeback,sd i,sd p_is_comment)
+ 	while s!=e
+ 		dec content
+ 		dec e
+@@ -143,6 +165,18 @@ function parsepreferences_back_helper(ss
+ 			return (FALSE)
+ 		endif
+ 	endwhile
++	#and verify if it is commented or another case
++	if sizeback>i
++		dec content
++		if content#!=(asciireturn)
++			if content#!=(asciicarriage)
++				if content#==(asciinumber)
++					set p_is_comment# (TRUE)
++				endif
++				return (FALSE)
++			endif
++		endif
++	endif
+ 	return (TRUE)
+ endfunction
+ 
+@@ -258,11 +292,9 @@ function setpreferences(vstr scrpath)
+ 		Data freepreferences#1
+ 		Set freepreferences preferencescontent
+ 
+-		sv t%nr_of_prefs_strings_p
+-		sd n=nr_of_prefs
+-		while n>0
+-			call parsepreferences(ptrpreferencescontent,ptrpreferencessize,t)
+-			dec n
++		sd b=TRUE
++		while b==(TRUE)
++			setcall b parsepreferences(ptrpreferencescontent,ptrpreferencessize)
+ 		endwhile
+ 
+ 		Call free(freepreferences)
+--- ocompiler-1.orig/src/files/headers/ascii.h
++++ ocompiler-1/src/files/headers/ascii.h
+@@ -1,6 +1,7 @@
+ 
+ 
+ #some ascii Constants commonly used
++Const asciinul=0x0
+ Const asciitab=0x9
+ Const asciireturn=0xa
+ Const asciicarriage=0xd
