@@ -1,0 +1,58 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x42) focal; urgency=medium
+ .
+   * to see errors at existing files
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-10-20
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -176,19 +176,21 @@ int saving_base(char*dest){
+ 		f=open_new(dest);
+ 		//new_f=f==-1;
+ 		//if(new_f/*true*/){
+-		if(f==-1){
+-			bar_clear();//is troubleing with the bool,and more
+-			err_s=strerror(errno);
+-			err_l=(int)strlen(err_s)+err_len_min;
+-			int rg=get_right-com_left;
+-			if(err_l>rg)err_l=rg;
+-		}
+ 	}
+ 	else f=open(dest,O_WRONLY|O_TRUNC);
+ 	if(f!=-1){
+ 		r=wrt(f);
+ 		close(f);
+-	}else r=0;
++	}else{
++		//this was for open_new, and is ok also when the file is already there
++		bar_clear();//is troubleing with the bool,and more
++		err_s=strerror(errno);
++		err_l=(int)strlen(err_s)+err_len_min;
++		int rg=get_right-com_left;
++		if(err_l>rg)err_l=rg;
++
++		r=0;
++	}
+ 	return r;
+ }
+ //command return
