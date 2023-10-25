@@ -1,0 +1,2124 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+99) xenial; urgency=medium
+ .
+   * Segmentation fault at !a.a pass_init
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-10-25
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -49,13 +49,10 @@ last=`curl https://api.github.com/repos/
+ 
+ #plans:
+ 
+-#vars/fns/consts and usage locations in a json:
+-#	oanalyzer or ounused, dbg file log(+exec.dbg) or same, libounused/libocompiler or liboanalyzer
+-#will replace grep commands
+-#can be for odbg or something new
+-
+-#another project otoc / or at the same time with o, another project c-o(can test with github actions maybe) / or o subproject
++#subproject otoc
+ 
++#>>>
++#vars/fns/consts and usage locations in dbg sec for odbg
+ #simple and or
+ #={"a","b"}
+ #~(page_sectionalignment-1)
+--- ocompiler-1.orig/makewin32
++++ ocompiler-1/makewin32
+@@ -8,8 +8,8 @@ OCOMP=$1
+ fi
+ 
+ ${OCOMP} ./src/windows/obj32.s inplace_reloc 0 && \
+-#argc argv? more info at obj.s
+-i686-w64-mingw32-ld -s -entry=_WinMain@16 ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
++#argc argv? more info at obj.s. _WinMain@16
++i686-w64-mingw32-ld -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
+ ounused ./src/windows/obj32.s.log && \
+ \
+ rm ./src/windows/obj32.o && \
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -1,4 +1,4 @@
+-
++<!DOCTYPE html>
+ 
+ <style>
+ 	.code
+@@ -9,6 +9,22 @@
+ 		margin-top:10px;
+ 		margin-bottom:10px;
+ 	}
++	.blue
++	{
++		color:blue;
++	}
++	.red
++	{
++		color:red;
++	}
++	.green
++	{
++		color:green;
++	}
++	#selection_table td:not(.noborder) {
++		border: 1px solid black;
++	}
++	.noborder{}
+ </style>
+ 
+ <h2>O Language Documentation</h2>
+@@ -41,7 +57,9 @@
+ 
+ <h3><a href="#object">XIV. Creating object files</a></h3>
+ 
+-<h3><a href="#otheroperations">XV. Other operations</a></h3>
++<h3><a href="#xfile">XV. X File Syntax</a></h3>
++
++<h3><a href="#otheroperations">XVI. Other operations</a></h3>
+ 
+ 
+ 
+@@ -309,9 +327,9 @@
+ 	<br>
+ 	<table class="code">
+ 	<tr><td>const a=1</td></tr>
+-	<tr><td>#</td>                <td>add</td> <td>sub</td> <td>mul</td> <td>div</td>   <td>rem</td>   <td>pow</td> <td>and</td> <td>or</td>  <td>xor</td> <td>shl</td> <td>sar</td> <td>less</td><td>greater</td><td>neg</td><td>not</td></tr>
+-	<tr><td>char *examples={</td><td>3+2,</td><td>6-4.</td><td>5*5,</td><td>32/10,</td><td>32/10,</td><td>3$2,</td><td>7&2,</td><td>5|2,</td><td>7^2,</td><td>2<2,</td><td>8>3,</td><td>2<3,</td><td>2>3,</td>   <td>-a</td> <td>~0}</td></tr>
+-	<tr><td>#</td>                <td>5</td>   <td>2</td>   <td>25</td>  <td>3</td>     <td>2</td>     <td>9</td>   <td>2</td>   <td>7</td>   <td>5</td>   <td>8</td>   <td>1</td>   <td>1</td>   <td>0</td>      <td>-1</td> <td>0xff</td></tr>
++	<tr><td>#</td>               <td>add</td> <td>sub</td> <td>mul</td> <td>div</td>   <td>rem</td>   <td>pow</td> <td>and</td> <td>or</td>  <td>xor</td> <td>shl</td>  <td>sar</td>  <td>less</td><td>greater</td><td>neg</td><td>not</td></tr>
++	<tr><td>char *examples={</td><td>3+2,</td><td>6-4.</td><td>5*5,</td><td>32/10,</td><td>32/10,</td><td>3$2,</td><td>7&2,</td><td>5|2,</td><td>7^2,</td><td>2<<2,</td><td>8>>3,</td><td>2<3,</td><td>2>3,</td>   <td>-a</td> <td>~0}</td></tr>
++	<tr><td>#</td>               <td>5</td>   <td>2</td>   <td>25</td>  <td>3</td>     <td>2</td>     <td>9</td>   <td>2</td>   <td>7</td>   <td>5</td>   <td>8</td>    <td>1</td>    <td>1</td>   <td>0</td>      <td>-1</td> <td>0xff</td></tr>
+ 	</table>
+ 	<a class="code">
+ 	 const a=3*(1+2)<br>
+@@ -893,7 +911,7 @@
+         endif<br>
+         sd returnvalue<br>
+         setcall returnvalue printf("Test: ")<br>
+-        call printf("long %lx,returnvalue)<br>
++        call printf("long %lx",returnvalue)<br>
+         Return 0</a>
+ 	</p>
+ 	64-bit can be ignored from preferences. Cross-compiles can be made at the same option from preferences.
+@@ -906,7 +924,37 @@
+ 	</p>
+   </div>
+ </p>
+-<h3><a name="otheroperations">XV. Other operations</a></h3>
++<h3><a name="xfile">XV. X Syntax</a></h3>
++<p>Black = 1 byte. <span class="blue">Blue = 4 bytes = data.</span> <span class="red">Red = string = data+byte(s).</span>
++<span class="green">Green = replacement.</span></p>
++<table id="selection_table">
++	<tr><td>Xfile_comment</td>     <td class="red">comment</td></tr>
++	<tr><td>Xfile_multicomment</td><td class="red">comment</td></tr>
++</table>
++<table id="selection_table">
++	<tr><td rowspan=2>Xfile_functiondef</td><td class="red" rowspan=2>name</td><td>Xfile_function_t*</td><td></td>                  <td class="blue" rowspan=2>nr_of_args</td><td class="green" rowspan=2>{D}</td></tr>
++	<tr>                                                                       <td>Xfile_function_e*</td><td>Xfile_function_e_*</td></tr>
++</table>
++<table id="selection_table">
++	<tr><td rowspan=5>Xfile_declare</td><td class="green" rowspan=5>D</td><td>Xfile_declsign_pointer</td></tr>
++	<tr>                                                                  <td>Xfile_declsign_reserve</td>    <td></td>                    <td class="green" rowspan=2>N</td></tr>
++	<tr>                                                                  <td rowspan=3>Xfile_declsign_*</td><td>Xfile_declmode_value</td></tr>
++	<tr>                                                                                                     <td>Xfile_declmode_group</td><td class="green">{N}</td></tr>
++	<tr>                                                                                                     <td>Xfile_declmode_string</td></tr>
++</table>
++Table D:
++<table id="selection_table">
++	<tr><td>Xfile_declfield_const</td><td colspan=3></td>                                                                                     <td class="red" rowspan=3>name</td></tr>
++	<tr><td>Xfile_declfield_stack</td><td></td>                      <td rowspan=2>Xfile_decltype_*</td><td rowspan=2>Xfile_declfeature_*</td></tr>
++	<tr><td>Xfile_declfield_data</td> <td>Xfile_declfield_data_*</td></tr>
++</table>
++Table N:
++<table id="selection_table">
++	<tr><td rowspan=3>[Xfile_numbers_parenthesis_open]</td><td rowspan=3>Xfile_numbers_prefix_*</td><td>Xfile_numbers_type_i*</td><td></td>                <td rowspan=3>[Xfile_numbers_parenthesis_close]</td><td rowspan=3>[Xfile_numbers_operation_*]</td><td class="green noborder" rowspan=3>{...}</td><td rowspan=3>Xfile_numbers_done</td>
++	<tr>                                                                                            <td>Xfile_numbers_type_t*</td><td class="red">text</td></tr>
++	<tr>                                                                                            <td>Xfile_numbers_type_*</td> <td></td></tr>
++</table>
++<h3><a name="otheroperations">XVI. Other operations</a></h3>
+ <p>
+ 	Other commands that comes with the language.
+ 	<br>
+--- ocompiler-1.orig/ocompiler.conf
++++ ocompiler-1/ocompiler.conf
+@@ -91,4 +91,8 @@
+ 
+ #22. Debug section at object.
+ #0 is No; 1 is Yes
+-#has_debug=0
+\ No newline at end of file
++#has_debug=0
++
++#23. Make .x file at the same time.
++#0 is No; 1 is Yes
++#x_file=0
+\ No newline at end of file
+--- ocompiler-1.orig/src/files/actions/main/index.s
++++ ocompiler-1/src/files/actions/main/index.s
+@@ -29,6 +29,13 @@ setcall pointer command_start(#is_commen
+ while loop==2
+ 	if pointer==last
+ 		set loop 1
++		if is_comment!=0
++			if is_comment_multiline==0
++				setcall errormsg xfile_add_comment_ifif(content,pointer)
++			else
++				setcall errormsg xfile_add_comment_multi_ifif(content,pointer)
++			endelse
++		endif
+ 	elseif pointer#==newline
+ 		set dot_comma_end 0   #a multiline comment can also be in a commands line
+ 		if is_comment_multiline==0
+@@ -43,6 +50,9 @@ while loop==2
+ 					set pointer testcontent
+ 					Inc linebreaksize
+ 				EndIf
++				if is_comment!=0
++					setcall errormsg xfile_add_comment_ifif(content,pointer)
++				endif
+ 			endif
+ 		else
+ 			#like: #!line\nline\nline\n ! command
+@@ -53,9 +63,14 @@ while loop==2
+ 				setcall pointer mem_spaces(pointer,last)
+ 				if pointer!=last
+ 					if pointer#==(asciiexclamationmark)
+-						inc pointer
+-						set content pointer
+-						setcall pointer command_start(#is_comment,#is_comment_multiline,#cursor_start,#content,last)
++						setcall errormsg xfile_add_comment_multi_ifif(content,pointer)
++						if errormsg!=(noerror)
++							set loop 1
++						else
++							inc pointer
++							set content pointer
++							setcall pointer command_start(#is_comment,#is_comment_multiline,#cursor_start,#content,last)
++						endelse
+ 					endif
+ 				endif
+ 			endif
+@@ -64,7 +79,7 @@ while loop==2
+ 		if pointer#==(asciidoublequote)
+ 			setcall errormsg quotes_forward(#pointer,last,#newlines,#textlinestart)
+ 			if errormsg!=(noerror)
+-				set loop 0
++				set loop 1
+ 			else
+ 				add totalnewlines newlines
+ 			endelse
+@@ -78,7 +93,7 @@ while loop==2
+ 		inc pointer
+ 	endelse
+ endwhile
+-if loop==1
++if errormsg==(noerror)
+ 	set comsize pointer
+ 	sub comsize content
+ 	#\r\n case begin
+@@ -136,7 +151,10 @@ if loop==1
+ 					endif
+ 				endif
+ 			ElseIf commandset==(cDECLARE)
+-				setcall errormsg declare(pcontent,pcomsize,p_is_for_64_value#,subtype,parses)
++				setcall errormsg xfile_add_char_ifif((Xfile_declare))
++				If errormsg==(noerror)
++					setcall errormsg declare(pcontent,pcomsize,p_is_for_64_value#,subtype,parses)
++				endIf
+ 			ElseIf commandset==(cPRIMSEC)
+ 				Include "./index/primsec.s"
+ 			ElseIf commandset==(cONEARG)
+@@ -218,7 +236,14 @@ if loop==1
+ 							Set errormsg unreccomaftererr
+ 						else
+ 							#this is comment after command
+-							Call advancecursors(pcontent,pcomsize,comsize)
++							if xfile_sharp_comment!=0
++								call stepcursors(pcontent,pcomsize)
++								set xfile_sharp_comment 0
++							endif
++							setcall errormsg xfile_add_comment_ifif(content,pointer)
++							if errormsg==(noerror)
++								Call advancecursors(pcontent,pcomsize,comsize)
++							endif
+ 						endelse
+ 					elseIf was_whitespaces==(TRUE)
+ 						#mostly parses (pass_write), example: at cCALL is at all parses
+--- ocompiler-1.orig/src/files/actions/setdefdir.s
++++ ocompiler-1/src/files/actions/setdefdir.s
+@@ -52,7 +52,10 @@ if logbool==true
+ 			call free(log_main_folder)
+ 		endelse
+ 	endif
+-	if errormsg!=noerr
+-		Call msgerrexit(errormsg)
+-	endif
++endif
++if xbool==true
++	setcall errormsg openfile_write_add_extension(safecurrentdirtopath,".x",#xfile)
++endif
++if errormsg!=noerr
++	Call msgerrexit(errormsg)
+ endif
+--- ocompiler-1.orig/src/files/functions.s
++++ ocompiler-1/src/files/functions.s
+@@ -59,3 +59,6 @@ Include "./functions/debug.s"
+ Include "./functions/index.s"
+ 
+ Include "./functions/short.s"
++
++Include "./functions/xfile.s"
++Include "./functions/xfile_details.s"
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.s
++++ ocompiler-1/src/files/functions/actions/dataparse.s
+@@ -149,13 +149,13 @@ function addvarreferenceorunref(sv ptrco
+ 	Set firstchar content#
+ 
+ 	If firstchar!=(unrefsign)
+-		if firstchar==(asciicirc)   #throwless if on a throwing area
++		if firstchar==(throwlesssign)   #throwless if on a throwing area
+ 			If typenumber==(constantsnumber)
+ 				Return "Unexpected throwless sign ('^') at constant declaration."
+ 			EndIf
+ 			dec valsize
+ 			If valsize==zero
+-				Return namecverr
++				Return "Name for variable expected."
+ 			endif
+ 			or mask (aftercallthrowlessbit)
+ 			call stepcursors(ptrcontent,ptrsize)
+@@ -181,7 +181,7 @@ function addvarreferenceorunref(sv ptrco
+ endfunction
+ 
+ #er
+-function getsign(str content,data size,str assigntype,data ptrsz,data typenumber,data stack,data ptrrelocbool)
++function getsign(ss content,sd size,ss assigntype,sd ptrsz,sd typenumber,sd stack,sd ptrrelocbool,sd ptrdataxrel)
+ 	data true=TRUE
+ 	data noerr=noerror
+ 	Data valsize#1
+@@ -193,7 +193,7 @@ function getsign(str content,data size,s
+ 		return noerr
+ 	endif
+ 
+-	Char reservesign=reserveascii
++	Char reservesign=reservesign
+ 	SetCall valsize valinmem_pipes(content,size,reservesign,ptrsz)
+ 	If valsize!=size
+ 		Data constnr=constantsnumber
+@@ -222,6 +222,17 @@ function getsign(str content,data size,s
+ 		EndElseIf
+ 		Set assigntype# equalsign
+ 		Set ptrrelocbool# true
++		#this was moved here because of xfile, to know datax relocation
++		call advancecursors(#content,#size,valsize)
++		call stepcursors(#content,#size)
++		if size==0
++			return "Size 0 when testing for datax relocation."
++		endif
++		if content#==relsign
++			set ptrdataxrel# (TRUE)
++		else
++			set ptrdataxrel# (FALSE)
++		endelse
+ 		return noerr
+ 	endif
+ 
+--- ocompiler-1.orig/src/files/functions/actions/declare.s
++++ ocompiler-1/src/files/functions/actions/declare.s
+@@ -22,38 +22,51 @@ function declare(sv pcontent,sd pcomsize
+ 	#	endif
+ 	#endif
+ 
++	sd xfile_decltype
+ 	if declare_typenumber==(vintegersnumber)
+ 		set is_stack (FALSE);set typenumber (integersnumber)
+ 		if bool_64==(TRUE);set mask (datapointbit)
+ 			if parses==(pass_init)
+ 				set unitsize (qwsz)
+-			endif
++			else
++				set xfile_decltype (Xfile_decltype_longInt)
++			endelse
+ 		else;set mask 0
+ 			if parses==(pass_init)
+ 				set unitsize (dwsz)
+-			endif
++			else
++				set xfile_decltype (Xfile_decltype_longInt)
++			endelse
+ 		endelse
+ 	elseif declare_typenumber==(vstringsnumber)
+ 		set is_stack (FALSE);set typenumber (stringsnumber)
+ 		if bool_64==(TRUE);set mask (datapointbit)
+ 			if parses==(pass_init)
+ 				set unitsize (qwsz)
+-			endif
++			else
++				set xfile_decltype (Xfile_decltype_longByte)
++			endelse
+ 		else;set mask 0
+ 			if parses==(pass_init)
+ 				set unitsize (dwsz)
+-			endif
++			else
++				set xfile_decltype (Xfile_decltype_longByte)
++			endelse
+ 		endelse
+ 	elseif declare_typenumber==(valuesnumber)
+ 		set is_stack (FALSE);set typenumber (integersnumber)
+ 		if bool_64==(TRUE);set mask (valueslongmask)
+ 			if parses==(pass_init)
+ 				set unitsize (qwsz)
+-			endif
++			else
++				set xfile_decltype (Xfile_decltype_long)
++			endelse
+ 		else;set mask 0
+ 			if parses==(pass_init)
+ 				set unitsize (dwsz)
+-			endif
++			else
++				set xfile_decltype (Xfile_decltype_long)
++			endelse
+ 		endelse
+ 	else
+ 		setcall typenumber stackfilter(declare_typenumber,#is_stack)
+@@ -78,14 +91,34 @@ function declare(sv pcontent,sd pcomsize
+ 			if is_stack==(TRUE)
+ 				#must be at the start
+ 				call entryscope_verify_code()
+-			endif
++
++				#xfile part
++				if typenumber==(valuesinnernumber)
++					set xfile_decltype (Xfile_decltype_long)
++				elseif typenumber==(integersnumber)
++					set xfile_decltype (Xfile_decltype_longInt)
++				else #(stringsnumber)
++					set xfile_decltype (Xfile_decltype_longByte)
++				endelse
++			else
++				#xfile part
++				if typenumber==(constantsnumber)
++					set xfile_decltype (Xfile_decltype_const)
++				elseif typenumber==(charnumber)
++					set xfile_decltype (Xfile_decltype_byte)
++				elseif typenumber==(integersnumber)
++					set xfile_decltype (Xfile_decltype_int)
++				else #(stringsnumber)
++					set xfile_decltype (Xfile_decltype_intByte)
++				endelse
++			endelse
+ 		endelse
+ 		set mask 0
+ 	endelse
+ 
+ 	sd err
+-	sd relocbool=FALSE
+-	setcall err getsign(pcontent#,pcomsize#,#sign,#valsize,typenumber,is_stack,#relocbool)
++	sd relocbool=FALSE;sd dataxrel
++	setcall err getsign(pcontent#,pcomsize#,#sign,#valsize,typenumber,is_stack,#relocbool,#dataxrel)
+ 	if err==(noerror)
+ 		if parses==(pass_init)
+ 			if typenumber==(constantsnumber)
+@@ -95,7 +128,7 @@ function declare(sv pcontent,sd pcomsize
+ 						call advancecursors(pcontent,pcomsize,pcomsize#)
+ 						return (noerror)
+ 					endif
+-					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool) #there are 2 more argument but are not used
++					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool) #there are 3 more argument but are not used
+ 					#                                                                            since %%|
+ 				endif
+ 			else
+@@ -121,7 +154,7 @@ function declare(sv pcontent,sd pcomsize
+ 							endif
+ 						endif
+ 					endelse
+-					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,is_stack) #there is 1 more argument but is not used
++					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,dataxrel,is_stack) #there is 1 more argument but is not used
+ 					#                                                                               since %%|
+ 					if is_expand==(FALSE)
+ 						sd pdataReg%%ptr_dataReg
+@@ -133,17 +166,23 @@ function declare(sv pcontent,sd pcomsize
+ 				endif
+ 			endelse
+ 		else
+-			if typenumber==(constantsnumber)
+-				if sign!=(pointersigndeclare)
+-					call advancecursors(pcontent,pcomsize,pcomsize#)
+-					return (noerror)
+-				endif
+-			elseif is_expand==(TRUE)
+-				if sign!=(reserveascii)
+-					return "Virtual declarations can have only the reserve sign."
+-				endif
+-			endelseif
+-			SetCall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool,is_stack,is_expand)
++			setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,pcontent#,valsize,sign,relocbool,dataxrel)
++			if err==(noerror)
++				if typenumber==(constantsnumber)
++					if sign!=(pointersigndeclare)
++						setcall err xfile_add_char_if((Xfile_declmode_value))
++						if err==(noerror)
++							call advancecursors(pcontent,pcomsize,pcomsize#)
++							return (noerror)
++						endif
++					endif
++				elseif is_expand==(TRUE)
++					if sign!=(reservesign)
++						return "Virtual declarations can have only the reserve sign."
++					endif
++				endelseif
++				SetCall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool,dataxrel,is_stack,is_expand)
++			endif
+ 		endelse
+ 	endif
+ 	return err
+--- ocompiler-1.orig/src/files/functions/actions/enumcomma.s
++++ ocompiler-1/src/files/functions/actions/enumcomma.s
+@@ -220,10 +220,9 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 				set argsize 0
+ 			endelse
+ 
+-			Data negvalue#1
+-			Set negvalue zero
+-			Sub negvalue argsize
+-			Call advancecursors(ptrcontent,ptrsize,negvalue)
++			#here, advancecursors is not ok
++			sub ptrcontent# argsize
++			sub ptrsize# argsize
+ 			Data ptrargsize^argsize
+ 			if typenumberOrparses==(pass_init)
+ 				setcall err getarg(ptrcontent,ptrargsize,argsize,(allow_later),sens) #there are 4 more arguments but are not used
+@@ -240,7 +239,12 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 		Sub sz argsize
+ 		If sz!=zero
+ 			Dec sz
+-			Call advancecursors(ptrcontent,ptrsize,sens)
++			add ptrcontent# sens
++			if sens==(FORWARD)
++				sub ptrsize# sens
++			else
++				add ptrsize# sens
++			endelse
+ 			Set content ptrcontent#
+ 		Else
+ 			Set csv zero
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -39,14 +39,14 @@ function fnimp_exists(sd content,sd size
+ 	endif
+ 	return "Function/Import name is already defined."
+ endfunction
+-#b
+-function is_funcx_subtype(sd subtype)
++#xf
++function func_xfile(sd subtype)
+ 	if subtype==(cFUNCTIONX)
+-		return (TRUE)
++		return (Xfile_function_extern)
+ 	elseif subtype==(cENTRY)
+-		return (TRUE)
++		return (Xfile_function_entry)
+ 	endelseif
+-	return (FALSE)
++	return (Xfile_function_traw) #or Xfile_function_not_x
+ endfunction
+ #subtype is only when declarefn(not callfn)
+ #err
+@@ -87,7 +87,6 @@ Function parsefunction(data ptrcontent,d
+ 		Data fnnr=functionsnumber
+ 		Data value#1
+ 		Data ptrvalue^value
+-		sd scope64
+ 		if parses==(pass_init)
+ 			setcall err fnimp_exists(content,sz) #it is at first pass when only fns and imports are
+ 			if err!=(noerror)
+@@ -103,8 +102,9 @@ Function parsefunction(data ptrcontent,d
+ 			else
+ 				set mask 0
+ 			endelse
+-			setcall scope64 is_funcx_subtype(subtype)
+-			if scope64==(TRUE)
++			sd can_scope64
++			setcall can_scope64 func_xfile(subtype)
++			if can_scope64!=(Xfile_function_not_x)
+ 				or mask (x86_64bit)
+ 			endif
+ 			sd err_pb;setcall err_pb global_err_pBool()
+@@ -170,27 +170,28 @@ Function parsefunction(data ptrcontent,d
+ 
+ 			if subtype==(cFUNCTION)
+ 				call scope64_set((FALSE))
++				setcall err xfile_add_fndef_if(content,sz,(Xfile_function_tintern),(Xfile_function_not_x)) #,arg
+ 			else
+-				setcall scope64 is_funcx_subtype(subtype)
++				sd xf_fn
++				setcall xf_fn func_xfile(subtype)
+ 				#functionx,entry in 64 conventions
+-				#entryraw has no return but has argc,aexec,a1...an
+-				if scope64==(TRUE)
++				if xf_fn!=(Xfile_function_traw)
++					sd scope64
+ 					setcall scope64 is_for_64()
+-					#if scope64==(TRUE)
+-					#	setcall err function_start_64()
+-					#	If err!=noerr
+-					#		Return err
+-					#	EndIf
+-					#endif
+ 					call scope64_set(scope64)
+ 				else
+ 				#if subtype==(cENTRYRAW)
++				#entryraw has no return but has argc,aexec,a1...an
+ 					setcall err entryraw_top();if err!=noerr;Return err;EndIf
+ 
+ 					#set only to avoid at start args, else, not using, never get into getreturn here
+ 					call scope64_set((FALSE))
+ 				endelse
++				setcall err xfile_add_fndef_if(content,sz,xf_fn,xf_fn,varargs)
+ 			endelse
++			If err!=noerr
++				Return err
++			EndIf
+ 		endelse
+ 	Else
+ 		Data ptrdata#1
+@@ -223,19 +224,25 @@ Function parsefunction(data ptrcontent,d
+ 
+ 	If is_declare==true
+ 		if parses==(pass_write)
++			sd nr_of_args_for_xfile=0
++			if sz!=zero
++				sv c;sd s;set c ptrcontent#;set s ptrsize#
++				Call enumcommas(#c,#s,sz,is_declare,fnnr,(pass_write0),#nr_of_args_for_xfile) #there are 4 more arguments but are not used
++			endif
++			setcall err xfile_add_int_if(nr_of_args_for_xfile)
++			If err!=noerr
++				Return err
++			EndIf
++
+ 			sd b;setcall b scope64_get()
+ 			if b==(TRUE)
+-				sd nr_of_args
+ 				if varargs!=0
++					sd nr_of_args
+ 					setcall nr_of_args convdata((convdata_total))
++					setcall err function_start_64(nr_of_args)
+ 				else
+-					set nr_of_args 0
+-					If sz!=zero
+-						sv c;sd s;set c ptrcontent#;set s ptrsize#
+-						Call enumcommas(#c,#s,sz,is_declare,fnnr,(pass_write0),#nr_of_args) #there are 4 more arguments but are not used
+-					endIf
++					setcall err function_start_64(nr_of_args_for_xfile)
+ 				endelse
+-				setcall err function_start_64(nr_of_args)
+ 				If err!=noerr
+ 					Return err
+ 				EndIf
+--- ocompiler-1.orig/src/files/functions/actions/fndecargs.s
++++ ocompiler-1/src/files/functions/actions/fndecargs.s
+@@ -41,6 +41,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 	sd datasize=dwsz
+ 	sd long_mask=0
+ 	sd b;setcall b is_for_64()
++	sd xfile_decltype
+ 	if vartype>=(vnumbers)
+ 		sub vartype (vnumbers)
+ 		if vartype==(valuesinnernumber)
+@@ -49,13 +50,37 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 				set long_mask (valueslongmask)
+ 				set datasize (qwsz)
+ 			endif
+-		elseif b==(TRUE)
+-			set long_mask (datapointbit)
+-			set datasize (qwsz)
+-		endelseif
++			set xfile_decltype (Xfile_decltype_long) #can also be an ifif
++		else
++			if b==(TRUE)
++				set long_mask (datapointbit)
++				set datasize (qwsz)
++			endif
++			if vartype==(integersnumber)
++				set xfile_decltype (Xfile_decltype_longInt)
++			else
++			#was vstringsnumber
++				set xfile_decltype (Xfile_decltype_longByte)
++			endelse
++		endelse
+ 	elseif vartype==(charnumber)
+ 		set datasize (bsz)
+-	endelseif
++		set xfile_decltype (Xfile_decltype_byte)
++	elseif is_stack==(TRUE)
++		if vartype==(stackdatanumber)
++			set xfile_decltype (Xfile_decltype_longInt)
++		elseif vartype==(stackstringnumber)
++			set xfile_decltype (Xfile_decltype_longByte)
++		else
++		#stackvaluenumber
++			set xfile_decltype (Xfile_decltype_long)
++		endelse
++	elseif vartype==(integersnumber)
++		set xfile_decltype (Xfile_decltype_int)
++	else
++	#stringsnumber
++		set xfile_decltype (Xfile_decltype_intByte)
++	endelse
+ 
+ 	vdata ptrdataSize%ptrdataSize
+ 
+@@ -70,7 +95,12 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 		endif
+ 		call advancecursors(ptrcontent,ptrsize,sz)
+ 		return (noerror)
+-	endif
++	else
++		setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,ptrcontent#,sz,(sign_not_required)) #2 more
++		If err!=noerr
++			Return err
++		EndIf
++	endelse
+ 
+ 	#this is a write to sec for old data args, careful with stackoff
+ 	Char stacktransfer1#1;char *={0x84,0x24}
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -1,6 +1,4 @@
+ 
+-
+-
+ function verify_syntax_end(sd ptrcontent,sd ptrsize,sd argsize,sd *data2)
+ 	Call advancecursors(ptrcontent,ptrsize,argsize)
+ 	Call spaces(ptrcontent,ptrsize)
+@@ -48,6 +46,7 @@ function extend_arg_size(ss content,sd s
+ 						if sizetoverify!=0
+ 							if content#==(pointerascii)
+ 								#this " ##" is the only line end comment after sufix and allowing spaces
++								set main.xfile_sharp_comment (nonzero)   #and notify for xfile
+ 								ret
+ 							endif
+ 							#this disallow "arg #comment"
+@@ -133,7 +132,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 			set prefix# 1
+ 		endelse
+ 	elseif allowdata!=(allow_later)  #exclude pass_init
+-		setcall errnr arg_size(content,argsize,#argsize)
++		setcall errnr arg_size(content,argsize,#argsize)  #spc,tab
+ 		If errnr!=(noerror)
+ 			Return errnr
+ 		EndIf
+@@ -149,19 +148,38 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 					return immnothere
+ 				endif
+ 				#extend to parenthesis if found
+-				sd ptr_sz^argsize
+-				setcall errnr parenthesis_all_size(content,size,ptr_sz)
+-				If errnr!=noerr
+-					Return errnr
+-				EndIf
+-				#find the imm
+-				setcall errnr findimm(ptrcontent,ptrsize,argsize,ptrdata)
+-				If errnr!=noerr
+-					Return errnr
+-				EndIf
+-				#
+-				set ptrlow# false
++				if content#==(asciiparenthesisstart)
++					call stepcursors(ptrcontent,ptrsize)
++					setcall errnr parenthesis_size(ptrcontent#,ptrsize#,#argsize)
++					if errnr!=(noerror)
++						return errnr
++					endif
++					setcall errnr parseoperations(ptrcontent,ptrsize,argsize,ptrdata,(FALSE))
++					if errnr!=(noerror)
++						return errnr
++					endif
++					call stepcursors(ptrcontent,ptrsize)
++					if sens==(BACKWARD)
++						add argsize 2 #the recognised parenthesis
++					endif
++				else
++					setcall errnr parseoperations(ptrcontent,ptrsize,argsize,ptrdata,(FALSE))
++					if errnr!=(noerror)
++						return errnr
++					endif
++				endelse
++
++				call setisimm()
+ 				#sufix is not used at imm value
++				set ptrlow# false
++
++				if sens==(FORWARD)
++					return (noerror)
++				else
++					sd back=-1
++					mult back argsize
++					call advancecursors(ptrcontent,ptrsize,back)
++				endelse
+ 			else
+ 				if allowdata==(allow_yes)
+ 					#at last/only argument it is better to allow space before sufix to not regret later
+--- ocompiler-1.orig/src/files/functions/argument/imm.s
++++ ocompiler-1/src/files/functions/argument/imm.s
+@@ -1,56 +1,9 @@
+ 
+-
+-function imm_values(sd ptrcontent,sd ptrsize,sd sz,sd outvalue)
+-#parenthesis is already verified
+-	call stepcursors(ptrcontent,ptrsize)
+-	dec sz
+-	dec sz
+-	sd err
+-	setcall err parseoperations(ptrcontent,ptrsize,sz,outvalue,(FALSE))
+-	return err
+-endfunction
+-
+-function canbeimm_orerror(sd ptrcontent,sd ptrsize,sd sz,sd outvalue)
+-#size is not 0(zero)
+-	ss content
+-	set content ptrcontent#
+-
+-	sd err
+-
+-	if content#!=(asciiparenthesisstart)
+-		setcall err numbersconstants(content,sz,outvalue)
+-		return err
+-	endif
+-	data f^imm_values
+-	setcall err restore_cursors_onok(ptrcontent,ptrsize,f,sz,outvalue)
+-	return err
+-endfunction
+-
+-#err
+-function findimm(data ptrcontent,data ptrsize,data sz,data outvalue)
+-#size is not 0(zero)
++function setimm()
+ 	data canhaveimm#1
+ 	const immpointer^canhaveimm
+-	data isimm#1
+-	const ptr_isimm^isimm
+-
+-	Data noerr=noerror
+-	sd err
+-	setcall err canbeimm_orerror(ptrcontent,ptrsize,sz,outvalue)
+-	if err!=noerr
+-		return err
+-	endif
+-
+ 	data true=1
+-	set isimm true
+-	return noerr
+-endfunction
+-
+-
+-function setimm()
+-	data ptratimm%immpointer
+-	data true=1
+-	set ptratimm# true
++	set canhaveimm true
+ endfunction
+ function unsetimm()
+ 	data ptratimm%immpointer
+@@ -63,6 +16,12 @@ function getimm()
+ endfunction
+ 
+ 
++function setisimm()
++	data isimm#1
++	const ptr_isimm^isimm
++	data true=1
++	set isimm true
++endfunction
+ function resetisimm()
+ 	data ptr%ptr_isimm
+ 	data false=0
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -481,8 +481,8 @@ Function getcommand(data pcontent,data p
+ 		vstr call_ret_str="RET"
+ 			set extstr call_ret_str
+ 		Elseif command==(cSTARTFUNCTION)
+-			sd is_x;setcall is_x is_funcx_subtype(ptrsubtype#)
+-			if is_x==(TRUE)
++			sd x;setcall x func_xfile(ptrsubtype#)
++			if x!=(Xfile_function_not_x)
+ 				Set extstr "X" #varargs
+ 			endif
+ 		elseif command==(cCALLEX)
+@@ -511,11 +511,11 @@ Function getcommand(data pcontent,data p
+ 				endif
+ 				If command==(cSTARTFUNCTION)
+ 				#functionx/entry [x] , varargs
+-					#allow the command at 64
+-					sd for64;setcall for64 is_for_64()
+-					if for64==(TRUE)
+-						or ptrsubtype# (x_func_flag)
+-					endif
++					#allow the command at 64, there is a check inside parsefunc, and for xfile better to know
++					#sd for64;setcall for64 is_for_64()
++					#if for64==(TRUE)
++					or ptrsubtype# (x_func_flag)
++					#endif
+ 				else
+ 				#call[ex][x]ret
+ 					or ptrsubtype# (call_ret_flag)
+--- ocompiler-1.orig/src/files/functions/commons/strcommons.s
++++ ocompiler-1/src/files/functions/commons/strcommons.s
+@@ -7,12 +7,8 @@ Function advancecursors(data ptrcontent,
+ 	Set size ptrsize#
+ 	Add content nr
+ 
+-	#backward advance
+-	#take nr if nr>0 or -nr if nr<0
+-	Data zero=0
+-	If nr<zero
+-		SetCall nr neg(nr)
+-	EndIf
++	#take nr if nr>0 or -nr if nr<0. was ok in one case at enumcomma backward
++	#Data zero=0;If nr<zero;SetCall nr neg(nr);EndIf
+ 
+ 	Sub size nr
+ 	Set ptrcontent# content
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -1,7 +1,7 @@
+ 
+ 
+ #err
+-Function dataassign(sd ptrcontent,sd ptrsize,sd sign,sd valsize,sd typenumber,sd punitsize,sd long_mask,sd relocbool,sd stack,sd is_expand)
++Function dataassign(sd ptrcontent,sd ptrsize,sd sign,sd valsize,sd typenumber,sd punitsize,sd long_mask,sd relocbool,sd dataxrel,sd stack,sd is_expand)
+ 	Data false=FALSE
+ 	Data true=TRUE
+ 	Str err#1
+@@ -104,26 +104,30 @@ Function dataassign(sd ptrcontent,sd ptr
+ 	set importbittest -1
+ 
+ 	If sign==(assignsign)
+-		Char byte#1
+ 		Set content ptrcontent#
+-		Set byte content#
+-		if byte==(relsign)
+-			Call stepcursors(ptrcontent,ptrsize)
+-			Call stepcursors(#content,#size)
+-			If size==0
+-				#to not set byte in vain
+-				Return ptrrightsideerr
+-			endIf
+-			#this comparation is not for char and const is excluded at getsign
+-			if relocbool!=true
+-				return "Unexpected relocation sign."
+-			endif
+-			vdata ptr_nobits_virtual%ptr_nobits_virtual
+-			if ptr_nobits_virtual#==(Yes)
+-				set relocindx (dtnbind)
++		#if byte==(relsign)
++		if relocbool==true
++			if dataxrel==true
++				Call stepcursors(ptrcontent,ptrsize)
++				Call stepcursors(#content,#size)
++				#this was moved from here because of xfile, to know datax relocation
++				#If size==0
++				#	#to not set byte in vain
++				#	Return ptrrightsideerr
++				#endIf
++				#this comparation is not for char and const is excluded at getsign
++				#if relocbool!=true
++				#	return "Unexpected relocation sign."
++				#endif
++				vdata ptr_nobits_virtual%ptr_nobits_virtual
++				if ptr_nobits_virtual#==(Yes)
++					set relocindx (dtnbind)
++				endif
++				#Set byte content#
+ 			endif
+-			Set byte content#
+ 		endif
++		Char byte#1
++		Set byte content#
+ 		Char groupstart="{"
+ 		If byte!=groupstart
+ 			char stringstart=asciidoublequote
+@@ -171,6 +175,10 @@ Function dataassign(sd ptrcontent,sd ptr
+ 					str bytesatints^bytesatintegers
+ 					return bytesatints
+ 				endif
++				if punitsize==(NULL)
++					setcall err xfile_add_char_if((Xfile_declmode_string))
++					If err!=noerr;Return err;EndIf
++				endif
+ 			Else
+ 			#=value+constant-/&...
+ 				if punitsize!=(NULL)
+@@ -178,7 +186,10 @@ Function dataassign(sd ptrcontent,sd ptr
+ 				#ss =% x is 0
+ 					call advancecursors(ptrcontent,ptrsize,size)
+ 					return (noerror)
+-				endif
++				elseif typenumber!=constantsnr ##constant=value is declared at pass_init
++					setcall err xfile_add_char_if((Xfile_declmode_value))
++					If err!=noerr;Return err;EndIf
++				endelseif
+ 				SetCall err parseoperations(ptrcontent,ptrsize,size,ptrvalue,(TRUE))
+ 				if err!=noerr
+ 					return err
+@@ -198,7 +209,10 @@ Function dataassign(sd ptrcontent,sd ptr
+ 					call advancecursors(ptrcontent,ptrsize,size)
+ 					return (noerror)
+ 				endif
+-			endif
++			else
++				setcall err xfile_add_char_if((Xfile_declmode_group))
++				If err!=noerr;Return err;EndIf
++			endelse
+ 			If typenumber==constantsnr
+ 				Char constgroup="Group begin sign ('{') is not expected to declare a constant."
+ 				Str ptrconstgroup^constgroup
+@@ -226,7 +240,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			Call stepcursors(ptrcontent,ptrsize)
+ 			Return noerr
+ 		EndElse
+-	ElseIf sign==(reserveascii)
++	ElseIf sign==(reservesign)
+ 		setcall err get_reserve_size(ptrcontent,ptrsize,size,ptrvalue,stack,typenumber,long_mask,ptr_reserve)
+ 		if err==(noerror)
+ 			if punitsize!=(NULL)
+--- ocompiler-1.orig/src/files/functions/enumbags.s
++++ ocompiler-1/src/files/functions/enumbags.s
+@@ -41,7 +41,7 @@ Function freeclose()
+ 
+ 	Call enumbags(zero)
+ 
+-	Data negative=-1
++	Data negative=openno
+ 
+ 	Data ptrfileout%ptrfileout
+ 	Set value ptrfileout#
+@@ -55,6 +55,10 @@ Function freeclose()
+ 		Call close(value)
+ 	EndIf
+ 
++	if main.xfile!=negative
++		call close(main.xfile)
++	endif
++
+ 	#here if allocerrormsg was a submessage(included in sprintf)
+ 	#here at some main msgerrexits
+ 	call clearmessage()
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.s
++++ ocompiler-1/src/files/functions/pref/preffuncs.s
+@@ -230,13 +230,14 @@ function initpreferences()
+ 	set ptr_call_align# (call_align_yes_all)
+ 	set ptr_call_align# (Yes)
+ 	set ptr_has_debug# (No)
++	set main.xbool (No)
+ 
+ 	#this is used also at arguments
+ 
+ 	sv q%nr_of_prefs_pointers_p
+-	set q# ptrwarningsbool; incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w
++	set q# ptrwarningsbool; incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w;         incst q;set q# #main.xbool
+ 	sv t%nr_of_prefs_strings_p
+-	set t# "orphans";       incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"
++	set t# "orphans";       incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"; incst t;set t# "x_file"
+ endfunction
+ 
+ #void
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -161,17 +161,19 @@ Function memtohex(str content,data size,
+ EndFunction
+ 
+ #error
+-function numbertoint(str content,data size,data outval,data minusbool)
++function numbertoint(vstrx content,datax size,datax outval,datax minusbool)
+ 	Data bool#1
+ 	#test to see if the ! sign is present
+ 	if content#==(asciiexclamationmark)
++		sd err
++
+ 		if size==1
+ 			#the current data cursor
+ 			setcall outval# get_img_vdata_dataReg()
+-			return (noerror)
+-		endif
+ 
+-		sd err
++			setcall err xfile_add_char_ifif((Xfile_numbers_type_idata))
++			return err
++		endif
+ 
+ 		vdata p_parses%ptr_parses
+ 		inc content
+@@ -188,78 +190,102 @@ function numbertoint(str content,data si
+ 					endif
+ 				endif
+ 				setcall outval# get_img_vdata_dataSize()
+-				return (noerror)
++
++				setcall err xfile_add_char_ifif((Xfile_numbers_type_idatax))
++				return err
+ 			endif
+ 			inc content
+ 			sub size 2
+-			setcall err get_sizeoffunction(content,size,outval,(TRUE))
++
++			if p_parses#==(pass_init)
++				return "At the moment, !!func is not implemented here."  #after pass_init is the calloc for scopes
++			endif
++			setcall err xfile_add_char_if((Xfile_numbers_type_sizeXFunc))  #getarg_base can write for xfile
++			if err==(noerror)
++				setcall err get_sizeoffunction(content,size,outval,(TRUE))
++			endif
+ 			return err
+ 		endif
+ 
+ 		dec size
+ 		sd dot_offset;setcall dot_offset valinmem(content,size,(asciidot))
+ 		if dot_offset!=size
++			if p_parses#==(pass_init)
++				return "At the moment, !a.b or !a.b! are not implemented here."  #after pass_init is the calloc for scopes
++			endif
+ 			#suffixed,casted, nobody is stopping them (casted will not reach here, will be xor)
+ 			#	and suffix+0 at def, else is a comment;at code is ok
+ 			ss pointer=-1;add pointer content;add pointer size
+ 			datax data#1;datax low#1;datax sufix#1
+ 			if pointer#!=(asciiexclamationmark)
+ 				#size of variable
+-				setcall err getarg_dot_any(content,size,dot_offset,#data,#low,#sufix)
++				setcall err xfile_add_char_if((Xfile_numbers_type_sizeVar))
+ 				if err==(noerror)
+-					if low!=0
+-						set outval# (bsz)
+-					else
+-						set outval# (dwsz)
+-						sd test;setcall test stackbit(data)
+-						if test==0
+-							if sufix==0
+-								setcall test datapointbit(data)
+-								if test!=0
+-									set outval# (qwsz)
+-								endif
+-							else
+-								setcall test pointbit(data) #it has 64 check
+-								if test!=0
+-									set outval# (qwsz)
+-								endif
+-							endelse
++					setcall err getarg_dot_any(content,size,dot_offset,#data,#low,#sufix)
++					if err==(noerror)
++						if low!=0
++							set outval# (bsz)
+ 						else
+-							if sufix==0
+-								setcall outval# stack64_enlarge(outval#)
++							set outval# (dwsz)
++							sd test;setcall test stackbit(data)
++							if test==0
++								if sufix==0
++									setcall test datapointbit(data)
++									if test!=0
++										set outval# (qwsz)
++									endif
++								else
++									setcall test pointbit(data) #it has 64 check
++									if test!=0
++										set outval# (qwsz)
++									endif
++								endelse
+ 							else
+-								setcall test pointbit(data) #it has 64 check
+-								if test!=0
+-									set outval# (qwsz)
+-								endif
++								if sufix==0
++									setcall outval# stack64_enlarge(outval#)
++								else
++									setcall test pointbit(data) #it has 64 check
++									if test!=0
++										set outval# (qwsz)
++									endif
++								endelse
+ 							endelse
+ 						endelse
+-					endelse
+ 
+-					if sufix==0
+-						add data (maskoffset_reserve)
+-						sd shortvalue;setcall shortvalue s_to_i(data)
+-						if shortvalue==0
+-							return "Great reserve size is not implemented yet."
++						if sufix==0
++							add data (maskoffset_reserve)
++							sd shortvalue;setcall shortvalue s_to_i(data)
++							if shortvalue==0
++								return "Great reserve size is not implemented yet."
++							endif
++							mult outval# shortvalue
+ 						endif
+-						mult outval# shortvalue
+ 					endif
+ 				endif
+ 			else
+ 				# !a.b! offset
+ 				dec size
+ 
+-				setcall err getarg_base(content,size,dot_offset,#data,#low,#sufix,outval)
++				setcall err xfile_add_char_if((Xfile_numbers_type_offsetVar))  #getarg_base can write for xfile
+ 				if err==(noerror)
+-					if sufix!=0
+-						return "Not using offset of suffix."
++					setcall err getarg_base(content,size,dot_offset,#data,#low,#sufix,outval)
++					if err==(noerror)
++						if sufix!=0
++							return "Not using offset of suffix."
++						endif
++						sub outval# data#
++						neg outval#
+ 					endif
+-					sub outval# data#
+-					neg outval#
+ 				endif
+ 			endelse
+ 		else
+-			setcall err get_sizeoffunction(content,size,outval,(FALSE))
++			if p_parses#==(pass_init)
++				return "At the moment, !func is not implemented here."  #after pass_init is the calloc for scopes
++			endif
++			setcall err xfile_add_char_if((Xfile_numbers_type_sizeFunc))  #getarg_base can write for xfile
++			if err==(noerror)
++				setcall err get_sizeoffunction(content,size,outval,(FALSE))
++			endif
+ 		endelse
+ 		return err
+ 	#test for : sign (the size of a stack value, 4B on 32-bits, 8B on 64-bits)
+@@ -269,7 +295,9 @@ function numbertoint(str content,data si
+ 		sd b;setcall b is_for_64()
+ 		if b==(FALSE);set outval# (dwsz)
+ 		else;set outval# (qwsz);endelse
+-		return (noerror)
++
++		setcall err xfile_add_char_ifif((Xfile_numbers_type_ilong))
++		return err
+ 	endelseif
+ 	#decimal or hex number
+ 	SetCall bool memtoint(content,size,outval,minusbool)
+@@ -279,17 +307,17 @@ function numbertoint(str content,data si
+ 			Char _intvalerr="Integer(dec/hex) value not recognized."
+ 			Str intvallerr^_intvalerr
+ 			Return intvallerr
+-		EndIf
+-	EndIf
+-	return (noerror)
++		Else
++			setcall err xfile_add_base_ifif((Xfile_numbers_type_thex),content,size)
++		EndElse
++	Else
++		setcall err xfile_add_base_ifif((Xfile_numbers_type_tdecimal),content,size)
++	EndElse
++	return err
+ endfunction
+ 
+ #size of function
+ function get_sizeoffunction(sd content,sd size,sd outval,sd is_expand)
+-	vdata p_parses%ptr_parses
+-	if p_parses#==(pass_init)
+-		return "At the moment, !func is not implemented here."  #after pass_init is the calloc for scopes
+-	endif
+ 	sd err
+ 	sd pos
+ 	setcall err get_scope_pos(content,size,#pos)
+@@ -302,51 +330,61 @@ endfunction
+ #err pointer
+ Function numbersconstants(str content,data size,data outval)
+ 	Str intconsterr="Integer(dec/hex) or constant value expected."
+-	If size<=0
++	If size==0
+ 		Return intconsterr
+ 	EndIf
+-	char not=asciiequiv
++
++	sd xprefixes=Xfile_numbers_prefix_none
++
++	char not=not_number
+ 	sd notbool=FALSE
+ 	if content#==not
+ 		set notbool (TRUE)
+ 		inc content
+ 		dec size
+-		If size<=0
++		If size==0
+ 			Return intconsterr
+ 		EndIf
++		or xprefixes (Xfile_numbers_prefix_not)
+ 	endif
+ 	sd minusbool=FALSE
+ 	if content#==(asciiminus)
+ 		set minusbool (TRUE)
+ 		inc content
+ 		dec size
+-		If size<=0
++		If size==0
+ 			Return intconsterr
+ 		EndIf
++		or xprefixes (Xfile_numbers_prefix_neg)
+ 	endif
+-	sd bool
+-	setcall bool is_variable_char_not_numeric(content#)
++
+ 	sd err
+-	If bool==(FALSE)
+-		setcall err numbertoint(content,size,outval,minusbool)
+-	Else
+-		Data constr%%ptr_constants
+-		Data pointer#1
+-		SetCall pointer vars(content,size,constr)
+-		If pointer==0
+-			Char unconst="Undefined constant name."
+-			Str ptruncost^unconst
+-			Return ptruncost
+-		EndIf
+-		Set outval# pointer#
+-		set err (noerror)
+-	EndElse
++	setcall err xfile_add_char_ifif(xprefixes)
+ 	if err==(noerror)
+-		if notbool==(TRUE)
+-			not outval#
+-		endif
+-		if minusbool==(TRUE)
+-			mult outval# -1
++		sd bool
++		setcall bool is_variable_char_not_numeric(content#)
++		If bool==(FALSE)
++			setcall err numbertoint(content,size,outval,minusbool)
++		Else
++			Data constr%%ptr_constants
++			Data pointer#1
++			SetCall pointer vars(content,size,constr)
++			If pointer==0
++				Char unconst="Undefined constant name."
++				Str ptruncost^unconst
++				Return ptruncost
++			EndIf
++			Set outval# pointer#
++
++			setcall err xfile_add_base_ifif((Xfile_numbers_type_tconstant),content,size)
++		EndElse
++		if err==(noerror)
++			if notbool==(TRUE)
++				not outval#
++			endif
++			if minusbool==(TRUE)
++				mult outval# -1
++			endif
+ 		endif
+ 	endif
+ 	return err
+@@ -392,24 +430,6 @@ function parenthesis_size(ss content,sd
+ 	endwhile
+ 	Return closeerr
+ endfunction
+-#er
+-function parenthesis_all_size(ss content,sd size,sd ptr_sz)
+-	data noerr=noerror
+-	Char fnbegin=asciiparenthesisstart
+-	if content#!=fnbegin
+-		return noerr
+-	endif
+-	inc content
+-	dec size
+-	sd err
+-	setcall err parenthesis_size(content,size,ptr_sz)
+-	if err!=noerr
+-		return err
+-	endif
+-	data two=2
+-	add ptr_sz# two
+-	return err
+-endfunction
+ 
+ #len
+ function dwtomem(sd dw,ss mem)
+--- ocompiler-1.orig/src/files/functions/values/operations.s
++++ ocompiler-1/src/files/functions/values/operations.s
+@@ -1,18 +1,19 @@
+ 
+ 
+-Const addNumber=asciiplus
+-Const subNumber=asciiminus
+-Const mulNumber=asciiast
+-Const divNumber=asciislash
+-Const andNumber=asciiand
+-Const orNumber=asciivbar
+-Const xorNumber=asciicirc
+-Const powNumber=asciidollar
+-Const remNumber=asciipercent
+-Const lessNumber=asciiless
+-Const greaterNumber=asciigreater
+-Const shlNumber=asciicomma
+-Const sarNumber=asciidot
++Const unreadyNumber=0
++Const addNumber=Xfile_numbers_operation_add
++Const subNumber=Xfile_numbers_operation_sub
++Const mulNumber=Xfile_numbers_operation_mul
++Const divNumber=Xfile_numbers_operation_div
++Const andNumber=Xfile_numbers_operation_and
++Const orNumber=Xfile_numbers_operation_or
++Const xorNumber=Xfile_numbers_operation_xor
++Const powNumber=Xfile_numbers_operation_pow
++Const remNumber=Xfile_numbers_operation_rem
++Const lessNumber=Xfile_numbers_operation_less
++Const greaterNumber=Xfile_numbers_operation_greater
++Const shlNumber=Xfile_numbers_operation_shl
++Const sarNumber=Xfile_numbers_operation_sar
+ #asciiminus and asciinot for one arg
+ 
+ #err
+@@ -72,7 +73,10 @@ Function operation(ss content,sd size,sd
+ 		SetCall errptr numbersconstants(content,size,ptrnewitem)
+ 	else
+ 		inc content;sub size 2
+-		setcall errptr parseoperations(#content,#size,size,ptrnewitem,(FALSE))
++		setcall errptr xfile_add_char_ifif((Xfile_numbers_parenthesis_open))
++		if errptr==(noerror)
++			setcall errptr parseoperations_base(#content,#size,size,ptrnewitem,(FALSE),(Xfile_numbers_parenthesis_close))
++		endif
+ 	endelse
+ 	If errptr!=noerr;Return errptr;EndIf
+ 
+@@ -168,7 +172,7 @@ function operation_core(sd inoutvalue,sd
+ endfunction
+ 
+ #bool
+-Function signop(char byte,sd outval)
++Function signop(char byte,sv outval)
+ 	Data false=FALSE
+ 	Data true=TRUE
+ 
+@@ -192,23 +196,56 @@ EndFunction
+ 
+ #err
+ Function oneoperation(sd ptrcontent,ss initial,ss content,sd val,sd op)
+-	sd size
+ 	sd errptr
+-	Data noerr=noerror
++
++	if op==(unreadyNumber)
++		set op (addNumber)
++	else
++		setcall errptr xfile_add_char_ifif(op)
++		if errptr!=(noerror);Return errptr;endif
++	endelse
++
++	sd size
+ 
+ 	Set size content
+ 	Sub size initial
+ 
+ 	SetCall errptr operation(initial,size,val,op)
+-	If errptr!=noerr
++	If errptr!=(noerror)
+ 		Set ptrcontent# initial
+ 		Return errptr
+ 	EndIf
+-	Return noerr
++	Return (noerror)
+ EndFunction
+ 
++#err
++function operation_test(sv ptrcontent,sd initial,sd content,sd end,sd ptrval,sd pnumber,sd pnr,sd pbool)
++	if initial!=content ##to ignore -n
++		ss test;set test content;dec test
++		if test#==(not_number) #to ignore ~-n
++			if initial==test ##if not this, a~-b will anyway stop at a~, but this test is logic
++				return (noerror)
++			endif
++		endif
++		sd err
++		SetCall err oneoperation(ptrcontent,initial,content,ptrval,pnumber#)
++		If err==(noerror)
++			call doubleoperation(pnr,#content,end)
++			set pnumber# pnr#
++			Set pbool# (TRUE)
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++
+ #err pointer
+ Function parseoperations(sd ptrcontent,sd ptrsize,sd sz,sd outvalue,sd comments)
++	sd er;setcall er parseoperations_base(ptrcontent,ptrsize,sz,outvalue,comments,(Xfile_numbers_done))
++	return er
++EndFunction
++#err pointer
++Function parseoperations_base(sd ptrcontent,sd ptrsize,sd sz,sd outvalue,sd comments,sd xfile_numbers)
+ 	ss content
+ 	ss initial
+ 	sd number
+@@ -221,7 +258,7 @@ Function parseoperations(sd ptrcontent,s
+ 	Set content ptrcontent#
+ 
+ 	Set initial content
+-	Set number (addNumber)
++	Set number (unreadyNumber)
+ 	Set val zero
+ 
+ 	sd bool
+@@ -238,15 +275,10 @@ Function parseoperations(sd ptrcontent,s
+ 	While content!=end
+ 		SetCall find signop(content#,pnr)
+ 		if find==true
+-			If initial!=content
+-				SetCall errptr oneoperation(ptrcontent,initial,content,ptrval,number)
+-				If errptr!=noerr
+-					Return errptr
+-				EndIf
+-				call doubleoperation(pnr,#content,end)
+-				set number nr
+-				Set bool true
+-			EndIf
++			setcall errptr operation_test(ptrcontent,initial,content,end,ptrval,#number,pnr,#bool)
++			if errptr!=noerr
++				return errptr
++			endif
+ 		elseif content#==(asciiparenthesisstart)
+ 			inc content
+ 			sd rest_sz;set rest_sz end;sub rest_sz content
+@@ -284,7 +316,9 @@ Function parseoperations(sd ptrcontent,s
+ 		sub sz szz
+ 	endif
+ 	Call advancecursors(ptrcontent,ptrsize,sz)
+-	Return noerr
++
++	setcall errptr xfile_add_char_ifif(xfile_numbers)
++	Return errptr
+ EndFunction
+ 
+ function doubleoperation(ss pnr,sv pcontent,sd end)
+--- /dev/null
++++ ocompiler-1/src/files/functions/xfile.s
+@@ -0,0 +1,95 @@
++
++const Xfile_sz_char=bsz
++const Xfile_sz_int=dwsz
++const Xfile_function_not_x=Xfile_function_traw
++const Xfile_decltype_const=Xfile_decltype_longByte+1
++
++#err
++function xfile_add_int_if(sd int)
++	if main.xfile!=(openno)
++		sd err;setcall err writefile_errversion(main.xfile,#int,(Xfile_sz_int))
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_char(sd type)
++	sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
++	return err
++endfunction
++function xfile_add_char_if(sd type)
++	if main.xfile!=(openno)
++		sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_char_ifif(sd type)
++	if main.parses==(pass_write)
++		sd err;setcall err xfile_add_char_if(type)
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_string(sd text,sd size)
++	sd err;setcall err writefile_errversion(main.xfile,#size,(Xfile_sz_int))
++	if err==(noerror)
++		setcall err writefile_errversion(main.xfile,text,size)
++	endif
++	return err
++endfunction
++function xfile_add_string_if(sd text,sd size)
++	if main.xfile!=(openno)
++		sd err;setcall err xfile_add_string(text,size)
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_string_ifif(sd text,sd size)
++	if main.parses==(pass_write)
++		sd err;setcall err xfile_add_string_if(text,size)
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_base(sd type,sd text,sd size)
++	sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
++	if err==(noerror)
++		setcall err xfile_add_string(text,size)
++	endif
++	return err
++endfunction
++function xfile_add_base_if(sd type,sd text,sd size)
++	if main.xfile!=(openno)
++		sd err;setcall err xfile_add_base(type,text,size)
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_base_ifif(sd type,sd text,sd size)
++	if main.parses==(pass_write)
++		sd err;setcall err xfile_add_base_if(type,text,size)
++		return err
++	endif
++	return (noerror)
++endfunction
++function xfile_add_if(sd type,sd start,sd end)
++	sub end start
++	sd e;setcall e xfile_add_base_if(type,start,end)
++	return e
++endfunction
++function xfile_add_comment_ifif(sd start,sd end)
++	if main.parses==(pass_write)
++		inc start ##one for commentascii
++		sd e;setcall e xfile_add_if((Xfile_comment),start,end)
++		return e
++	endif
++	return (noerror)
++endfunction
++function xfile_add_comment_multi_ifif(sd start,sd end)
++	if main.parses==(pass_write)
++		add start 2 #one for commentascii and one for asciiexclamationmark
++		sd e;setcall e xfile_add_if((Xfile_multicomment),start,end)
++		return e
++	endif
++	return (noerror)
++endfunction
+--- /dev/null
++++ ocompiler-1/src/files/functions/xfile_details.s
+@@ -0,0 +1,84 @@
++
++#err
++function xfile_add_declare_if(sd decltype,sd is_stack,sd is_expand,ss content,sd size,sd sign,sd reloc,sd relocx)
++	if main.xfile!=(openno)
++		sd err
++		if decltype==(Xfile_decltype_const)
++			setcall err xfile_add_char((Xfile_declfield_const))
++		else
++			if is_stack==(TRUE)
++				setcall err xfile_add_char((Xfile_declfield_stack))
++			else
++				setcall err xfile_add_char((Xfile_declfield_data))
++				if err==(noerror)
++					if is_expand==(TRUE)
++						setcall err xfile_add_char((Xfile_declfield_data_expand))
++					else
++						setcall err xfile_add_char((Xfile_declfield_data_concrete))
++					endelse
++				endif
++			endelse
++			if err==(noerror)
++				setcall err xfile_add_char(decltype)
++				if err==(noerror)
++					if content#==(throwlesssign)
++						setcall err xfile_add_char((Xfile_declfeature_throwless))
++						call stepcursors(#content,#size)
++					elseif content#==(unrefsign)
++						setcall err xfile_add_char((Xfile_declfeature_unref))
++						call stepcursors(#content,#size)
++					else
++						setcall err xfile_add_char((Xfile_declfeature_normal))
++					endelse
++				endif
++			endif
++		endelse
++		if err==(noerror)
++			setcall err xfile_add_string(content,size)
++			if sign!=(sign_not_required)
++				if err==(noerror)
++					if sign==(assignsign)
++						if reloc==(FALSE)
++							setcall err xfile_add_char((Xfile_declsign_equal))
++						elseif relocx==(FALSE)
++							setcall err xfile_add_char((Xfile_declsign_reloc))
++						else
++							setcall err xfile_add_char((Xfile_declsign_relocx))
++						endelse
++					elseif sign==(reservesign)
++						setcall err xfile_add_char((Xfile_declsign_reserve))
++					elseif sign==(pointersigndeclare)
++						setcall err xfile_add_char((Xfile_declsign_pointer))
++					else
++					#if sign==(nosign) reserve
++						setcall err xfile_add_char((Xfile_declsign_reserve))
++					endelse
++				endif
++			endif
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++
++#err
++function xfile_add_fndef_if(sd content,sd sz,sd fn,sd x_or_not_x,sd varargs)
++	if main.xfile!=(openno)
++		sd err
++		setcall err xfile_add_base((Xfile_functiondef),content,sz)
++		if err==(noerror)
++			setcall err xfile_add_char(fn)
++			if err==(noerror)
++				if x_or_not_x!=(Xfile_function_not_x)
++					if varargs==0
++						setcall err xfile_add_char((Xfile_function_e_normal))
++					else
++						setcall err xfile_add_char((Xfile_function_e_varargs))
++					endelse
++				endif
++			endif
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
+--- ocompiler-1.orig/src/files/headers.h
++++ ocompiler-1/src/files/headers.h
+@@ -8,6 +8,8 @@ Include "./headers/commons.h"
+ Include "./headers/logs.h"
+ Include "./headers/strip.h"
+ 
++include "./headers/xfile.h"
++
+ Include "./headers/header.h"
+ Include "./headers/asm.h"
+ Include "./headers/pe_format.h"
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -5,12 +5,14 @@ Const FALSE=0
+ Const NULL=0
+ Const No=FALSE
+ Const Yes=TRUE
++const negative=-1
++const nonzero=-1
+ 
+ #files
+  #open
+ Const _O_RDONLY=0
+ 
+-Const openno=-1
++Const openno=negative
+ Const _O_WRONLY=0x0001
+ Const _O_TRUNC=0x0200
+ 
+@@ -60,7 +62,7 @@ Data zero=0
+ Data one=1
+ data two=2
+ data three=3
+-Data negative=-1
++Data negative=negative
+ Data i#1
+ Char dot="."
+ 
+@@ -71,3 +73,5 @@ const sym_with_size=dwsz
+ 
+ const set=0
+ const get=1
++
++const not_number=asciiequiv
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -411,7 +411,6 @@ const sd_as_sv_bool=0
+ const sd_as_sv_get=1
+ 
+ const commentascii=asciinumber
+-const reserveascii=asciinumber
+ const pointerascii=asciinumber
+ const castascii=asciicirc
+ 
+@@ -431,7 +430,7 @@ const p_hidden_pref^hidden_pref
+ Data safecurrentdirtopath#1
+ const p_safecurrentdirtopath^safecurrentdirtopath
+ 
+-const nr_of_prefs=22
++const nr_of_prefs=23
+ const nr_of_prefs_jumper=nr_of_prefs*:
+ 
+ vdata nr_of_prefs_pointers#nr_of_prefs;vdata nr_of_prefs_strings#nr_of_prefs
+@@ -457,9 +456,16 @@ const p_exit_end^exit_end
+ data include_sec#1
+ const p_include_sec^include_sec
+ 
+-const pointersigndeclare=asciicirc
++const nosign=0
+ const assignsign=asciiequal
+ const relsign=asciipercent
++const reservesign=asciinumber
++const pointersigndeclare=asciicirc
++const sign_not_required=-1
++#Latin Small Letter Y with diaeresis (0xff)
++
++const unrefsign=asciiast
++const throwlesssign=asciicirc
+ 
+ const call_align_no=0
+ const call_align_yes_all=1
+@@ -481,8 +487,6 @@ const pass_calls=2
+ const pass_write0=2
+ const pass_write=1
+ 
+-const nosign=0
+-
+ const allow_later_sec=-2
+ const allow_later=-1
+ const allow_no=0
+@@ -498,4 +502,6 @@ const ptr_has_debug^has_debug
+ 
+ const aftercall_clearstate=0
+ 
+-const unrefsign=asciiast
++data xbool#1
++data xfile#1
++charx xfile_sharp_comment#1
+--- /dev/null
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -0,0 +1,77 @@
++
++const Xfile_comment=0
++const Xfile_multicomment=1
++const Xfile_functiondef=2
++const Xfile_declare=3
++
++const Xfile_function_tintern=0
++const Xfile_function_traw=1
++#const Xfile_function_not_x=Xfile_function_traw
++const Xfile_function_extern=2
++const Xfile_function_entry=3
++
++const Xfile_function_e_normal=0
++const Xfile_function_e_varargs=1
++
++const Xfile_declfield_const=0
++const Xfile_declfield_stack=1
++const Xfile_declfield_data=2
++
++const Xfile_declfield_data_concrete=0
++const Xfile_declfield_data_expand=1
++
++const Xfile_decltype_byte=0
++const Xfile_decltype_int=1
++const Xfile_decltype_intByte=2
++const Xfile_decltype_long=3
++const Xfile_decltype_longInt=4
++const Xfile_decltype_longByte=5
++#const Xfile_decltype_const=Xfile_decltype_longByte+1
++
++const Xfile_declfeature_normal=0
++const Xfile_declfeature_unref=1
++const Xfile_declfeature_throwless=2
++
++const Xfile_declsign_pointer=0
++const Xfile_declsign_reserve=1
++const Xfile_declsign_equal=2
++const Xfile_declsign_reloc=3
++const Xfile_declsign_relocx=4
++
++const Xfile_declmode_value=0
++const Xfile_declmode_group=1
++const Xfile_declmode_string=2
++
++const Xfile_numbers_parenthesis_open=0
++const Xfile_numbers_parenthesis_close=1
++const Xfile_numbers_done=2
++
++const Xfile_numbers_operation_add=asciiplus
++const Xfile_numbers_operation_sub=asciiminus
++const Xfile_numbers_operation_mul=asciiast
++const Xfile_numbers_operation_div=asciislash
++const Xfile_numbers_operation_and=asciiand
++const Xfile_numbers_operation_or=asciivbar
++const Xfile_numbers_operation_xor=asciicirc
++const Xfile_numbers_operation_pow=asciidollar
++const Xfile_numbers_operation_rem=asciipercent
++const Xfile_numbers_operation_less=asciiless
++const Xfile_numbers_operation_greater=asciigreater
++const Xfile_numbers_operation_shl=asciicomma
++const Xfile_numbers_operation_sar=asciidot
++
++#here is ORing
++const Xfile_numbers_prefix_none=0x0
++const Xfile_numbers_prefix_neg=0x1
++const Xfile_numbers_prefix_not=0x2
++
++const Xfile_numbers_type_ilong=0
++const Xfile_numbers_type_idata=1
++const Xfile_numbers_type_idatax=2
++const Xfile_numbers_type_tdecimal=3
++const Xfile_numbers_type_thex=4
++const Xfile_numbers_type_tconstant=5
++const Xfile_numbers_type_sizeFunc=6
++const Xfile_numbers_type_sizeXFunc=7
++const Xfile_numbers_type_sizeVar=8
++const Xfile_numbers_type_offsetVar=9
+--- ocompiler-1.orig/src/files/inits/inits.s
++++ ocompiler-1/src/files/inits/inits.s
+@@ -106,3 +106,5 @@ vdata ptrcodeRegD%%ptrcodeRegD
+ set ptrcodeRegD# 0
+ 
+ call vars_log_reset() #to let next variables be ".var"
++
++set xfile_sharp_comment 0
+--- ocompiler-1.orig/src/files/inits_top.s
++++ ocompiler-1/src/files/inits_top.s
+@@ -1,8 +1,9 @@
+ 
+ 
+ #files
+-Set fileout negative
+-set logfile negative
++Set fileout (openno)
++set logfile (openno)
++set xfile (openno)
+ 
+ #containers initialisations
+ Data containersptr%%containersbegin
+--- ocompiler-1.orig/src/linux/files/xgetfile.s
++++ ocompiler-1/src/linux/files/xgetfile.s
+@@ -7,7 +7,7 @@ endif
+ 
+ if argc<2
+ 	Char cmdnoinput="O Compiler - usage: o \"filename\" [[pref1 value1]...[prefN valueN]]"
+-	char moreinfo="Documentation is here: https://htmlpreview.github.io/?https://github.com/colin-i/o/blob/master/o.html"
++	char moreinfo="Documentation is here: https://colin-i.github.io/o.html"
+ 	ss moreinfo_helper^moreinfo
+ 	dec moreinfo_helper;set moreinfo_helper# (asciireturn)
+ 	call exitMessage(#cmdnoinput)
+--- /dev/null
++++ ocompiler-1/src/mcd
+@@ -0,0 +1,2 @@
++
++make clean && ./md
+--- ocompiler-1.orig/src/md
++++ ocompiler-1/src/md
+@@ -1,5 +1,5 @@
+ 
+-OFLAGS="function_name 1" make linkerflags= $@
++OFLAGS="function_name 1 nul_res_pref 1" make linkerflags= $@
+ 
+ #last working glibc linker: 2.36
+ #linker=/home/bc/arh/libc6-i386/lib32/ld-linux.so.2 make test
+--- ocompiler-1.orig/src/windows/o.s
++++ ocompiler-1/src/windows/o.s
+@@ -8,4 +8,5 @@ Include "./files/winimports.h"
+ 
+ Include "./head.h"
+ 
++entry main() #more at obj.s
+ Include "./text.s"
+--- ocompiler-1.orig/src/windows/obj.s
++++ ocompiler-1/src/windows/obj.s
+@@ -8,5 +8,6 @@ Include "./head.h"
+ #	int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nCmdShow)
+ #but lpCmdLine is a structure, the string is after some bytes
+ 
+-Entry _WinMain@16()
++#Entry _WinMain@16()
++entry main()  #since .x , c and relocs (% and %%) is complicated
+ 	Include "./text.s"
+--- ocompiler-1.orig/tests/a
++++ ocompiler-1/tests/a
+@@ -1,6 +1,8 @@
+ 
+ if [ -z "${OCOMP}" ]; then OCOMP=../src/o; fi
+ 
++#edb(0=also ocomp),ex(exec),win,old(for32),onlycomp
++
+ comp () {
+ 	if [ "${edb}" = "0" ]; then
+ 		edb --run ${OCOMP} ${1}.s ${OFLAGS} || exit 1
+@@ -12,7 +14,7 @@ if [ -z "${ex}" ]; then
+ 	if [ -z "${OLINK}" ]; then OLINK=../ounused/ounused; fi
+ 
+ 	if [ -n "${win}" ]; then
+-		OFLAGS="inplace_reloc 0"
++		OFLAGS+="inplace_reloc 0"
+ 		if [ -z "${old}" ]; then OFLAGS+=" conv_64 2"; fi
+ 	#else underscore_pref 1
+ 	fi
+@@ -26,6 +28,8 @@ if [ -z "${ex}" ]; then
+ 	done
+ 	${OLINK} ${logs} || exit 1
+ 
++	if [ -n "${onlycomp}" ]; then exit 0; fi
++
+ 	if [ -z "${win}" ]; then
+ 		if [ -z "${old}" ]; then
+ 			cc ${objs}
+@@ -50,6 +54,7 @@ if [ -z "${ex}" ]; then
+ 	fi
+ else
+ 	comp ${1}
++	if [ -n "${onlycomp}" ]; then exit 0; fi
+ 	if [ -z "${win}" ]; then
+ 		mv ${1} `pwd`/a.out
+ 		if [ -z "${edb}" ]; then /home/bc/Desktop/out/squashfs-root/lib32/ld-linux.so.2 ./a.out
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -1,14 +1,18 @@
+ 
++del () {
++	rm -f ./*.o
++	rm -f ./*.log
++	rm -f ./*.x
++	rm -f ./*.exe    #by ocomp
++}
+ rm -f ./a.out
+-rm -f ./*.o
+-rm -f ./*.log
++del
+ 
+ a=( `ls` )
+ for var in "${a[@]}"; do
+ 	if [ -d "${var}" ]; then
+ 		cd "${var}"
+-			rm -f ./*.o
+-			rm -f ./*.log
++			del
+ 		cd ..
+ 	fi
+ done
+--- /dev/null
++++ ocompiler-1/tests/x
+@@ -0,0 +1,2 @@
++
++OFLAGS="x_file 1" ./a $@
+--- /dev/null
++++ ocompiler-1/tests/xb
+@@ -0,0 +1,2 @@
++
++edb=0 ./x $@
+--- /dev/null
++++ ocompiler-1/tests/xf/comments.h
+@@ -0,0 +1 @@
++#asdasdsadasdasd
+\ No newline at end of file
+--- /dev/null
++++ ocompiler-1/tests/xf/comments.s
+@@ -0,0 +1,16 @@
++
++include "comments.h"
++
++     #wqeqweqwe
++
++     #!
++qwe
++ !
++
++entry test()    #123
++
++sd a=1  #0
++set a a ##456
++set a 1 #789
++
++#!zz
+--- /dev/null
++++ ocompiler-1/tests/xf/declare.s
+@@ -0,0 +1,28 @@
++
++format elfobj64
++
++char a=~-1+(~1+-1)
++
++data b={2,2}
++
++value c%1
++sv d
++value *d#1
++value ^dd^c
++
++str e#1
++vstr f#1
++ss g="qweqwe"
++
++vdata h#1
++sd i#1
++
++const j=1
++
++#value k%
++value k%%1
++
++valuex l#1
++
++#return 1+
++return 1+1
+--- /dev/null
++++ ocompiler-1/tests/xf/declareN.s
+@@ -0,0 +1,20 @@
++
++format elfobj64
++
++function b()
++char a=1
++endfunction
++
++#const a=!b.a!
++const a=1
++
++char *z=:
++char *z=!
++char *z=!!
++char *z=1
++char *z=0xf
++char *z=a
++char *z=!b
++char *z=!!b
++char *z=!b.a
++char *z=!b.a!
+--- /dev/null
++++ ocompiler-1/tests/xf/function.s
+@@ -0,0 +1,13 @@
++
++format elfobj
++
++function test(char a,data b,value c,sv d,str e,ss f,vstr g,sd h,vdata *i,valuex j)
++endfunction
++
++functionx test2()
++endfunction
++
++functionxx test3()
++endfunction
++
++entry test4()
+--- /dev/null
++++ ocompiler-1/tests/xf/function2.s
+@@ -0,0 +1,2 @@
++
++entryraw test()
+--- /dev/null
++++ ocompiler-1/www
+@@ -0,0 +1 @@
++sudo rsync -av /home/bc/Desktop/colin-i.github.io/o.html /var/www/html/o.html
+\ No newline at end of file
