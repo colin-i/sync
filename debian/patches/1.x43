@@ -1,0 +1,44 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x43) focal; urgency=medium
+ .
+   * at right when deleting/bcsp a tab
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-03
+
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -1456,12 +1456,13 @@ static void delete_fast(WINDOW*w,int r,i
+ 				k+=j;
+ 			}
+ 			else{mapsel[k]=no_char(ch)/*true*/?'?':ch;c++;k++;}
++			x++;//before c==max for 'at right'
+ 			if(c==max){
+-				if(x+1==sz)no_content_at_right(r);
++				//can test 'at right' here but when deleting a tab c can be less than max with tab - 1
+ 				break;
+ 			}
+-			x++;
+ 		}
++		if(x==sz)no_content_at_right(r);
+ 		waddnstr(w,mapsel,k);
+ 	}
+ 	if(c<max)wclrtoeol(w);
