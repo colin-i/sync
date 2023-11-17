@@ -1,0 +1,2117 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+101) xenial; urgency=medium
+ .
+   * fix ...callx
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-17
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -21,7 +21,8 @@ last=`curl https://api.github.com/repos/
+ ~/test/lp && \
+ ~/test/lp x && \
+ ~/test/keyring && \
+-~/test/arh2 ${last}
++~/test/arh2 ${last} && \
++~/test/arhpub ${last}
+ 
+ # && \
+ #sed -i '1s/jammy/bionic/' debian/changelog && \
+@@ -61,3 +62,6 @@ last=`curl https://api.github.com/repos/
+ #at write when there is at 0x80.... or at exes it is a fixed virtual
+ #there is 0x66 prefix for words and some movsw/movzw
+ #rbx at stack init (is imm32, can be 32,8 or none) but need to know the number of args
++
++#info:
++#ocompiler.conf is not overwritten if modifying it locally, "any files under the /etc directory as conffile, so if your program only has conffiles there you do not need to specify them in debian/{package}.conffiles"
+--- ocompiler-1.orig/makewin32
++++ ocompiler-1/makewin32
+@@ -7,6 +7,8 @@ if [ -n "$1" ]; then
+ OCOMP=$1
+ fi
+ 
++#must also use mingw-w64-i686-dev
++
+ ${OCOMP} ./src/windows/obj32.s inplace_reloc 0 && \
+ #argc argv? more info at obj.s. _WinMain@16
+ i686-w64-mingw32-ld -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -25,6 +25,11 @@
+ 		border: 1px solid black;
+ 	}
+ 	.noborder{}
++	sup-r{
++		vertical-align: super;
++		font-size: small;
++		color:green;
++	}
+ </style>
+ 
+ <h2>O Language Documentation</h2>
+@@ -936,24 +941,78 @@
+ 	<tr>                                                                       <td>Xfile_function_e*</td><td>Xfile_function_e_*</td></tr>
+ </table>
+ <table id="selection_table">
+-	<tr><td rowspan=5>Xfile_declare</td><td class="green" rowspan=5>D</td><td>Xfile_declsign_pointer</td></tr>
+-	<tr>                                                                  <td>Xfile_declsign_reserve</td>    <td></td>                    <td class="green" rowspan=2>N</td></tr>
+-	<tr>                                                                  <td rowspan=3>Xfile_declsign_*</td><td>Xfile_declmode_value</td></tr>
+-	<tr>                                                                                                     <td>Xfile_declmode_group</td><td class="green">{N}</td></tr>
+-	<tr>                                                                                                     <td>Xfile_declmode_string</td></tr>
++	<tr><td rowspan=5>Xfile_declare</td><td class="green" rowspan=5>D</td><td>Xfile_declsign_pointer</td>    <td class="red">var/fn</td></tr>
++	<tr>                                                                  <td>Xfile_declsign_reserve</td>    <td class="green">N</td></tr>
++	<tr>                                                                  <td rowspan=3>Xfile_declsign_*</td><td>Xfile_declmode_value</td> <td class="green">N</td></tr>
++	<tr>                                                                                                     <td>Xfile_declmode_group</td> <td class="blue">nr_of_args</td>           <td class="green">{N}</td></tr>
++	<tr>                                                                                                     <td>Xfile_declmode_string</td><td class="red">string<sup-r>s</sup-r></td></tr>
++</table>
++<table id="selection_table">
++	<tr><td rowspan=2>Xfile_action</td><td>Xfile_action_a*</td><td class="green">A</td></tr>
++	<tr>                               <td>Xfile_action_*</td> <td class="green">VF</td></tr>
++</table>
++<table id="selection_table">
++	<tr><td rowspan=2>Xfile_action2</td><td class="green" rowspan=2>VF</td><td rowspan=2>Xfile_action2_*</td><td class="green">A</td></tr>
++	<tr>                                                                                                     <td>Xfile_arg_call</td> <td class="green">C</td><td class="blue">nr_of_args</td><td class="green">{A}</td></tr>
++</table>
++<br>Table A:
++<table id="selection_table">
++	<tr><td>Xfile_arg_number</td><td class="green">N</td></tr>
++	<tr><td>Xfile_arg_string</td><td class="red">string<sup-r>s</sup-r></td></tr>
++	<tr><td>Xfile_arg_varfn</td> <td class="green">VF</td></tr>
++</table>
++<br>Table C:
++<table id="selection_table">
++	<tr><td>Xfile_arg_call_*</td><td class="red">var/fn</td></tr>
++</table>
++<br>Table CR:
++<table id="selection_table">
++	<tr><td>Xfile_call_*</td><td class="green">C</td></tr>
+ </table>
+-Table D:
++<br>Table D:
+ <table id="selection_table">
+ 	<tr><td>Xfile_declfield_const</td><td colspan=3></td>                                                                                     <td class="red" rowspan=3>name</td></tr>
+ 	<tr><td>Xfile_declfield_stack</td><td></td>                      <td rowspan=2>Xfile_decltype_*</td><td rowspan=2>Xfile_declfeature_*</td></tr>
+ 	<tr><td>Xfile_declfield_data</td> <td>Xfile_declfield_data_*</td></tr>
+ </table>
+-Table N:
++<br>Table DT:
+ <table id="selection_table">
+-	<tr><td rowspan=3>[Xfile_numbers_parenthesis_open]</td><td rowspan=3>Xfile_numbers_prefix_*</td><td>Xfile_numbers_type_i*</td><td></td>                <td rowspan=3>[Xfile_numbers_parenthesis_close]</td><td rowspan=3>[Xfile_numbers_operation_*]</td><td class="green noborder" rowspan=3>{...}</td><td rowspan=3>Xfile_numbers_done</td>
++	<tr><td class="red">func<sup-r>f</sup-r></td><td class="green">V</td></tr>
++</table>
++<br>Table N:
++<table id="selection_table">
++	<tr><td rowspan=4>[Xfile_numbers_parenthesis_open]</td><td rowspan=4>Xfile_numbers_prefix_*</td><td>Xfile_numbers_type_i*</td><td></td>                                          <td rowspan=4>[Xfile_numbers_parenthesis_close]</td><td rowspan=4>[Xfile_numbers_operation_*]</td><td class="green noborder" rowspan=4>{...}</td><td rowspan=4>Xfile_numbers_done</td>
+ 	<tr>                                                                                            <td>Xfile_numbers_type_t*</td><td class="red">text</td></tr>
+-	<tr>                                                                                            <td>Xfile_numbers_type_*</td> <td></td></tr>
++	<tr>                                                                                            <td>Xfile_numbers_type_f*</td><td class="red">func<sup-r>f</sup-r></td></tr>
++	<tr>                                                                                            <td>Xfile_numbers_type_*</td> <td class="green">DT</td></tr>
++</table>
++<br>Table V:
++<table id="selection_table">
++	<tr><td class="red" rowspan=2>var</td><td>Xfile_suffix_false</td></tr>
++	<tr>                                  <td>Xfile_suffix_true</td> <td>Xfile_suffix_cast_*</td></tr>
++</table>
++<br>Table VF:
++<table id="selection_table">
++	<tr><td rowspan=4>Xfile_arg_varfn_prefix_no</td> <td rowspan=3>Xfile_arg_varfn_colon_no</td><td rowspan=2>Xfile_arg_varfn_dot_no</td><td class="red">func</td></tr>
++	<tr>                                                                                                                                 <td class="green">V</td></tr>
++	<tr>                                                                                        <td class="green">VFD</tr>
++	<tr>                                             <td class="green">VFC</td></tr>
++	<tr><td rowspan=3>Xfile_arg_varfn_prefix_yes</td><td>Xfile_arg_varfn_colon_no</td>          <td class="green">VFD*</td></tr>
++	<tr>                                             <td class="green">VFC</td></tr>
++</table>
++<br>Table VFC:
++<table id="selection_table">
++	<tr><td rowspan=2>Xfile_arg_varfn_colon_yes</td><td colspan=2>Xfile_arg_varfn_dot_no</td>                                                   <td class="red" rowspan=2>var</td><td rowspan=2>Xfile_suffix_*</td><td class="green" rowspan=2>VFD*</td></tr>
++	<tr>                                            <td>Xfile_arg_varfn_dot_yes</td>         <td class="red">func<sup-r>f</sup-r></td></tr>
++</table>
++<br>Table VFD:
++<table id="selection_table"><tr><td>Xfile_arg_varfn_dot_yes</td><td class="green">DT</td></tr></table>
++<br>Table VFD*:
++<table id="selection_table">
++	<tr><td>Xfile_arg_varfn_dot_no</td><td class="green">V</td></tr>
++	<tr><td class="green">VFD</td></tr>
+ </table>
++<br><div class="green">A C CR D DT <sup-r>f</sup-r> N <sup-r>s</sup-r> V VF VFC VFD VFD*</div>
+ <h3><a name="otheroperations">XVI. Other operations</a></h3>
+ <p>
+ 	Other commands that comes with the language.
+--- /dev/null
++++ ocompiler-1/old
+@@ -0,0 +1,3 @@
++File ID: 1O9NYDj0G-qGseaWXAWoIShjVm6cXbQzO
++[{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+98.x86_64.rpm, 1O9NYDj0G-qGseaWXAWoIShjVm6cXbQzO, 2023-11-13T13:29:55.208Z, https://drive.google.com/uc?id=1O9NYDj0G-qGseaWXAWoIShjVm6cXbQzO&export=download
+--- ocompiler-1.orig/ostrip/Makefile
++++ ocompiler-1/ostrip/Makefile
+@@ -17,6 +17,10 @@ ifeq (${nobits_virtual},0)
+ OFLAGS+=nobits_virtual 0
+ endif
+ 
++ifndef OCOMP
++OCOMP=../src/o
++endif
++
+ OB = ostrip
+ OBJ = ${OB}.o
+ OBT = ${OB}.txt
+@@ -24,7 +28,6 @@ FULLOBJ = ./${OB}
+ FULLOBJS = ${FULLOBJ}.s
+ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+-OCOMP=../src/o
+ OUNUSED=../ounused/ounused
+ 
+ %.o: ${FULLOBJS}
+--- /dev/null
++++ ocompiler-1/ostrip/md
+@@ -0,0 +1,2 @@
++
++OFLAGS="function_name 1 nul_res_pref 1" make linkerflags= $@
+--- ocompiler-1.orig/src/files/actions/main/index/call.s
++++ ocompiler-1/src/files/actions/main/index/call.s
+@@ -1,8 +1,11 @@
+ 
+-Data callfn=callfunction
+-SetCall errormsg parsefunction(pcontent,pcomsize,callfn,subtype) #there are 2 more arguments but are not used
+-if parses==(pass_write)
+-	if errormsg==(noerror)
+-		setcall errormsg after_after_call(subtype)
++setcall errormsg xfile_add_callret_ifif(subtype)
++if errormsg==(noerror)
++	Data callfn=callfunction
++	SetCall errormsg parsefunction(pcontent,pcomsize,callfn,subtype) #there are 2 more arguments but are not used
++	if parses==(pass_write)
++		if errormsg==(noerror)
++			setcall errormsg after_after_call(subtype)
++		endif
+ 	endif
+ endif
+--- ocompiler-1.orig/src/files/actions/main/index/callex.s
++++ ocompiler-1/src/files/actions/main/index/callex.s
+@@ -1,52 +1,54 @@
+ 
+-
+-sd call_sz
+-setcall errormsg arg_size(pcontent#,pcomsize#,#call_sz)
++setcall errormsg xfile_add_callret_if(subtype)
+ if errormsg==(noerror)
+-	sd top_data
+-	sd bool_indirect
+-	setcall errormsg prepare_function_call(pcontent,pcomsize,call_sz,#top_data,#bool_indirect,subtype)
++	sd call_sz
++	setcall errormsg arg_size(pcontent#,pcomsize#,#call_sz)
+ 	if errormsg==(noerror)
+-		call spaces(pcontent,pcomsize)
+-		setcall errormsg twoargs(pcontent,pcomsize,(cCALLEX),(NULL))
++		sd top_data
++		sd bool_indirect
++		setcall errormsg prepare_function_call(pcontent,pcomsize,call_sz,#top_data,#bool_indirect,subtype)
+ 		if errormsg==(noerror)
+-			#
+-			sd callex_data;sd callex_sz
+-			const callex_regopcode=ecxregnumber*toregopcode
+-			sd callex_bool;setcall callex_bool is_for_64()
+-			if callex_bool==(TRUE)
+-				sd callex64;setcall callex64 is_for_64_is_impX_or_fnX_get()
+-				if callex64==(TRUE)
+-					setcall errormsg callex64_call()
+-				endif
+-				if errormsg==(noerror)
+-					const callex_x86_64_start=!
+-					#same but with 2 rex, inc je, -2 jmp, and 3* at sib
+-					char callex_x86_64={REX_Operand_64,0x81,0xf9,0,0,0,0,0x74,8,REX_Operand_64,0xFF,1*toregopcode|ecxregnumber|regregmod,0xff,6*toregopcode|espregnumber,3*tomod|callex_regopcode,0xEB,0xef}
+-					set callex_sz (!-callex_x86_64_start);set callex_data #callex_x86_64
+-				endif
+-			else
+-				const callex_start=!
+-				# ## cmp ecx,0
+-				char callex_i386={0x81,0xf9};data *=0
+-				#je ###
+-				char *={0x74};char *callex_je=7
+-				#dec ecx
+-				char *=0xFF;char *=1*toregopcode|ecxregnumber|0xc0
+-				# push [eax+ecx*4]
+-				char *callex_c2=0xff;char *=6*toregopcode|espregnumber;char *callex_sib=2*tomod|callex_regopcode
+-				#jmp ##
+-				char *=0xEB;char *callex_jmp=0xf1
+-				#
+-				set callex_sz (!-callex_start);set callex_data #callex_i386
+-			endelse
+-			#
++			call spaces(pcontent,pcomsize)
++			setcall errormsg twoargs(pcontent,pcomsize,(cCALLEX_primsec),(NULL))
+ 			if errormsg==(noerror)
+-				SetCall errormsg addtosec(callex_data,callex_sz,ptrcodesec)
++				#
++				sd callex_data;sd callex_sz
++				const callex_regopcode=ecxregnumber*toregopcode
++				sd callex_bool;setcall callex_bool is_for_64()
++				if callex_bool==(TRUE)
++					sd callex64;setcall callex64 is_for_64_is_impX_or_fnX_get()
++					if callex64==(TRUE)
++						setcall errormsg callex64_call()
++					endif
++					if errormsg==(noerror)
++						const callex_x86_64_start=!
++						#same but with 2 rex, inc je, -2 jmp, and 3* at sib
++						char callex_x86_64={REX_Operand_64,0x81,0xf9,0,0,0,0,0x74,8,REX_Operand_64,0xFF,1*toregopcode|ecxregnumber|regregmod,0xff,6*toregopcode|espregnumber,3*tomod|callex_regopcode,0xEB,0xef}
++						set callex_sz (!-callex_x86_64_start);set callex_data #callex_x86_64
++					endif
++				else
++					const callex_start=!
++					# ## cmp ecx,0
++					char callex_i386={0x81,0xf9};data *=0
++					#je ###
++					char *={0x74};char *callex_je=7
++					#dec ecx
++					char *=0xFF;char *=1*toregopcode|ecxregnumber|0xc0
++					# push [eax+ecx*4]
++					char *callex_c2=0xff;char *=6*toregopcode|espregnumber;char *callex_sib=2*tomod|callex_regopcode
++					#jmp ##
++					char *=0xEB;char *callex_jmp=0xf1
++					#
++					set callex_sz (!-callex_start);set callex_data #callex_i386
++				endelse
++				#
+ 				if errormsg==(noerror)
+-					setcall errormsg write_function_call(top_data,bool_indirect,(TRUE))
++					SetCall errormsg addtosec(callex_data,callex_sz,ptrcodesec)
+ 					if errormsg==(noerror)
+-						setcall errormsg after_after_call(subtype)
++						setcall errormsg write_function_call(top_data,bool_indirect,(TRUE))
++						if errormsg==(noerror)
++							setcall errormsg after_after_call(subtype)
++						endif
+ 					endif
+ 				endif
+ 			endif
+--- ocompiler-1.orig/src/files/actions/main/index/onearg.s
++++ ocompiler-1/src/files/actions/main/index/onearg.s
+@@ -1,8 +1,11 @@
+ 
+ 
+ if parses==(pass_init)
+-	setcall errormsg getarg(pcontent,pcomsize,comsize,(allow_later),(FORWARD)) #there are 3 more arguments but are not used
++	setcall errormsg argument_init(pcontent,pcomsize,subtype)
+ else
+ 	call entryscope_verify_code()
+-	SetCall errormsg argument(pcontent,pcomsize,(FORWARD),subtype)
++	SetCall errormsg xfile_add_char_if((Xfile_action))
++	if errormsg==(noerror)
++		SetCall errormsg argument(pcontent,pcomsize,(FORWARD),subtype)
++	endif
+ endelse
+--- ocompiler-1.orig/src/files/actions/main/index/primsec.s
++++ ocompiler-1/src/files/actions/main/index/primsec.s
+@@ -4,5 +4,8 @@ if parses!=(pass_write)
+ 	SetCall errormsg twoargs_ex(pcontent,pcomsize,subtype,null,(allow_later_sec),parses)
+ else
+ 	call entryscope_verify_code()
+-	SetCall errormsg twoargs(pcontent,pcomsize,subtype,null)
++	SetCall errormsg xfile_add_char_if((Xfile_action2))
++	if errormsg==(noerror)
++		SetCall errormsg twoargs(pcontent,pcomsize,subtype,null)
++	endif
+ endelse
+--- ocompiler-1.orig/src/files/actions/setdefdir.s
++++ ocompiler-1/src/files/actions/setdefdir.s
+@@ -54,7 +54,7 @@ if logbool==true
+ 	endif
+ endif
+ if xbool==true
+-	setcall errormsg openfile_write_add_extension(safecurrentdirtopath,".x",#xfile)
++	setcall errormsg openfile_mode_add_extension(safecurrentdirtopath,".x",#xfile,(_open_readwrite))
+ endif
+ if errormsg!=noerr
+ 	Call msgerrexit(errormsg)
+--- ocompiler-1.orig/src/files/functions/64/bit.s
++++ ocompiler-1/src/files/functions/64/bit.s
+@@ -48,7 +48,7 @@ function is_for_64_is_impX_or_fnX_set(sd
+ 			endif
+ 		endelse
+ 	endif
+-	#is this required anymore? set p_b# (FALSE)
++	#set p_b# (FALSE)   #is set FALSE after it is used
+ endfunction
+ function is_for_64_is_impX_or_fnX_set_force(sd subtype)
+ 	sd b
+@@ -71,10 +71,13 @@ endfunction
+ #get
+ function nr_of_args_64need_p_get();data n#1;return #n;endfunction
+ function nr_of_args_64need_count()
+-	sd p_b;setcall p_b is_for_64_is_impX_or_fnX_p_get()
+-	if p_b#==(TRUE)
+-		sd p;setcall p nr_of_args_64need_p_get();inc p#
+-	endif
++	#sd p_b;setcall p_b is_for_64_is_impX_or_fnX_p_get()
++	#if p_b#==(TRUE)
++
++	#the check was good, but at xfile is needing the number of args at any function
++	sd p;setcall p nr_of_args_64need_p_get();inc p#
++
++	#endif
+ endfunction
+ 
+ ##REX_W
+@@ -100,7 +103,7 @@ function is_big(sd dataarg,sd sufix)
+ 	if b!=0
+ 		setcall b pointbit(dataarg)
+ 		if b==0
+-			if sufix==(TRUE)
++			if sufix==(sufix_true)
+ 				# sd# is not big
+ 				return (FALSE)
+ 			endif
+--- ocompiler-1.orig/src/files/functions/actions/argstwo.s
++++ ocompiler-1/src/files/functions/actions/argstwo.s
+@@ -57,7 +57,7 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 				Call advancecursors(ptrcontent,ptrsize,ptrsize#)
+ 			endelse
+ 		else
+-			and subtype (x_callx_flag)
++			#and subtype (x_callx_flag) #call and callex are testing without and
+ 			SetCall errnr parsefunction(ptrcontent,ptrsize,callfn,subtype) #there are 2 more arguments but are not used
+ 			return errnr
+ 		endelse
+@@ -90,47 +90,72 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 	If ptrcondition==false
+ 		#imm second arg can be, at conditions was already called
+ 		call setimm()
+-		set subtype_test subtype;and subtype_test (x_call_flag)
+-		if subtype_test!=0
+-			xor subtype (x_call_flag)
+-			Set primcalltype true
+-			set subtype_test subtype;and subtype_test (x_callx_flag)
+-		endif
+-		if subtype==(cSET)
+-			Set opprim atmemtheproc
+-		ElseIf subtype==(cADD)
+-			Char addprim={0x01}
+-			Set opprim addprim
+-		ElseIf subtype==(cSUB)
+-			Char subprim={0x29}
+-			Set opprim subprim
+-		ElseIf subtype<=(cREM)
++
++		if subtype==(cCALLEX_primsec)
++		#the text for callexx is elsewhere
+ 			Set opprim atprocthemem
+ 			#Set regprep ecxreg
+ 			Set regopcode ecxreg
+-			Set divmul true
+-			if lowprim==(FALSE);setcall big is_big(dataargprim,sufixprim)
+-			else;set big (FALSE);endelse
+-			if subtype==(cREM);set rem (TRUE)
+-			else;set rem (FALSE);endelse
+-		ElseIf subtype<=(cXOR)
+-			Set sameimportant false
+-			If subtype==(cAND)
+-				Char andprim={0x21}
+-				Set opprim andprim
+-			ElseIf subtype==(cOR)
+-				Char orprim={0x09}
+-				Set opprim orprim
++		else
++			set subtype_test subtype;and subtype_test (x_call_flag)
++			if subtype_test!=0
++				Set primcalltype true
++				set subtype_test subtype
++				#and subtype_test (x_callx_flag)  #call and callex are testing without and
++				xor subtype (x_call_flag|x_callx_flag)
++			endif
++			sd xlog
++			if subtype==(cSET)
++				Set opprim atmemtheproc
++				set xlog (Xfile_action2_set)
++			ElseIf subtype==(cADD)
++				Char addprim={0x01}
++				Set opprim addprim
++				set xlog (Xfile_action2_add)
++			ElseIf subtype==(cSUB)
++				Char subprim={0x29}
++				Set opprim subprim
++				set xlog (Xfile_action2_sub)
++			ElseIf subtype<=(cREM)
++				Set opprim atprocthemem
++				#Set regprep ecxreg
++				Set regopcode ecxreg
++				Set divmul true
++				if lowprim==(FALSE);setcall big is_big(dataargprim,sufixprim)
++				else;set big (FALSE);endelse
++				if subtype==(cREM)
++					set rem (TRUE)
++					set xlog (Xfile_action2_rem)
++				else
++					set rem (FALSE)
++					if subtype==(cMULT)
++						set xlog (Xfile_action2_mult)
++					else
++						set xlog (Xfile_action2_div)
++					endelse
++				endelse
+ 			Else
+-			#(cXOR)
+-				Char xorprim={0x31}
+-				Set opprim xorprim
++			#If subtype<=(cXOR)
++				Set sameimportant false
++				If subtype==(cAND)
++					Char andprim={0x21}
++					Set opprim andprim
++					set xlog (Xfile_action2_and)
++				ElseIf subtype==(cOR)
++					Char orprim={0x09}
++					Set opprim orprim
++					set xlog (Xfile_action2_or)
++				Else
++				#(cXOR)
++					Char xorprim={0x31}
++					Set opprim xorprim
++					set xlog (Xfile_action2_xor)
++				EndElse
+ 			EndElse
+-		Else
+-		#(cCALLEX)
+-			Set opprim atprocthemem
+-			#Set regprep ecxreg
+-			Set regopcode ecxreg
++			SetCall errnr xfile_add_char_if(xlog)
++			If errnr!=noerr
++				Return errnr
++			EndIf
+ 		EndElse
+ 	Else
+ 		Data sz#1
+@@ -157,22 +182,27 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 
+ 	If primcalltype==false
+ 		if ptrcondition==false
+-			if subtype!=(cCALLEX)
++			if subtype!=(cCALLEX_primsec)
+ 				SetCall errnr arg(ptrcontent,ptrsize,ptrdataargsec,ptrlowsec,ptrsufixsec,true,(allow_yes))
+ 			else
+ 				SetCall errnr arg(ptrcontent,ptrsize,ptrdataargsec,ptrlowsec,ptrsufixsec,true,(allow_no))
+ 			endelse
+ 		else
+-			SetCall errnr arg(ptrcontent,ptrsize,ptrdataargsec,ptrlowsec,ptrsufixsec,true,(allow_no))
++			SetCall errnr arg(ptrcontent,ptrsize,ptrdataargsec,ptrlowsec,ptrsufixsec,true,(allow_no)) #if not this allow no, Xfile_arg_varfn can go in the next if, that with allow yes
+ 		endelse
+ 		If errnr!=noerr
+ 			Return errnr
+ 		EndIf
+ 	Else
+-		SetCall errnr parsefunction(ptrcontent,ptrsize,callfn,subtype_test) #there is 1 more argument but is not used
+-		If errnr!=noerr
+-			Return errnr
+-		EndIf
++		setcall errnr xfile_add_char_if((Xfile_arg_call))
++		if errnr==(noerror)
++			SetCall errnr parsefunction(ptrcontent,ptrsize,callfn,subtype_test) #there is 1 more argument but is not used
++			If errnr!=noerr
++				Return errnr
++			EndIf
++		else
++			return errnr
++		endelse
+ 	EndElse
+ 
+ 	#Data intchar#1
+@@ -184,7 +214,7 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 	If ptrcondition==false
+ 		If lowprim==true
+ 			Dec opprim
+-			if subtype!=(cCALLEX)
++			if subtype!=(cCALLEX_primsec)
+ 				#at callex they can be different
+ 				Dec opsec
+ 			else
+@@ -247,10 +277,10 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 			#set opsec immtake
+ 			#if divmul==(TRUE)
+ 			#	add opsec 1
+-			#elseif subtype==(cCALLEX)
++			#elseif subtype==(cCALLEX_primsec)
+ 			#	add opsec 1
+ 			#endelseif
+-			if subtype!=(cCALLEX)
++			if subtype!=(cCALLEX_primsec)
+ 				SetCall errnr write_imm_trunc(dataargsec,regopcode,lowprim,dataargprim,sufixprim)
+ 			else
+ 				SetCall errnr write_imm_sign(dataargsec,regopcode)
+@@ -438,7 +468,7 @@ function writeoper(sd takeindex,sd locat
+ 	sd err
+ 	setcall err writetake_offset(takeindex,location)
+ 	If err==(noerror)
+-		if sufix==(TRUE)
++		if sufix==(sufix_true)
+ 			sd t;setcall t sufix64(location)
+ 			setcall err sufix_take(takeindex,t)
+ 		endif
+--- ocompiler-1.orig/src/files/functions/actions/enumcomma.s
++++ ocompiler-1/src/files/functions/actions/enumcomma.s
+@@ -118,6 +118,10 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 			Data unitsize#1   #ignored at stack
+ 			Data charnr=charnumber
+ 			if punitsizeOrparses==(NULL)
++				#here is only at decgroup and hex, and pass_write
++				setcall err xfile_prepare_commas_if()
++				If err!=noerr;Return err;EndIf
++
+ 				If typenumberOrparses==charnr
+ 				#ignored at stack value   grep stackfilter2  1
+ 					Set unitsize bSz    ##used also at hex
+@@ -177,6 +181,7 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 							Return err
+ 						EndIf
+ 					endelse
++					call xfile_inc_commas_if()
+ 				else
+ 					add punitsizeOrparses# hexOrunitsize
+ 					call advancecursors(ptrcontent,ptrsize,argumentsize)
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -48,7 +48,6 @@ function func_xfile(sd subtype)
+ 	endelseif
+ 	return (Xfile_function_traw) #or Xfile_function_not_x
+ endfunction
+-#subtype is only when declarefn(not callfn)
+ #err
+ Function parsefunction(data ptrcontent,data ptrsize,data is_declare,sd subtype,sd el_or_e,sd varargs)
+ 	Data true=TRUE
+@@ -224,12 +223,12 @@ Function parsefunction(data ptrcontent,d
+ 
+ 	If is_declare==true
+ 		if parses==(pass_write)
+-			sd nr_of_args_for_xfile=0
++			sd nr_of_args_tested=0
+ 			if sz!=zero
+ 				sv c;sd s;set c ptrcontent#;set s ptrsize#
+-				Call enumcommas(#c,#s,sz,is_declare,fnnr,(pass_write0),#nr_of_args_for_xfile) #there are 4 more arguments but are not used
++				Call enumcommas(#c,#s,sz,is_declare,fnnr,(pass_write0),#nr_of_args_tested) #there are 4 more arguments but are not used
+ 			endif
+-			setcall err xfile_add_int_if(nr_of_args_for_xfile)
++			setcall err xfile_add_int_if(nr_of_args_tested)
+ 			If err!=noerr
+ 				Return err
+ 			EndIf
+@@ -241,7 +240,7 @@ Function parsefunction(data ptrcontent,d
+ 					setcall nr_of_args convdata((convdata_total))
+ 					setcall err function_start_64(nr_of_args)
+ 				else
+-					setcall err function_start_64(nr_of_args_for_xfile)
++					setcall err function_start_64(nr_of_args_tested)
+ 				endelse
+ 				If err!=noerr
+ 					Return err
+@@ -288,34 +287,46 @@ Function parsefunction(data ptrcontent,d
+ 				endelse
+ 			else
+ 				#pass_write
++
+ 				if pbool#==(FALSE)
+ 					if sz!=zero
+-						SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 6 more arguments but are not used
++						setcall err xfile_add_commas_interncall_if(ptrcontent#,ptrsize#,sz)
++						if err==(noerror)
++							SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 6 more arguments but are not used
++							if err!=noerr;return err;endif
++						else
++							return err
++						endelse
+ 					endif
+ 				else
+ 					setcall p nr_of_args_64need_p_get();set p# 0 #also at 0 at win will be sub all shadow space
+ 					if sz!=zero
+ 						set content ptrcontent#
+ 						set size ptrsize#
+-						SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,(pass_calls)) #there are 6 more arguments but are not used
++						SetCall err enumcommas(#content,#size,sz,is_declare,(pass_calls)) #there are 6 more arguments but are not used
+ 						if err==noerr
+ 							setcall err stack_align(p#)
+ 							if err==noerr
+-								set ptrcontent# content
+-								set ptrsize# size
+-								SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 6 more arguments but are not used
+-							endif
+-						endif
++								setcall err xfile_add_int_if(p#)
++								if err==noerr
++									SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 6 more arguments but are not used
++								else
++									return err
++								endelse
++							else
++								return err
++							endelse
++						else
++							return err
++						endelse
+ 					else
+ 						setcall err stack_align(0)
+ 					endelse
++					if err!=noerr;return err;endif
+ 				endelse
+-				If err==noerr
+-					setcall err write_function_call(ptrdata,boolindirect,(FALSE))
+-				EndIf
+-				if err!=noerr
+-					return err
+-				endif
++
++				setcall err write_function_call(ptrdata,boolindirect,(FALSE))
++				if err!=noerr;return err;endif
+ 			endelse
+ 		endelse
+ 	EndElse
+@@ -353,19 +364,23 @@ function prepare_function_call(sd pconte
+ 		set p_bool_indirect# (FALSE)
+ 		call is_for_64_is_impX_or_fnX_set(p_data#,subtype)
+ 	EndElse
+-	Call advancecursors(pcontent,psize,sz)
+ 
+-	#move over the stack arguments, ebx is also shorting the first stack variable (mov rbx,rdx)
+-	#mov esp,ebx
+-	Data code%%ptr_codesec
+ 	sd err
+-	#
+-	setcall err rex_w_if64();if err!=(noerror);return err;endif
+-	#
+-	char espebx={moveatregthemodrm,0xe3}
+-	Str ptrespebx^espebx
+-	Data sizeespebx=2
+-	SetCall err addtosec(ptrespebx,sizeespebx,code)
++	setcall err xfile_add_call_if(pcontent#,sz,subtype)
++	if err==(noerror)   #here is coming from calls and callex
++		Call advancecursors(pcontent,psize,sz)
++
++		#move over the stack arguments, ebx is also shorting the first stack variable (mov rbx,rdx)
++		#mov esp,ebx
++		Data code%%ptr_codesec
++		#
++		setcall err rex_w_if64();if err!=(noerror);return err;endif
++		#
++		char espebx={moveatregthemodrm,0xe3}
++		Str ptrespebx^espebx
++		Data sizeespebx=2
++		SetCall err addtosec(ptrespebx,sizeespebx,code)
++	endif
+ 	Return err
+ endfunction
+ 
+--- ocompiler-1.orig/src/files/functions/add/addstresc.s
++++ ocompiler-1/src/files/functions/add/addstresc.s
+@@ -2,6 +2,16 @@
+ 
+ #errnr
+ Function addtosecstresc(sd pcontent,sd psize,sd sz,sd escapes,sd pdest,sd wordpad)
++	sd err;setcall err addtosecstresc_base(pcontent,psize,sz,escapes,pdest,wordpad,(FALSE))
++	return err
++endFunction
++#errnr
++Function addtosecstresc_xfile(sd pcontent,sd psize,sd sz,sd escapes,sd pdest,sd wordpad)
++	sd err;setcall err addtosecstresc_base(pcontent,psize,sz,escapes,pdest,wordpad,(TRUE))
++	return err
++endFunction
++#errnr
++Function addtosecstresc_base(sd pcontent,sd psize,sd sz,sd escapes,sd pdest,sd wordpad,sd write_to_xfile)
+ 	#set destination start
+ 	Data destReg#1
+ 	Data ptrdestReg^destReg
+@@ -15,6 +25,9 @@ Function addtosecstresc(sd pcontent,sd p
+ 	Set sizeEsc sz
+ 	sd end;set end sizeEsc
+ 	Sub sizeEsc escapes
++	if write_to_xfile==(TRUE)
++		sd xfilesz;set xfilesz sizeEsc
++	endif
+ 	Inc sizeEsc
+ 
+ 	Set odd zero
+@@ -39,6 +52,9 @@ Function addtosecstresc(sd pcontent,sd p
+ 	Data ptrdestloc^destloc
+ 	Call getcont(pdest,ptrdestloc)
+ 	Add destloc destReg
++	if write_to_xfile==(TRUE)
++		sd xfileloc;set xfileloc destloc
++	endif
+ 
+ 	add end pcontent#
+ 	While pcontent#!=end
+@@ -54,5 +70,10 @@ Function addtosecstresc(sd pcontent,sd p
+ 		Set destloc# zero
+ 	EndIf
+ 
+-	Return noerr
++	if write_to_xfile==(TRUE)
++		setcall errnr xfile_add_string_if(xfileloc,xfilesz)
++		return errnr
++	endif
++
++	Return (noerror)
+ EndFunction
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -109,6 +109,10 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 				return "String here is useless at the moment."  #the real problem: is disturbing virtual calculation at pass_init
+ 			endelse
+ 		else
++			setcall errnr xfile_add_char_if((Xfile_arg_string))
++			If errnr!=(noerror)
++				return errnr
++			endif
+ 			#get entry
+ 			sd sec%ptrdummyEntry
+ 			call getcont(sec,ptrdata)
+@@ -117,7 +121,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 			setcall location# get_img_vdata_dataReg()
+ 			#set string to data
+ 			data ptrdatasec%%ptr_datasec
+-			SetCall errnr addtosecstresc(#content,#size,q_size,escapes,ptrdatasec,(FALSE))
++			SetCall errnr addtosecstresc_xfile(#content,#size,q_size,escapes,ptrdatasec,(FALSE))
+ 			If errnr!=(noerror)
+ 				return errnr
+ 			endif
+@@ -126,7 +130,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 			add argsize q_size
+ 			#set low and sufix
+ 			set ptrlow# (FALSE)
+-			set ptrsufix# (FALSE)
++			set ptrsufix# (sufix_false)
+ 			#the code operation is a "prefix" like
+ 			setcall prefix prefix_bool()
+ 			set prefix# 1
+@@ -147,27 +151,30 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 					str immnothere="Unexpected numbers/constants, expecting a variable."
+ 					return immnothere
+ 				endif
+-				#extend to parenthesis if found
+-				if content#==(asciiparenthesisstart)
+-					call stepcursors(ptrcontent,ptrsize)
+-					setcall errnr parenthesis_size(ptrcontent#,ptrsize#,#argsize)
+-					if errnr!=(noerror)
+-						return errnr
+-					endif
+-					setcall errnr parseoperations(ptrcontent,ptrsize,argsize,ptrdata,(FALSE))
+-					if errnr!=(noerror)
+-						return errnr
+-					endif
+-					call stepcursors(ptrcontent,ptrsize)
+-					if sens==(BACKWARD)
+-						add argsize 2 #the recognised parenthesis
+-					endif
+-				else
+-					setcall errnr parseoperations(ptrcontent,ptrsize,argsize,ptrdata,(FALSE))
+-					if errnr!=(noerror)
+-						return errnr
+-					endif
+-				endelse
++				setcall errnr xfile_add_char_if((Xfile_arg_number))
++				if errnr==(noerror)
++					#extend to parenthesis if found
++					if content#==(asciiparenthesisstart)
++						call stepcursors(ptrcontent,ptrsize)
++						setcall errnr parenthesis_size(ptrcontent#,ptrsize#,#argsize)
++						if errnr!=(noerror)
++							return errnr
++						endif
++						setcall errnr parseoperations(ptrcontent,ptrsize,argsize,ptrdata,(FALSE))
++						if errnr!=(noerror)
++							return errnr
++						endif
++						call stepcursors(ptrcontent,ptrsize)
++						if sens==(BACKWARD)
++							add argsize 2 #the recognised parenthesis
++						endif
++					else
++						setcall errnr parseoperations(ptrcontent,ptrsize,argsize,ptrdata,(FALSE))
++						if errnr!=(noerror)
++							return errnr
++						endif
++					endelse
++				endif
+ 
+ 				call setisimm()
+ 				#sufix is not used at imm value
+@@ -181,6 +188,14 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 					call advancecursors(ptrcontent,ptrsize,back)
+ 				endelse
+ 			else
++				sd imm;setcall imm getimm()
++				if imm==(TRUE) #if is FALSE, this is the only option for xfile. also allow(string) is no
++				#then, this is a test at allow yes; also at allow no for conditions
++					setcall errnr xfile_add_char_if((Xfile_arg_varfn))
++					if errnr!=(noerror)
++						return errnr
++					endif
++				endif
+ 				if allowdata==(allow_yes)
+ 					#at last/only argument it is better to allow space before sufix to not regret later
+ 					#"##" will be a comment and "#" a sufix
+@@ -189,70 +204,96 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 				sd argsize_filter
+ 				sd container_sz
+ 				if content#==(pointerascii)
+-					#prefix
+-					setcall prefix prefix_bool()
+-					set prefix# 1
+-					inc content
+-					set argsize_filter argsize
+-					dec argsize_filter
+-
+-					#class test
+-					setcall container_sz valinmem(content,argsize_filter,(asciicolon))
+-					if container_sz!=argsize_filter
+-						setcall errnr getarg_colon(content,argsize_filter,container_sz,ptrdata,ptrlow,ptrsufix)
+-					else
+-						setcall errnr getarg_testdot(content,argsize_filter,ptrdata,ptrlow,ptrsufix)
+-					endelse
+-					if errnr!=(noerror)
+-						return errnr
+-					endif
+-				else
+-					data ptrobject%ptrobject
+-					data ptrfunctions%%ptr_functions
+-
+-					#class test
+-					setcall container_sz valinmem(content,argsize,(asciicolon))
+-					if container_sz!=argsize
+-						setcall errnr getarg_colon(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix)
++					setcall errnr xfile_add_char_if((Xfile_arg_varfn_prefix_yes))
++					if errnr==(noerror)
++						#prefix
++						setcall prefix prefix_bool()
++						set prefix# 1
++						inc content
++						set argsize_filter argsize
++						dec argsize_filter
++
++						#class test
++						setcall container_sz valinmem(content,argsize_filter,(asciicolon))
++						if container_sz!=argsize_filter
++							setcall errnr getarg_colon(content,argsize_filter,container_sz,ptrdata,ptrlow,ptrsufix)
++						else
++							setcall errnr xfile_add_char_if((Xfile_arg_varfn_colon_no))
++							if errnr==(noerror)
++								setcall errnr getarg_testdot(content,argsize_filter,ptrdata,ptrlow,ptrsufix)
++							else
++								return errnr
++							endelse
++						endelse
+ 						if errnr!=(noerror)
+ 							return errnr
+ 						endif
+ 					else
+-						setcall container_sz valinmem(content,argsize,(asciidot))
++						return errnr
++					endelse
++				else
++					setcall errnr xfile_add_char_if((Xfile_arg_varfn_prefix_no))
++					if errnr==(noerror)
++						data ptrobject%ptrobject
++						data ptrfunctions%%ptr_functions
++
++						#class test
++						setcall container_sz valinmem(content,argsize,(asciicolon))
+ 						if container_sz!=argsize
+-							setcall errnr getarg_dot(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix)
++							setcall errnr getarg_colon(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix)
+ 							if errnr!=(noerror)
+ 								return errnr
+ 							endif
+-						elseif ptrobject#==1
+-							#verify for function
+-							setcall ptrdata# vars(content,argsize,ptrfunctions)
+-							if ptrdata#==0
+-								SetCall errnr varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
+-								if errnr!=(noerror)
+-									sd undvar_err
+-									setcall undvar_err undefinedvariable()
+-									if errnr==undvar_err
+-										setcall errnr undefinedvar_fn()
++						else
++							setcall errnr xfile_add_char_if((Xfile_arg_varfn_colon_no))
++							if errnr==(noerror)
++								setcall container_sz valinmem(content,argsize,(asciidot))
++								if container_sz!=argsize
++									setcall errnr getarg_dot(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix)
++									if errnr!=(noerror)
++										return errnr
++									endif
++								else
++									SetCall errnr varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
++									if errnr!=(noerror)
++										if ptrobject#==1
++											sd undvar_err
++											setcall undvar_err undefinedvariable()
++											if errnr==undvar_err
++												#verify for function
++												setcall ptrdata# vars(content,argsize,ptrfunctions)
++												if ptrdata#!=(NULL)
++													setcall errnr xfile_add_string_if(content,argsize)
++													if errnr==(noerror)
++														set ptrlow# (FALSE)
++														set ptrsufix# (sufix_false)
++														sd var
++														setcall var function_in_code()
++														set var# 1
++														#the code operation is a "prefix" like
++														setcall prefix prefix_bool()
++														set prefix# 1
++													else
++														return errnr
++													endelse
++												else
++													setcall errnr undefinedvar_fn()
++													return errnr
++												endelse
++											else
++												return errnr
++											endelse
++										else
++											return errnr
++										endelse
+ 									endif
+-									return errnr
+-								endif
++								endelse
+ 							else
+-								set ptrlow# (FALSE)
+-								set ptrsufix# (FALSE)
+-								sd var
+-								setcall var function_in_code()
+-								set var# 1
+-								#the code operation is a "prefix" like
+-								setcall prefix prefix_bool()
+-								set prefix# 1
+-							endelse
+-						else
+-							SetCall errnr varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
+-							if errnr!=(noerror)
+ 								return errnr
+-							endif
++							endelse
+ 						endelse
++					else
++						return errnr
+ 					endelse
+ 				endelse
+ 			endelse
+@@ -269,12 +310,15 @@ EndFunction
+ #err
+ function getarg_dot_any(sd content,sd argsize,sd container_sz,sd ptrdata,sd ptrlow,sd ptrsufix)
+ 	sd errnr
+-	sd scope
+-	setcall errnr get_scope(#content,#argsize,container_sz,#scope)
+-	if errnr!=(noerror)
+-		return errnr
++	setcall errnr xfile_add_char_if((Xfile_arg_varfn_dot_yes))
++	if errnr==(noerror)
++		sd scope
++		setcall errnr get_scope(#content,#argsize,container_sz,#scope)
++		if errnr!=(noerror)
++			return errnr
++		endif
++		SetCall errnr varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
+ 	endif
+-	SetCall errnr varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
+ 	return errnr
+ endfunction
+ #err
+@@ -369,116 +413,147 @@ endfunction
+ #endfunction
+ #er
+ function getarg_colon(sd content,sd argsize,sd container_sz,sv ptrdata,sd ptrlow,sd ptrsufix)
+-	#first test if has runtime pointer
+-	sd pointer_size=0
+-	if container_sz!=0
+-		# !=0? yes, example: ":"
+-		ss cursor=-1
+-		add cursor content
+-		add cursor container_sz
+-		if cursor#==(pointerascii)
+-			dec container_sz
+-			inc pointer_size
+-		endif
+-	endif
+-	sd data
+ 	sd err
+-	sd scope
+-	sd is_stack
+-	sd part_sz;setcall part_sz valinmem(content,container_sz,(asciidot))
+-	sub argsize container_sz
+-	if part_sz!=container_sz
+-		setcall err get_scope(#content,#container_sz,part_sz,#scope)
+-		if err!=(noerror)
+-			return err
+-		endif
+-		sd nr;setcall data searchinvars_scope(content,container_sz,#nr,scope)
+-		if data==(NULL)
+-			setcall err undefinedvariable()
+-			return err
+-		endif
+-		if nr>=(totalmemvariables)
+-			setcall err there_is_nothing_there()
+-			return err
+-		endif
+-		set is_stack 0   #use later when keeping location
+-	else
+-		setcall data searchinvars(content,container_sz,(NULL),(NULL),1)
+-		if data==(NULL)
+-			setcall err undefinedvariable()
+-			return err
++	setcall err xfile_add_char_if((Xfile_arg_varfn_colon_yes))
++	if err==(noerror)
++		#first test if has runtime pointer
++		sd pointer_size=0
++		if container_sz!=0
++			# !=0? yes, example: ":"
++			ss cursor=-1
++			add cursor content
++			add cursor container_sz
++			if cursor#==(pointerascii)
++				dec container_sz
++				inc pointer_size
++			endif
+ 		endif
+-		setcall is_stack stackbit(data)
+-	endelse
+-	add content container_sz
+-	call advancecursors(#content,#argsize,pointer_size)
+-	call stepcursors(#content,#argsize)
+-
+-	sd subtract_base
+-	sd test
+-	setcall container_sz valinmem(content,argsize,(asciidot))
+-	if container_sz!=argsize
+-		setcall err getarg_base(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix,#subtract_base)
++		sd data
++		sd scope
++		sd is_stack
++		sd part_sz;setcall part_sz valinmem(content,container_sz,(asciidot))
++		sub argsize container_sz
++		if part_sz!=container_sz
++			setcall err xfile_add_char_if((Xfile_arg_varfn_dot_yes))
++			if err==(noerror)
++				setcall err get_scope(#content,#container_sz,part_sz,#scope)
++				if err!=(noerror)
++					return err
++				endif
++				sd nr;setcall data searchinvars_scope(content,container_sz,#nr,scope)
++				if data==(NULL)
++					setcall err undefinedvariable()
++					return err
++				endif
++				if nr>=(totalmemvariables)
++					setcall err there_is_nothing_there()
++					return err
++				endif
++				set is_stack 0   #use later when keeping location
++			else
++				return err
++			endelse
++		else
++			setcall err xfile_add_char_if((Xfile_arg_varfn_dot_no))
++			if err==(noerror)
++				setcall data searchinvars(content,container_sz,(NULL),(NULL),1)
++				if data==(NULL)
++					setcall err undefinedvariable()
++					return err
++				endif
++				setcall is_stack stackbit(data)
++			else
++				return err
++			endelse
++		endelse
++		#xfile and colon part suffix
++		setcall err xfile_add_string_if(content,container_sz)
+ 		if err!=(noerror)
+ 			return err
+ 		endif
+-	else
+-		SetCall err varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
++		if pointer_size!=0
++			setcall err xfile_add_char_if((Xfile_suffix_true))
++		else
++			setcall err xfile_add_char_if((Xfile_suffix_false))
++		endelse
+ 		if err!=(noerror)
+ 			return err
+ 		endif
+-		setcall test stackbit(ptrdata#)
+-		if test==0
+-			sd ptrinnerfunction%globalinnerfunction
+-			if ptrinnerfunction#==(TRUE)
+-				sd ptrfunctionTagIndex%ptrfunctionTagIndex
+-				setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+-				setcall subtract_base scopes_get_class_data(scope,ptrdata#)
++
++		add content container_sz
++		call advancecursors(#content,#argsize,pointer_size)
++		call stepcursors(#content,#argsize)
++
++		sd subtract_base
++		sd test
++		setcall container_sz valinmem(content,argsize,(asciidot))
++		if container_sz!=argsize
++			setcall err xfile_add_char_if((Xfile_arg_varfn_dot_yes))
++			if err==(noerror)
++				setcall err getarg_base(content,argsize,container_sz,ptrdata,ptrlow,ptrsufix,#subtract_base)
++				if err!=(noerror)
++					return err
++				endif
+ 			else
+-				setcall subtract_base get_img_vdata() #if exe will get nobits add one argument, get_img_vdata is also called at datareg and datasize
++				return err
+ 			endelse
+ 		else
+-			setcall subtract_base stack64_base(ptrdata#)
++			SetCall err varsufix(content,argsize,ptrdata,ptrlow,ptrsufix)
++			if err!=(noerror)
++				return err
++			endif
++			setcall test stackbit(ptrdata#)
++			if test==0
++				sd ptrinnerfunction%globalinnerfunction
++				if ptrinnerfunction#==(TRUE)
++					sd ptrfunctionTagIndex%ptrfunctionTagIndex
++					setcall scope scopes_get_scope(ptrfunctionTagIndex#)
++					setcall subtract_base scopes_get_class_data(scope,ptrdata#)
++				else
++					setcall subtract_base get_img_vdata() #if exe will get nobits add one argument, get_img_vdata is also called at datareg and datasize
++				endelse
++			else
++				setcall subtract_base stack64_base(ptrdata#)
++			endelse
+ 		endelse
+-	endelse
+-	char random#1
+-	data *#3
+-	#in case are two args
+-	data d2#3
+-	call tempdatapair(#random,ptrdata,#d2)
+-
+-	sd pointer;set pointer ptrdata#
+-	sub pointer# subtract_base
+-
+-	#keep location, will be some disturbance if combining stack with data, but if not is ok
+-	sd pointer2=maskoffset;sd data2=maskoffset
+-	add pointer2 pointer
+-	add data2 data
+-	sd location_part;sd transformation_part
+-	if is_stack!=0
+-		set location_part (stack_location_bits)
+-		and location_part data2#
+-		set transformation_part (~stack_location_bits)
+-	else
+-		set location_part (location_bits)
+-		and location_part data2#
+-		set transformation_part (~location_bits)
+-	endelse
+-	and pointer2# transformation_part
+-	or pointer2# location_part
+-
+-	#decide if add offset now or at runtime with sufix
+-	if pointer_size!=0
+-		#runtime
+-		or pointer2# (suffixbit)
+-		add pointer2 (masksize) #note that here is not on nameoffset, is on data#3 value from temp
+-		set pointer2# pointer#
+-		set pointer# data#
+-	else
+-		add pointer# data#
+-	endelse
++		char random#1
++		data *#3
++		#in case are two args
++		data d2#3
++		call tempdatapair(#random,ptrdata,#d2)
++
++		sd pointer;set pointer ptrdata#
++		sub pointer# subtract_base
++
++		#keep location, will be some disturbance if combining stack with data, but if not is ok
++		sd pointer2=maskoffset;sd data2=maskoffset
++		add pointer2 pointer
++		add data2 data
++		sd location_part;sd transformation_part
++		if is_stack!=0
++			set location_part (stack_location_bits)
++			and location_part data2#
++			set transformation_part (~stack_location_bits)
++		else
++			set location_part (location_bits)
++			and location_part data2#
++			set transformation_part (~location_bits)
++		endelse
++		and pointer2# transformation_part
++		or pointer2# location_part
+ 
+-	return (noerror)
++		#decide if add offset now or at runtime with sufix
++		if pointer_size!=0
++			#runtime
++			or pointer2# (suffixbit)
++			add pointer2 (masksize) #note that here is not on nameoffset, is on data#3 value from temp
++			set pointer2# pointer#
++			set pointer# data#
++		else
++			add pointer# data#
++		endelse
++	endif
++	return err
+ endfunction
+ #err
+ function getarg_testdot(sd content,sd size,sd ptrdata,sd ptrlow,sd ptrsufix)
+@@ -543,7 +618,8 @@ function get_scope_pos(ss content,sd sz,
+ 	sd var
+ 	setcall var vars_core_ref_scope(content,sz,ptrfunctions,(NULL),(TRUE),ppos)
+ 	if var!=(NULL)
+-		return (noerror)
++		sd err;setcall err xfile_add_string_if(content,sz)
++		return err
+ 	endif
+ 	return "Undefined function name."
+ endfunction
+--- ocompiler-1.orig/src/files/functions/argument/argument.s
++++ ocompiler-1/src/files/functions/argument/argument.s
+@@ -82,6 +82,8 @@ Function argument(data ptrcontent,data p
+ 
+ 	If forwardORcallsens==forward
+ 		call unsetimm() #set is at returns/and at push
++
++		sd xlog
+ 		If subtype==(cRETURN)
+ 			sd termswitch
+ 			setcall termswitch is_linux_end() #exit from linux term
+@@ -89,21 +91,26 @@ Function argument(data ptrcontent,data p
+ 			If err!=(noerror)
+ 				Return err
+ 			EndIf
++			set xlog (Xfile_action_areturn)
+ 		ElseIf subtype==(cINC)
+ 			Char inc={0xFF}
+ 			Set op inc
+ 			set regopcode 0
++			set xlog (Xfile_action_inc)
+ 		ElseIf subtype==(cDEC)
+ 			Char dec={0xFF}
+ 			Char decregopcode={1}
+ 			Set op dec
+ 			Set regopcode decregopcode
++			set xlog (Xfile_action_dec)
+ 		ElseIf subtype<=(cDECST)
+ 			set op (0x83)
+ 			if subtype==(cINCST)
+ 				set regopcode 0
++				set xlog (Xfile_action_incst)
+ 			else
+ 				set regopcode 5
++				set xlog (Xfile_action_decst)
+ 			endelse
+ 			char incs_sz#1
+ 			sd b;setcall b is_for_64()
+@@ -114,20 +121,25 @@ Function argument(data ptrcontent,data p
+ 		ElseIf subtype==(cNEG)
+ 			set op (0xf7)
+ 			set regopcode 3
++			set xlog (Xfile_action_neg)
+ 		ElseIf subtype==(cNOT)
+ 			Char not={0xF7}
+ 			Char notregopcode={Notregopcode}
+ 			Set op not
+ 			Set regopcode notregopcode
++			set xlog (Xfile_action_not)
+ 		ElseIf subtype<=(cSAR)
+ 			set op (0xD1)
+ 			If subtype==(cSHL)
+ 				set regopcode 4
++				set xlog (Xfile_action_shl)
+ 			ElseIf subtype==(cSHR)
+ 				set regopcode 5
++				set xlog (Xfile_action_shr)
+ 			Else
+ 			#cSAR
+ 				set regopcode 7
++				set xlog (Xfile_action_sar)
+ 			EndElse
+ 		Else
+ 		#If subtype==(cEXIT)
+@@ -135,7 +147,10 @@ Function argument(data ptrcontent,data p
+ 			If err!=(noerror)
+ 				Return err
+ 			EndIf
++			set xlog (Xfile_action_aexit)
+ 		EndElse
++		setcall err xfile_add_char_if(xlog)
++		If err!=(noerror);Return err;EndIf
+ 	Else
+ 	#push imm prepare test
+ 		call setimm()
+@@ -243,3 +258,18 @@ function comp_one(sd low,sd dataarg,sd s
+ 	endif
+ 	return -1
+ endfunction
++
++#err
++function argument_init(sv ptrcontent,sd ptrsize,sd subtype)
++	sd err
++	if subtype!=(cRETURN)
++		if subtype!=(cEXIT)
++			#exclude strings at inc,dec,...
++			#can't go with allow_no because, for vars, will not exclude pass init
++			setcall err getarg(ptrcontent,ptrsize,ptrsize#,(allow_later_sec),(FORWARD)) #there are 3 more arguments but are not used
++			return err
++		endif
++	endif
++	setcall err getarg(ptrcontent,ptrsize,ptrsize#,(allow_later),(FORWARD)) #there are 3 more arguments but are not used
++	return err
++endfunction
+--- ocompiler-1.orig/src/files/functions/argument/comwrite.s
++++ ocompiler-1/src/files/functions/argument/comwrite.s
+@@ -215,7 +215,7 @@ Function writeoperation_take(sd p_errnr,
+ 	sd v_64
+ 	sd prefix
+ 	setcall v_64 sufix64(location)
+-	If sufix==(TRUE)
++	If sufix==(sufix_true)
+ 		sd take64;set take64 v_64
+ 		if v_64==(val64_willbe)
+ 			if is_low==(TRUE)
+--- ocompiler-1.orig/src/files/functions/commands/ret.s
++++ ocompiler-1/src/files/functions/commands/ret.s
+@@ -19,9 +19,14 @@ function writeret()
+ 	return err
+ endfunction
+ 
++function callret_flag(sd subtype)
++	and subtype (call_ret_flag)
++	return subtype
++endfunction
++
+ #err
+ function after_after_call(sd subtype)
+-	and subtype (call_ret_flag)
++	setcall subtype callret_flag(subtype)
+ 	if subtype!=0
+ 		sd err
+ 		setcall err writeret()
+--- ocompiler-1.orig/src/files/functions/commons/comfn.s
++++ ocompiler-1/src/files/functions/commons/comfn.s
+@@ -158,6 +158,12 @@ EndFunction
+ #err
+ function openfile_write_add_extension(ss path,ss extension,sd popen)
+ 	sd er
++	setcall er openfile_mode_add_extension(path,extension,popen,(_open_write))
++	return er
++endfunction
++#err
++function openfile_mode_add_extension(ss path,ss extension,sd popen,sd mod)
++	sd er
+ 	setcall er maxpathverif(path,extension)
+ 	if er==(noerror)
+ 		ss c;set c path
+@@ -165,7 +171,7 @@ function openfile_write_add_extension(ss
+ 		ss b;setcall b strlen(extension)
+ 		inc b
+ 		call memtomem(c,extension,b)
+-		setcall er openfile(popen,path,(_open_write))
++		setcall er openfile(popen,path,mod)
+ 		set c# (asciinul)  #required in all cases
+ 	endif
+ 	return er
+@@ -314,6 +320,24 @@ function changedir(ss path)
+ 	return chdirresult
+ endfunction
+ 
++#lseek
++function seekfile(sd file,sd n,sd whence,sv perr)
++	sd p;setcall p lseek(file,n,whence)
++	if p==-1    #see the other lseek
++		set perr# "lseek error"
++	endif
++	return p
++endfunction
++
++#err
++function readfile(sd file,sd mem,sd len)
++	sd sz;setcall sz read(file,mem,len)
++	if sz!=len
++		return "File read error."
++	endif
++	return (noerror)
++endfunction
++
+ #################Mixt
+ #offset is when wanting to put the content at the allocation+offset
+ Function file_get_content_ofs(str path,data ptrsize,data ptrmem,data offset)
+@@ -351,10 +375,9 @@ Function file_get_content_ofs(str path,d
+ 			sub size offset
+ 			#
+ 
+-			sd sz;setcall sz read(file,mem,size)
+-			if sz!=size
++			setcall err readfile(file,mem,size)
++			if err!=(noerror)
+ 				call free(ptrmem#)
+-				set err "File read error."
+ 			endif
+ 		EndIf
+ 	else
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -173,6 +173,7 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=cPRIMSEC
+ 			Data *=cXOR
+ 			Data *=spacereq
++		Const cCALLEX_primsec=!-cPRIMSEC_top
+ 	Const cONEARG=!-coms_start
+ 	Const cONEARG_top=!
+ 		Const cRETURN=!-cONEARG_top
+--- ocompiler-1.orig/src/files/functions/commons/vars.s
++++ ocompiler-1/src/files/functions/commons/vars.s
+@@ -271,15 +271,18 @@ Function undefinedvariable()
+ 	Return _undefinedvar
+ EndFunction
+ 
+-const no_cast=-3
+-const cast_value=asciiV
+-const cast_data=asciiD
+-const cast_string=asciiS
++const no_cast=Xfile_suffix_cast_none
++const cast_value=Xfile_suffix_cast_value
++const cast_data=Xfile_suffix_cast_data
++const cast_string=Xfile_suffix_cast_string
+ 
+ #err
+ Function varsufix(ss content,sd size,sd ptrdata,sd ptrlow,sd ptrsufix)
+ 	sd err
+-	setcall err varsufix_ex(content,size,ptrdata,ptrlow,ptrsufix,(NULL))
++	setcall err xfile_add_char_if((Xfile_arg_varfn_dot_no))
++	if err==(noerror)
++		setcall err varsufix_ex(content,size,ptrdata,ptrlow,ptrsufix,(NULL))
++	endif
+ 	return err
+ endfunction
+ 
+@@ -307,45 +310,48 @@ function varsufix_ex(ss content,sd size,
+ 		SetCall err undefinedvariable()
+ 		Return err
+ 	EndIf
+-	Set ptrdata# data
+-
+-	Data charnumber=charnumber
+-	sd prefix
+-	setcall prefix prefix_bool()
+-
+-	If type==charnumber
+-		If ptrsufix#==true
+-			Char ptrsfxerr="CHAR statement cannot have the pointer sufix."
+-			Str _ptrsfxerr^ptrsfxerr
+-			Return _ptrsfxerr
+-		EndIf
+-		if prefix#==0
+-			Set ptrlow# true
+-		else
+-			#need all char address at prefix
+-			set ptrlow# false
+-		endelse
+-		return (noerror)
+-	endIf
+-
+-	sd is_str
+-	setcall is_str cast_resolve(type,cast,ptrdata)
+ 
+-	If is_str==false
+-		Set ptrlow# false
+-	Else
+-	#str ss
+-		If ptrsufix#==true
++	setcall err xfile_add_varsufix_if(content,size,ptrsufix#,cast)
++	if err==(noerror)
++		Set ptrdata# data
++
++		Data charnumber=charnumber
++		sd prefix
++		setcall prefix prefix_bool()
++
++		If type==charnumber
++			If ptrsufix#==(sufix_true)
++				Char ptrsfxerr="CHAR statement cannot have the pointer sufix."
++				Str _ptrsfxerr^ptrsfxerr
++				Return _ptrsfxerr
++			EndIf
+ 			if prefix#==0
+ 				Set ptrlow# true
+ 			else
+-				Set ptrlow# false
++				#need all char address at prefix
++				set ptrlow# false
+ 			endelse
+-		Else
+-			Set ptrlow# false
+-		EndElse
+-	EndElse
+-	return (noerror)
++		else
++			sd is_str
++			setcall is_str cast_resolve(type,cast,ptrdata)
++
++			If is_str==false
++				Set ptrlow# false
++			Else
++			#str ss
++				If ptrsufix#==(sufix_true)
++					if prefix#==0
++						Set ptrlow# true
++					else
++						Set ptrlow# false
++					endelse
++				Else
++					Set ptrlow# false
++				EndElse
++			EndElse
++		endelse
++	endif
++	return err
+ EndFunction
+ 
+ #sufix
+@@ -355,16 +361,16 @@ function sufix_test(ss content,sd p_size
+ 	if content#!=(pointerascii)
+ 		if content#==(castascii)
+ 			setcall p_cast# cast_test(content,p_size)
+-			return (TRUE)
++			return (sufix_true)
+ 		endif
+ 		set p_cast# (no_cast)
+-		return (FALSE)
++		return (sufix_false)
+ 	endif
+ 	dec p_size#
+ 	set p_cast# (no_cast)
+ 	call extend_sufix_test(content,p_size)
+ 	#and, allow prefix and sufix same time, for fun
+-	return (TRUE)
++	return (sufix_true)
+ endfunction
+ 
+ #cast
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -232,6 +232,8 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			if punitsize==(NULL)
+ 				SetCall err enumcommas(ptrcontent,ptrsize,sz,true,typenumber,(NULL),(not_hexenum),stack,long_mask,relocbool,relocindx)
+ 				If err!=noerr;Return err;EndIf
++				setcall err xfile_add_commas_if()
++				If err!=noerr;Return err;EndIf
+ 			else
+ 				sd aux;set aux punitsize#
+ 				set punitsize# 0   #will add unit sizes inside
+@@ -372,6 +374,8 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			str unexpdp="Unexpected double pointer."
+ 			return unexpdp
+ 		endif
++		setcall err xfile_add_string_if(content,size)
++		if err!=noerr;return err;endif
+ 		Call advancecursors(ptrcontent,ptrsize,size)
+ 	EndElse
+ 	if skipNumberValue==false
+@@ -413,11 +417,11 @@ Function dataassign(sd ptrcontent,sd ptr
+ 		sd escapes
+ 		SetCall err quotinmem(ptrcontent,ptrsize,ptrvalue,#escapes)
+ 		if punitsize==(NULL)
+-			SetCall err addtosecstresc(ptrcontent,ptrsize,value,escapes,ptrdatasec,(FALSE))
+-			if err!=(noerror)
+-				return err
++			SetCall err addtosecstresc_xfile(ptrcontent,ptrsize,value,escapes,ptrdatasec,(FALSE))
++			if err==(noerror)
++				Call stepcursors(ptrcontent,ptrsize)
+ 			endif
+-			Call stepcursors(ptrcontent,ptrsize)
++			return err
+ 		else
+ 			sub value escapes
+ 			add punitsize# value
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -200,7 +200,7 @@ function numbertoint(vstrx content,datax
+ 			if p_parses#==(pass_init)
+ 				return "At the moment, !!func is not implemented here."  #after pass_init is the calloc for scopes
+ 			endif
+-			setcall err xfile_add_char_if((Xfile_numbers_type_sizeXFunc))  #getarg_base can write for xfile
++			setcall err xfile_add_char_if((Xfile_numbers_type_fsizeX))  #next in get_scope_pos
+ 			if err==(noerror)
+ 				setcall err get_sizeoffunction(content,size,outval,(TRUE))
+ 			endif
+@@ -229,7 +229,7 @@ function numbertoint(vstrx content,datax
+ 							set outval# (dwsz)
+ 							sd test;setcall test stackbit(data)
+ 							if test==0
+-								if sufix==0
++								if sufix==(sufix_false)
+ 									setcall test datapointbit(data)
+ 									if test!=0
+ 										set outval# (qwsz)
+@@ -241,7 +241,7 @@ function numbertoint(vstrx content,datax
+ 									endif
+ 								endelse
+ 							else
+-								if sufix==0
++								if sufix==(sufix_false)
+ 									setcall outval# stack64_enlarge(outval#)
+ 								else
+ 									setcall test pointbit(data) #it has 64 check
+@@ -252,7 +252,7 @@ function numbertoint(vstrx content,datax
+ 							endelse
+ 						endelse
+ 
+-						if sufix==0
++						if sufix==(sufix_false)
+ 							add data (maskoffset_reserve)
+ 							sd shortvalue;setcall shortvalue s_to_i(data)
+ 							if shortvalue==0
+@@ -266,11 +266,11 @@ function numbertoint(vstrx content,datax
+ 				# !a.b! offset
+ 				dec size
+ 
+-				setcall err xfile_add_char_if((Xfile_numbers_type_offsetVar))  #getarg_base can write for xfile
++				setcall err xfile_add_char_if((Xfile_numbers_type_offsetVar))  #next in get_scope_pos
+ 				if err==(noerror)
+ 					setcall err getarg_base(content,size,dot_offset,#data,#low,#sufix,outval)
+ 					if err==(noerror)
+-						if sufix!=0
++						if sufix!=(sufix_false)
+ 							return "Not using offset of suffix."
+ 						endif
+ 						sub outval# data#
+@@ -282,7 +282,7 @@ function numbertoint(vstrx content,datax
+ 			if p_parses#==(pass_init)
+ 				return "At the moment, !func is not implemented here."  #after pass_init is the calloc for scopes
+ 			endif
+-			setcall err xfile_add_char_if((Xfile_numbers_type_sizeFunc))  #getarg_base can write for xfile
++			setcall err xfile_add_char_if((Xfile_numbers_type_fsize))  #next in get_scope_pos
+ 			if err==(noerror)
+ 				setcall err get_sizeoffunction(content,size,outval,(FALSE))
+ 			endif
+--- ocompiler-1.orig/src/files/functions/xfile.s
++++ ocompiler-1/src/files/functions/xfile.s
+@@ -5,9 +5,14 @@ const Xfile_function_not_x=Xfile_functio
+ const Xfile_decltype_const=Xfile_decltype_longByte+1
+ 
+ #err
++function xfile_add_int(sd int)
++	sd err;setcall err writefile_errversion(main.xfile,#int,(Xfile_sz_int))
++	return err
++endfunction
++#err
+ function xfile_add_int_if(sd int)
+ 	if main.xfile!=(openno)
+-		sd err;setcall err writefile_errversion(main.xfile,#int,(Xfile_sz_int))
++		sd err;setcall err xfile_add_int(int)
+ 		return err
+ 	endif
+ 	return (noerror)
+@@ -37,6 +42,14 @@ function xfile_add_string(sd text,sd siz
+ 	endif
+ 	return err
+ endfunction
++function xfile_add_string_if(sd text,sd size)
++	if main.xfile!=(openno)
++		sd err
++		setcall err xfile_add_string(text,size)
++		return err
++	endif
++	return (noerror)
++endfunction
+ function xfile_add_base(sd type,sd text,sd size)
+ 	sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+ 	if err==(noerror)
+@@ -58,7 +71,7 @@ function xfile_add_base_ifif(sd type,sd
+ 	endif
+ 	return (noerror)
+ endfunction
+-function xfile_add_if(sd type,sd start,sd end)
++function xfile_add_base_area_if(sd type,sd start,sd end)
+ 	sub end start
+ 	sd e;setcall e xfile_add_base_if(type,start,end)
+ 	return e
+@@ -66,7 +79,7 @@ endfunction
+ function xfile_add_comment_ifif(sd start,sd end)
+ 	if main.parses==(pass_write)
+ 		inc start ##one for commentascii
+-		sd e;setcall e xfile_add_if((Xfile_comment),start,end)
++		sd e;setcall e xfile_add_base_area_if((Xfile_comment),start,end)
+ 		return e
+ 	endif
+ 	return (noerror)
+@@ -74,7 +87,7 @@ endfunction
+ function xfile_add_comment_multi_ifif(sd start,sd end)
+ 	if main.parses==(pass_write)
+ 		add start 2 #one for commentascii and one for asciiexclamationmark
+-		sd e;setcall e xfile_add_if((Xfile_multicomment),start,end)
++		sd e;setcall e xfile_add_base_area_if((Xfile_multicomment),start,end)
+ 		return e
+ 	endif
+ 	return (noerror)
+--- ocompiler-1.orig/src/files/functions/xfile_details.s
++++ ocompiler-1/src/files/functions/xfile_details.s
+@@ -82,3 +82,127 @@ function xfile_add_fndef_if(sd content,s
+ 	endif
+ 	return (noerror)
+ endfunction
++
++#err
++function xfile_add_varsufix_if(sd content,sd size,sd sufix,sd cast)
++	if main.xfile!=(openno)
++		sd err;setcall err xfile_add_string(content,size)
++		if err==(noerror)
++			setcall err xfile_add_char(sufix)
++			if sufix==(Xfile_suffix_true)
++				if err==(noerror)
++					setcall err xfile_add_char(cast)
++				endif
++			endif
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++
++data xf_commas#1;data xf_pos#1
++#err
++function xfile_prepare_commas_if()
++	if main.xfile!=(openno)
++		sd err
++		setcall main.xf_pos seekfile(main.xfile,0,(SEEK_CUR),#err)
++		if main.xf_pos==-1
++			return err
++		endif
++		set main.xf_commas 0
++	endif
++	return (noerror)
++endfunction
++function xfile_inc_commas_if()
++	if main.xfile!=(openno)
++		inc main.xf_commas
++	endif
++endfunction
++#err
++function xfile_add_commas_if()
++	if main.xfile!=(openno)
++		sd err
++		sd off;setcall off seekfile(main.xfile,0,(SEEK_CUR),#err)
++		if off==-1;return err;endif
++		sub off main.xf_pos
++		sd mem
++		setcall err mem_alloc(off,#mem)
++		if err==(noerror)
++			sd sz
++			setcall sz seekfile(main.xfile,main.xf_pos,(SEEK_SET),#err)
++			if sz!=-1
++				setcall err readfile(main.xfile,mem,off)
++				if err==(noerror)
++					setcall sz seekfile(main.xfile,main.xf_pos,(SEEK_SET),#err)
++					if sz!=-1
++						call lseek(main.xfile,0,(SEEK_CUR))
++						setcall err xfile_add_int(main.xf_commas)
++						if err==(noerror)
++							call lseek(main.xfile,0,(SEEK_CUR))
++							setcall err writefile_errversion(main.xfile,mem,off)
++							call lseek(main.xfile,0,(SEEK_CUR))
++						endif
++					endif
++				endif
++			endif
++			call free(mem)
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++#err
++function xfile_add_commas_interncall_if(sd content,sd size,sd sz)
++	if main.xfile!=(openno)
++		sd p;setcall p nr_of_args_64need_p_get();set p# 0
++		sd err
++		SetCall err enumcommas(#content,#size,sz,(FALSE),(pass_calls)) #there are 6 more arguments but are not used
++		if err==(noerror)
++			setcall err xfile_add_int(p#)
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++
++#err
++function xfile_add_call_if(sd content,sd size,sd subtype)
++	if main.xfile!=(openno)
++		sd err
++		setcall subtype callx_flag(subtype)  #this is tested if 64 in the normal place
++		if subtype==0
++			setcall err xfile_add_char((Xfile_arg_call_normal)) #not forced extern
++		else
++			setcall err xfile_add_char((Xfile_arg_call_extern)) #forced extern
++		endelse
++		if err==(noerror)
++			setcall err xfile_add_string(content,size)
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
++#err
++function xfile_add_callret_if(sd subtype)
++#this can go also with primsec with a test against CALL_primsec, add that flag at getcommand, but still there is a wrong cosmetic at subtype_test=0 and not subtype_test=CALL_primsec in a case
++	if main.xfile!=(openno)
++		setcall subtype callret_flag(subtype)
++		sd err
++		if subtype==0
++			setcall err xfile_add_char((Xfile_call_normal))
++		else
++			setcall err xfile_add_char((Xfile_call_ret))
++		endelse
++		return err
++	endif
++	return (noerror)
++endfunction
++#err
++function xfile_add_callret_ifif(sd subtype)
++	if main.parses==(pass_write)
++		sd err
++		setcall err xfile_add_callret_if(subtype)
++		return err
++	endif
++	return (noerror)
++endfunction
+--- ocompiler-1.orig/src/files/headers.h
++++ ocompiler-1/src/files/headers.h
+@@ -1,14 +1,12 @@
+ 
+ 
+-
+-#headers
+ Include "./headers/ascii.h"
+-Include "./headers/commons.h"
+ 
++include "./headers/xfile.h"
+ Include "./headers/logs.h"
+ Include "./headers/strip.h"
+ 
+-include "./headers/xfile.h"
++Include "./headers/commons.h"
+ 
+ Include "./headers/header.h"
+ Include "./headers/asm.h"
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -10,15 +10,15 @@ const nonzero=-1
+ 
+ #files
+  #open
+-Const _O_RDONLY=0
+-
+ Const openno=negative
++Const _O_RDONLY=0
+ Const _O_WRONLY=0x0001
++Const _O_RDWR=0x0002   #this is at x86_64 w64 mingw32 gcc win32, on linux is 02
+ Const _O_TRUNC=0x0200
+ 
+  #seek
+ Const SEEK_SET=0
+-#Const SEEK_CUR=1
++Const SEEK_CUR=1
+ Const SEEK_END=2
+  #write
+ Const writeno=-1
+@@ -75,3 +75,5 @@ const set=0
+ const get=1
+ 
+ const not_number=asciiequiv
++const sufix_true=Xfile_suffix_true
++const sufix_false=Xfile_suffix_false
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -63,6 +63,7 @@ Const mainscope=10*0x1000
+ Const subscope=2*0x1000
+ Const _open_read=_O_RDONLY|flag_O_BINARY
+ Const _open_write=_O_WRONLY|flag_O_BINARY|flag_O_CREAT|_O_TRUNC
++Const _open_readwrite=_O_RDWR|flag_O_BINARY|flag_O_CREAT|_O_TRUNC
+ Const shortstrsize=16
+ const includesetSzData=5*dwsz
+ Const includesetSz=includesetSzData+shortstrsize
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -3,7 +3,10 @@ const Xfile_comment=0
+ const Xfile_multicomment=1
+ const Xfile_functiondef=2
+ const Xfile_declare=3
++const Xfile_action=4
++const Xfile_action2=5
+ 
++#t from type
+ const Xfile_function_tintern=0
+ const Xfile_function_traw=1
+ #const Xfile_function_not_x=Xfile_function_traw
+@@ -65,13 +68,64 @@ const Xfile_numbers_prefix_none=0x0
+ const Xfile_numbers_prefix_neg=0x1
+ const Xfile_numbers_prefix_not=0x2
+ 
++#i from int
+ const Xfile_numbers_type_ilong=0
+ const Xfile_numbers_type_idata=1
+ const Xfile_numbers_type_idatax=2
++#t from text
+ const Xfile_numbers_type_tdecimal=3
+ const Xfile_numbers_type_thex=4
+ const Xfile_numbers_type_tconstant=5
+-const Xfile_numbers_type_sizeFunc=6
+-const Xfile_numbers_type_sizeXFunc=7
++#f from function
++const Xfile_numbers_type_fsize=6
++const Xfile_numbers_type_fsizeX=7
+ const Xfile_numbers_type_sizeVar=8
+ const Xfile_numbers_type_offsetVar=9
++
++const Xfile_suffix_true=1
++const Xfile_suffix_false=0
++const Xfile_suffix_cast_none=0
++const Xfile_suffix_cast_value=asciiV
++const Xfile_suffix_cast_data=asciiD
++const Xfile_suffix_cast_string=asciiS
++
++#a from any
++const Xfile_action_areturn=0
++const Xfile_action_aexit=1
++const Xfile_action_inc=2
++const Xfile_action_incst=3
++const Xfile_action_dec=4
++const Xfile_action_decst=5
++const Xfile_action_neg=6
++const Xfile_action_not=7
++const Xfile_action_shl=8
++const Xfile_action_shr=9
++const Xfile_action_sar=10
++
++const Xfile_arg_number=0
++const Xfile_arg_string=1
++const Xfile_arg_varfn=2
++const Xfile_arg_call=3
++
++const Xfile_arg_varfn_prefix_no=0
++const Xfile_arg_varfn_prefix_yes=1
++const Xfile_arg_varfn_colon_no=0
++const Xfile_arg_varfn_colon_yes=1
++const Xfile_arg_varfn_dot_no=0
++const Xfile_arg_varfn_dot_yes=1
++
++const Xfile_arg_call_normal=0
++const Xfile_arg_call_extern=1
++
++const Xfile_action2_set=0
++const Xfile_action2_add=1
++const Xfile_action2_sub=2
++const Xfile_action2_mult=3
++const Xfile_action2_div=4
++const Xfile_action2_rem=5
++const Xfile_action2_and=6
++const Xfile_action2_or=7
++const Xfile_action2_xor=8
++
++const Xfile_call_normal=0
++const Xfile_call_ret=1
+--- ocompiler-1.orig/tests/callx.s
++++ ocompiler-1/tests/callx.s
+@@ -10,4 +10,5 @@ hex 144;call a(1)
+ hex 144;call b(1)
+ hex 144;callx a(1)
+ hex 144;callx b(1)
++hex 144;setcallx a b(2)
+ i3
+--- ocompiler-1.orig/tests/xf/declare.s
++++ ocompiler-1/tests/xf/declare.s
+@@ -26,3 +26,6 @@ valuex l#1
+ 
+ #return 1+
+ return 1+1
++
++vstr *z="123"
++value *z^dd
+--- ocompiler-1.orig/tests/xf/declareN.s
++++ ocompiler-1/tests/xf/declareN.s
+@@ -3,6 +3,8 @@ format elfobj64
+ 
+ function b()
+ char a=1
++value aa^a
++return aa#s^
+ endfunction
+ 
+ #const a=!b.a!
+--- /dev/null
++++ ocompiler-1/tests/xf/onearg.s
+@@ -0,0 +1,26 @@
++
++format elfobj64
++
++function b()
++data a#1
++endfunction
++
++entry main()
++
++vstr a="qwer"
++
++return 2
++inc #a:b.a
++inc #a
++incst #b.a
++dec a
++decst a
++neg a
++not a
++shl a
++shr a
++sar b.a
++exit 3
++return "asdf"
++return main.a#:a
++return b
+--- /dev/null
++++ ocompiler-1/tests/xf/primsec.s
+@@ -0,0 +1,15 @@
++
++format elfobj64
++
++value a=0
++
++set a 1
++add a 2
++sub a 3
++mult a 4
++div a 5
++rem a 6
++and a 7
++or a 8
++xorcall a a(a,a)
++xorcallx a a(a,a)
