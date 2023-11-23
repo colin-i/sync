@@ -1,0 +1,181 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+105) xenial; urgency=medium
+ .
+   * set a b()
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-23
+
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -700,7 +700,7 @@
+ 	<br>
+ 	<b>FunctionX</b> is described at objects. <b>FunctionXX</b> and <b>EntryX</b> will handle the input arguments as if they don't know how many there are (varargs).
+ 	<br>
+-	All functions can be used in combinations like AddCall, OrCall, XorCall, etc.
++	All functions can be used in combinations like <b>AddCall</b>, <b>OrCall</b>, <b>XorCall</b>, etc (<i>set a b()</i> is same as <i>setcall a b()</i>).
+ 	<br>
+ 	<b>CallEx</b> is for prepared calls. This is a 3 argument operation. The first argument is the function name, the second argument is the arguments pointer and the third argument is the number of arguments. The arguments are passed forward respecting the size of the integer(4 bytes on 32-bits app, 8 on 64). One usage can be when there is a call with a number of arguments detected at run-time and want to pass them all to another call.
+ 	A "SetCallEx" trick is to wrap <b>CallEx</b> in a function and to <b>SetCall</b> that function.
+--- ocompiler-1.orig/src/files/functions/actions/argstwo.s
++++ ocompiler-1/src/files/functions/actions/argstwo.s
+@@ -47,7 +47,7 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 
+ 	if allowdata=(allow_later_sec)
+ 		#pass_init or pass_calls
+-		set subtype_test subtype;and subtype_test (x_call_flag)
++		setcall subtype_test x_call_test(subtype,ptrcontent#,ptrsize#)
+ 		if subtype_test=0
+ 			if parses=(pass_init)
+ 				setcall errnr getarg(ptrcontent,ptrsize,ptrsize#,(allow_later),(FORWARD)) #there are 4 more arguments but are not used
+@@ -97,7 +97,7 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 			#Set regprep ecxreg
+ 			Set regopcode ecxreg
+ 		else
+-			set subtype_test subtype;and subtype_test (x_call_flag)
++			setcall subtype_test x_call_test(subtype,ptrcontent#,ptrsize#)
+ 			if subtype_test!=0
+ 				Set primcalltype true
+ 				set subtype_test subtype
+@@ -598,3 +598,25 @@ function div_prepare(sd low,sd big,ss p_
+ 	#32E4 84c0   7902 f6d4
+ 	#33D2 85c0   7902 f7d2
+ endfunction
++
++#subtype
++function x_call_test(sd subtype,ss content,sd size)
++	and subtype (x_call_flag)
++	if subtype!=0
++		return subtype
++	endif
++	if size!=0 #getarg is erroring here
++		if content#!=(getarg_str)
++			sd bool
++			setcall bool is_constant_related_ascii(content#)
++			if bool=(FALSE)
++				sd sz
++				setcall sz valinmem(content,size,(asciiparenthesisstart)) #to do for comments if required
++				if sz!=size
++					return (x_call_flag)
++				endif
++			endif
++		endif
++	endif
++	return subtype
++endfunction
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -92,13 +92,12 @@ Function parsefunction(data ptrcontent,d
+ 				return err
+ 			endif
+ 
+-			call vars_log((set),content,sz)
+-
+ 			Data mask#1
+ 			#Data ptrobjfnmask%ptrobjfnmask
+ 			if el_or_e=(TRUE)
+ 				Set mask (referencebit)
+ 			else
++				call vars_log_set(content,sz) #more at the function
+ 				set mask 0
+ 			endelse
+ 			sd can_scope64
+--- ocompiler-1.orig/src/files/functions/commons/vars.s
++++ ocompiler-1/src/files/functions/commons/vars.s
+@@ -48,10 +48,22 @@ endfunction
+ function vars_log_reset()
+ 	call vars_log((set),"",0)
+ endfunction
++function vars_log_set(sd a,sd b)
++#preferring to log .var even at main.var to be recognized at ounused(before entry is o.var and vmain.var at the end)
++#                                        and .var is united with a realpath so in a file can be main1.var, in another file can be main2.var
++	call vars_log((set),a,b)
++endfunction
+ #err
+ function vars_log_prepare(ss content,sd size)
+ 	data ptrobject%ptrobject
+ 	if ptrobject#=(TRUE)
++		if size>0  #addvarref..orunref is erroring there for getsign and fndecargs
++			if content#=(unrefsign)
++				return (noerror)
++			elseif content#=(throwlesssign)
++				inc content;dec size
++			endelseif
++		endif
+ 		sd vals;setcall vals vars_log((get),content,size)
+ 		sd err
+ 		setcall err addtolog_array_withchar(vals,(log_offset))
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.s
++++ ocompiler-1/src/files/functions/pref/preffuncs.s
+@@ -16,7 +16,9 @@ Function warnings(sd p_err,sd has_named_
+ 		setcall var scopes_searchinvars(p_err,#fn_name)
+ 		If var=(NULL)
+ 			if has_named_entry=(FALSE)
+-				call vars_log_reset()
++				#call vars_log_reset()
++				#why this? init/endfunction is already doing this.
++
+ 				SetCall var searchinvars((NULL),0,(NULL),p_err) #,setref unused
+ 				if var!=(NULL)
+ 					set fn_name "(entry)"
+--- ocompiler-1.orig/src/files/functions/scopes.s
++++ ocompiler-1/src/files/functions/scopes.s
+@@ -154,6 +154,8 @@ function scopes_store(sv scope)
+ endfunction
+ 
+ function scopes_searchinvars(sd p_err,sv p_name)
++	value entrybags%%ptr_scopes
++
+ 	sd psz%scopesbag_size_ptr
+ 	#now at three pass the fns are mixed with imports
+ 	sd sz;set sz psz#
+@@ -171,7 +173,11 @@ function scopes_searchinvars(sd p_err,sv
+ 			sd data
+ 			sd scope
+ 			setcall scope scopes_get_scope(i)
+-			call vars_log((set),fns,size)
++			if scope!=entrybags ##calloc was for every scope
++				call vars_log_set(fns,size) #more at the function
++			else
++				call vars_log_reset()
++			endelse
+ 			setcall data searchinvars_scope_warn(p_err,scope)
+ 			if data!=(NULL)
+ 				set p_name# fns
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -63,7 +63,6 @@ Data one=1
+ data two=2
+ data three=3
+ Data negative=negative
+-Data i#1
+ Char dot="."
+ 
+ const dw_char=10
+--- ocompiler-1.orig/tests/xf/primsec.s
++++ ocompiler-1/tests/xf/primsec.s
+@@ -11,5 +11,5 @@ div a 5
+ rem a 6
+ and a 7
+ or a 8
+-xorcall a a(a,a)
++xor a a(a,a)
+ xorcallx a a(a,a)
