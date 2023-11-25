@@ -1,0 +1,155 @@
+
+const Xfile_comment=0
+const Xfile_commentmulti=1
+const Xfile_commentlineend=2
+const Xfile_functiondef=3
+const Xfile_declare=4
+const Xfile_action=5
+const Xfile_action2=6
+const Xfile_call=7
+const Xfile_callex=8
+#
+#Const ifinscribe=-1
+#Const nocondnumber=-1
+const Xfile_if=9
+const Xfile_else=10
+const Xfile_while=11
+const Xfile_break=12
+const Xfile_continue=13
+const Xfile_condend=14
+
+#t from type
+const Xfile_function_tintern=0
+const Xfile_function_traw=1
+#const Xfile_function_not_x=Xfile_function_traw
+const Xfile_function_extern=2
+const Xfile_function_entry=3
+
+const Xfile_function_e_normal=0
+const Xfile_function_e_varargs=1
+
+const Xfile_declfield_const=0
+const Xfile_declfield_stack=1
+const Xfile_declfield_data=2
+
+const Xfile_declfield_data_concrete=0
+const Xfile_declfield_data_expand=1
+
+const Xfile_decltype_byte=0
+const Xfile_decltype_int=1
+const Xfile_decltype_intByte=2
+const Xfile_decltype_long=3
+const Xfile_decltype_longInt=4
+const Xfile_decltype_longByte=5
+#const Xfile_decltype_const=Xfile_decltype_longByte+1
+
+const Xfile_declfeature_normal=0
+const Xfile_declfeature_unref=1
+const Xfile_declfeature_throwless=2
+
+const Xfile_declsign_pointer=0
+const Xfile_declsign_reserve=1
+const Xfile_declsign_equal=2
+const Xfile_declsign_reloc=3
+const Xfile_declsign_relocx=4
+
+const Xfile_declmode_value=0
+const Xfile_declmode_group=1
+const Xfile_declmode_string=2
+
+const Xfile_numbers_parenthesis_open=0
+const Xfile_numbers_parenthesis_close=1
+const Xfile_numbers_done=2
+
+const Xfile_numbers_operation_add=asciiplus
+const Xfile_numbers_operation_sub=asciiminus
+const Xfile_numbers_operation_mul=asciiast
+const Xfile_numbers_operation_div=asciislash
+const Xfile_numbers_operation_and=asciiand
+const Xfile_numbers_operation_or=asciivbar
+const Xfile_numbers_operation_xor=asciicirc
+const Xfile_numbers_operation_pow=asciidollar
+const Xfile_numbers_operation_rem=asciipercent
+const Xfile_numbers_operation_less=asciiless
+const Xfile_numbers_operation_greater=asciigreater
+const Xfile_numbers_operation_shl=asciicomma
+const Xfile_numbers_operation_sar=asciidot
+
+#here is ORing
+const Xfile_numbers_prefix_none=0x0
+const Xfile_numbers_prefix_neg=0x1
+const Xfile_numbers_prefix_not=0x2
+
+#i from int
+const Xfile_numbers_type_ilong=0
+const Xfile_numbers_type_idata=1
+const Xfile_numbers_type_idatax=2
+#t from text
+const Xfile_numbers_type_tdecimal=3
+const Xfile_numbers_type_thex=4
+const Xfile_numbers_type_tconstant=5
+#f from function
+const Xfile_numbers_type_fsize=6
+const Xfile_numbers_type_fsizeX=7
+#v from var
+const Xfile_numbers_type_vsizeVar=8
+const Xfile_numbers_type_voffsetVar=9
+
+const Xfile_suffix_true=1
+const Xfile_suffix_false=0
+const Xfile_suffix_cast_none=0
+const Xfile_suffix_cast_value=asciiV
+const Xfile_suffix_cast_data=asciiD
+const Xfile_suffix_cast_string=asciiS
+
+#a from any, t from type
+const Xfile_action_areturn=0
+const Xfile_action_aexit=1
+const Xfile_action_tinc=2
+const Xfile_action_tincst=3
+const Xfile_action_tdec=4
+const Xfile_action_tdecst=5
+const Xfile_action_tneg=6
+const Xfile_action_tnot=7
+const Xfile_action_tshl=8
+const Xfile_action_tshr=9
+const Xfile_action_tsar=10
+
+const Xfile_arg_number=0
+const Xfile_arg_string=1
+const Xfile_arg_varfn=2
+const Xfile_arg_call=3
+
+const Xfile_arg_varfn_prefix_no=0
+const Xfile_arg_varfn_prefix_yes=1
+const Xfile_arg_varfn_colon_no=0
+const Xfile_arg_varfn_colon_yes=1
+const Xfile_arg_varfn_dot_no=0
+const Xfile_arg_varfn_dot_yes=1
+
+const Xfile_arg_call_normal=0
+const Xfile_arg_call_extern=1
+
+const Xfile_action2_set=0
+const Xfile_action2_add=1
+const Xfile_action2_sub=2
+const Xfile_action2_mult=3
+const Xfile_action2_div=4
+const Xfile_action2_rem=5
+const Xfile_action2_and=6
+const Xfile_action2_or=7
+const Xfile_action2_xor=8
+
+const Xfile_call_normal=0
+const Xfile_call_ret=1
+
+const Xfile_cond_equal=0x85
+const Xfile_cond_notequal=0x84
+const Xfile_cond_lessequalunsign=0x87
+const Xfile_cond_greatequalunsign=0x82
+const Xfile_cond_lessequal=0x8F
+const Xfile_cond_greatequal=0x8C
+const Xfile_cond_lessunsign=0x83
+const Xfile_cond_greatunsign=0x86
+const Xfile_cond_less=0x8D
+const Xfile_cond_great=0x8E
