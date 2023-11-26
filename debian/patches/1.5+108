@@ -1,0 +1,177 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+108) xenial; urgency=medium
+ .
+   * fix stringsatmemspc and getcommand
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-26
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O
++File ID: 1GCbazf8mz5iyI5CgImI0SMcA2onhyji7
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+105.x86_64.rpm, 1GCbazf8mz5iyI5CgImI0SMcA2onhyji7, 2023-11-25T16:40:31.101Z, https://drive.google.com/uc?id=1GCbazf8mz5iyI5CgImI0SMcA2onhyji7&export=download
+ Found file: ocompiler-1-5+102.x86_64.rpm, 1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O, 2023-11-24T14:29:49.425Z, https://drive.google.com/uc?id=1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O&export=download
+ Found file: ocompiler-1-5+100.x86_64.rpm, 1Qbm2E_uMi85Gq1sJ1Yhc1CYstN8fleac, 2023-11-17T15:39:47.661Z, https://drive.google.com/uc?id=1Qbm2E_uMi85Gq1sJ1Yhc1CYstN8fleac&export=download
+ Found file: ocompiler-1-5+98.x86_64.rpm, 1bNGKHelihqwRjqxpb43YwfcYlx1J_L78, 2023-11-17T15:27:56.867Z, https://drive.google.com/uc?id=1bNGKHelihqwRjqxpb43YwfcYlx1J_L78&export=download
+--- ocompiler-1.orig/src/files/actions/main/index/format.s
++++ ocompiler-1/src/files/actions/main/index/format.s
+@@ -22,7 +22,7 @@ else
+ 			Str ptrelfobjformat^elfobjformat
+ 			Data elfobjformresp#1
+ 
+-			SetCall elfobjformresp stringsatmemspc(pcontent,pcomsize,ptrelfobjformat,false,"64",p_is_for_64_value)
++			SetCall elfobjformresp stringsatmemspc(pcontent,pcomsize,ptrelfobjformat,false,"64",p_is_for_64_value,(NULL))
+ 			If elfobjformresp=true
+ 				sd is_so
+ 				setcall is_so stratmemspc(pcontent,pcomsize,"SO",false)
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -484,9 +484,13 @@ Function getcommand(value pcontent,data
+ 
+ 		sd extbooldata=FALSE
+ 		sv extbool^extbooldata
++		sd intercursors=NULL
+ 
+ 		If command=(cPRIMSEC)
+ 			Set extstr xstr
++			value pointer#1;data sz#1
++			set intercursors #pointer
++			set pointer pcontent#
+ 		elseif command=(cCALL)
+ 		vstr call_ret_str="RET"
+ 			set extstr call_ret_str
+@@ -499,25 +503,26 @@ Function getcommand(value pcontent,data
+ 			set extstr call_ret_str
+ 		endElseif
+ 
+-		sd test;set test pcontent#
+-		SetCall result stringsatmemspc(pcontent,psize,offset,spacebool,extstr,extbool)
++		SetCall result stringsatmemspc(pcontent,psize,offset,spacebool,extstr,extbool,intercursors)
+ 		If extbooldata=true
+ 		#here firstAndSecond part was recognized
+ 			If command=(cPRIMSEC)
+-				#or first byte at subcommand to recognize the xcall at two args
+-				or ptrsubtype# (primsec_flags)
+ 				if result=(FALSE)
+ 				#here there was not a space, maybe is the deprecated ..xcall
+-					setcall result stratmemspc(pcontent,psize,call,spacebool)
+-					if result=(FALSE)
+-						break
++					setcall result stratmemspc(#pointer,#sz,call,spacebool)
++					if result=(TRUE)
++						#or first byte at subcommand to recognize the xcall at two args
++						or ptrsubtype# (primsec_flags)
++						set pcontent# pointer
++						set psize# sz
++						Return command
+ 					endif
+-				endif
+-			Else
+-				if result=(FALSE)
+-				#here there was not a space
+-					break
+-				endif
++				else
++				#setx
++					or ptrsubtype# (primsec_flags)
++					Return command
++				endelse
++			Elseif result=(TRUE)
+ 				If command=(cSTARTFUNCTION)
+ 				#functionx/entry [x] , varargs
+ 					#allow the command at 64, there is a check inside parsefunc, and for xfile better to know
+@@ -525,26 +530,29 @@ Function getcommand(value pcontent,data
+ 					#if for64==(TRUE)
+ 					or ptrsubtype# (x_func_flag)
+ 					#endif
++					return command
+ 				else
+ 				#call[ex][x]ret
+ 					or ptrsubtype# (call_ret_flag)
++					return command
+ 				endelse
+-			endElse
+-			return command
++			endElseif
+ 		elseIf result=true
+ 		#here (first/onlyone)+-space was ok
+ 			Return command
+-		elseif test!=pcontent#
++		elseif command=(cPRIMSEC)
+ 		#here first was ok but not the space
+-			If command=(cPRIMSEC)
+-				#here there was not extra x, maybe is the deprecated ..xcall
+-				setcall result stratmemspc(pcontent,psize,call,spacebool)
++			if pcontent#!=pointer
++				#here there was not extra x, maybe is the deprecated ..call
++				setcall result stratmemspc(#pointer,#sz,call,spacebool)
+ 				if result=(TRUE)
+ 					or ptrsubtype# (x_call_flag)
++					set pcontent# pointer
++					set psize# sz
+ 					Return command
+ 				endif
++				#break #don't want to remember this when having something like addend command, and who will wrong here?
+ 			endif
+-			break
+ 		endelseIf
+ 		Add pointercommands dsz
+ 		Set cursor pointercommands#
+--- ocompiler-1.orig/src/files/functions/commons/strcommons.s
++++ ocompiler-1/src/files/functions/commons/strcommons.s
+@@ -216,7 +216,8 @@ Function spaces(sd pcontent,sd psize)
+ EndFunction
+ 
+ #bool;return 1 or 0
+-Function stringsatmemspc(data pcontent,data psize,str match,data spacereq,str extstr,data extbool)
++Function stringsatmemspc(sv pcontent,sd psize,ss match,sd spacereq,ss extstr,sd extbool,sv intercursors)
++#												    attention here there is a sd but not working on entire long, so sd is ok
+ 	Data content#1
+ 	Data size#1
+ 	Data bool#1
+@@ -234,9 +235,12 @@ Function stringsatmemspc(data pcontent,d
+ 
+ 	If extstr!=zero
+ 		SetCall extbool# stratmem(tocontent,tosize,extstr)
+-		#to work around ...xcall, and ok in other cases
+-		Set pcontent# content
+-		Set psize# size
++		if intercursors!=(NULL)
++			#to work around ...xcall
++			Set intercursors# content
++			add intercursors :
++			set intercursors#d^ size
++		endif
+ 	EndIf
+ 
+ 	If spacereq=nonzero
+@@ -254,7 +258,7 @@ EndFunction
+ Function stratmemspc(data pcontent,data psize,str match,data spacereq)
+ 	Data null=NULL
+ 	Data bool#1
+-	SetCall bool stringsatmemspc(pcontent,psize,match,spacereq,null,null)
++	SetCall bool stringsatmemspc(pcontent,psize,match,spacereq,null,null,null)
+ 	Return bool
+ EndFunction
+ 
