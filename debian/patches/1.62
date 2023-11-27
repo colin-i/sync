@@ -1,0 +1,3801 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-62) bionic; urgency=medium
+ .
+   * debug
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-27
+
+--- actionswf-1.orig/.github/workflows/deb.yml
++++ actionswf-1/.github/workflows/deb.yml
+@@ -9,8 +9,15 @@ jobs:
+    - uses: actions/checkout@v3
+      with:
+       path: in
++   - uses: actions/checkout@master
++     with:
++      repository: colin-i/sync
++      path: in2
++      ref: actionswf
+    - name: Run a multi-line script
+      run: |
++      mv in2/debian/patches in/debian/patches
++      mv in2/.pc in/.pc
+       sudo dpkg --add-architecture i386
+       if [ -z "`dpkg -s devscripts>/dev/null 2>&1 && echo x`" ]; then
+        sudo add-apt-repository -y ppa:colin-i/ppa
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -16,8 +16,10 @@ last=$(curl https://api.github.com/repos
+ ~/test/publp2 && \
+ ~/test/lp && \
+ ~/test/lp x && \
+-~/test/arh2 ${last}
++~/test/arh2 ${last} 1
+ 
+ #plans:
+ 
+-#if builtin more than one param then is not a builtin
++#another project: ffdec -export script folder file , and debug curated code, .dbg file; get ffdec and compile , get from swf/get from swfdump -d/recompile .log , compare
++
++#if builtin more than one param then is not a builtin (is only for gotoAnd...)
+--- /dev/null
++++ actionswf-1/clean
+@@ -0,0 +1,2 @@
++
++make clean && git status
+--- actionswf-1.orig/dev/import.h
++++ actionswf-1/dev/import.h
+@@ -36,6 +36,7 @@ importX "swf_dbl_height" swf_dbl_height
+ #utils
+ importX "swf_done" swf_done
+ importX "swf_new" swf_new
++importX "swf_new_ex" swf_new_ex
+ importX "swf_placeobject" swf_placeobject
+ importX "swf_placeobject_coords" swf_placeobject_coords
+ importX "swf_removeobject" swf_removeobject
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -6,7 +6,7 @@ OCOMP=o
+ endif
+ 
+ OLINK=ounused
+-syms=-s
++linkerflags=-s
+ conv_64=0
+ OFLAGS=conv_64 ${conv_64}
+ 
+@@ -17,7 +17,7 @@ linkfile=${linkname}.lib
+ ifeq (${platform},win)
+ 	OFLAGS += inplace_reloc 0 include_sec 1
+ else
+-	stripname=lib${linkname}.so
++	libname=${linkname}.so
+ 	ifeq (${conv_64},1)
+ 		OFLAGS += exit_end 1
+ 		# underscore_pref 1   win32 with _, can go back to this later
+@@ -43,18 +43,18 @@ lib:
+ link:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		if [ "${conv_64}" = "1" ]; then \
+-			$(LD) ${syms} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${stripname}; \
++			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${libname}; \
+ 		else \
+-			$(CC) ${syms} ${name}.o -o ${name} -L../src -l:${stripname}; \
++			$(CC) ${linkerflags} ${name}.o -o ${name} -L../src -l:${libname}; \
+ 		fi \
+ 	else \
+ 		if [ "${conv_64}" = "1" ]; then \
+-			i686-w64-mingw32-ld ${syms} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
++			i686-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
+ 		else \
+-			x86_64-w64-mingw32-ld ${syms} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
++			x86_64-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
+ 		fi \
+ 	fi
+-#$(LD) ${syms} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:actionswf.so; \
++#$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:actionswf.so; \
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+@@ -70,6 +70,7 @@ clean:
+ 	-rm -f ${name}
+ 	-rm -f ${name}.exe
+ 	-rm -f ${linkfile}
++	-rm -f ${name}.swf.log
+ 
+ distclean: clean
+ 
+--- actionswf-1.orig/example/example.s
++++ actionswf-1/example/example.s
+@@ -1,64 +1,64 @@
+-format elfobj64
+-
+-#win32 with _
+-importx "sprintf" sprintf
+-
+-#a simple shape moving on the stage example
+-
+-warning off
+-include "../dev/import.h"
+-warning on
+-
+-const width=640
+-const height=480
+-
+-const shape_lat=40
+-
+-####################
+-entry main()
+-
+-call swf_new("example.swf",(width),(height),0x001100,24)
+-
+-sd shape
+-setcall shape swf_shape_basic((shape_lat),(shape_lat),0xffeeFEff,0x11FF22ff)
+-
+-sd movie_preid
+-setcall movie_preid swf_sprite_new()
+-
+-call swf_sprite_placeobject(movie_preid,shape,1)
+-
+-call swf_sprite_showframe(movie_preid)
+-
+-chars data#512
+-vstr ac^data
+-vstr vars="var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move"
+-call sprintf(ac,vars,(width),(height),(shape_lat))
+-call action_sprite(movie_preid,ac)
+-
+-call action_sprite(movie_preid,"
+-if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+-else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
+-this._x=move*_root.x_coef+this._x;
+-if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;
+-else if(this._y<=top)_root.y_coef=_root.y_coef*-1;
+-this._y=move*_root.y_coef+this._y;
+-")
+-call swf_sprite_showframe(movie_preid)
+-sd movie
+-setcall movie swf_sprite_done(movie_preid)
+-
+-call swf_exports_add(movie,"movie")
+-call swf_exports_done()
+-
+-call action("
+-var x_coef=1;
+-var y_coef=1;
+-this.attachMovie('movie','_movie',1);
+-_movie._x=100;
+-_movie._y=100;
+-")
+-
+-call swf_showframe()
+-call swf_done()
+-
+-return 0
++format elfobj64
++
++#a simple shape moving on the stage example
++
++#win32 with _
++importx "sprintf" sprintf
++
++einclude "../dev/import.h"
++
++const width=640
++const height=480
++const shape_lat=40
++
++
++
++####################
++
++entry main()
++call swf_new_ex("example.swf",(width),(height),0x001100,24,1)
++
++sd shape
++setcall shape swf_shape_basic((shape_lat),(shape_lat),0xffeeFEff,0x11FF22ff)
++
++sd movie_preid
++setcall movie_preid swf_sprite_new()
++
++call swf_sprite_placeobject(movie_preid,shape,1)
++call swf_sprite_showframe(movie_preid)
++
++char data#512
++vstr ac^data
++vstr vars="var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move"
++call sprintf(ac,vars,(width),(height),(shape_lat))
++call action_sprite(movie_preid,ac)
++
++call action_sprite(movie_preid,"
++if(this._x>=right)_root.x_coef=_root.x_coef*-1;
++else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
++this._x=move*_root.x_coef+this._x;
++if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;
++else if(this._y<=top)_root.y_coef=_root.y_coef*-1;
++this._y=move*_root.y_coef+this._y;
++")
++
++call swf_sprite_showframe(movie_preid)
++
++sd movie
++setcall movie swf_sprite_done(movie_preid)
++
++call swf_exports_add(movie,"movie")
++call swf_exports_done()
++
++call action("
++var x_coef=1;
++var y_coef=1;
++this.attachMovie('movie','_movie',1);
++_movie._x=100;
++_movie._y=100;
++")
++
++call swf_showframe()
++call swf_done()
++
++return 0
+--- actionswf-1.orig/example/example32.s
++++ actionswf-1/example/example32.s
+@@ -4,9 +4,9 @@ importx "sprintf" sprintf
+ 
+ #a simple shape moving on the stage example
+ 
+-warning off
++orphan off
+ include "../dev/import.h"
+-warning on
++orphan on
+ 
+ const width=640
+ const height=480
+@@ -27,7 +27,7 @@ setcall movie_preid swf_sprite_new()
+ call swf_sprite_placeobject(movie_preid,shape,1)
+ call swf_sprite_showframe(movie_preid)
+ 
+-chars data#512
++char data#512
+ str ac^data
+ str vars="var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move"
+ call sprintf(ac,vars,(width),(height),(shape_lat))
+--- actionswf-1.orig/example/m64d
++++ actionswf-1/example/m64d
+@@ -1,2 +1,2 @@
+ 
+-./make64 syms= $@
++./make64 linkerflags= $@
+--- actionswf-1.orig/include/actionswf.h
++++ actionswf-1/include/actionswf.h
+@@ -125,6 +125,7 @@ int swf_dbl_height(char* imagepath);
+ 
+ void swf_done();
+ void swf_new(char* path,int width,int height,int backgroundcolor,int fps);
++void swf_new_ex(char* path,int width,int height,int backgroundcolor,int fps,int is_debug);
+ void swf_placeobject(int refid,int depth);
+ void swf_placeobject_coords(int refid,int depth,int x,int y);
+ void swf_removeobject(int depth);
+--- actionswf-1.orig/include/ascii.h
++++ actionswf-1/include/ascii.h
+@@ -1,5 +1,5 @@
+ 
+-#Const Nullchar=0x00
++Const Nullchar=0x00
+ #Const StartofHeading=0x01
+ #Const StartofText=0x02
+ #Const EndofText=0x03
+@@ -9,10 +9,10 @@
+ #Const Bell=0x07
+ #Const BackSpace=0x08
+ Const HorizontalTab=0x09
+-#Const LineFeed=0x0A
++Const LineFeed=0x0A
+ #Const VerticalTab=0x0B
+ #Const FormFeed=0x0C
+-#Const CarriageReturn=0x0D
++Const CarriageReturn=0x0D
+ #Const ShiftOut=0x0E
+ #Const ShiftIn=0x0F
+ #Const DataLineEscape=0x10
+@@ -36,14 +36,14 @@ Const Exclamationmark=0x21
+ #Const Doublequotes=0x22
+ #Const Number=0x23
+ #Const Dollar=0x24
+-Const Procenttecken=0x25
++Const Percent=0x25
+ Const Ampersand=0x26
+ #Const Singlequote=0x27
+ Const Openparenthesis=0x28
+ Const Closeparenthesis=0x29
+ Const Asterisk=0x2A
+ Const Plus=0x2B
+-#Const Comma=0x2C
++Const Comma=0x2C
+ Const Hyphen=0x2D
+ Const Period=0x2E
+ Const Slash=0x2F
+@@ -114,9 +114,9 @@ Const l=0x6C
+ #Const p=0x70
+ #Const q=0x71
+ #Const r=0x72
+-#Const s=0x73
++Const s=0x73
+ #Const t=0x74
+-#Const u=0x75
++Const u=0x75
+ #Const v=0x76
+ #Const w=0x77
+ #Const x=0x78
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -51,7 +51,7 @@ const negative_means_action_sprite_pool=
+ const fd_error=-1
+ const fd_none=fd_error
+ const not_an_id=-1
+-const dword_to_string_chars=1+9+1
++const dword_to_string_char=1+9+1
+ 
+ const End=0
+ const ShowFrame=1
+@@ -101,3 +101,5 @@ Const _O_RDONLY=0;Const _O_WRONLY=0x0001
+ Const _open_read=_O_RDONLY|flag_O_BINARY
+ Const _open_write_base=_O_WRONLY|flag_O_BINARY|flag_O_CREAT
+ Const _open_write=_open_write_base|_O_TRUNC
++
++const fprintf_min=2  #file,format plus ...
+--- actionswf-1.orig/lib/actionswf.def
++++ actionswf-1/lib/actionswf.def
+@@ -17,6 +17,7 @@ swf_dbl_width
+ swf_dbl_height
+ swf_done
+ swf_new
++swf_new_ex
+ swf_placeobject
+ swf_placeobject_coords
+ swf_removeobject
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -1,13 +1,16 @@
+ 
+ cd src
+ 
+-./makewin${1} && \
++ver=${1}
++shift
++
++./makewin${ver} $@ && \
+ \
+ cd .. && \
+ mkdir actionswf && \
+ mv src/actionswf.dll actionswf && \
+ cd src && \
+-./makewin${1} clean && \
++./makewin${ver} clean && \
+ cd .. && \
+ zip -r actionswf.zip actionswf && \
+ rm -r ./actionswf && \
+--- actionswf-1.orig/makewin64
++++ actionswf-1/makewin64
+@@ -1,2 +1,4 @@
+ 
+-./makewin 64
++./makewin 64 $@
++
++#when diff these dlls, expect alt least time/date (twice) and checksum
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -22,7 +22,11 @@ On Windows, <i>.windows.zip</i> file fro
+ Compile with [O Compiler](https://github.com/colin-i/o)
+ 
+ ## Info
+-A brief intro is at [readme.txt](https://raw.githubusercontent.com/colin-i/actionswf/master/readme.txt).
++A brief intro is at [readme.txt](https://raw.githubusercontent.com/colin-i/actionswf/master/readme.txt).\
++Games by this program at *https://www.kongregate.com/accounts/bitplayer/favorites?sort=gameplays*
++
++[//]: # (https://www.kongregate.com/games/bitplayer)
++<!--- but with no sort --->
+ 
+ ## Donations
+ The *donations* section is here
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -4,3 +4,21 @@ The program is a set of objects made wit
+ A swf with actionscript example is in the example folder for static o language.
+ The include/actionswf.h is for c/c++ language. dev/import.h are the imports for o language.
+ The files swf.es and action.es has the main functions that can be used; functions from tool.es can be used in rare situations.
++When using the debug option, action and action_sprite calls are logged. The syntax is as follow:
++
++SpriteId
++TextLinesNumber
++TextLines
++{NumberA,NumberB}
++
++Or
++
++SpriteId
++(here is a blank row, not TextLinesNumber, representing a ShowFrame, to differentiate DoAction tags)
++
++Where:
++SpriteId or 0 for root.
++TextLinesNumber is the number of lines that TextLines has.
++TextLines is the text like in action[_sprite] call.
++NumberA lines, then NumberA1+...+NumberAN<=TextLinesNumber, less only when last line(s) is/are blank(s).
++NumberB is the number of actions encountered in NumberA
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -1,5 +1,7 @@
+ 
+-platform = lin
++ifndef platform
++platform=lin
++endif
+ 
+ ifndef OCOMP
+ OCOMP=o
+@@ -9,15 +11,33 @@ ifndef conv_64
+ conv_64=0
+ endif
+ 
++ifndef OLINK
+ OLINK=ounused
+-syms=-s
+-#OFLAGSEXTRA=
+-#if modifying OFLAGS will lose inside data
++endif
++
++ifndef linkerflags
++linkerflags=-s
++#-O0 to 3 is same at .so here
++endif
++
++ifndef OSTRIP
++OSTRIP=ostrip
++endif
++
++ifndef nobits_virtual
++nobits_virtual=1
++endif
++
++#if modifying OFLAGS will lose inside data (at kinetic is reversed: first that def, then this def)
+ OFLAGS=conv_64 ${conv_64} ${OFLAGSEXTRA}
+ 
++ifeq (${nobits_virtual},0)
++OFLAGS+=nobits_virtual 0
++endif
++
+ #this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+ #	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction
+ expitems = action swf tool ../shared/action_dllmain
+ 
+ exte=libexte.a
+@@ -29,7 +49,7 @@ name = ${projname}.so
+ defname = ${projname}.def
+ items_prefix=
+ prefname=${items_prefix}${name}
+-stripname=${restofname}${name}
++libname=${restofname}${name}
+ 
+ $(eval obs = )
+ $(eval eobs = )
+@@ -46,37 +66,45 @@ OFLAGS += inplace_reloc 0 include_sec 1
+ all: compile ounused link def
+ link:
+ 	if [ "${conv_64}" = "1" ]; then \
+-		i686-w64-mingw32-ld --no-leading-underscore ${syms} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
++		i686-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+ 	else \
+-		x86_64-w64-mingw32-ld --no-leading-underscore ${syms} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
++		x86_64-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+ 	fi
+ 
+ else
+ OFLAGS += underscore_pref 1
+ #else ifeq (${conv_64},1)
+ 
++all: ${libname}
++
+ ifeq (${conv_64},1)
+-ATLDCOM = $(LD) ${syms} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
+-all: ${name}
++ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
++${libname}: ${name}
++	cp ${name} ${libname}
+ 
+ else
+-ATLDCOM = $(CC) ${syms} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+-all: ${stripname}
+-${stripname}: ${name}
++ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
++ifeq (${nobits_virtual},1)
++${libname}: ${name}
++	cp ${name} ${libname}
++	#is not with ln -s because will be one file install
++else
++${libname}: ${name}
+ 	$(eval strp = )
+ 	$(foreach var,$(expitems),$(eval strp += ${items_prefix}${var}.es.log ${items_prefix}${var}.o))
+ 	$(foreach var,$(items),$(eval strp += ${items_prefix}${var}.s.log ${items_prefix}${var}.o))
+-	ostrip ${name} ${strp}
++	${OSTRIP} ${name} ${strp}
+ 	#if [ ! -e "./strip.py" ]; then wget https://raw.githubusercontent.com/colin-i/o/master/ostrip/strip.py; fi
+-	${strippy} ${name} ${stripname}
++	${strippy} ${name} ${libname}
++endif
++
+ endif
+ 
+-${name}: compile
++${name}: ${obs} ${eobs}
+ 	${OLINK} ${logs}
+ 	@echo
+ 	$(AR) cr ${exte} ${obs}
+ 	${ATLDCOM}
+-	if [ "${conv_64}" = "1" ]; then cp ${name} ${stripname}; fi
+ endif
+ 
+ %.o: %.s
+@@ -99,11 +127,11 @@ def:
+ 	../fix/makedef ${defname}
+ 
+ clean:
+-	-printf ' %s.s.log' ${items} | xargs rm -f
+-	-printf ' %s.es.log' ${expitems} | xargs rm -f
+-	-printf ' %s.o' ${items} ${expitems} | xargs rm -f
++	-rm -f ${logs}
++	-rm -f ${obs}
++	-rm -f ${eobs}
+ 	-rm -f ${exte}
+-	-rm -f ${stripname}
++	-rm -f ${libname}
+ 	-rm -f ${name}
+ 	-rm -f ${projname}.dll
+ 	-rm -f ${defname}
+@@ -111,6 +139,8 @@ clean:
+ 	-rm -f .data
+ 	-rm -f .text
+ 	-rm -f .rela.dyn
++	-rm -f .symtab
++	-rm -f .symtab_offset
+ 
+ distclean: clean
+ 
+@@ -118,20 +148,20 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	install -D ${stripname} \
+-		$(DESTDIR)$(prefix)/lib/${stripname}
++	install -D ${libname} \
++		$(DESTDIR)$(prefix)/lib/${libname}
+ 
+ install: all install-lib
+ 
+ uninstall:
+-	-rm -f $(DESTDIR)$(prefix)/lib/${stripname}
++	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
+ 
+ .PHONY: all install clean distclean uninstall test
+ 
+ .NOTPARALLEL:
+ 
+-#make compile && make link syms= items_prefix=/home/bc/s/actionswf-1/src/ LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage
+-#make syms= conv_64=0
+-#make syms= conv_64=0 link
++#make compile && make link linkerflags= items_prefix=/home/bc/s/actionswf-1/src/ LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage
++#make linkerflags= conv_64=0
++#make linkerflags= conv_64=0 link
+ 
+ #make strippy="python /home/bc/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" OFLAGSEXTRA="function_name 1 nul_res_pref 1"
+--- actionswf-1.orig/src/action.es
++++ actionswf-1/src/action.es
+@@ -2,81 +2,46 @@ Format ElfObj64
+ 
+ include "../include/prog.h"
+ 
+-import "action_debug" action_debug
+-import "brace_blocks_counter_init" brace_blocks_counter_init
+-import "action_code_values" action_code_values
+-import "action_code_values_index" action_code_values_index
+-import "escape_action" escape_action
+-import "action_debug_free" action_debug_free
+-
++#this has throws but for mem_exp_change and back are not required
++import "swf_actionblock" swf_actionblock
+ 
+ 
+ importaftercall ebool
+ 
+ #this/an action
+ 
+-import "action__code" action__code
+-import "action_code_set" action_code_set
+-import "action_code_row" action_code_row
+-import "dupreserve_string" dupreserve_string
+-import "brace_blocks_end" brace_blocks_end
++import "action_base" action_base
++import "action_format" action_format
++import "debug_base" debug_base
++
+ functionX action(ss ac)
+ #ss ac       actionscript string to be parsed
+-    sd p_values
+-    setcall p_values action_code_values()
+-    import "error" error
+-    if p_values==(NULL);call error("Don't call the action now.");endif
+-    #
+-    sd nr
+-    setcall nr action_code_values_index()
+-    set nr# 0
+-    call brace_blocks_counter_init()
+-    #
+-    ss mem
+-    setcall mem dupreserve_string(ac)
+-    sd p_action_errors
+-    setcall p_action_errors action_debug((TRUE))
+-    set p_action_errors# (TRUE)
+-	sv cursor;set cursor p_action_errors;add cursor (DWORD);set cursor# ac;add cursor :;set cursor# mem
+-    call escape_action(ac,mem,0)
+-    while mem#!=0
+-        setcall mem action_code_row(mem,(FALSE))
+-    endwhile
+-    call action_code_set((math_end))
+-
+-    #set false to stop adding row nr at errors
+-    set p_action_errors# (FALSE)
+-
+-    call brace_blocks_end()
+-
+-    #                 code_values are not reallocated
+-    call action__code(p_values)
+-
+-    #free mem ok,another free can be at errors
+-    call action_debug_free()
++	call debug_base(0)
++	call action_base(ac)
+ endfunction
+-import "action_format" action_format
+-functionX actionf(ss buffer,ss *format)
++functionXx actionf(ss buffer,ss *format)
+ #ss buffer   the buffer where to sprintf the format and the arguments
+ #ss format   the format
+ #...         % arguments here
+-    call action_format(#buffer)
++	call debug_base(0)
++	call action_format(#buffer)
+ endfunction
+ 
+ #sprite
+ 
+-import "swf_actionblock" swf_actionblock
+ functionX action_sprite(sd sprite,ss actions)
+ #sd sprite    sprite id
+ #ss actions   same as action
++	call debug_base(sprite)
+     call swf_actionblock((mem_exp_change),sprite)
+-    call action(actions)
++    call action_base(actions)
+     call swf_actionblock((mem_exp_change_back))
+ endfunction
+-functionX actionf_sprite(sd sprite,ss buffer,ss *format)
++functionXx actionf_sprite(sd sprite,ss buffer,ss *format)
+ #sd sprite    sprite id
+ #ss buffer    same as actionf
+ #ss format    same as actionf
++	call debug_base(sprite)
+     call swf_actionblock((mem_exp_change),sprite)
+     call action_format(#buffer)
+     call swf_actionblock((mem_exp_change_back))
+--- actionswf-1.orig/src/actioncode.s
++++ actionswf-1/src/actioncode.s
+@@ -54,9 +54,9 @@ function get_nr_of_forIn_statements()
+     while counter>0
+         dec counter
+         sub block (DWORD)
+-        if block#==(brace_blocks_function)
++        if block#=(brace_blocks_function)
+             return nr
+-        elseif block#==(for_marker)
++        elseif block#=(for_marker)
+             inc nr
+         endelseif
+     endwhile
+@@ -69,62 +69,62 @@ function action_code_write_builtin_names
+ 	sd compare
+ 	vstr int="int"
+ 	setcall compare strcmp(codepointer,int)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionToInteger)
+ 		return int
+ 	endif
+ 	vstr rnd="random"
+ 	setcall compare strcmp(codepointer,rnd)
+-	if compare==0
++	if compare=0
+ 	#0�(maximum-1)
+ 		set p_action# (ActionRandomNumber)
+ 		return rnd
+ 	endif
+ 	vstr ascii="ord"
+ 	setcall compare strcmp(codepointer,ascii)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionCharToAscii)
+ 		return ascii
+ 	endif
+ 	vstr chr="chr"
+ 	setcall compare strcmp(codepointer,chr)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionAsciiToChar)
+ 		return chr
+ 	endif
+ 	vstr typeOf="typeof"
+ 	setcall compare strcmp(codepointer,typeOf)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionTypeOf)
+ 		return typeOf
+ 	endif
+ 	vstr stop="stop"
+ 	setcall compare strcmp(codepointer,stop)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionStop)
+ 		return stop
+ 	endif
+ 	vstr play="play"
+ 	setcall compare strcmp(codepointer,play)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionPlay)
+ 		return play
+ 	endif
+ 	vstr nframe="nextFrame"
+ 	setcall compare strcmp(codepointer,nframe)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionNextFrame)
+ 		return nframe
+ 	endif
+ 	vstr pframe="prevFrame"
+ 	setcall compare strcmp(codepointer,pframe)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionPreviousFrame)
+ 		return pframe
+ 	endif
+ 	vstr goto="gotoAndStop"
+ 	setcall compare strcmp(codepointer,goto)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionGotoFrame)
+ 		inc p_action
+ 		set p_action# (ActionEndFlag)   #even if it's playing, it will stop, no ActionStop here
+@@ -132,7 +132,7 @@ function action_code_write_builtin_names
+ 	endif
+ 	vstr gotop="gotoAndPlay"
+ 	setcall compare strcmp(codepointer,gotop)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionGotoFrame)
+ 		inc p_action
+ 		set p_action# (ActionPlay)
+@@ -140,7 +140,7 @@ function action_code_write_builtin_names
+ 	endif
+ 	vstr trace="trace"
+ 	setcall compare strcmp(codepointer,trace)
+-	if compare==0
++	if compare=0
+ 		set p_action# (ActionTrace)
+ 		return trace
+ 	endif
+@@ -149,13 +149,10 @@ endfunction
+ 
+ 
+ 
+-
+-
+-
+-
+-
+ importaftercall ebool
+ 
++import "debug_phase_code" debug_phase_code
++
+ function action_code_values_init()
+     import "memalloc" memalloc
+     sv m
+@@ -183,7 +180,7 @@ function action_code_set_ex(sd value,sd
+ 	sd pointer
+ 	setcall pointer action_code_values()
+ 	add pointer to
+-	if size==1
++	if size=1
+ 		set pointer# value
+ 	else
+ 		set pointer#v^ value
+@@ -207,11 +204,6 @@ endfunction
+ 
+ #entries write
+ 
+-function action__code(sd mathpointer)
+-    while mathpointer#!=(math_end)
+-        setcall mathpointer action__code_row(mathpointer)
+-    endwhile
+-endfunction
+ import "action_push" action_push
+ import "action_one" action_one
+ import "action_member_loop" action_member_loop
+@@ -219,6 +211,12 @@ import "brace_blocks_add_write" brace_bl
+ import "brace_blocks_remove_write" brace_blocks_remove_write
+ #position
+ function action__code_row(sd codepointer)
++	setcall codepointer action__code_row_ex(codepointer)
++	call debug_phase_code(codepointer)
++	return codepointer
++endfunction
++#position
++function action__code_row_ex(sd codepointer)
+     sd pointer
+     set pointer codepointer
+     setcall pointer action_code_write_conditions(codepointer)
+@@ -231,33 +229,33 @@ function action__code_row(sd codepointer
+     endif
+     sd attrib
+     set attrib codepointer#
+-    if attrib==(ActionReturn)
++    if attrib=(ActionReturn)
+         add codepointer (DWORD)
+         call close_scope_forIn_statements()
+         setcall codepointer action_code_right_util(codepointer)
+         call action_one((ActionReturn))
+         return codepointer
+-    elseif attrib==(block_end)
++    elseif attrib=(block_end)
+         add codepointer (DWORD)
+-        if codepointer#==(else_flag)
++        if codepointer#=(else_flag)
+             call action_code_else_add()
+             add codepointer (DWORD)
+         else
+             call brace_blocks_remove_write()
+         endelse
+         return codepointer
+-    elseif attrib==(block_else_end)
++    elseif attrib=(block_else_end)
+         setcall codepointer action_code_conditions_end(codepointer)
+         return codepointer
+-    elseif attrib==(whileblock_end)
++    elseif attrib=(whileblock_end)
+         import "brace_blocks_remove_write_jump" brace_blocks_remove_write_jump
+         call brace_blocks_remove_write_jump()
+         add codepointer (DWORD)
+         return codepointer
+-    elseif attrib==(break_flag)
++    elseif attrib=(break_flag)
+         call action_code_break()
+         add codepointer (DWORD);return codepointer
+-    elseif attrib==(continue_flag)
++    elseif attrib=(continue_flag)
+         call action_code_continue()
+         add codepointer (DWORD);return codepointer
+     endelseif
+@@ -272,38 +270,38 @@ function action_code_pack(sd codepointer
+     sd is_member=FALSE
+     sd need_right=TRUE
+     sd need_pop=FALSE
+-    if attrib==(ActionSetMember)
++    if attrib=(ActionSetMember)
+         set is_member (TRUE)
+-    elseif attrib==(ActionDelete)
++    elseif attrib=(ActionDelete)
+         set is_member (TRUE)
+         set need_right (FALSE)
+         set need_pop (TRUE)
+-    elseif attrib==(ActionDefineLocal2)
++    elseif attrib=(ActionDefineLocal2)
+         set need_right (FALSE)
+-    elseif attrib==(ActionDelete2)
++    elseif attrib=(ActionDelete2)
+         set need_right (FALSE)
+         set need_pop (TRUE)
+     endelseif
+     #
+-    if is_member==(TRUE)
++    if is_member=(TRUE)
+         setcall codepointer action_member_loop(codepointer,:)   #to pass the pointer
+     else
+     #definelocal or setvariable or delete2
+         call action_push((ap_Constant8),codepointer#v^,-1)
+         add codepointer :  #to pass the pointer
+     endelse
+-    if need_right==(TRUE)
+-        if codepointer#==(ActionIncrement)
++    if need_right=(TRUE)
++        if codepointer#=(ActionIncrement)
+             add codepointer (DWORD)
+             call action_code_inc_dec((ActionIncrement),attrib)
+-        elseif codepointer#==(ActionDecrement)
++        elseif codepointer#=(ActionDecrement)
+             add codepointer (DWORD)
+             call action_code_inc_dec((ActionDecrement),attrib)
+-        elseif codepointer#==(mixt_equal)
++        elseif codepointer#=(mixt_equal)
+             #+= .. ^= ..
+             add codepointer (DWORD)
+             sd mixt_op;set mixt_op codepointer#;add codepointer (DWORD)
+-            if attrib==(ActionSetVariable);call action_code_dupGet_var()
++            if attrib=(ActionSetVariable);call action_code_dupGet_var()
+             else;call action_code_dupGet_member();endelse
+             setcall codepointer action_code_right(codepointer)
+             call action_one(mixt_op)
+@@ -312,7 +310,7 @@ function action_code_pack(sd codepointer
+         endelse
+     endif
+     call action_one(attrib)
+-    if need_pop==(TRUE)
++    if need_pop=(TRUE)
+         call action_one((ActionPop))
+     endif
+     return codepointer
+@@ -320,7 +318,7 @@ endfunction
+ import "actionrecordheader" actionrecordheader
+ import "swf_actionblock_add" swf_actionblock_add
+ function action_code_inc_dec(sd inc_dec,sd setvar_or_setmember)
+-    if setvar_or_setmember==(ActionSetVariable)
++    if setvar_or_setmember=(ActionSetVariable)
+         call action_code_dupGet_var()
+         call action_one(inc_dec)
+     else
+@@ -354,7 +352,7 @@ import "resolve_dummy_jump" resolve_dumm
+ function action_code_write_conditions(sd codepointer)
+     #verify for condition tag
+     sd cond;set cond codepointer#
+-    if cond==(for_marker)
++    if cond=(for_marker)
+         add codepointer (DWORD)
+         if codepointer#!=(for_three)
+             call action_push((ap_Constant8),codepointer#v^,-1);add codepointer :   #to pass the pointer
+@@ -373,7 +371,7 @@ function action_code_write_conditions(sd
+             #
+             sd attr2;set attr2 codepointer#;add codepointer (DWORD)
+             #
+-            if attr2==(ActionSetMember)
++            if attr2=(ActionSetMember)
+                 setcall codepointer action_member_loop(codepointer,:)  #to pass the pointer
+             else
+                 #var or set variable
+@@ -401,10 +399,10 @@ function action_code_write_conditions(sd
+         import "write_forward_offset" write_forward_offset
+         sub sizeOff (WORD)
+         call write_forward_offset(sizeOff)
+-    elseif cond==(while_marker)
++    elseif cond=(while_marker)
+         call add_while_top_off((while_marker))
+         add codepointer (DWORD)
+-    elseif cond==(ActionIf)
++    elseif cond=(ActionIf)
+         add codepointer (DWORD)
+     else
+         return codepointer
+@@ -435,7 +433,7 @@ const forIn_ifBreak_size=3+1+1+3+2
+ function action_code_break()
+     sd c_block;setcall c_block prepare_space_for_break()
+     sd p_type;set p_type c_block;sub p_type (2*DWORD)
+-    if p_type#==(while_marker)
++    if p_type#=(while_marker)
+         call write_jump(0)
+     else
+         call action_push((ap_Null),-1)
+@@ -447,7 +445,7 @@ function action_code_break()
+     setcall memblock brace_blocks_get_memblock()
+     setcall c_block# block_get_size(memblock);sub c_block# (WORD)
+     #
+-    if p_type#==(for_marker);call write_jump((-2-3-forIn_ifBreak_size));endif
++    if p_type#=(for_marker);call write_jump((-2-3-forIn_ifBreak_size));endif
+     #
+     call brace_blocks_counter_inc()
+ endfunction
+@@ -478,7 +476,7 @@ function prepare_space_for_break()
+     sd copy_cursor;set copy_cursor c_blocks
+     while counter>0
+         sub c_blocks (DWORD)
+-        if c_blocks#==0
++        if c_blocks#=0
+             add c_blocks (DWORD)
+             sd cursor;set cursor copy_cursor;sub cursor (DWORD)
+             while copy_cursor!=c_blocks
+@@ -507,7 +505,7 @@ function action_code_continue()
+     sd c;setcall c brace_blocks_counter();sd counter;set counter c#
+     while counter>0
+         sub c_blocks (DWORD)
+-        if c_blocks#==0
++        if c_blocks#=0
+             #the loop type and to the offset to jump from here
+             sub c_blocks (2*DWORD)
+             sd off_to_jump;set off_to_jump c_blocks#
+@@ -555,7 +553,7 @@ function action_code_write_function(sd c
+ 	endif
+ 	sd want_return=FALSE
+ 	setcall codepointer action_code_write_function_call(codepointer,#want_return)
+-	if want_return==(FALSE)  #can be modified inside
++	if want_return=(FALSE)  #can be modified inside
+ 		call action_one((ActionPop))
+ 	endif
+ 	return codepointer
+@@ -572,7 +570,7 @@ function action_code_write_function_call
+     sd member
+     set member codepointer#
+     setcall codepointer action_code_new_or_call(codepointer)
+-    if member==0
++    if member=0
+         call action_one((ActionCallFunction))
+     else
+         call action_one((ActionCallMethod))
+@@ -591,7 +589,7 @@ function action_code_write_builtin_funct
+     #
+     sd cursor
+     setcall cursor action_code_write_builtin_set(pointer,pwant_return)
+-    if cursor==pointer
++    if cursor=pointer
+         return codepointer
+     endif
+     return cursor
+@@ -608,15 +606,15 @@ function action_code_write_builtin_set(s
+ 		add test :   #to pass the pointer
+ 		if test#!=(args_end)
+ 			if act!=(ActionGotoFrame)
+-				if act==(ActionTrace)
+-					if pwant_return#==(TRUE)  #same like at gotoAndStop
++				if act=(ActionTrace)
++					if pwant_return#=(TRUE)  #same like at gotoAndStop
+ 						return codepointer
+ 					endif
+ 				endif
+ 				setcall test action_code_right_util(test)
+-				if test#==(args_end)
++				if test#=(args_end)
+ 					call action_one(act)
+-					if act==(ActionTrace)
++					if act=(ActionTrace)
+ 						set pwant_return# (TRUE)  #to skip pop
+ 					endif
+ 					add test (DWORD)
+@@ -627,15 +625,15 @@ function action_code_write_builtin_set(s
+ 				call error(builtin)
+ 			endif
+ 			#here is another format, if the first is not unsigned 16 then call movie clip function instead of actiongotoframe
+-			if test#==(ap_Integer)
++			if test#=(ap_Integer)
+ 				add test (DWORD)
+ 				if test#<=^0xffFF #attention at negative numbers, ignoring gotoandstop mc behaviour
+ 					sd val;set val test#
+ 					add test (DWORD)
+-					if test#==(math_end)
++					if test#=(math_end)
+ 						add test (DWORD)
+-						if test#==(args_end)
+-							if pwant_return#==(FALSE)   #can be in a ...=gotoAndStop+... attribution and add extra code there
++						if test#=(args_end)
++							if pwant_return#=(FALSE)   #can be in a ...=gotoAndStop+... attribution and add extra code there
+ 								#                      because ActionGotoFrame is not pushing a return value
+ 								call actionrecordheader(act,(WORD))
+ 								call swf_actionblock_add(#val,(WORD))
+@@ -654,7 +652,7 @@ function action_code_write_builtin_set(s
+ 				endif
+ 			endif
+ 		elseif act<=(ActionStop)  #this is skipping 1,2,3 but there are no actions in the model
+-			if pwant_return#==(FALSE)  #same like at gotoAndStop
++			if pwant_return#=(FALSE)  #same like at gotoAndStop
+ 				call action_one(act)
+ 				set pwant_return# (TRUE)  #to skip pop
+ 				add test (DWORD)
+@@ -690,12 +688,12 @@ function action_code_right(sd codepointe
+ endfunction
+ #codepointer
+ function action_code_right_util(sd codepointer)
+-    if codepointer#==(new_action)
++    if codepointer#=(new_action)
+         add codepointer (DWORD)
+         sd member
+         set member codepointer#v^
+         setcall codepointer action_code_new_or_call(codepointer)
+-        if member==0
++        if member=0
+             call action_one((ActionNewObject))
+         else
+             call action_one((ActionNewMethod))
+@@ -709,12 +707,12 @@ function action_code_right_util(sd codep
+         sd operation
+         set operation codepointer#
+         add codepointer (DWORD)
+-        if operation==(compare_action)
++        if operation=(compare_action)
+             set compare_op_1 codepointer#
+             add codepointer (DWORD)
+             set compare_op_2 codepointer#
+             add codepointer (DWORD)
+-        elseif operation==(ifElse_start)
++        elseif operation=(ifElse_start)
+             call write_ifjump_withNot()
+             setcall codepointer action_code_right_util(codepointer)
+             call action_code_else_add()
+@@ -736,12 +734,12 @@ endfunction
+ 
+ #codepointer
+ function action_code_right_number(sd codepointer)
+-    if codepointer#==(parenthesis_start)
++    if codepointer#=(parenthesis_start)
+         add codepointer (DWORD)
+         setcall codepointer action_code_right_util(codepointer)
+         return codepointer
+     endif
+-    if codepointer#==(call_action_right)
++    if codepointer#=(call_action_right)
+ 		sd want_return=TRUE
+         setcall codepointer action_code_write_function_call(codepointer,#want_return)
+         return codepointer
+@@ -749,16 +747,16 @@ function action_code_right_number(sd cod
+     sd attrib
+     set attrib codepointer#
+     add codepointer (DWORD)
+-    if attrib==(ActionGetMember)
++    if attrib=(ActionGetMember)
+         setcall codepointer action_member_loop(codepointer,(get_member))
+     else
+-        if attrib==(ActionGetVariable)
++        if attrib=(ActionGetVariable)
+             call action_one_command(codepointer#v^)
+             add codepointer (pointer_rest)
+-        elseif attrib==(ap_double)
++        elseif attrib=(ap_double)
+             sd low;set low codepointer#;add codepointer (DWORD)
+             call action_push(attrib,low,codepointer#,-1)
+-        elseif attrib==(ap_Integer)
++        elseif attrib=(ap_Integer)
+             call action_push(attrib,codepointer#,-1)
+         else
+         #ap_Constant8
+@@ -773,22 +771,22 @@ function action_one_command(ss command)
+     sd compare
+     #
+     setcall compare strcmp("null",command)
+-    if compare==0
++    if compare=0
+         call action_push((ap_Null),-1)
+         return (void)
+     endif
+     setcall compare strcmp("undefined",command)
+-    if compare==0
++    if compare=0
+         call action_push((ap_Undefined),-1)
+         return (void)
+     endif
+     setcall compare strcmp("true",command)
+-    if compare==0
++    if compare=0
+         call action_push((ap_Boolean),1,-1)
+         return (void)
+     endif
+     setcall compare strcmp("false",command)
+-    if compare==0
++    if compare=0
+         call action_push((ap_Boolean),0,-1)
+         return (void)
+     endif
+@@ -806,6 +804,10 @@ function action_definefunction(sd codepo
+     endif
+     add codepointer (DWORD)
+     setcall codepointer action_deffunction(codepointer)
++
++	#all previous codes must pe catched at this phase, this place for this function is tested, example: "function(){" on one row
++	call debug_phase_code(codepointer)
++
+     #a function marker for return and for..in case
+     sd block;setcall block cond_blocks();set block# (brace_blocks_function);call brace_blocks_counter_inc()
+     #
+--- actionswf-1.orig/src/actionparse.s
++++ actionswf-1/src/actionparse.s
+@@ -20,7 +20,7 @@ import "str_expression_at_start_withEndC
+ #operations str
+ function get_operations()
+     const operations_begin=!
+-    chars operations="+-*/%&|^<>?"
++    char operations="+-*/%&|^<>?"
+     #subtract 1 is for the string termination
+     const operations_size=!-operations_begin-1
+     return #operations
+@@ -31,11 +31,11 @@ function action_parse_utilEndTypes(sd op
+     #when p_op is set, is to store the multiple kind of endtypes
+     if p_op!=0
+         set p_op# op
+-        if op==endtype2
++        if op=endtype2
+             return (TRUE)
+         endif
+     endif
+-    if op==endtype1;return (TRUE);endif
++    if op=endtype1;return (TRUE);endif
+     return (FALSE)
+ endfunction
+ 
+@@ -43,7 +43,7 @@ import "is_numeric" is_numeric
+ 
+ #strpbrk
+ function action_code_membersplit(ss ac)
+-    chars delims=".["
++    char delims=".["
+     ss next
+     setcall next strpbrk(ac,#delims)
+     return next
+@@ -108,7 +108,7 @@ const add=Plus
+ const sub=Hyphen
+ const mlt=Asterisk
+ const div=Slash
+-const modulo=Procenttecken
++const modulo=Percent
+ const and=Ampersand
+ const or=Verticalbar
+ const xor=Caret
+@@ -117,7 +117,7 @@ const sar_shr=Greaterthan
+ const ifElse_sign=Questionmark
+ #pointer
+ function action_code_row(ss ac,sd a_block_detected)
+-    setcall ac action_code_row_ex(ac,a_block_detected,-1)
++	setcall ac action_code_row_ex(ac,a_block_detected,-1)
+     return ac
+ endfunction
+ #pointer
+@@ -132,20 +132,20 @@ function action_code_row_ex(ss ac,sd a_b
+         set atstart ac
+         setcall ac action_parse_conditions(ac,#flags,#for_detected)
+         if atstart!=ac
+-            if for_detected==0
++            if for_detected=0
+                 if ac#!=(Openparenthesis)
+                     call error("open parenthesis sign expected")
+                 endif
+                 #using the operations function
+                 inc ac
+-                chars closecompare=")"
++                char closecompare=")"
+                 setcall ac action_code_row_parse_tool(ac,closecompare)
+                 #if ac#!=closecompare
+                 #    call error("close parenthesis expected")
+                 #endif
+             endif
+             #important settings
+-            if a_block_detected==(TRUE)
++            if a_block_detected=(TRUE)
+                 or flags (consecutive_flag)
+             endif
+             call brace_blocks_add_parse(flags)
+@@ -153,6 +153,9 @@ function action_code_row_ex(ss ac,sd a_b
+         endif
+     endwhile
+     setcall ac action_code_row_parse(ac,a_block_detected,else_index)
++	import "debug_phase_parse" debug_phase_parse
++	#around: else if(2==2){return 2;}else{return 3;}, 4 breakpoints, with \n-s,this here and not at action_code_row,1 breakpoint
++	call debug_phase_parse(ac)
+     return ac
+ endfunction
+ #pointer
+@@ -174,7 +177,7 @@ function action_parse_conditions(ss ac,s
+     else
+     #for
+         setcall pointer str_expression_at_start(ac,"for")
+-        if pointer==ac;return pointer;endif
++        if pointer=ac;return pointer;endif
+         #
+         call action_code_set((for_marker))
+         set p_flags# (while_marker)
+@@ -195,7 +198,7 @@ function action_parse_conditions(ss ac,s
+             call action_code_set((for_three))
+             #ac X;x;x
+             set cursor pointer;add cursor pos2
+-            if cursor#==0
++            if cursor#=0
+                 call error("expecting ';' at for loop, first part")
+             endif
+                             #is for for(;x;x) the !=
+@@ -207,7 +210,7 @@ function action_parse_conditions(ss ac,s
+             set pointer cursor
+             setcall pos2 strcspn(pointer,";")
+             add cursor pos2
+-            if cursor#==0
++            if cursor#=0
+                 call error("expecting ';' at for loop, second part")
+             endif
+             #cursor x;x;X
+@@ -223,19 +226,19 @@ function action_parse_conditions(ss ac,s
+         setcall pointer str_expression_at_start(pointer,"var")
+         setcall pos1 strcspn(pointer," ")
+         set cursor pointer;add cursor pos1
+-        if cursor#==0
++        if cursor#=0
+             call error("expecting 'space' at for loop")
+         endif
+         set cursor# 0
+         inc cursor;setcall cursor spaces(cursor)
+         setcall marker str_expression_at_start(cursor,"in")
+-        if marker==cursor
++        if marker=cursor
+             call error("expecting 'in' at for loop")
+         endif
+         setcall pos1 strcspn(marker,")")
+         set cursor marker
+         add cursor pos1
+-        if cursor#==0
++        if cursor#=0
+             call error("expecting Close Parenthesis at for loop")
+         endif
+         set cursor# 0
+@@ -255,14 +258,14 @@ function action_parse_conditions(ss ac,s
+ endfunction
+ #pointer
+ function action_code_row_parse(ss ac,sd a_block_detected,sd else_index)
+-    if ac#==(Openingbrace)
+-        if a_block_detected==(FALSE)
++    if ac#=(Openingbrace)
++        if a_block_detected=(FALSE)
+             call brace_blocks_add_parse((normal_marker))
+         endif
+         inc ac
+         return ac
+-    elseif ac#==(Closingbrace)
+-        if a_block_detected==(TRUE)
++    elseif ac#=(Closingbrace)
++        if a_block_detected=(TRUE)
+             call error("unexpected closing brace sign after code block opened")
+         endif
+         inc ac
+@@ -270,7 +273,7 @@ function action_code_row_parse(ss ac,sd
+         return ac
+     endelseif
+     setcall ac action_code_row_parse_instrument(ac)
+-    if a_block_detected==(TRUE)
++    if a_block_detected=(TRUE)
+     #ex: if(a==b)x=3;
+         setcall ac else_verify(ac,else_index)
+     endif
+@@ -290,7 +293,7 @@ function else_verify(ss ac,sd else_index
+     setcall p_ind brace_blocks_counter()
+     set c_ind p_ind#
+     #opened else index same with current index: return at else
+-    if else_index==c_ind
++    if else_index=c_ind
+         return ac
+     endif
+ 
+@@ -298,7 +301,7 @@ function else_verify(ss ac,sd else_index
+ 
+     ss pointer
+     setcall pointer else_elseif_expression(ac,#bool_is_elseif)
+-    if pointer==ac
++    if pointer=ac
+         return ac
+     endif
+     while pointer!=ac
+@@ -311,7 +314,7 @@ function else_verify(ss ac,sd else_index
+         while ind!=c_ind
+ 			ss the_new_pointer;set the_new_pointer pointer
+             setcall the_new_pointer action_code_row_ex(pointer,(FALSE),ind)
+-			if the_new_pointer==pointer;call error("Else not closed");endif
++			if the_new_pointer=pointer;call error("Else not closed");endif
+ 			set pointer the_new_pointer
+             #
+             setcall p_ind brace_blocks_counter()
+@@ -320,7 +323,7 @@ function else_verify(ss ac,sd else_index
+         set ac pointer
+         sd prev_else_elseif;set prev_else_elseif bool_is_elseif
+         setcall pointer else_elseif_expression(ac,#bool_is_elseif)
+-        if prev_else_elseif==(FALSE);if bool_is_elseif==(TRUE)
++        if prev_else_elseif=(FALSE);if bool_is_elseif=(TRUE)
+             call error("not expecting Else and then Else If")
+         endif;endif
+     endwhile
+@@ -332,11 +335,11 @@ function else_elseif_expression(ss ac,sd
+     set p_elseif# (FALSE)
+     ss pointer
+     setcall pointer str_expression_at_start(ac,"else")
+-    if pointer==ac
++    if pointer=ac
+         return ac
+     endif
+     setcall ac str_expression_at_start(pointer,"if")
+-    if pointer==ac
++    if pointer=ac
+         return pointer
+     endif
+     set p_elseif# (TRUE)
+@@ -352,7 +355,7 @@ function action_code_row_parse_instrumen
+     setcall pointer str_expression_at_start(ac,"return")
+     if pointer!=ac
+         call action_code_set((ActionReturn))
+-        chars an_end=";"
++        char an_end=";"
+         setcall ac action_code_row_parse_tool(pointer,an_end)
+         return ac
+     endif
+@@ -386,15 +389,15 @@ function action_parse_pack(ss ac,sd endC
+         endif
+     endelse
+     sd op
+-    chars set={Equals}
+-    chars secondChar#1
+-    chars *term=0
++    char set={Equals}
++    char secondChar#1
++    char *term=0
+     set secondChar endChar
+     ss delims^set
+ 
+     setcall ac str_next(pointer,delims,#op)
+-    if isnewvar==(TRUE)
+-        if op==set
++    if isnewvar=(TRUE)
++        if op=set
+             call action_code_set((ActionDefineLocal))
+             call action_code_set_pointer(pointer)
+         else
+@@ -403,7 +406,7 @@ function action_parse_pack(ss ac,sd endC
+             return ac
+         endelse
+     else
+-        if isdelete==(FALSE)
++        if isdelete=(FALSE)
+             sd inc_dec
+             if op!=set
+                 set inc_dec 0
+@@ -419,16 +422,16 @@ function action_parse_pack(ss ac,sd endC
+                 sub another_test pointer
+                 #test for some size for ++ or --
+                 if another_test>0
+-                    if test#==(Plus)
++                    if test#=(Plus)
+                         inc test
+-                        if test#==(Plus)
++                        if test#=(Plus)
+                             set inc_dec (ActionIncrement)
+                             dec test
+                             set test# 0
+                         endif
+-                    elseif test#==(Hyphen)
++                    elseif test#=(Hyphen)
+                         inc test
+-                        if test#==(Hyphen)
++                        if test#=(Hyphen)
+                             set inc_dec (ActionDecrement)
+                             dec test
+                             set test# 0
+@@ -436,7 +439,7 @@ function action_parse_pack(ss ac,sd endC
+                     endelseif
+                 endif
+                 #if not ++ or -- return the current location (x;heatMaker;)
+-                if inc_dec==0
++                if inc_dec=0
+                     return ac
+                 endif
+             else
+@@ -444,7 +447,7 @@ function action_parse_pack(ss ac,sd endC
+                 sd mixt_action;setcall mixt_action action_parse_test_mixt_equal(pointer,ac)
+             endelse
+             call action_parse_left_holder(pointer,(ActionSetVariable),(ActionSetMember))
+-            if op==set
++            if op=set
+             #mixt or not mixt
+                 if mixt_action!=0
+                     call action_code_set((mixt_equal))
+@@ -466,7 +469,7 @@ endfunction
+ function action_parse_left_holder(ss pointer,sd ac1,sd ac2)
+     ss test
+     setcall test action_code_membersplit(pointer)
+-    if test==(NULL)
++    if test=(NULL)
+         call action_code_set(ac1)
+         call action_code_set_pointer(pointer)
+     else
+@@ -483,23 +486,23 @@ function action_parse_test_mixt_equal(ss
+     if dif<=0
+         return 0
+     endif
+-    if ac#==0
++    if ac#=0
+         #0 can be set(qw['z']=x will be 00x) and at strchr will not be NULL
+         return 0
+     endif
+     ss operations;setcall operations get_operations()
+     ss p_op;setcall p_op strchr(operations,ac#)
+-    if p_op==(NULL);return 0;endif;sd op;set op p_op#
+-    if op==(shl);ss missing_shl="expecting value and <<"
++    if p_op=(NULL);return 0;endif;sd op;set op p_op#
++    if op=(shl);ss missing_shl="expecting value and <<"
+         dec ac
+-        if ac==start
++        if ac=start
+             call error(missing_shl)
+         elseif ac#!=(shl)
+             call error(missing_shl)
+         endelseif
+-    elseif op==(sar_shr);ss missing_sar_shr="expecting value and >>"
++    elseif op=(sar_shr);ss missing_sar_shr="expecting value and >>"
+         dec ac
+-        if ac==start
++        if ac=start
+             call error(missing_sar_shr)
+         elseif ac#!=(sar_shr)
+             call error(missing_sar_shr)
+@@ -533,7 +536,7 @@ endfunction
+ 
+ #pointer
+ function action_code_row_parse_tool_util(ss ac,sd p_op,sd endtype1,sd endtype2)
+-    if ac#==0
++    if ac#=0
+         call error("expeting a number, variables operations")
+     endif
+     #a new object
+@@ -542,12 +545,12 @@ function action_code_row_parse_tool_util
+     if pointer!=ac
+         setcall ac action_code_parse_new_or_call(pointer,(new_action))
+         sd bool;setcall bool action_parse_utilEndTypes(ac#,p_op,endtype1,endtype2)
+-        if bool==(TRUE);inc ac;endif
++        if bool=(TRUE);inc ac;endif
+         return ac
+     endif
+     sd ifElse_bool=FALSE
+     setcall ac action_parse_loop(ac,p_op,endtype1,endtype2,#ifElse_bool)
+-    if ifElse_bool==(FALSE)
++    if ifElse_bool=(FALSE)
+         call action_code_set((math_end))
+     endif
+     return ac
+@@ -555,24 +558,24 @@ endfunction
+ #pointer
+ function action_parse_loop(ss ac,sv p_op,sd endtype1,sd endtype2,sd p_ifElse_bool)  #p_op is pointing at a stack variable
+     sd bool
+-    #can be on the stack but chars are low values; ends are set again when recursivity
+-    chars oprs#operations_size
+-    chars *=Openingbracket
+-    chars *=Exclamationmark
+-    chars *=Equals
+-    chars end#1
+-    chars end2#1
+-    chars *term=0
++    #can be on the stack but char is low value; ends are set again when recursivity
++    char oprs#operations_size
++    char *=Openingbracket
++    char *=Exclamationmark
++    char *=Equals
++    char end#1
++    char end2#1
++    char *term=0
+     #
+     sd is_compare_ptr
+     setcall is_compare_ptr compare_bool_pointer()
+     #
+     vstr op_set^oprs
+     ss ops;setcall ops get_operations();call memcpy(op_set,ops,(operations_size))
+-    while 1==1
++    while 1=1
+         sd op
+         sd was_parenthesis=0
+-        if ac#==(Openparenthesis)
++        if ac#=(Openparenthesis)
+             call action_code_set((parenthesis_start))
+             inc ac
+             setcall ac action_code_row_parse_tool(ac,(Closeparenthesis))
+@@ -584,9 +587,9 @@ function action_parse_loop(ss ac,sv p_op
+         set end endtype1
+         set end2 endtype2
+         #
+-        if was_parenthesis==0
++        if was_parenthesis=0
+             setcall ac action_code_take_main(ac,#op,op_set)
+-            if op==(ifElse_sign)
++            if op=(ifElse_sign)
+                 inc ac
+                 call action_code_set((ifElse_start))
+                 set p_ifElse_bool# (TRUE)
+@@ -597,17 +600,17 @@ function action_parse_loop(ss ac,sv p_op
+         endif
+         #
+         setcall ac action_code_extended_operations(ac,op)
+-        if is_compare_ptr#==(TRUE)
++        if is_compare_ptr#=(TRUE)
+             set is_compare_ptr# (FALSE)
+         else
+-            if op==0
++            if op=0
+                 if p_op!=0
+                     set p_op# op
+                 endif
+                 return ac
+             else
+                 setcall bool action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
+-                if bool==(TRUE);return ac;endif
++                if bool=(TRUE);return ac;endif
+             endelse
+             sd x;setcall x action_parse_take_action(op,ac)
+             call action_code_set(x)
+@@ -618,23 +621,23 @@ endfunction
+ function action_parse_take_action(sd op,ss ac)
+     sd x
+     ss test
+-    if op==(add);set x (ActionAdd2)
+-    elseif op==(sub);set x (ActionSubtract)
+-    elseif op==(mlt);set x (ActionMultiply)
+-    elseif op==(div);set x (ActionDivide)
+-    elseif op==(modulo);set x (ActionModulo)
+-    elseif op==(and)
++    if op=(add);set x (ActionAdd2)
++    elseif op=(sub);set x (ActionSubtract)
++    elseif op=(mlt);set x (ActionMultiply)
++    elseif op=(div);set x (ActionDivide)
++    elseif op=(modulo);set x (ActionModulo)
++    elseif op=(and)
+         set test ac;dec test
+-        if test#==(and);set x (ActionAnd);else;set x (ActionBitAnd);endelse
+-    elseif op==(or)
++        if test#=(and);set x (ActionAnd);else;set x (ActionBitAnd);endelse
++    elseif op=(or)
+         set test ac;dec test
+-        if test#==(or);set x (ActionOr);else;set x (ActionBitOr);endelse
+-    elseif op==(xor);set x (ActionBitXor)
+-    elseif op==(shl);set x (ActionBitLShift)
+-    elseif op==(sar_shr)
++        if test#=(or);set x (ActionOr);else;set x (ActionBitOr);endelse
++    elseif op=(xor);set x (ActionBitXor)
++    elseif op=(shl);set x (ActionBitLShift)
++    elseif op=(sar_shr)
+         set test ac
+         sub test 2
+-        if test#==0;set x (ActionBitRShift)
++        if test#=0;set x (ActionBitRShift)
+         else;set x (ActionBitURShift);endelse
+     else
+         #at "qwer"x can be x
+@@ -660,10 +663,10 @@ function action_code_extended_operations
+     endif
+ 
+     #shl/shr/sar / && ||
+-    if op==(shl)
++    if op=(shl)
+         inc pointer
+         if pointer#!=(shl);call error("expecting <<");endif
+-    elseif op==(sar_shr)
++    elseif op=(sar_shr)
+         inc pointer
+         if pointer#!=(sar_shr);call error("expecting >>");endif
+         inc pointer
+@@ -671,9 +674,9 @@ function action_code_extended_operations
+         #not >>> case
+             dec pointer
+         endif
+-    elseif op==(and)
++    elseif op=(and)
+         inc pointer;if pointer#!=(and);dec pointer;endif
+-    elseif op==(or)
++    elseif op=(or)
+         inc pointer;if pointer#!=(or);dec pointer;endif
+     endelseif
+ 
+@@ -699,14 +702,14 @@ function action_code_take_main(ss ac,sv
+         return pointer
+     endif
+     #a variable(a.b.c[1+d])
+-    chars neg="-"
+-    if pointer#==neg
++    char neg="-"
++    if pointer#=neg
+         inc pointer
+     endif
+     sd pos
+     setcall pos strcspn(pointer,delims)
+     add pointer pos
+-    while pointer#==(Openingbracket)
++    while pointer#=(Openingbracket)
+         setcall pointer brackets_test(pointer)
+         #continue with the member
+         setcall pos strcspn(pointer,delims)
+@@ -721,15 +724,15 @@ endfunction
+ #pointer
+ function brackets_test(ss pointer)
+     sd multidim=1
+-    while multidim==1
++    while multidim=1
+         sd openedbrackets=1
+         while openedbrackets>0
+             inc pointer
+-            if pointer#==(Openingbracket)
++            if pointer#=(Openingbracket)
+                 inc openedbrackets
+-            elseif pointer#==(Closingbracket)
++            elseif pointer#=(Closingbracket)
+                 dec openedbrackets
+-            elseif pointer#==0
++            elseif pointer#=0
+                 call error("unclosed bracket detected")
+             endelseif
+         endwhile
+@@ -745,8 +748,8 @@ import "str_escape" str_escape
+ #next/0
+ function action_code_str(ss ac)
+     sd delim
+-    chars stringdelim="\""
+-    chars stringdelim2="'"
++    char stringdelim="\""
++    char stringdelim2="'"
+     set delim stringdelim
+     if ac#!=stringdelim
+         if ac#!=stringdelim2
+@@ -766,12 +769,12 @@ function action_code_str(ss ac)
+ endfunction
+ function action_code_take(ss ac)
+     sd b;setcall b numeric_code(ac)
+-    if b==(TRUE)
++    if b=(TRUE)
+         return (void)
+     endif
+     ss test
+     setcall test action_code_membersplit(ac)
+-    if test==0
++    if test=0
+         call action_code_set((ActionGetVariable))
+         call action_code_set_pointer(ac)
+     else
+@@ -782,8 +785,8 @@ endfunction
+ #bool
+ function numeric_code(ss ac)
+     ss pointer;set pointer ac
+-    chars neg="-"
+-    if pointer#==neg
++    char neg="-"
++    if pointer#=neg
+         inc pointer
+     endif
+     sd bool
+@@ -793,7 +796,7 @@ function numeric_code(ss ac)
+     data value_low#1;data value_high#1
+     #
+     ss decimal_symbol_test
+-    chars dot="."
++    char dot="."
+     setcall decimal_symbol_test strchr(pointer,dot)
+     if decimal_symbol_test!=(NULL)
+         call action_code_set((ap_double))
+@@ -808,8 +811,8 @@ function numeric_code(ss ac)
+     ss hextest
+     set hextest pointer
+     inc hextest
+-    chars hex="x"
+-    if hextest#==hex
++    char hex="x"
++    if hextest#=hex
+         call sscanf(ac,"%x",#value_low)
+     else
+         call sscanf(ac,"%u",#value_low)
+@@ -819,8 +822,8 @@ function numeric_code(ss ac)
+ endfunction
+ function action_code_member(ss ac)
+     vstr delims=".["
+-    chars dot=".";chars sqbrace_start="["
+-    chars sqbrace_end="]"
++    char dot=".";char sqbrace_start="["
++    char sqbrace_end="]"
+     while ac#!=0
+         sd pos
+         setcall pos strcspn(ac,delims)
+@@ -831,13 +834,13 @@ function action_code_member(ss ac)
+             add pointer pos
+             call action_code_set_pointer(ac)
+         endif
+-        if pointer#==sqbrace_start
++        if pointer#=sqbrace_start
+             set pointer# 0
+             inc pointer
+             call action_code_set((square_bracket_start))
+             setcall pointer action_code_row_parse_tool(pointer,sqbrace_end)
+         endif
+-        if pointer#==dot
++        if pointer#=dot
+             set pointer# 0
+             inc pointer
+         endif
+@@ -856,20 +859,20 @@ function action_compare(sd value,sd firs
+     ss compares
+     setcall compares compares_signs()
+     #<
+-    if compares#==value
++    if compares#=value
+         if firstcompare!=(NULL)
+                                            #is shl
+-            if firstcompare==(ActionLess2);return 2
++            if firstcompare=(ActionLess2);return 2
+             else;call error("not expeting < here");endelse
+         endif
+         return (ActionLess2)
+     endif
+     #>
+     inc compares
+-    if compares#==value
++    if compares#=value
+         if firstcompare!=(NULL)
+                                              #is sar_shr
+-            if firstcompare==(ActionGreater);return 2
++            if firstcompare=(ActionGreater);return 2
+             else;call error("not expeting > here");endelse
+         endif
+         return (ActionGreater)
+@@ -880,44 +883,44 @@ function action_compare(sd value,sd firs
+     endif
+     #=
+     inc compares
+-    if compares#==value
+-        if firstcompare==(ActionLess2)
++    if compares#=value
++        if firstcompare=(ActionLess2)
+             call action_code_set((ActionGreater))
+             call action_code_set((ActionNot))
+             return 1
+-        elseif firstcompare==(ActionGreater)
++        elseif firstcompare=(ActionGreater)
+             call action_code_set((ActionLess2))
+             call action_code_set((ActionNot))
+             return 1
+-        elseif firstcompare==(ActionEquals2)
++        elseif firstcompare=(ActionEquals2)
+             call action_code_set((ActionEquals2))
+             call action_code_set(0)
+             return 1
+-        elseif firstcompare==(ActionNot)
++        elseif firstcompare=(ActionNot)
+             call action_code_set((ActionEquals2))
+             call action_code_set((ActionNot))
+             return 1
+         endelseif
+         return (ActionEquals2)
+     endif
+-    #!
++    # !
+     inc compares
+-    if compares#==value
++    if compares#=value
+         if firstcompare!=(NULL)
+             call error("not expecting ! here")
+         endif
+         return (ActionNot)
+     endif
+     #another char
+-    if firstcompare==(NULL)
++    if firstcompare=(NULL)
+         #call error("expecting a comparison")
+         return (NULL)
+-    elseif firstcompare==(ActionEquals2)
++    elseif firstcompare=(ActionEquals2)
+         call error("expecting a == comparison")
+-    elseif firstcompare==(ActionNot)
++    elseif firstcompare=(ActionNot)
+         call error("expecting a != comparison")
+     endelseif
+-    if firstcompare==(ActionLess2)
++    if firstcompare=(ActionLess2)
+         call action_code_set((ActionLess2))
+         call action_code_set(0)
+     else
+@@ -933,7 +936,7 @@ endfunction
+ function brace_blocks_counter_inc()
+     sd c
+     setcall c brace_blocks_counter()
+-    if c#==(brace_blocks_max)
++    if c#=(brace_blocks_max)
+     #was >=
+         call error("too many blocks: {}")
+     endif
+@@ -965,9 +968,9 @@ function brace_blocks_remove_parse_else(
+     dec i
+     setcall p_type cond_blocks_at_index(i)
+     set type p_type#
+-    if type==(else_flag)
++    if type=(else_flag)
+         sd else_number=0
+-        while type==(else_flag)
++        while type=(else_flag)
+             inc else_number
+             dec p_i#
+             if i!=0
+@@ -986,13 +989,13 @@ function brace_blocks_remove_parse()
+     sd p_type
+     sd type
+     sd consecutive=consecutive_flag
+-    while consecutive==(consecutive_flag)
++    while consecutive=(consecutive_flag)
+         call brace_blocks_counter_dec()
+         #
+         setcall p_type cond_blocks()
+         setcall type type_consecutive(p_type#,#consecutive)
+         if type!=(normal_marker)
+-            if type==(while_marker)
++            if type=(while_marker)
+                 call action_code_set((whileblock_end))
+             else
+                 call action_code_set((block_end))
+@@ -1098,10 +1101,10 @@ function resolve_dummy_jump(sd jumpoffse
+     inc mem;set mem# byte
+ endfunction
+ function brace_blocks_remove_write_loopIfJumps_at_current_offset()
+-    while 1==1
++    while 1=1
+         sd ifoffset
+         setcall ifoffset brace_blocks_remove_write_offset()
+-        if ifoffset==0
++        if ifoffset=0
+             #also remove the type of loop
+             call brace_blocks_counter_dec()
+             return (void)
+@@ -1122,8 +1125,8 @@ function action_code_parse_leftfunction(
+     endif
+     #a call
+     setcall ac action_code_parse_new_or_call(ac,(call_action_left))
+-    chars end=";"
+-    if ac#==end
++    char end=";"
++    if ac#=end
+         inc ac
+     endif
+     return ac
+@@ -1136,17 +1139,17 @@ function action_code_parse_new_or_call(s
+     ss last_dot=0
+     sd bool
+     setcall bool part_of_variable(pointer#)
+-    while bool==(TRUE)
++    while bool=(TRUE)
+         inc pointer
+         setcall bool part_of_variable(pointer#)
+-        if bool==(FALSE)
+-            if pointer#==(Openingbracket)
++        if bool=(FALSE)
++            if pointer#=(Openingbracket)
+                 setcall pointer brackets_test(pointer)
+             endif
+-            if pointer#==(Period)
++            if pointer#=(Period)
+                 set last_dot pointer
+                 set bool (TRUE)
+-            elseif pointer#==(Openparenthesis)
++            elseif pointer#=(Openparenthesis)
+                 setcall pointer action_code_parse_function_detected(ac,last_dot,pointer,type)
+                 return pointer
+             endelseif
+@@ -1178,10 +1181,10 @@ function action_code_parse_function_argu
+     #arguments
+     # this was for what? sd math_values
+     # setcall math_values action_code_get()
+-    chars comma=","
+-    chars close=")"
++    char comma=","
++    char close=")"
+     inc pointer
+-    if pointer#==close
++    if pointer#=close
+         inc pointer
+         return pointer
+     endif
+@@ -1206,7 +1209,7 @@ function action_code_parse_function_argu
+     sd op=0
+     while op!=close
+         setcall pointer action_code_row_parse_tool_util(pointer,#op,comma,close)
+-        if op==0
++        if op=0
+             call error("close the function arguments sign expected: )")
+         endif
+         #
+@@ -1238,16 +1241,16 @@ endfunction
+ function action_code_parse_deffunction(ss ac)
+     ss pointer
+     setcall pointer str_expression_at_start(ac,"function")
+-    if pointer==ac
++    if pointer=ac
+         return ac
+     endif
+     call action_code_set((function_action))
+     ss name_start
+     set name_start pointer
+-    chars startsign="("
++    char startsign="("
+     ss args
+     setcall args strchr(pointer,startsign)
+-    if args==(NULL)
++    if args=(NULL)
+         call error("start sign expected at function definition: (")
+     endif
+     set args# 0
+@@ -1266,7 +1269,7 @@ function action_code_parse_deffunction(s
+     setcall index_current brace_blocks_counter()
+     set index_current index_current#
+     while index_atstart<=index_current
+-        if pointer#==0
++        if pointer#=0
+             call error("A define function was unclosed")
+         endif
+         setcall pointer action_code_row(pointer,(FALSE))
+@@ -1278,9 +1281,9 @@ endfunction
+ #pointer
+ function action_code_parse_function_defarguments(ss ac)
+     vstr argsdelims=",)"
+-    chars close=")"
++    char close=")"
+     inc ac
+-    if ac#==close
++    if ac#=close
+         inc ac
+         return ac
+     endif
+@@ -1290,7 +1293,7 @@ function action_code_parse_function_defa
+         setcall pos strcspn(ac,argsdelims)
+         call action_code_set_pointer(ac)
+         add ac pos
+-        if ac#==0
++        if ac#=0
+             call error("close the function arguments sign expected: )")
+         endif
+         set op ac#
+--- actionswf-1.orig/src/actionpool.s
++++ actionswf-1/src/actionpool.s
+@@ -66,7 +66,7 @@ function actionpool_getvalue(ss value)
+     sd nr
+     sd newlen
+     setcall newlen strlen(value)
+-    if size==0
++    if size=0
+     #add the pools header and count=1, later add value for count=1
+         sd onevalue=1
+         call swf_mem_add(#onevalue,2)
+@@ -81,10 +81,10 @@ function actionpool_getvalue(ss value)
+         while count!=0
+             sd len
+             setcall len strlen(mem)
+-            if len==newlen
++            if len=newlen
+                 sd comp
+                 setcall comp memcmp(mem,value,len)
+-                if comp==0
++                if comp=0
+                     sub nr count
+                     return nr
+                 endif
+--- actionswf-1.orig/src/actionutil.s
++++ actionswf-1/src/actionutil.s
+@@ -11,6 +11,19 @@ import "spaces" spaces
+ 
+ #strings
+ 
++#0 yes  1 no
++function row_termination(sv p_ac,sv p_row)
++	ss ac;set ac p_ac#
++	if ac#=(LineFeed)
++		inc p_row#
++		return 0
++	elseif ac#=(CarriageReturn)
++		inc ac;if ac#=0xa;set p_ac# ac;endif
++		inc p_row#
++		return 0
++	endelseif
++	return 1
++endfunction
+ #error_row
+ function escape_action(ss ac,ss pointer,ss stop_pointer)
+     sd row=1
+@@ -18,55 +31,55 @@ function escape_action(ss ac,ss pointer,
+     sd error_row=0
+     #
+     sd comments=0
+-    chars lines_com_c1="*";chars lines_com_c2="/";ss test
++    char lines_com_c1="*";char lines_com_c2="/";ss test
+     const line_comment=1
+     const multiLine_comment=2
+     #
+-    while loop1==1
++    while loop1=1
+         sd loop2=1
+         setcall ac spaces(ac)
+         #
+         if comments!=(multiLine_comment)
+             set comments 0
+-            if ac#==(Slash)
++            if ac#=(Slash)
+                 set test ac
+                 inc test
+-                if test#==(Slash)
++                if test#=(Slash)
+                     set comments (line_comment)
+                     add ac 2
+-                elseif test#==lines_com_c1
++                elseif test#=lines_com_c1
+                     set comments (multiLine_comment)
+                     add ac 2
+                 endelseif
+             endif
+         endif
+         #
+-        while loop2==1
+-            if ac#==0xa
+-                set loop2 0
+-                inc row
+-            elseif ac#==0xd
+-                set loop2 0
+-                set test ac;inc test;if test#==0xa;inc ac;endif
+-                inc row
+-            elseif ac#==0
+-                set loop2 0
+-                set loop1 0
+-                set pointer# 0
+-            else
+-                if comments==0
+-                    if pointer==stop_pointer
+-                        set error_row row
+-                    else
+-                        set pointer# ac#
+-                    endelse
+-                    inc pointer
+-                elseif comments==(multiLine_comment)
+-                    if ac#==lines_com_c1
+-                        set test ac;inc test;if test#==lines_com_c2;set comments 0;inc ac;endif
+-                    endif
+-                endelseif
+-            endelse
++	import "debug_phase_init" debug_phase_init
++        while loop2=1
++		setcall loop2 row_termination(#ac,#row)
++		if loop2=1
++			if ac#=0
++				set loop2 0
++				set loop1 0
++				set pointer# 0
++				call debug_phase_init(pointer)
++			else
++				if comments=0
++				    if pointer=stop_pointer
++				        set error_row row
++				    else
++				        set pointer# ac#
++				    endelse
++				    inc pointer
++				elseif comments=(multiLine_comment)
++				    if ac#=lines_com_c1
++				        set test ac;inc test;if test#=lines_com_c2;set comments 0;inc ac;endif
++				    endif
++				endelseif
++			endelse
++		else
++			call debug_phase_init(pointer)
++		endelse
+             inc ac
+         endwhile
+ 	if error_row!=0
+@@ -81,19 +94,19 @@ function escape_count(ss string,sd escap
+     sd nr=0
+     sd escaped=0
+     while string#!=0
+-        if string#==escape
++        if string#=escape
+             xor escaped 1
+-        elseif escaped==1
++        elseif escaped=1
+ 		inc nr
+             set escaped 0
+ 
+ 		#this is not working nowadays, printf is searching for floats on xmm registers, kept as legacy
+-		chars l="l"
+-		if string#==l
+-			chars f="f";
++		char l="l"
++		if string#=l
++			char f="f";
+ 			ss double_test=1
+ 			add double_test string
+-			if double_test#==f
++			if double_test#=f
+ 				inc nr
+ 			endif
+ 		endif
+@@ -110,7 +123,7 @@ function action_debug(sd is_on)
+     data action_errors=FALSE
+     vstr *#1
+     vstr m=NULL
+-    if is_on==(FALSE)
++    if is_on=(FALSE)
+         #set there and here, here good at errors and comeback
+         set action_errors (FALSE)
+         import "mem_free" mem_free
+@@ -131,7 +144,7 @@ endfunction
+ function action_error()
+     sd p_action_errors
+     setcall p_action_errors action_debug((TRUE))
+-    if p_action_errors#==(FALSE)
++    if p_action_errors#=(FALSE)
+         return (void)
+     endif
+ 
+@@ -147,7 +160,7 @@ function action_error()
+     setcall row escape_action(ac,mem,p_c#)
+     import "string_nl_print" string_nl_print
+     #a small reserve for a number like 2 000 000 000
+-    chars row_nr#dword_to_string_chars
++    char row_nr#dword_to_string_char
+     call sprintf(#row_nr,"%u",row)
+     call string_nl_print(#row_nr)
+     call string_nl_print(p_c#)
+@@ -179,7 +192,7 @@ function pool_size(sd id)
+     sd poolsize
+     setcall poolsize block_get_size(poolblock)
+     #detected at button actions="", swfdump giving error without "if poolsize!=0"
+-    if poolsize==0;return 0;endif
++    if poolsize=0;return 0;endif
+     #add header
+     add poolsize (1+2)
+     return poolsize
+@@ -191,7 +204,7 @@ endfunction
+ 
+ importaftercall ebool
+ 
+-importx "action" action
++import "action_base" action_base
+ 
+ import "swf_actionblock_add" swf_actionblock_add
+ import "actionrecordheader" actionrecordheader
+@@ -204,15 +217,15 @@ function action_push(sd factors)
+ 	sd size=0
+ 	while iter#!=-1
+ 		inc size
+-		if iter#==(ap_Integer)
++		if iter#=(ap_Integer)
+ 			add size (DWORD)
+ 			incst iter
+-		elseif iter#==(ap_double)
++		elseif iter#=(ap_double)
+ 			add size (QWORD)
+ 			add iter (2*:)
+-		elseif iter#==(ap_Null)
++		elseif iter#=(ap_Null)
+ 		#skip
+-		elseif iter#==(ap_Undefined)
++		elseif iter#=(ap_Undefined)
+ 		#skip
+ 		else
+ 		#if iter#==(ap_RegisterNumber)
+@@ -222,7 +235,7 @@ function action_push(sd factors)
+ 			sd value
+ 			set value iter#
+ 			incst iter
+-			if value==(ap_Constant8)
++			if value=(ap_Constant8)
+ 			#set the action pool(if isn't) and verify to add +1size if 8 will go to ap_Constant16
+ 				sd translated_id
+ 				setcall translated_id actionpool_value(iter#v^)
+@@ -239,7 +252,7 @@ function action_push(sd factors)
+ 	sd cursor^factors
+ 	while cursor#!=-1
+ 		#test here Constant8 to Constant16
+-		if cursor#==(ap_Constant8)
++		if cursor#=(ap_Constant8)
+ 			sv pointer
+ 			set pointer cursor
+ 			incst pointer
+@@ -255,23 +268,23 @@ function action_push(sd factors)
+ 
+ 		call swf_actionblock_add(cursor,1)
+ 
+-		if cursor#==(ap_Integer)
++		if cursor#=(ap_Integer)
+ 			incst cursor
+ 			call swf_actionblock_add(cursor,(DWORD))
+-		elseif cursor#==(ap_double)
++		elseif cursor#=(ap_double)
+ 			incst cursor
+ 			call swf_actionblock_add(cursor,(DWORD))
+ 			incst cursor
+ 			call swf_actionblock_add(cursor,(DWORD))
+-		elseif cursor#==(ap_RegisterNumber)
++		elseif cursor#=(ap_RegisterNumber)
+ 			incst cursor
+ 			call swf_actionblock_add(cursor,(BYTE))
+-		elseif cursor#==(ap_Boolean)
++		elseif cursor#=(ap_Boolean)
+ 			incst cursor
+ 			call swf_actionblock_add(cursor,(BYTE))
+-		elseif cursor#==(ap_Null)
++		elseif cursor#=(ap_Null)
+ 		#skip
+-		elseif cursor#==(ap_Undefined)
++		elseif cursor#=(ap_Undefined)
+ 		#skip
+ 		else
+ 		#if cursor#==(ap_Constant8)
+@@ -285,6 +298,8 @@ endfunction
+ 
+ function action_one(sd tag)
+     call swf_actionblock_add(#tag,1)
++      import "debug_phase_code_add" debug_phase_code_add
++      call debug_phase_code_add()
+ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
+@@ -311,14 +326,14 @@ import "action_get_one" action_get_one
+ #the position where the mathpointer reachs
+ function action_member_loop(sd mathpointer,sd endoffset)
+     call action_get_one(mathpointer#v^)
+-    while 1==1
++    while 1=1
+         add mathpointer :  #to pass the pointer
+         #
+-        while mathpointer#==(square_bracket_start)
++        while mathpointer#=(square_bracket_start)
+         #multi-dim arrays
+             add mathpointer (DWORD)
+             setcall mathpointer action_code_right_util(mathpointer)
+-            if endoffset==(get_member)
++            if endoffset=(get_member)
+                 call action_one((ActionGetMember))
+             else
+                 if mathpointer#v^!=(no_pointer)
+@@ -333,7 +348,7 @@ function action_member_loop(sd mathpoint
+         set endtest mathpointer
+         add endtest endoffset
+         #
+-        if endtest#==(no_pointer)
++        if endtest#=(no_pointer)
+             if endoffset!=(no_pointer)
+                 #push to set later
+                 call action_push((ap_Constant8),mathpointer#v^,-1)
+@@ -351,7 +366,7 @@ import "error" error
+ import "forward_values_expand" forward_values_expand
+ function action_member_write(ss member)
+     const dup_member=256
+-    chars dup_data#dup_member
++    char dup_data#dup_member
+     vstr code^dup_data
+     sd len
+     setcall len strlen(member)
+@@ -391,7 +406,7 @@ function pool_wr(sd id)
+     sd poolsize
+     setcall poolsize block_get_size(poolblock)
+     #detected at button actions="", swfdump giving error without "if poolsize!=0"
+-    if poolsize==0;return 0;endif
++    if poolsize=0;return 0;endif
+     sd poolmem
+     setcall poolmem block_get_mem(poolblock)
+     call swf_actionrecordheader((ActionConstantPool),poolsize)
+@@ -404,8 +419,8 @@ function action_format(sv args)
+     sd args_nr=2
+     sv args_format
+     set args_format args;incst args_format
+-    chars e="%"
++    char e="%"
+     addcall args_nr escape_count(args_format#,e)
+     callex sprintf args args_nr
+-    call action(args#)
++    call action_base(args#)
+ endfunction
+--- actionswf-1.orig/src/bits.s
++++ actionswf-1/src/bits.s
+@@ -31,7 +31,7 @@ function bits_bigendian(sd value,sd size
+     inc iter
+     div iter 2
+     while iter!=0
+-        if pos==0x80
++        if pos=0x80
+             set dest# 0
+         endif
+         sd test
+@@ -41,7 +41,7 @@ function bits_bigendian(sd value,sd size
+             or dest# pos
+         endif
+         div pos 2
+-        if pos==0
++        if pos=0
+             set pos 0x80
+             inc dest
+         endif
+@@ -63,7 +63,7 @@ function num_bits(sd value)
+         sd test
+         set test mask
+         and test value
+-        if sign==0
++        if sign=0
+             if test!=0
+                 return i
+             endif
+@@ -96,7 +96,7 @@ function rect_prepare(sv p_out,sv p_size
+     mult width 20
+     mult height 20
+     setcall NBits numbitsMax(width,height)
+-    chars rect#31*4+5
++    char rect#31*4+5
+     call bits_packs(#rect,5,NBits,(NBits_size),0,NBits,width,NBits,0,NBits,height,NBits)
+     sd size=4
+     mult size NBits
+@@ -108,10 +108,10 @@ function rect_prepare(sv p_out,sv p_size
+     set p_size# size
+ endfunction
+ function matrix_translate(sv p_dest,sd p_size,sd x,sd y)
+-    chars matrix#1+4+4
++    char matrix#1+4+4
+     set p_dest# #matrix
+-    if x==0
+-        if y==0
++    if x=0
++        if y=0
+             set matrix 0
+             set p_size# 1
+             return (void)
+@@ -129,7 +129,7 @@ function matrix_translate(sv p_dest,sd p
+         add size 7
+         div size 8
+ 
+-	#this is no more than chars matrix
++	#this is no more than char matrix
+     set p_size# size
+ endfunction
+ 
+--- actionswf-1.orig/src/character.s
++++ actionswf-1/src/character.s
+@@ -12,9 +12,9 @@ function args_advance(sv p_args)
+     add p_args# (DWORD)
+     return value#
+ endfunction
+-const max_chars_records=256
++const max_char_records=256
+ function shapewithstyle_records()
+-    chars shapewithstyle_record#max_chars_records
++    char shapewithstyle_record#max_char_records
+     return #shapewithstyle_record
+ endfunction
+ 
+@@ -33,10 +33,10 @@ endfunction
+ #get:fill/lin
+ function NumFill_NumLin(sd set_get,sd fill,sd lin)
+     data NFill_NLin#1
+-    if set_get==0
++    if set_get=0
+         set NFill_NLin lin;mult fill 0x10;or NFill_NLin fill
+     else
+-        if fill==(FALSE);set lin NFill_NLin;and lin 0x0F;return lin
++        if fill=(FALSE);set lin NFill_NLin;and lin 0x0F;return lin
+         else;set fill NFill_NLin;div fill 0x10;return fill;endelse
+     endelse
+ endfunction
+@@ -48,10 +48,10 @@ const sim64pointerSize=pointer_rest
+ function edittext_struct()
+     data fontid#1
+     data *font_height#1
+-    str *fontclassname#1;chars *sim64pointer#sim64pointerSize
++    str *fontclassname#1;char *sim64pointer#sim64pointerSize
+     data *rgba#1
+     data *maxlength#1
+-    str *initialtext#1;chars *sim64pointer#sim64pointerSize
++    str *initialtext#1;char *sim64pointer#sim64pointerSize
+     data *layout_align#1
+     data *layout_leftmargin#1
+     data *layout_rightmargin#1
+@@ -133,7 +133,7 @@ function shape_records_bits(sd value,sd
+     sd pointer
+     set pointer p_dest_pos#
+     subcall pointer shapewithstyle_records()
+-    if pointer==(max_chars_records)
++    if pointer=(max_char_records)
+     #was >=
+         call error("too many arguments at shape")
+     endif
+@@ -146,12 +146,12 @@ function shape_records_add(sd p_dest_pos
+     sd edge
+     setcall edge args_advance(p_args)
+     call shape_records_bits(edge,1,p_dest_pos)
+-    if edge==0
++    if edge=0
+     #StyleChangeRecord,#EndShapeRecord
+         sd flags
+         setcall flags args_advance(p_args)
+         call shape_records_bits(flags,5,p_dest_pos)
+-        if flags==0
++        if flags=0
+         #EndShapeRecord
+             return (void)
+         endif
+@@ -182,7 +182,7 @@ function shape_records_add(sd p_dest_pos
+ endfunction
+ function shape_records_add_moveto(sd p_dest_pos,sd flags,sd p_args)
+     and flags (StateMoveTo)
+-    if flags==0
++    if flags=0
+         return (void)
+     endif
+     sd x
+@@ -201,7 +201,7 @@ function shape_records_add_edge(sd p_des
+     sd straight_edge
+     setcall straight_edge args_advance(p_args)
+     call shape_records_bits(straight_edge,1,p_dest_pos)
+-    if straight_edge==1
++    if straight_edge=1
+         call shape_records_add_edge_straight(p_dest_pos,p_args)
+     else
+         call shape_records_add_edge_curved(p_dest_pos,p_args)
+@@ -219,16 +219,16 @@ function shape_records_add_edge_straight
+     if width!=0;if height!=0;set GeneralLineFlag 1;endif;endif
+     call shape_records_bits(GeneralLineFlag,1,p_dest_pos)
+     #Vert(1)/Horz(0)
+-    if GeneralLineFlag==0
++    if GeneralLineFlag=0
+         sd vertical=1;if width!=0;set vertical 0;endif
+         call shape_records_bits(vertical,1,p_dest_pos)
+     endif
+     #DeltaX SB[NumBits+2]
+-    sd DeltaX=TRUE;if GeneralLineFlag==0;if vertical==1;set DeltaX (FALSE);endif;endif
+-    if DeltaX==(TRUE);call shape_records_bits(width,counter,p_dest_pos);endif
++    sd DeltaX=TRUE;if GeneralLineFlag=0;if vertical=1;set DeltaX (FALSE);endif;endif
++    if DeltaX=(TRUE);call shape_records_bits(width,counter,p_dest_pos);endif
+     #DeltaY SB[NumBits+2]
+-    sd DeltaY=TRUE;if GeneralLineFlag==0;if vertical==0;set DeltaY (FALSE);endif;endif
+-    if DeltaY==(TRUE);call shape_records_bits(height,counter,p_dest_pos);endif
++    sd DeltaY=TRUE;if GeneralLineFlag=0;if vertical=0;set DeltaY (FALSE);endif;endif
++    if DeltaY=(TRUE);call shape_records_bits(height,counter,p_dest_pos);endif
+ endfunction
+ function shape_records_add_edge_curved(sd p_dest_pos,sd p_args)
+     sd control_x
+@@ -280,7 +280,7 @@ function swf_shape_simple(sd width,sd he
+     sub height_variable ycurve
+ 
+     data header#4
+-    sd struct^header;if lineheight==0;add struct (DWORD);endif
++    sd struct^header;if lineheight=0;add struct (DWORD);endif
+     sd cursor;set cursor struct
+     set cursor# (solid_fill)
+     add cursor (DWORD);set cursor# fillcolor
+@@ -366,15 +366,15 @@ function swf_button_base(sd state_def_id
+     sd Characters_CharacterEndFlag_size
+     setcall Characters_CharacterEndFlag_size buttonrecord(0,0,0)
+     mult Characters_CharacterEndFlag_size 3
+-    if noText==(FALSE)
++    if noText=(FALSE)
+         addcall Characters_CharacterEndFlag_size buttonrecord(0,0,y)
+     endif
+     inc Characters_CharacterEndFlag_size
+ 
+     add size Characters_CharacterEndFlag_size
+ 
+-    chars BUTTONCONDACTION={0,0};#CondActionSize
+-    chars *={8,0};#CondOverDownToOverUp
++    char BUTTONCONDACTION={0,0};#CondActionSize
++    char *={8,0};#CondOverDownToOverUp
+     const BUTTONCONDACTION_header_size=2+2
+     #is action,pool and sprite, it's more code to get action,pool only
+     import "new_sprite_id" new_sprite_id
+@@ -389,7 +389,7 @@ function swf_button_base(sd state_def_id
+     sd ButtonId
+     setcall ButtonId identifiers_get()
+     call swf_mem_add(#ButtonId,2)
+-    chars TrackAsMenu=0
++    char TrackAsMenu=0
+     call swf_mem_add(#TrackAsMenu,(BYTE))
+     sd ActionOffset=2;add ActionOffset Characters_CharacterEndFlag_size
+     call swf_mem_add(#ActionOffset,(WORD))
+@@ -397,10 +397,10 @@ function swf_button_base(sd state_def_id
+     call buttonrecord(1,0,0,(ButtonStateUp),state_def_id,1)
+     call buttonrecord(1,0,0,(ButtonStateOver),state_over_id,2)
+ 	call buttonrecord(1,0,0,(ButtonStateDown|ButtonStateHitTest),state_down_id,3)
+-    if noText==(FALSE)
++    if noText=(FALSE)
+         call buttonrecord(1,0,y,(ButtonStateUp|ButtonStateOver|ButtonStateDown|ButtonStateHitTest),text_id,4)
+     endif
+-    chars CharacterEndFlag=0
++    char CharacterEndFlag=0
+     call swf_mem_add(#CharacterEndFlag,1)
+     import "write_action" write_action
+     call swf_mem_add(#BUTTONCONDACTION,(BUTTONCONDACTION_header_size))
+@@ -414,13 +414,13 @@ endfunction
+ function buttonrecord(sd writeflag,sd x,sd y,sd states,sd id,sd depth)
+     #ButtonReserved[2]=0,ButtonHasBlendMode[1]=0,ButtonHasFilterList[1]=0
+     #states[4]
+-    chars bits#1
+-    chars CharacterID#2
+-    chars PlaceDepth#2
++    char bits#1
++    char CharacterID#2
++    char PlaceDepth#2
+ 
+     sd size=1+2+2
+ 
+-    if writeflag==1
++    if writeflag=1
+         set bits states
+         call dword_to_word_arg(id,#CharacterID)
+         call dword_to_word_arg(depth,#PlaceDepth)
+@@ -429,22 +429,22 @@ function buttonrecord(sd writeflag,sd x,
+ 
+     #PlaceMatrix
+     sd matrix
+-    datax maxtrixsz#1
+-    call matrix_translate(#matrix,#maxtrixsz,x,y)
+-    if writeflag==1
+-        call swf_mem_add(matrix,maxtrixsz)
++    datax matrixsz#1
++    call matrix_translate(#matrix,#matrixsz,x,y)
++    if writeflag=1
++        call swf_mem_add(matrix,matrixsz)
+     else
+-        add size maxtrixsz
++        add size matrixsz
+     endelse
+ 
+-    chars CXFORMWITHALPHA=0
+-    if writeflag==1
++    char CXFORMWITHALPHA=0
++    if writeflag=1
+         call swf_mem_add(#CXFORMWITHALPHA,(BYTE))
+     else
+         add size (BYTE)
+     endelse
+ 
+-    if writeflag==0
++    if writeflag=0
+         return size
+     endif
+ endfunction
+--- /dev/null
++++ actionswf-1/src/debug.s
+@@ -0,0 +1,222 @@
++
++format elfobj64
++
++include "../include/prog.h"
++
++function debug_mark()
++	valuex row#1
++	return #row
++endfunction
++function debug_mark_start()
++	sv a;setcall a debug_mark()
++	set a# 0
++endfunction
++function debug_mark_add()
++	sv a;setcall a debug_mark()
++	add a# :
++endfunction
++function debug_mark_get()
++	value offsets=NULL
++	const p_offsets^offsets
++
++	sv a;setcall a debug_mark()
++	sv b;set b a#
++	add b offsets
++	return b
++endfunction
++
++function debug_target()
++	valuex a#1
++	return #a
++endfunction
++
++function debug_end()
++	valuex a#1
++	return #a
++endfunction
++function debug_actions()
++	datax a#1  #65535
++	return #a
++endfunction
++
++import "mem_free" mem_free
++import "f_close" f_close
++
++function debug_free()
++	sv of%p_offsets
++	if of#!=(NULL)
++		call mem_free(of)
++		value file=NULL
++		const p_debug_file^file
++		call f_close(#file)
++	endif
++endfunction
++
++function debug_phase_init(ss pointer)
++	sv of%p_offsets
++	if of#!=(NULL)
++		sv a;setcall a debug_mark_get()
++		set a# pointer
++		call debug_mark_add()
++	endif
++endfunction
++function debug_phase_parse(ss pointer)
++	sv of%p_offsets
++	if of#!=(NULL)
++		sv a
++		sv start;setcall start debug_mark_get()
++		sv target;setcall target debug_target()
++		if target#=(NULL)
++		#need to know empty rows
++			set a start
++			while pointer>a#
++				incst a
++			endwhile
++			set target# a
++		else
++			set a target#
++		endelse
++		#if pointer>=^a#  # and > ? it's not with spaces at end, therefore ";   \nabc" can go wrong
++		if pointer<^a#
++			ret
++		endif
++		import "action_code_get" action_code_get   #the pointer is not reallocated, can use offset but will be slower
++		sd x;setcall x action_code_get()
++		while start#<^pointer   #or a
++			set start# x
++			call debug_mark_add()
++			setcall start debug_mark_get()
++		endwhile
++		set start# x      ##also,set for this row, can be the only set
++		call debug_mark_add()
++		set target# (NULL)
++	endif
++endfunction
++function debug_phase_code_add()
++	sv of%p_offsets
++	if of#!=(NULL)
++		sd acts;setcall acts debug_actions()
++		inc acts#
++	endif
++endfunction
++
++function debug_action_phase()
++	sv of%p_offsets
++	if of#!=(NULL)
++		call debug_mark_start()  #second and third iteration
++	endif
++endfunction
++
++import "row_termination" row_termination
++
++importx "strlen" strlen
++importx "sprintf" sprintf
++importx "fwrite" fwrite
++
++
++
++importaftercall ebool
++
++import "memalloc" memalloc
++import "f_open_mem" f_open_mem
++import "error" error
++
++function debug_init(sd bool,sd path)
++	sv of%p_offsets
++	if bool=(TRUE)
++		setcall of# memalloc(0)
++
++		sd a;setcall a strlen(path)
++		add a 5
++		sd b;setcall b memalloc(a)
++		call sprintf(b,"%s.log",path)
++		sv file%p_debug_file
++		setcall file# f_open_mem(b,"wb")
++	endif
++endfunction
++
++import "f_printf" f_printf
++
++function debug_action_init(ss ac)
++	sv of%p_offsets
++	if of#!=(NULL)
++		sd start;set start ac
++
++		sd row=1     #at least one row, example: row 1,3 actions
++		while ac#!=0
++			call row_termination(#ac,#row)
++			inc ac
++		endwhile
++
++		#out rows\nac\n
++		sv file%p_debug_file
++		char f={Percent,l,u,LineFeed,Percent,s,LineFeed,Nullchar}
++		call f_printf((fprintf_min+2),file#,#f,row,start)
++
++		mult row :
++		import "memrealloc" memrealloc
++		setcall of# memrealloc(of#,row)
++
++		call debug_mark_start()  #prepare for first iteration
++
++		#set target to 0, for recognizing blank rows at second iteration
++		sv target;setcall target debug_target()
++		set target# (NULL)
++
++		add row of#
++		sv end;setcall end debug_end()   #at third iteration
++		set end# row
++		#
++		sd acts;setcall acts debug_actions()
++		set acts# 0
++	endif
++endfunction
++
++function debug_phase_code(sd codepointer)
++	sv of%p_offsets
++	if of#!=(NULL)
++		sv a;setcall a debug_mark_get()
++		if codepointer=a#   #can also be smaller
++			sv b;set b a
++			sv end;setcall end debug_end()
++			while codepointer=b#
++				call debug_mark_add()
++				setcall b debug_mark_get()
++				if b=end#
++					break
++				endif
++			endwhile
++			sub b a
++			div b :
++
++			#out rows,actions\n
++			sd acts;setcall acts debug_actions()
++			sv file%p_debug_file
++			char f={Percent,l,u,Comma,Percent,u,LineFeed,Nullchar}   #must escape \n or something
++			call f_printf((fprintf_min+2),file#,#f,b,acts#)
++			set acts# 0
++		endif
++	endif
++endfunction
++
++function debug_base_core(sd id)
++	sv file%p_debug_file
++	call f_printf((fprintf_min+1),file#,"%u\n",id) #swf_button is calling action_sprite
++end
++function debug_base(sd id)
++	sv of%p_offsets
++	if of#!=(NULL)
++		call debug_base_core(id)
++	end
++end
++function debug_show(sd id)
++	sv of%p_offsets
++	if of#!=(NULL)
++		call debug_base_core(id)
++		sv file%p_debug_file
++		sd items;set items fwrite("\n",1,1,file#) #...size,items...
++		if items!=1
++			call error("fwrite error")
++		end
++	end
++end
+--- /dev/null
++++ actionswf-1/src/faction.s
+@@ -0,0 +1,69 @@
++Format ElfObj64
++
++include "../include/prog.h"
++
++import "action_debug" action_debug
++import "brace_blocks_counter_init" brace_blocks_counter_init
++import "action_code_values" action_code_values
++import "action_code_values_index" action_code_values_index
++import "escape_action" escape_action
++import "action_debug_free" action_debug_free
++
++
++
++importaftercall ebool
++
++#this/an action
++
++import "action__code_row" action__code_row
++import "action_code_set" action_code_set
++import "action_code_row" action_code_row
++import "dupreserve_string" dupreserve_string
++import "brace_blocks_end" brace_blocks_end
++function action_base(ss ac)
++#ss ac       actionscript string to be parsed
++    sd p_values
++    setcall p_values action_code_values()
++    import "error" error
++    if p_values=(NULL);call error("Don't call the action now.");endif
++    #
++    sd nr
++    setcall nr action_code_values_index()
++    set nr# 0
++    call brace_blocks_counter_init()
++    #
++    ss mem
++    setcall mem dupreserve_string(ac)
++    sd p_action_errors
++    setcall p_action_errors action_debug((TRUE))
++    set p_action_errors# (TRUE)
++	sv cursor;set cursor p_action_errors;add cursor (DWORD);set cursor# ac;add cursor :;set cursor# mem
++
++	import "debug_action_init" debug_action_init
++	call debug_action_init(ac)
++
++    call escape_action(ac,mem,0)
++
++	import "debug_action_phase" debug_action_phase
++	call debug_action_phase()
++
++    while mem#!=0
++        setcall mem action_code_row(mem,(FALSE))
++    endwhile
++    call action_code_set((math_end))
++
++    #set false to stop adding row nr at errors
++    set p_action_errors# (FALSE)
++
++    call brace_blocks_end()
++
++	call debug_action_phase()
++
++	#                 code_values are not reallocated
++	while p_values#!=(math_end)
++		setcall p_values action__code_row(p_values)
++	endwhile
++
++    #free mem ok,another free can be at errors
++    call action_debug_free()
++endfunction
+--- actionswf-1.orig/src/file.s
++++ actionswf-1/src/file.s
+@@ -13,7 +13,7 @@ import "printEr" printEr
+ 
+ function file_get_content__resources(sd trueIsSet_falseIsFree,sd fileIn,sd memIn)
+     data file=fd_none;vdata mem=NULL
+-    if trueIsSet_falseIsFree==(TRUE)
++    if trueIsSet_falseIsFree=(TRUE)
+         if fileIn!=(fd_none);set file fileIn
+         else;set mem memIn;endelse
+     else
+@@ -37,7 +37,21 @@ function file_close(sd p_file)
+     set p_file# (fd_none)
+ endfunction
+ 
++importx "fclose" fclose
+ 
++function f_close(sv p_file)
++	call fclose(p_file#)
++	set p_file# (NULL)
++endfunction
++
++importx "free" free
++
++importx "fopen" fopen
++importx "fprintf" fprintf
++
++function f_printf_in(sd p,sd nr)
++	callex fprintf p nr ##callexret
++end
+ 
+ 
+ 
+@@ -52,7 +66,7 @@ function file_open(ss filepath,sd flags)
+     sd creat_test;set creat_test flags;and creat_test (flag_O_CREAT);if creat_test!=0
+         set permission (flag_pmode);endif
+     SetCall file open(filepath,flags,permission)
+-    if file==(fd_error)
++    if file=(fd_error)
+         call printEr("File: \"")
+         call printEr(filepath)
+         call error("\" cannot be opened")
+@@ -62,7 +76,7 @@ endfunction
+ function file_seek(sd file,sd off,sd method)
+     sd seekint
+     setcall seekint lseek(file,off,method)
+-    If seekint==-1
++    If seekint=-1
+         vstr seekerr="File seek error"
+         call error(seekerr)
+     endif
+@@ -71,7 +85,7 @@ endfunction
+ function file_tell(sd file)
+     sd sz
+     setcall sz lseek(file,0,(SEEK_CUR))
+-    if sz==-1
++    if sz=-1
+         vstr tellerr="File tell error"
+         call error(tellerr)
+     endif
+@@ -111,14 +125,32 @@ endfunction
+ #write
+ 
+ function file_write(sd file,sd buffer,sd size)
+-    if size==0
++    if size=0
+         return (void)
+     endif
+     sd len
+     setcall len write(file,buffer,size)
+-    if len==size
++    if len=size
+         return (void)
+     endif
+     vstr er="File write error"
+     call error(er)
+ endfunction
++
++
++function f_open_mem(sd path,sd format)
++	sd f;setcall f fopen(path,format)
++	if f=(NULL)
++		call free(path)
++		call error("fopen error")
++	endif
++	call free(path)
++	return f
++endfunction
++
++function f_printf(sd nr,sd file,sd format) #...
++	sd r;set r f_printf_in(#file,nr)
++	if r=-1
++		call error("fprintf error")
++	endif
++endfunction
+--- actionswf-1.orig/src/m32d
++++ actionswf-1/src/m32d
+@@ -1,2 +1,2 @@
+ 
+-OFLAGSEXTRA="function_name 1 nul_res_pref 1" ./make32 $@ && make link syms= items_prefix=/home/bc/s/actionswf-1/src/ LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage
++OFLAGSEXTRA="function_name 1 nul_res_pref 1" ./make32 $@ && make link linkerflags= items_prefix=/home/bc/s/actionswf-1/src/ LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage
+--- /dev/null
++++ actionswf-1/src/m64d
+@@ -0,0 +1,4 @@
++
++make linkerflags= OFLAGSEXTRA="function_name 1 nul_res_pref 1" $@
++
++#make strippy="python /home/bc/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" OFLAGSEXTRA="function_name 1 nul_res_pref 1" $@
+--- actionswf-1.orig/src/make64
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-make strippy="python /home/bc/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" OFLAGSEXTRA="function_name 1 nul_res_pref 1" $@
+--- actionswf-1.orig/src/mw64d
++++ actionswf-1/src/mw64d
+@@ -1,2 +1,2 @@
+ 
+-OFLAGSEXTRA="function_name 1" ./makewin64 $@ && ./makewin64 syms= link
++OFLAGSEXTRA="function_name 1" ./makewin64 $@ && ./makewin64 linkerflags= link
+--- actionswf-1.orig/src/storage.s
++++ actionswf-1/src/storage.s
+@@ -61,21 +61,16 @@ import "dword_to_word_arg" dword_to_word
+ 
+ 
+ 
+-
+-
+ importaftercall ebool
+ 
+ 
+ 
+-
+-
+-
+-
+ import "error" error
+ import "struct_ids_actionpool" struct_ids_actionpool
+ import "struct_ids_action" struct_ids_action
+ import "mem_block_add" mem_block_add
+ import "def_mem" def_mem
++import "debug_show" debug_show
+ 
+ function swf_mem(sd proc,sd arg,sd len)
+     vdata path_mem=NULL
+@@ -88,11 +83,11 @@ function swf_mem(sd proc,sd arg,sd len)
+     data main_id#1
+     vdata call_struct#1;vdata c_main^struct_ids;vdata c_pool^struct_ids_actionpool
+ 
+-    if proc==(mem_exp_change_back)
++    if proc=(mem_exp_change_back)
+         set id main_id
+         set call_struct c_main
+         return (void)
+-    elseif proc==(mem_exp_init)
++    elseif proc=(mem_exp_init)
+     #arg is file
+     #len is filelength offset
+         if path_mem!=(NULL)
+@@ -117,7 +112,7 @@ function swf_mem(sd proc,sd arg,sd len)
+         set filelength_offset len
+         #
+         return (void)
+-    elseif proc==(mem_exp_free)
++    elseif proc=(mem_exp_free)
+         if path_mem!=(NULL)
+             #0
+             call mem_free(#path_mem)
+@@ -136,16 +131,16 @@ function swf_mem(sd proc,sd arg,sd len)
+         endif
+         return (void)
+     endelseif
+-    if path_mem==(NULL)
++    if path_mem=(NULL)
+     #swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+         call error("there isn't a swf started")
+     endif
+-    if proc==(mem_exp_add)
++    if proc=(mem_exp_add)
+         #blockMain blockPool
+         sv p_block
+         setcall p_block call_struct((ids_get_pointer),id)
+         call mem_block_add(p_block,arg,len)
+-    elseif proc==(mem_exp_change)
++    elseif proc=(mem_exp_change)
+         if arg<0;set call_struct c_pool
+             xor arg (negative_means_action_sprite_pool)
+         else;set call_struct c_main;endelse
+@@ -206,7 +201,7 @@ function swf_actionblock(sd proc,sd arg,
+     data id#1
+     data id_back#1
+     sd poolid
+-    if proc==(mem_exp_change)
++    if proc=(mem_exp_change)
+         #must verify to be a valid user input id
+         call struct_ids_actionpool((ids_get_pointer),id)
+         #
+@@ -215,7 +210,7 @@ function swf_actionblock(sd proc,sd arg,
+         setcall poolid actionpoolid()
+         set poolid# id
+         return (void)
+-    elseif proc==(mem_exp_change_back)
++    elseif proc=(mem_exp_change_back)
+         set id id_back
+         #
+         sd root_poolid
+@@ -223,7 +218,7 @@ function swf_actionblock(sd proc,sd arg,
+         setcall poolid actionpoolid()
+         set poolid# root_poolid#
+         return (void)
+-    elseif proc==(mem_exp_init)
++    elseif proc=(mem_exp_init)
+         set id arg
+         set id_back id
+         call struct_ids_action((ids_set),id)
+@@ -234,24 +229,27 @@ function swf_actionblock(sd proc,sd arg,
+     endelseif
+     sv p_block
+     setcall p_block struct_ids_action((ids_get_pointer),id)
+-    if proc==(mem_exp_add)
++    if proc=(mem_exp_add)
+         call mem_block_add(p_block,arg,newmem_len)
+-    elseif proc==(mem_exp_part_done)
+-        sd block
+-        set block p_block#
+-        sd size
+-        setcall size block_get_size(block)
+-        if size!=0
+-            import "write_action" write_action
+-            sd tagsz
+-            setcall tagsz action_size(id)
+-            call swf_tag_recordheader_entry((DoAction),tagsz)
+-            call write_action(id)
+-            sd poolblock
+-            setcall poolblock actionpool_currentblock()
+-            call block_reset_size(poolblock)
+-            call block_reset_size(block)
+-        endif
++    elseif proc=(mem_exp_part_done)
++		#id is 0/spriteid
++		call debug_show(id)
++
++		sd block
++		set block p_block#
++		sd size
++		setcall size block_get_size(block)
++		if size!=0
++			import "write_action" write_action
++			sd tagsz
++			setcall tagsz action_size(id)
++			call swf_tag_recordheader_entry((DoAction),tagsz)
++			call write_action(id)
++			sd poolblock
++			setcall poolblock actionpool_currentblock()
++			call block_reset_size(poolblock)
++			call block_reset_size(block)
++		endif
+     else
+     #if proc==(mem_exp_get_block)
+         return p_block#
+@@ -262,15 +260,17 @@ function swf_actionblock_add(sd value,sd
+     call swf_actionblock((mem_exp_add),value,size)
+ endfunction
+ function actionrecordheader(sd tag,sd size)
+-    chars t#1
+-    chars length#2
++    char t#1
++    char length#2
+     set t tag
+     call dword_to_word_arg(size,#length)
+     call swf_actionblock_add(#t,3)
++	import "debug_phase_code_add" debug_phase_code_add
++	call debug_phase_code_add()
+ endfunction
+ function swf_actionrecordheader(sd tag,sd size)
+-    chars t#1
+-    chars length#2
++    char t#1
++    char length#2
+     set t tag
+     call dword_to_word_arg(size,#length)
+     call swf_mem_add(#t,3)
+@@ -297,7 +297,7 @@ endfunction
+ function exportsId_get()
+     sd e
+     setcall e exportsId()
+-    if e#==(not_an_id);call error("Do not call the exports at this moment.");endif
++    if e#=(not_an_id);call error("Do not call the exports at this moment.");endif
+     return e#
+ endfunction
+ 
+--- actionswf-1.orig/src/swf.es
++++ actionswf-1/src/swf.es
+@@ -23,13 +23,13 @@ import "word_arg_to_dword" word_arg_to_d
+ import "file_get_content__resources_free" file_get_content__resources_free
+ import "file_resources_set" file_resources_set
+ import "file_resources_free" file_resources_free
+-importx "freereset" freereset
+ import "struct_ids" struct_ids
+ import "matrix_translate" matrix_translate
+ import "block_get_size" block_get_size
+ import "block_get_mem" block_get_mem
+ import "free_sprite_id" free_sprite_id
+ import "block_reset_size" block_reset_size
++import "freereset" freereset   #..x with no args
+ 
+ 
+ 
+@@ -123,7 +123,7 @@ vstr actions#1
+     sd noText=FALSE;sd text_id
+     data t_null={0,0}
+     sd b;setcall b memcmp(#t_null,#text,:)
+-    if b==0
++    if b=0
+         set noText (TRUE)
+         set bmem# noText
+     else
+@@ -164,7 +164,7 @@ functionX swf_button_last(ss newtext,ss
+     setcall bmem button_mem()
+     call memcpy(#shape_up,bmem,(9*DWORD))
+ 
+-    if noText==(FALSE)
++    if noText=(FALSE)
+         sd newtext_id
+         setcall newtext_id swf_text_initial_font_centered(width,height,newtext,font_id,font_height,font_color)
+     endif
+@@ -182,10 +182,10 @@ functionX swf_font(ss fontname,sd font_f
+ #sd font_flags  = prog.h file is with the flags
+     const font_hd_start=!
+ 
+-    chars id#2
+-    chars Flags#1
+-    chars *Language=0
+-    chars FontNameLen#1
++    char id#2
++    char Flags#1
++    char *Language=0
++    char FontNameLen#1
+ 
+     const font_hd_start_size=!-font_hd_start
+     vdata font_hd_start^id
+@@ -214,10 +214,10 @@ functionX swf_font(ss fontname,sd font_f
+     call swf_mem_add(fontname,FontNameLen)
+     call swf_mem_add(#NumGlyphs,2)
+     if has_layout!=0
+-        chars FontAscent={0,0}
+-        chars *FontDescent={0,0}
+-        chars *FontLeading={0,0}
+-        chars *KerningCount={0,0}
++        char FontAscent={0,0}
++        char *FontDescent={0,0}
++        char *FontLeading={0,0}
++        char *KerningCount={0,0}
+         call swf_mem_add(#FontAscent,(2+2+2+2))
+     endif
+     return fontid
+@@ -361,11 +361,11 @@ functionX swf_text(sd bound_width,sd bou
+         mult layout_rightmargin 20
+         mult layout_indent 20
+         mult layout_leading 20
+-        chars l_align#1
+-        chars l_leftmargin#2
+-        chars l_rightmargin#2
+-        chars l_indent#2
+-        chars l_leading#2
++        char l_align#1
++        char l_leftmargin#2
++        char l_rightmargin#2
++        char l_indent#2
++        char l_leading#2
+         set l_align layout_align
+         call dword_to_word_arg(layout_leftmargin,#l_leftmargin)
+         call dword_to_word_arg(layout_rightmargin,#l_rightmargin)
+@@ -386,9 +386,9 @@ functionX swf_shape(sd width,sd height,s
+ #sd width
+ #sd height
+ #sd args        see swf_shape_basic or swf_image(last part) for example, or see shape_records_add and it's sub-functions to see how the swf SHAPERECORD is added
+-    if width==0
++    if width=0
+         call error("shape width 0 not allowed")
+-    elseif height==0
++    elseif height=0
+         call error("shape height 0 not allowed")
+     endelseif
+     sd fillstyle
+@@ -419,8 +419,8 @@ functionX swf_shape(sd width,sd height,s
+     add shape_size rect_size
+ 
+     #SHAPEWITHSTYLE
+-    chars FillStyleCount#1
+-        chars FillStyleType#1
++    char FillStyleCount#1
++        char FillStyleType#1
+     #
+         data data#3
+     vdata fillstyles^FillStyleCount
+@@ -430,7 +430,7 @@ functionX swf_shape(sd width,sd height,s
+         set FillStyleCount 1
+         set FillStyleType fillstyle
+         add fillstyles_size 1
+-        if fillstyle==(solid_fill)
++        if fillstyle=(solid_fill)
+             setcall data dword_swap(fillarg)
+             add fillstyles_size (DWORD)
+         else
+@@ -449,15 +449,15 @@ functionX swf_shape(sd width,sd height,s
+             #rotate is 0
+             #translate nbits is 0
+             call bits_packs(fill_pointer,6,1,1,(predef_nbits),(NBits_size),(predef_XYscale),(predef_nbits),(predef_XYscale),(predef_nbits),0,1,0,(NBits_size))
+-            #chars ref_id#2
+-            #chars matrix#7
++            #char ref_id#2
++            #char matrix#7
+             add fillstyles_size (2+7)
+         endelse
+     endif
+     add shape_size fillstyles_size
+     #
+-    chars LineStyleCount#1
+-    chars line_points#2
++    char LineStyleCount#1
++    char line_points#2
+     data color#1
+     vdata linestyles^LineStyleCount
+     sd linestyles_size=1
+@@ -564,7 +564,7 @@ functionX swf_shape_border(sd width,sd h
+     mult neg_w width
+     mult neg_h height
+     #
+-    if linesize==0;call error("is useless to call shape_border with linesize=0");endif
++    if linesize=0;call error("is useless to call shape_border with linesize=0");endif
+     data border=no_fill
+     data l_w#1
+         set l_w linesize
+@@ -630,15 +630,15 @@ functionX swf_dbl_ex(ss imagepath,sd p_w
+     if size<8
+         call error("missing image header")
+     endif
+-    chars hd_magic1={D,B,l,1};vdata magic1^hd_magic1
+-    chars hd_magic2={D,B,l,2};vdata magic2^hd_magic2
++    char hd_magic1={D,B,l,1};vdata magic1^hd_magic1
++    char hd_magic2={D,B,l,2};vdata magic2^hd_magic2
+     if mem#!=magic1#
+     if mem#!=magic2#
+         call printEr("expecting dbl(define bits lossless 1 or 2)header; filepath: ")
+         call error(imagepath)
+     endif;endif
+     sd header=DefineBitsLossless2
+-    if mem#==magic1#
++    if mem#=magic1#
+         set header (DefineBitsLossless)
+     endif
+     set cursor mem
+@@ -725,6 +725,9 @@ functionX swf_done()
+ endfunction
+ 
+ functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
++	call swf_new_ex(path,width,height,backgroundcolor,fps,(FALSE))
++endfunction
++functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd add_debug)
+ #ss path             file out pathname
+ #sd width
+ #sd height
+@@ -733,23 +736,25 @@ functionX swf_new(ss path,sd width,sd he
+ 
+     #F=uncompressed, C=ZLib
+ const hd_start=!
+-    chars *=F
+-    chars *={W,S}
+-    chars *version=8
++    char *=F
++    char *={W,S}
++    char *version=8
+ const file_sz_off=!
+     data *FileLength#1
+ data size=!-hd_start
+ vdata hd_pack%hd_start
+     #rect
+ const hd2=!
+-    chars *FrameRate=0
+-        chars FrameRate#1
+-    chars *FrameCount={1,0}
++    char *FrameRate=0
++        char FrameRate#1
++    char *FrameCount={1,0}
+ data size2=!-hd2
+ vdata hd_pack2%hd2
+ 
+-    #
++	import "debug_init" debug_init
++	call debug_init(add_debug,path)
+     call swf_mem((mem_exp_init),path,(file_sz_off-hd_start))
++
+     #identifiers for swf
+     call identifiers_set(1);#font with id 0 isn't visible in the placements
+ 
+@@ -760,10 +765,10 @@ vdata hd_pack2%hd2
+     call swf_mem_add(hd_pack2,size2)
+     #
+ 
+-    chars setbackgroundtag#2
+-    chars red#1
+-    chars green#1
+-    chars blue#1
++    char setbackgroundtag#2
++    char red#1
++    char green#1
++    char blue#1
+ 
+     set blue backgroundcolor
+     sd g_color=0xff00;and g_color backgroundcolor;div g_color 0x100;set green g_color
+@@ -792,18 +797,18 @@ const PlaceFlagHasCharacter=0x2
+ #const PlaceFlagMove=0x1
+     sd flags=PlaceFlagHasMatrix|PlaceFlagHasCharacter
+     sd matrix
+-    datax maxtrixsz#1
+-    call matrix_translate(#matrix,#maxtrixsz,x,y)
++    datax matrixsz#1
++    call matrix_translate(#matrix,#matrixsz,x,y)
+ 
+     sd size=5
+-    add size maxtrixsz
++    add size matrixsz
+     call swf_tag_recordheader_entry((PlaceObject2),size)
+     call swf_mem_add(#flags,1)
+     call swf_mem_add(#depth,2)
+     #character id
+     call swf_mem_add(#refid,2)
+     #matrix
+-    call swf_mem_add(matrix,maxtrixsz)
++    call swf_mem_add(matrix,matrixsz)
+ endfunction
+ functionX swf_removeobject(sd depth)
+ #sd depth        depth for the removeobject2 tag
+@@ -924,7 +929,7 @@ functionX swf_exports_add(sd id,ss name)
+     sd size
+     setcall size block_get_size(block)
+     sd counter
+-    if size==0
++    if size=0
+         set counter 1
+         call swf_mem_add(#counter,(WORD))
+     else
+--- actionswf-1.orig/src/tool.es
++++ actionswf-1/src/tool.es
+@@ -13,8 +13,12 @@ endfunction
+ 
+ include "../include/prog.h"
+ 
+-import "swf_mem" swf_mem
+ functionx freereset()
+-    #free and set initial null/-1.....
+-    call swf_mem((mem_exp_free))
++#this is called by user only if want to abort after some calls
++#               and at some frees
++	import "debug_free" debug_free
++	call debug_free()
++	#free and set initial null/-1.....
++	import "swf_mem" swf_mem
++	call swf_mem((mem_exp_free))
+ endfunction
+--- actionswf-1.orig/src/util.s
++++ actionswf-1/src/util.s
+@@ -94,7 +94,7 @@ endfunction
+ 
+ function string_nl_print(ss msg)
+     call printEr(msg)
+-    chars nl={0xa,0}
++    char nl={0xa,0}
+     call printEr(#nl)
+ endfunction
+ 
+@@ -148,8 +148,8 @@ endfunction
+ 
+ #bool
+ function is_numeric(sd char)
+-    chars min="0"
+-    chars max="9"
++    char min="0"
++    char max="9"
+     if char<min
+         return (FALSE)
+     elseif char<=max
+@@ -161,7 +161,7 @@ endfunction
+ function part_of_variable(sd value)
+     sd bool
+     setcall bool is_numeric(value)
+-    if bool==(TRUE)
++    if bool=(TRUE)
+         return (TRUE)
+     endif
+     setcall bool is_letter(value)
+@@ -173,7 +173,7 @@ function is_letter(sd value)
+         return (FALSE)
+     elseif value<=(Z)
+         return (TRUE)
+-    elseif value==(_)
++    elseif value=(_)
+         return (TRUE)
+     elseif value<(a)
+         return (FALSE)
+@@ -193,7 +193,7 @@ function str_next(ss s,ss delims,sv p_op
+     set x s
+     add x pos
+     set p_op# x#
+-    if x#==0
++    if x#=0
+         return x
+     endif
+     set x# 0
+@@ -211,7 +211,7 @@ function str_at_str_start(ss s1,ss s2)
+     endif
+     sd comp
+     setcall comp memcmp(s1,s2,l2)
+-    if comp==0
++    if comp=0
+         return (TRUE)
+     endif
+     return (FALSE)
+@@ -221,14 +221,14 @@ endfunction
+ function str_expression_at_start(ss string,ss expression)
+     sd bool
+     setcall bool str_at_str_start(string,expression)
+-    if bool==(FALSE)
++    if bool=(FALSE)
+         return string
+     endif
+     ss next
+     set next string
+     addcall next strlen(expression)
+     setcall bool part_of_variable(next#)
+-    if bool==(TRUE)
++    if bool=(TRUE)
+         return string
+     endif
+     setcall next spaces(next)
+@@ -238,11 +238,11 @@ endfunction
+ function str_expression_at_start_withEndCare(ss ac,ss expression)
+     ss pointer
+     setcall pointer str_expression_at_start(ac,expression)
+-    if pointer==ac
++    if pointer=ac
+         return ac
+     endif
+-    chars term=";"
+-    if pointer#==term
++    char term=";"
++    if pointer#=term
+         inc pointer
+     endif
+     return pointer
+@@ -250,7 +250,7 @@ endfunction
+ 
+ #str
+ function spaces(ss str)
+-    while 1==1
++    while 1=1
+         if str#!=(Space)
+             if str#!=(HorizontalTab)
+                 return str
+@@ -266,7 +266,7 @@ endfunction
+ import "file_close" file_close
+ function file_resources(sd trueIsSet_falseIsFree,sd fileIn)
+     data file=fd_none
+-    if trueIsSet_falseIsFree==(TRUE)
++    if trueIsSet_falseIsFree=(TRUE)
+         set file fileIn
+     else
+         if file!=(fd_none)
+@@ -283,8 +283,19 @@ endfunction
+ 
+ #
+ 
++function freelater()
++    #this can be after code_values(in last_free); but normal is this at action and last_free at swf_done(without this)
++    call action_debug_free()
++    #
++    call file_get_content__resources_free()
++
++    call file_resources_free()
++endfunction
++
+ import "action_error" action_error
+-importx "freereset" freereset
++
++import "freereset" freereset   #..x with no args
++
+ import "action_debug_free" action_debug_free
+ import "file_get_content__resources_free" file_get_content__resources_free
+ 
+@@ -311,13 +322,8 @@ function error(ss msg)
+     call string_nl_print(msg)
+     call action_error()
+ 
+-    call freereset()
+-    #this can be after code_values(in last_free); but normal is this at action and last_free at swf_done(without this)
+-    call action_debug_free()
+-    #
+-    call file_get_content__resources_free()
+-
+-    call file_resources_free()
++	call freereset()
++	call freelater()
+ 
+     ss p;setcall p erbool();set p# 1
+ endfunction
+@@ -328,7 +334,7 @@ function memrealloc(sd mem,sd size)
+     sd ptr;sd n=NULL
+     setcall ptr realloc(mem,size)
+     sd comp;setcall comp memcmp(#ptr,#n,:)
+-    if comp==0
++    if comp=0
+         call error("realloc failed")
+     endif
+     return ptr
+@@ -377,7 +383,7 @@ function mem_block_add(sv p_block,ss new
+     #    set allsize sz_test
+         setcall block memrealloc(block,sz_test)  #allsize
+         set p_block# block
+-        set block# sz_test  #allsize
++        set block# sz_test  ##allsize
+     endif
+     sd pointer
+     set pointer block
+@@ -397,7 +403,7 @@ function struct_ids(sd proc,sd id)
+     data counter=0
+     sv ac_ptr
+     sv pointer
+-    if proc==(ids_all_free)
++    if proc=(ids_all_free)
+         #starting with ids_all_free:
+         #                #counter increment#, then null at ac,pools
+         #   mem_free at struct_ids_action_expand
+@@ -410,20 +416,20 @@ function struct_ids(sd proc,sd id)
+             setcall ac_ptr struct_ids_actionpool((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+         endwhile
+         return (void)
+-    elseif proc==(ids_counter)
++    elseif proc=(ids_counter)
+         return counter
+     endelseif
+ 
+     sd ident
+-    if proc==(ids_set)
++    if proc=(ids_set)
+         set ident counter
+     else
+         set ident id
+     endelse
+     setcall pointer move_to_n_pointer(strct,ident)
+-    if proc==(ids_set)
++    if proc=(ids_set)
+     #id
+-        if counter==(max_structures)
++        if counter=(max_structures)
+             call error("too many objects")
+         endif
+         sv iter
+@@ -433,7 +439,7 @@ function struct_ids(sd proc,sd id)
+         while iter!=strct
+         #can be in a free place
+             sub iter :
+-            if iter#==0
++            if iter#=0
+                 set iter# newblock
+                 sub iter strct
+                 div iter :
+@@ -448,10 +454,10 @@ function struct_ids(sd proc,sd id)
+         setcall ac_ptr struct_ids_actionpool((ids_get_pointer),c);set ac_ptr# (NULL)
+         #counter increment#
+         return ident
+-    elseif proc==(ids_get_pointer)
++    elseif proc=(ids_get_pointer)
+         if ident>=counter;call error("Unexistent input id.");endif
+         return pointer
+-    elseif proc==(ids_get)
++    elseif proc=(ids_get)
+         return pointer#
+     else
+     #if proc==(ids_free)
+@@ -470,15 +476,15 @@ function struct_ids_actionpool(sd proc,s
+ endfunction
+ function struct_ids_expand(sd proc,sd id,sd p_action_structures)
+     sv pointer;setcall pointer move_to_n_pointer(p_action_structures,id)
+-    if proc==(ids_set)
++    if proc=(ids_set)
+         setcall pointer# def_data()
+-    elseif proc==(ids_get_pointer)
++    elseif proc=(ids_get_pointer)
+         #call to verify if the user input has a wrong id
+         sd c;setcall c struct_ids((ids_counter))
+         if id>=c;call error("Unregistered input id.");endif
+         #
+         return pointer
+-    elseif proc==(ids_get)
++    elseif proc=(ids_get)
+         return pointer#
+     else
+     #if proc==(ids_free)
+@@ -504,15 +510,15 @@ function str_escape(ss src,ss dest,sd de
+     sd loop=1
+     sd escapes=0
+     inc src
+-    while loop==1
+-    if src#==delim
++    while loop=1
++    if src#=delim
+         set loop 0
+     #elseif src#==delim2
+     #    set loop 0
+     else
+-        chars escape="\\"
+-        while src#==escape
+-            if escapes==0
++        char escape="\\"
++        while src#=escape
++            if escapes=0
+                 set escapes 1
+             else
+                 set dest# src#
+@@ -521,10 +527,10 @@ function str_escape(ss src,ss dest,sd de
+             endelse
+             inc src
+         endwhile
+-        if src#==0
++        if src#=0
+             call error("end string expected")
+         endif
+-        if escapes==1
++        if escapes=1
+             set dest# src#
+             inc src
+             inc dest
+--- /dev/null
++++ actionswf-1/teststrip
+@@ -0,0 +1,5 @@
++
++#cd ~/Desktop/ostriputil/ostriputil-1; ./i
++nobits_virtual=0 OCOMP=~/o/ocompiler-1/src/o OSTRIP=~/o/ocompiler-1/ostrip/ostrip make OFLAGSEXTRA="nul_res_pref 1"
++echo git diff example/example.swf
++git diff example/example.swf
