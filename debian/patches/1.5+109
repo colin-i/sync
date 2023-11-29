@@ -1,0 +1,825 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+109) xenial; urgency=medium
+ .
+   * aftercallenable/disable
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-29
+
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -375,7 +375,7 @@
+ 	<br>
+ 	<b>ImportAfterCall</b> is used in objects to import an extern defined AfterCall.
+ 	<br>
+-	<b>AfterCallActivate</b>/<b>AfterCallClear</b> automation commands (name is not used, can define with unrefsign(*)).
++	<b>AfterCallEnable</b>/<b>AfterCallDisable</b> automation commands (name is not used; if not imported, aftercall can be defined with unrefsign(*)).
+ 	<br>
+ 	<b>^</b> sign will create throwless variables.
+ 	<br>
+@@ -703,7 +703,7 @@
+ 	All functions can be used in combinations like <b>AddCall</b>, <b>OrCall</b>, <b>XorCall</b>, etc (<i>set a b()</i> is same as <i>setcall a b()</i>).
+ 	<br>
+ 	<b>CallEx</b> is for prepared calls. This is a 3 argument operation. The first argument is the function name, the second argument is the arguments pointer and the third argument is the number of arguments. The arguments are passed forward respecting the size of the integer(4 bytes on 32-bits app, 8 on 64). One usage can be when there is a call with a number of arguments detected at run-time and want to pass them all to another call.
+-	A "SetCallEx" trick is to wrap <b>CallEx</b> in a function and to <b>SetCall</b> that function.
++	<b>CallExRet</b> (like <b>CallRet</b>, or <b>CallXRet</b>) can return from a function.
+ 	<br>
+ 	<b>CallX</b>, <b>...XCall</b>, <b>CallExX</b> will call like a <b>FunctionX</b>/<b>ImportX</b>.
+ 	<p>
+@@ -933,7 +933,14 @@
+ <p>Black = 1 byte. <span class="blue">Blue = 4 bytes = data.</span> <span class="red">Red = string = data+byte(s).</span>
+ <span class="green">Green = replacement.</span></p>
+ <table id="selection_table">
+-	<tr><td>Xfile_comment*</td>     <td class="red">comment</td></tr>
++	<tr><td>Xfile_comment*</td><td class="red">comment</td></tr>
++</table>
++<table id="selection_table">
++	<tr><td>Xfile_format</td><td>Xfile_format_*</td></tr>
++</table>
++<table id="selection_table">
++	<tr><td rowspan=2>Xfile_include</td><td rowspan=2>Xfile_include_normal<br>Xfile_include_extern</td><td class="red"rowspan=2>file</td><td colspan=2>Xfile_include_alternative_no</td></tr>
++	<tr>                                                                                                                                 <td>Xfile_include_alternative_yes</td>         <td class="red">file</td></tr>
+ </table>
+ <table id="selection_table">
+ 	<tr><td rowspan=2>Xfile_functiondef</td><td class="red" rowspan=2>name</td><td>Xfile_function_t*</td><td></td>                  <td class="blue" rowspan=2>nr_of_args</td><td class="green" rowspan=2>{D}</td></tr>
+@@ -963,7 +970,15 @@
+ 	<tr><td>Xfile_while</td>   <td class="green">CD</td></tr>
+ 	<tr><td>Xfile_break</td></tr>
+ 	<tr><td>Xfile_continue</td></tr>
+-	<tr><td>Xfile_condend</td></tr>
++<table id="selection_table">
++	<tr><td>Xfile_end</td></tr>
++</table>
++<table id="selection_table">
++	<tr><td rowspan=4>Xfile_aftercall</td><td>Xfile_aftercall_declare</td><td>Xfile_declfeature_normal<br>Xfile_declfeature_unref</td><td class="red">var</td></tr>
++	<tr>                                  <td>Xfile_aftercall_import</td> <td class="red">var</td></tr>
++	<tr>                                  <td>Xfile_aftercall_enable</td></tr>
++	<tr>                                  <td>Xfile_aftercall_disable</td></tr>
++</tr>
+ </table>
+ <br>Table A:
+ <table id="selection_table">
+@@ -1074,6 +1089,9 @@
+ 	When the option function_name from the ocompiler.conf file is set to Yes(1), the name is wrote in the code section above the function, for debugging asm code.<br>
+ 	The preferences file can be placed in HOME folder on linux.<br>
+ 	Lines are ended with new line(0xa),carriage return and new line(0xd,0xa) or semicolon(0x3B).<br>
+-	The command line options are detailed at some point on the linux console std. On windows there some dialogs instead of console std.
++	The command line options are detailed at some point on the linux console std. On windows there some dialogs instead of console std.<br>
++	<i>has_debug</i> option will add a .debug section at objects that acts like the log file for files hierarchy and another log,  <i>log_line</i>, A,B format, where A is the line number and B is the code section offset where it starts.
++		To see the content, for example, run
++		<br>&emsp;<i>objcopy -O binary --only-section=.debug --set-section-flags .debug=alloc file.o file.txt</i>
+ 	</p>
+ </p>
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1GCbazf8mz5iyI5CgImI0SMcA2onhyji7
++File ID: 1E16Y8q6SiNmf4pcKMDp_ZFrnnomaoSgw
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+107.x86_64.rpm, 1E16Y8q6SiNmf4pcKMDp_ZFrnnomaoSgw, 2023-11-26T09:02:42.259Z, https://drive.google.com/uc?id=1E16Y8q6SiNmf4pcKMDp_ZFrnnomaoSgw&export=download
+ Found file: ocompiler-1-5+105.x86_64.rpm, 1GCbazf8mz5iyI5CgImI0SMcA2onhyji7, 2023-11-25T16:40:31.101Z, https://drive.google.com/uc?id=1GCbazf8mz5iyI5CgImI0SMcA2onhyji7&export=download
+ Found file: ocompiler-1-5+102.x86_64.rpm, 1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O, 2023-11-24T14:29:49.425Z, https://drive.google.com/uc?id=1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O&export=download
+ Found file: ocompiler-1-5+100.x86_64.rpm, 1Qbm2E_uMi85Gq1sJ1Yhc1CYstN8fleac, 2023-11-17T15:39:47.661Z, https://drive.google.com/uc?id=1Qbm2E_uMi85Gq1sJ1Yhc1CYstN8fleac&export=download
+--- ocompiler-1.orig/src/files/actions/main/index.s
++++ ocompiler-1/src/files/actions/main/index.s
+@@ -129,8 +129,8 @@ if errormsg=(noerror)
+ 						elseif commandset=(cINCLUDELINK)
+ 						Elseif commandset=(cFORMAT)
+ 						Elseif commandset=(cDECLAREAFTERCALL)  #and import
+-						elseif commandset=(cORPHAN)    #for addaref
+ 						elseif commandset=(cOVERRIDE)   #example underscore_pref
++						elseif commandset=(cORPHAN)    #for addaref
+ 						else;set commandset (cCOMMENT);endelse
+ 					else
+ 					#pass_calls
+@@ -187,7 +187,10 @@ if errormsg=(noerror)
+ 				Include "./index/include.s"
+ 			ElseIf commandset=(cFORMAT)
+ 				if parses=(pass_init);Include "./index/format.s"
+-				else;Call advancecursors(pcontent,pcomsize,comsize);endelse
++				else
++					Call advancecursors(pcontent,pcomsize,comsize)
++					setcall errormsg xfile_add_format_if(fileformat,ignore)
++				endelse
+ 			ElseIf commandset=(cDECLAREAFTERCALL)
+ 				if parses=(pass_write);Include "./index/aftercall.s";
+ 				else;if subtype=(cAFTERCALL);add datasecReg (aftercalldeclaresize);endif
+@@ -195,20 +198,20 @@ if errormsg=(noerror)
+ 				set g_e_b_p# (TRUE)
+ 			ElseIf commandset=(cMANIPULATEAFTERCALL)
+ 				Include "./index/aftercallmanipulate.s"
+-			ElseIf commandset=(cORPHAN)
+-				Include "./index/warning.s"
+ 			ElseIf commandset=(cCALLEX)
+ 		call entryscope_verify_code()
+ 				Include "./index/callex.s"
+-			ElseIf commandset=(cOVERRIDE)
+-				#is at all, example at write hidden_pref
+-				setcall errormsg override_com(#content,#comsize)
+ 			ElseIf commandset=(cLIBRARY)
+ 				if parses=(pass_init);Include "./index/library.s"
+ 				else;Call advancecursors(pcontent,pcomsize,comsize);endelse
+ 			ElseIf commandset=(cHEX)
+ 		call entryscope_verify_code()
+ 				Include "./index/hex.s"
++			ElseIf commandset=(cOVERRIDE)
++				#is at all, example at write hidden_pref
++				setcall errormsg override_com(#content,#comsize)
++			ElseIf commandset=(cORPHAN)
++				Include "./index/warning.s"
+ 			Else
+ 			#If commandset==(cI3)
+ 		call entryscope_verify_code()
+--- ocompiler-1.orig/src/files/actions/main/index/aftercall.s
++++ ocompiler-1/src/files/actions/main/index/aftercall.s
+@@ -5,51 +5,65 @@ const aftercalldeclaresize=1
+ 
+ if comsize=0;set errormsg "AfterCall variable name expected."
+ else
+-	str ac_store_content#1;data ac_store_size#1
+-	set ac_store_content content;set ac_store_size comsize
+-	data acsym_value#1;data acsym_size#1;data acsym_shndx#1
+-	sd g_e_p;setcall g_e_p global_err_p()
+-	if subtype=(cIMPORTAFTERCALL)
+-		If object=(FALSE);set errormsg "ImportAfterCall is used at objects."
+-		else
+-			set acsym_value 0;set acsym_size (sym_with_size);set acsym_shndx (NULL)
+-			call advancecursors(pcontent,pcomsize,comsize)
+-		endelse
+-	else
+-	#(cAFTERCALL)
+-		sd ac_current_data
+-		setcall ac_current_data get_img_vdata_dataReg()  #this must be before addtosec
+-		SetCall errormsg addtosec(#null,(aftercalldeclaresize),ptrdatasec)
+-		if errormsg=(noerror)
+-			If object=(FALSE)
+-				set g_e_p# ac_current_data
++	setcall errormsg xfile_add_char_if((Xfile_aftercall))
++	if errormsg=(noerror)
++		vstr ac_store_c#1;data ac_store_s#1
++		data acsym_value#1;data acsym_size#1;data acsym_shndx#1
++		sd g_e_p;setcall g_e_p global_err_p()
++		if subtype=(cIMPORTAFTERCALL)
++			If object=(FALSE);set errormsg "ImportAfterCall is used at objects."
+ 			else
+-				set acsym_value ac_current_data;set acsym_size 0;set acsym_shndx (dataind)
++				set ac_store_c content;set ac_store_s comsize
++				set acsym_value 0;set acsym_size (sym_with_size);set acsym_shndx (NULL)
++				setcall errormsg xfile_add_base_if((Xfile_aftercall_import),content,comsize)
++				call advancecursors(pcontent,pcomsize,comsize)
+ 			endelse
+-			#size 0 test is above
+-			if content#!=(unrefsign)
+-				SetCall errormsg entryvarsfns(content,comsize)
++		else
++		#(cAFTERCALL)
++			setcall errormsg xfile_add_char_if((Xfile_aftercall_declare))
++			if errormsg=(noerror)
++				sd ac_current_data
++				setcall ac_current_data get_img_vdata_dataReg()  #this must be before addtosec
++				SetCall errormsg addtosec(#null,(aftercalldeclaresize),ptrdatasec)
+ 				if errormsg=(noerror)
+-					SetCall errormsg addaref(ac_current_data,pcontent,pcomsize,comsize,(charnumber),(dummy_mask))
++					If object=(FALSE)
++						set g_e_p# ac_current_data
++					else
++						set acsym_value ac_current_data;set acsym_size 0;set acsym_shndx (dataind)
++					endelse
++					#size 0 test is above
++					if content#!=(unrefsign)
++						SetCall errormsg entryvarsfns(content,comsize)
++						if errormsg=(noerror)
++							setcall errormsg xfile_add_base_if((Xfile_declfeature_normal),content,comsize)
++							if errormsg=(noerror)
++								set ac_store_c content;set ac_store_s comsize
++								SetCall errormsg addaref(ac_current_data,pcontent,pcomsize,comsize,(charnumber),(dummy_mask))
++							endif
++						endif
++					else
++						#since aftercall(activate/clear)
++						call stepcursors(pcontent,pcomsize)
++						set ac_store_c "";set ac_store_s 0
++						setcall errormsg xfile_add_base_if((Xfile_declfeature_unref),content,comsize)
++						call advancecursors(pcontent,pcomsize,comsize)
++					endelse
+ 				endif
+-			else
+-				#since aftercall(activate/clear)
+-				call advancecursors(pcontent,pcomsize,comsize)
+-			endelse
+-		endif
+-	endelse
+-	if errormsg=(noerror)
+-		#set g_e_b_p# (TRUE)
+-		if object=(TRUE)
+-			set g_e_p# tableReg
+-			if p_is_for_64_value#=(TRUE)
+-				div g_e_p# (elf64_dyn_d_val_syment)
+-			else
+-				div g_e_p# elf32_dyn_d_val_syment
+-			endelse
+-			#adding at current names reg the content lenghting comsize
+-			SetCall errormsg elfaddstrszsym(ac_store_content,ac_store_size,acsym_value,acsym_size,(STT_NOTYPE),(STB_GLOBAL),acsym_shndx,ptrtable)
+-			#can be weak at linux but windows needs global and we agreed imports are global
++			endif
++		endelse
++		if errormsg=(noerror)
++			#set g_e_b_p# (TRUE)
++			if object=(TRUE)
++				set g_e_p# tableReg
++				if p_is_for_64_value#=(TRUE)
++					div g_e_p# (elf64_dyn_d_val_syment)
++				else
++					div g_e_p# elf32_dyn_d_val_syment
++				endelse
++				#adding at current names reg the content lenghting comsize
++				SetCall errormsg elfaddstrszsym(ac_store_c,ac_store_s,acsym_value,acsym_size,(STT_NOTYPE),(STB_GLOBAL),acsym_shndx,ptrtable)
++				#can be weak at linux but windows needs global and we agreed imports are global
++			endif
+ 		endif
+ 	endif
+ endelse
+--- ocompiler-1.orig/src/files/actions/main/index/aftercallmanipulate.s
++++ ocompiler-1/src/files/actions/main/index/aftercallmanipulate.s
+@@ -2,12 +2,19 @@
+ if g_e_b_p#=(FALSE)
+ 	set errormsg "AfterCall is not defined."
+ else
+-	sd acall_val
+-	if subtype=(cAFTERCALLACTIVATE)
+-		set acall_val (~aftercall_clearstate)
+-	else
+-	#cAFTERCALLCLEAR
+-		set acall_val (aftercall_clearstate)
+-	endelse
+-	setcall errormsg aftercall_manipulate(acall_val)
++	setcall errormsg xfile_add_char_if((Xfile_aftercall))
++	if errormsg=(noerror)
++		sd acall_val
++		if subtype=(cAFTERCALLENABLE)
++			set acall_val (~aftercall_disable)
++			setcall errormsg xfile_add_char_if((Xfile_aftercall_enable))
++		else
++		#cAFTERCALLDISABLE
++			set acall_val (aftercall_disable)
++			setcall errormsg xfile_add_char_if((Xfile_aftercall_disable))
++		endelse
++		if errormsg=(noerror)
++			setcall errormsg aftercall_manipulate(acall_val)
++		endif
++	endif
+ endelse
+--- ocompiler-1.orig/src/files/actions/main/index/format.s
++++ ocompiler-1/src/files/actions/main/index/format.s
+@@ -25,9 +25,11 @@ else
+ 			SetCall elfobjformresp stringsatmemspc(pcontent,pcomsize,ptrelfobjformat,false,"64",p_is_for_64_value,(NULL))
+ 			If elfobjformresp=true
+ 				sd is_so
++				set ignore (FALSE)
+ 				setcall is_so stratmemspc(pcontent,pcomsize,"SO",false)
+ 				if is_so=true
+ 					if ignore_format_so=(No)
++						set ignore (TRUE)
+ 						setcall errormsg addtolog_char((log_reusable),logfile)
+ 					endif
+ 				endif
+--- ocompiler-1.orig/src/files/actions/main/index/include.s
++++ ocompiler-1/src/files/actions/main/index/include.s
+@@ -5,31 +5,42 @@ Data escapes#1
+ Data pquotsz^quotsz
+ Data pescapes^escapes
+ 
+-SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
++SetCall errormsg xfile_add_char_ifif((Xfile_include))
+ if errormsg=noerr
+-	if include_sec=(TRUE)
+-		ss include_test
+-		set include_test content
+-		add include_test quotsz
+-		inc include_test
+-		setcall include_test mem_spaces(include_test,pointer)
+-		if include_test!=pointer
+-			if include_test#=(asciidoublequote)
+-				sub include_test content
+-				sub comsize include_test
+-				add content include_test
+-				SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
+-			endif
+-		endif
+-	endif
++	SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
+ 	if errormsg=noerr
+-		SetCall errormsg addtosecstresc(pcontent,pcomsize,quotsz,escapes,ptrmiscbag,zero)
+-		If errormsg=noerr
+-			Call stepcursors(pcontent,pcomsize)
+-			Set includebool one
+-			if include_sec=(FALSE)
+-				SetCall errormsg include_sec_skip(pcontent,pcomsize)
++		SetCall errormsg xfile_add_base_ifif(subtype,content,quotsz)
++		if errormsg=noerr
++			if include_sec=(TRUE)
++				ss include_test
++				set include_test content
++				add include_test quotsz
++				inc include_test
++				setcall include_test mem_spaces(include_test,pointer)
++				if include_test!=pointer
++					if include_test#=(asciidoublequote)
++						sub include_test content
++						sub comsize include_test
++						add content include_test
++						SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
++						if errormsg=noerr
++							SetCall errormsg xfile_add_base_ifif((Xfile_include_alternative_yes),content,quotsz)
++						endif
++					else
++						setcall errormsg xfile_add_char_ifif((Xfile_include_alternative_no))
++					endelse
++				endif
+ 			endif
+-		EndIf
+-	endif
+-EndIf
++			if errormsg=noerr
++				SetCall errormsg addtosecstresc(pcontent,pcomsize,quotsz,escapes,ptrmiscbag,zero)
++				If errormsg=noerr
++					Call stepcursors(pcontent,pcomsize)
++					Set includebool one
++					if include_sec=(FALSE)
++						SetCall errormsg include_sec_skip(pcontent,pcomsize)
++					endif
++				EndIf
++			endif
++		endif
++	EndIf
++endif
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -478,7 +478,7 @@ function write_function_call(sd ptrdata,
+ 			#mov ecx,imm32
+ 			char g_err_mov=0xb8+ecxregnumber;data g_err_mov_disp32#1
+ 			#cmp byte[ecx],0
+-			char *={0x80,7*toregopcode|ecxregnumber};char *=aftercall_clearstate
++			char *={0x80,7*toregopcode|ecxregnumber};char *=aftercall_disable
+ 			const global_err_ex_sz=!-global_err_ex_start
+ 			#add rel,1 is (b8+ecx), one byte
+ 			set g_err_mov_disp32 global_err_ptr#
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -3,7 +3,7 @@
+ Const spacereq=1
+ Const spacenotreq=0
+ 
+-#with caution like elseif before else for getcommand comparations
++#with caution like elseif before else for getcommand comparations, only at space not required (elseif/else, endelseif/endelse, end../end, return/ret)
+ 
+ Char cCOMMENT_c={commentascii,0}
+ Char cDATA_c="DATA";Char cSTR_c="STR";Char cCHAR_c="CHAR";Char cSD_c="SD";Char cSS_c="SS";Char cSV_c="SV"
+@@ -12,23 +12,23 @@ Char cDATA_c="DATA";Char cSTR_c="STR";Ch
+ 	Char cVDATAX_c="VDATAX";Char cVSTRX_c="VSTRX";Char cVALUEX_c="VALUEX"
+ 	Char cCONST_c="CONST"
+ Char cSET_c="SET";Char cADD_c="ADD";Char cSUB_c="SUB";Char cMULT_c="MULT";Char cDIV_c="DIV";Char cREM_c="REM";Char cAND_c="AND";Char cOR_c="OR";Char cXOR_c="XOR"
+-Char cRETURN_c="RETURN";Char cINCST_c="INCST";Char cINC_c="INC";Char cDECST_c="DECST";Char cDEC_c="DEC";Char cNEG_c="NEG";Char cNOT_c="NOT";Char cSHL_c="SHL";Char cSHR_c="SHR";Char cSAR_c="SAR";Char cEXIT_c="EXIT"
+-Char cCALLX_c="CALLX";Char cCALL_c="CALL"
+-Char cIF_c="IF";Char cENDIF_c="ENDIF";Char cELSEIF_c="ELSEIF";Char cELSE_c="ELSE";Char cENDELSEIF_c="ENDELSEIF";Char cENDELSE_c="ENDELSE";Char cWHILE_c="WHILE";Char cENDWHILE_c="ENDWHILE";Char cBREAK_c="BREAK";Char cCONTINUE_c="CONTINUE"
++Char cRETURN_c="RETURN";Char cINC_c="INC";Char cDEC_c="DEC";Char cINCST_c="INCST";Char cDECST_c="DECST";Char cNEG_c="NEG";Char cNOT_c="NOT";Char cSHL_c="SHL";Char cSHR_c="SHR";Char cSAR_c="SAR";Char cEXIT_c="EXIT"
++Char cCALL_c="CALL";Char cCALLX_c="CALLX"
++Char cIF_c="IF";Char cELSEIF_c="ELSEIF";Char cELSE_c="ELSE";Char cENDIF_c="ENDIF";Char cENDELSEIF_c="ENDELSEIF";Char cENDELSE_c="ENDELSE";Char cWHILE_c="WHILE";Char cENDWHILE_c="ENDWHILE";Char cBREAK_c="BREAK";Char cCONTINUE_c="CONTINUE"
+ Char cIMPORT_c="IMPORT";Char cIMPORTX_c="IMPORTX"
+-Char cFUNCTION_c="FUNCTION";Char cFUNCTIONX_c="FUNCTIONX";Char cENTRYRAW_c="ENTRYRAW";Char cENTRY_c="ENTRY"
++Char cFUNCTION_c="FUNCTION";Char cFUNCTIONX_c="FUNCTIONX";Char cENTRY_c="ENTRY";Char cENTRYRAW_c="ENTRYRAW"
+ Char cENDFUNCTION_c="ENDFUNCTION"
+ Char cEND_c="END"
+ Char cRET_c="RET"
+ Char cINCLUDE_c="INCLUDE";Char cEINCLUDE_c="EINCLUDE"
+ Char cFORMAT_c="FORMAT"
+ Char cIMPORTAFTERCALL_c="IMPORTAFTERCALL";Char cAFTERCALL_c="AFTERCALL"
+-Char cAFTERCALLACTIVATE_c="AFTERCALLACTIVATE";Char cAFTERCALLCLEAR_c="AFTERCALLCLEAR"
+-Char cORPHAN_c="ORPHAN"
+-Char cCALLEXX_c="CALLEXX";Char cCALLEX_c="CALLEX"
+-Char cOVERRIDE_c="OVERRIDE"
++Char cAFTERCALLENABLE_c="AFTERCALLENABLE";Char cAFTERCALLDISABLE_c="AFTERCALLDISABLE"
++Char cCALLEX_c="CALLEX";Char cCALLEXX_c="CALLEXX"
+ Char cLIBRARY_c="LIBRARY"
+ Char cHEX_c="HEX"
++Char cOVERRIDE_c="OVERRIDE"
++Char cORPHAN_c="ORPHAN"
+ Char cI3_c="I3"
+ 
+ const not_a_subtype=-1
+@@ -182,26 +182,26 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=cONEARG
+ 			Data *=cRETURN
+ 			Data *=spacereq
+-		Const cINCST=!-cONEARG_top
+-			data *^cINCST_c
+-			Data *=cONEARG
+-			Data *=cINCST
+-			Data *=spacereq
+ 		Const cINC=!-cONEARG_top
+ 			data *^cINC_c
+ 			Data *=cONEARG
+ 			Data *=cINC
+ 			Data *=spacereq
+-		Const cDECST=!-cONEARG_top
+-			data *^cDECST_c
+-			Data *=cONEARG
+-			Data *=cDECST
+-			Data *=spacereq
+ 		Const cDEC=!-cONEARG_top
+ 			data *^cDEC_c
+ 			Data *=cONEARG
+ 			Data *=cDEC
+ 			Data *=spacereq
++		Const cINCST=!-cONEARG_top
++			data *^cINCST_c
++			Data *=cONEARG
++			Data *=cINCST
++			Data *=spacereq
++		Const cDECST=!-cONEARG_top
++			data *^cDECST_c
++			Data *=cONEARG
++			Data *=cDECST
++			Data *=spacereq
+ 		Const cNEG=!-cONEARG_top
+ 			data *^cNEG_c
+ 			Data *=cONEARG
+@@ -233,14 +233,14 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=cEXIT
+ 			Data *=spacereq
+ 	Const cCALL=!-coms_start
+-		data *^cCALLX_c
+-		Data *=cCALL
+-		Data *=x_callx_flag
+-		Data *=spacereq
+ 		data *^cCALL_c
+ 		Data *=cCALL
+ 		Data *=0
+ 		Data *=spacereq
++		data *^cCALLX_c
++		Data *=cCALL
++		Data *=x_callx_flag
++		Data *=spacereq
+ 	Const cCONDITIONS=!-coms_start
+ 	Const cCONDITIONS_top=!
+ 		Const cIF=!-cCONDITIONS_top
+@@ -248,11 +248,6 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=cCONDITIONS
+ 			Data *=cIF
+ 			Data *=spacereq
+-		Const cENDIF=!-cCONDITIONS_top
+-			data *^cENDIF_c
+-			Data *=cCONDITIONS
+-			Data *=cENDIF
+-			Data *=spacenotreq
+ 		Const cELSEIF=!-cCONDITIONS_top
+ 			data *^cELSEIF_c
+ 			Data *=cCONDITIONS
+@@ -263,6 +258,11 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=cCONDITIONS
+ 			Data *=cELSE
+ 			Data *=spacenotreq
++		Const cENDIF=!-cCONDITIONS_top
++			data *^cENDIF_c
++			Data *=cCONDITIONS
++			Data *=cENDIF
++			Data *=spacenotreq
+ 		Const cENDELSEIF=!-cCONDITIONS_top
+ 			data *^cENDELSEIF_c
+ 			Data *=cCONDITIONS
+@@ -317,16 +317,16 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=cSTARTFUNCTION
+ 			Data *=cFUNCTIONX
+ 			Data *=spacereq
+-		Const cENTRYRAW=!-cSTARTFUNCTION_top
+-			data *^cENTRYRAW_c
+-			Data *=cSTARTFUNCTION
+-			Data *=cENTRYRAW
+-			Data *=spacereq
+ 		Const cENTRY=!-cSTARTFUNCTION_top
+ 			data *^cENTRY_c
+ 			Data *=cSTARTFUNCTION
+ 			Data *=cENTRY
+ 			Data *=spacereq
++		Const cENTRYRAW=!-cSTARTFUNCTION_top
++			data *^cENTRYRAW_c
++			Data *=cSTARTFUNCTION
++			Data *=cENTRYRAW
++			Data *=spacereq
+ 	Const cENDFUNCTION=!-coms_start
+ 		data *^cENDFUNCTION_c
+ 		Data *=cENDFUNCTION
+@@ -343,13 +343,12 @@ Const numberofcommandsvars=(!-commandsva
+ 		Data *#1
+ 		Data *=spacenotreq
+ 	Const cINCLUDELINK=!-coms_start
+-	Const cINCLUDELINK_top=!
+-		Const cINCLUDE=!-cINCLUDELINK_top
++		Const cINCLUDE=Xfile_include_normal
+ 			data *^cINCLUDE_c
+ 			Data *=cINCLUDELINK
+ 			Data *=cINCLUDE
+ 			Data *=spacereq
+-		Const cEINCLUDE=!-cINCLUDELINK_top
++		Const cEINCLUDE=Xfile_include_extern
+ 			data *^cEINCLUDE_c
+ 			Data *=cINCLUDELINK
+ 			Data *=cEINCLUDE
+@@ -374,34 +373,24 @@ Const numberofcommandsvars=(!-commandsva
+ 			Data *=spacereq
+ 	Const cMANIPULATEAFTERCALL=!-coms_start
+ 	Const cMANIPULATEAFTERCALL_top=!
+-		Const cAFTERCALLACTIVATE=!-cMANIPULATEAFTERCALL_top
+-			data *^cAFTERCALLACTIVATE_c
++		Const cAFTERCALLENABLE=!-cMANIPULATEAFTERCALL_top
++			data *^cAFTERCALLENABLE_c
+ 			Data *=cMANIPULATEAFTERCALL
+-			Data *=cAFTERCALLACTIVATE
++			Data *=cAFTERCALLENABLE
+ 			Data *=spacenotreq
+-		Const cAFTERCALLCLEAR=!-cMANIPULATEAFTERCALL_top
+-			data *^cAFTERCALLCLEAR_c
++		Const cAFTERCALLDISABLE=!-cMANIPULATEAFTERCALL_top
++			data *^cAFTERCALLDISABLE_c
+ 			Data *=cMANIPULATEAFTERCALL
+-			Data *=cAFTERCALLCLEAR
++			Data *=cAFTERCALLDISABLE
+ 			Data *=spacenotreq
+-	Const cORPHAN=!-coms_start
+-		data *^cORPHAN_c
+-		Data *=cORPHAN
+-		Data *#1
+-		Data *=spacereq
+ 	Const cCALLEX=!-coms_start
+-		data *^cCALLEXX_c
+-		Data *=cCALLEX
+-		Data *=x_callx_flag
+-		Data *=spacereq
+ 		data *^cCALLEX_c
+ 		Data *=cCALLEX
+ 		Data *=0
+ 		Data *=spacereq
+-	Const cOVERRIDE=!-coms_start
+-		data *^cOVERRIDE_c
+-		Data *=cOVERRIDE
+-		Data *#1
++		data *^cCALLEXX_c
++		Data *=cCALLEX
++		Data *=x_callx_flag
+ 		Data *=spacereq
+ 	Const cLIBRARY=!-coms_start
+ 		data *^cLIBRARY_c
+@@ -413,6 +402,16 @@ Const numberofcommandsvars=(!-commandsva
+ 		Data *=cHEX
+ 		Data *#1
+ 		Data *=spacereq
++	Const cOVERRIDE=!-coms_start
++		data *^cOVERRIDE_c
++		Data *=cOVERRIDE
++		Data *#1
++		Data *=spacereq
++	Const cORPHAN=!-coms_start
++		data *^cORPHAN_c
++		Data *=cORPHAN
++		Data *#1
++		Data *=spacereq
+ 	Const cI3=!-coms_start
+ 		data *^cI3_c
+ 		Data *=cI3
+--- ocompiler-1.orig/src/files/functions/include.s
++++ ocompiler-1/src/files/functions/include.s
+@@ -163,20 +163,23 @@ EndFunction
+ 
+ #er
+ function include_sec_skip(sv pcontent,sd pcomsize)
++	call spaces(pcontent,pcomsize)
+ 	ss content;set content pcontent#
+-	sd size;set size pcomsize#
+-	call spaces(#content,#size)
+ 	if content#=(asciidoublequote)
++		sd size;set size pcomsize#
+ 		sd err
+ 		sd s;sd dummy
+ 		SetCall err quotinmem(#content,#size,#s,#dummy)
+ 		if err=(noerror)
+-			add content s;sub size s
+-			call stepcursors(#content,#size)
+-			set pcontent# content;set pcomsize# size
+-			return (noerror)
++			setcall err xfile_add_base_ifif((Xfile_include_alternative_yes),content,s)
++			if err=(noerror)
++				add content s;sub size s
++				call stepcursors(#content,#size)
++				set pcontent# content;set pcomsize# size
++			endif
+ 		endif
+-		return err
+-	endif
+-	return (noerror)
++	else
++		setcall err xfile_add_char_ifif((Xfile_include_alternative_no))
++	endelse
++	return err
+ endfunction
+--- ocompiler-1.orig/src/files/functions/xfile_details.s
++++ ocompiler-1/src/files/functions/xfile_details.s
+@@ -220,7 +220,7 @@ endfunction
+ 
+ #err
+ function xfile_add_end_if()
+-	sd err;setcall err xfile_add_char_if((Xfile_condend));return err
++	sd err;setcall err xfile_add_char_if((Xfile_end));return err
+ endfunction
+ #err
+ function xfile_add_end_ifif()
+@@ -229,3 +229,38 @@ function xfile_add_end_ifif()
+ 	endif
+ 	return (noerror)
+ endfunction
++
++#err
++function xfile_add_format_if(sd format,sd ignore)
++	if main.xfile!=(openno)
++		sd err
++		setcall err xfile_add_char((Xfile_format))
++		if err=(noerror)
++			if format=(elf_unix)
++				sd ptrobject%ptrobject
++				if ptrobject#=(TRUE)
++					sd b;setcall b is_for_64()
++					if b=(TRUE)
++						if ignore=(FALSE)
++							setcall err xfile_add_char((Xfile_format_elfobj64))
++						else
++							setcall err xfile_add_char((Xfile_format_elfobj64ig))
++						endelse
++					else
++						if ignore=(FALSE)
++							setcall err xfile_add_char((Xfile_format_elfobj))
++						else
++							setcall err xfile_add_char((Xfile_format_elfobjig))
++						endelse
++					endelse
++				else
++					setcall err xfile_add_char((Xfile_format_elf))
++				endelse
++			else
++				setcall err xfile_add_char((Xfile_format_exe))
++			endelse
++		endif
++		return err
++	endif
++	return (noerror)
++endfunction
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -273,6 +273,7 @@ Const elf_unix=1
+ Data pe_exec=pe_exec
+ Data elf_unix=elf_unix
+ Data formatdefined#1
++datax ignore#1
+ 
+ ##section alignment for mem realloc and section padding
+ Const page_sectionalignment=0x1000
+@@ -506,7 +507,7 @@ const ptr_nobits_virtual^nobits_virtual
+ data has_debug#1
+ const ptr_has_debug^has_debug
+ 
+-const aftercall_clearstate=0
++const aftercall_disable=0
+ 
+ data xbool#1
+ data xfile#1
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -2,21 +2,31 @@
+ const Xfile_comment=0
+ const Xfile_commentmulti=1
+ const Xfile_commentlineend=2
+-const Xfile_functiondef=3
+-const Xfile_declare=4
+-const Xfile_action=5
+-const Xfile_action2=6
+-const Xfile_call=7
+-const Xfile_callex=8
++const Xfile_format=3
++const Xfile_include=4
++const Xfile_functiondef=5
++const Xfile_declare=6
++const Xfile_action=7
++const Xfile_action2=8
++const Xfile_call=9
++const Xfile_callex=10
+ #
+ #Const ifinscribe=-1
+ #Const nocondnumber=-1
+-const Xfile_if=9
+-const Xfile_else=10
+-const Xfile_while=11
+-const Xfile_break=12
+-const Xfile_continue=13
+-const Xfile_condend=14
++const Xfile_if=11
++const Xfile_else=12
++const Xfile_while=13
++const Xfile_break=14
++const Xfile_continue=15
++const Xfile_end=16
++#const Xfile_ret=17
++#const Xfile_library=18
++#const Xfile_import=19
++const Xfile_aftercall=20
++#const Xfile_hex=21
++#const Xfile_override=22
++#const Xfile_orphan=23
++#const Xfile_interrupt=24
+ 
+ #t from type
+ const Xfile_function_tintern=0
+@@ -153,3 +163,21 @@ const Xfile_cond_lessunsign=0x83
+ const Xfile_cond_greatunsign=0x86
+ const Xfile_cond_less=0x8D
+ const Xfile_cond_great=0x8E
++
++const Xfile_format_exe=0
++const Xfile_format_elf=1
++const Xfile_format_elfobj=2
++const Xfile_format_elfobj64=3
++const Xfile_format_elfobjig=4
++const Xfile_format_elfobj64ig=5
++
++const Xfile_include_normal=0
++const Xfile_include_extern=1
++
++const Xfile_include_alternative_no=0
++const Xfile_include_alternative_yes=1
++
++const Xfile_aftercall_declare=0
++const Xfile_aftercall_import=1
++const Xfile_aftercall_enable=2
++const Xfile_aftercall_disable=3
+--- ocompiler-1.orig/tests/acall/a.s
++++ ocompiler-1/tests/acall/a.s
+@@ -1,7 +1,8 @@
+ 
+ vdata *=0
+ 
+-aftercall *test
++aftercall test
++#aftercall *test
+ 
+ function a()
+ 	call b()
+@@ -19,7 +20,7 @@ entry main()
+ value ^e^a
+ #i3
+ call e()
+-aftercallactivate
++aftercallenable
+ call e()
+-aftercallclear
++aftercalldisable
+ call e()
+--- /dev/null
++++ ocompiler-1/tests/acall/b.s
+@@ -0,0 +1,4 @@
++
++format elfobj64
++
++importaftercall test
+--- /dev/null
++++ ocompiler-1/tests/xf/include.s
+@@ -0,0 +1,7 @@
++
++include "include.h"
++einclude "include.h" "fakefile"
++
++override include_sec 1
++include "include.h"
++include "fakefile" "include.h"
+--- ocompiler-1.orig/tests/xf/primsec.s
++++ ocompiler-1/tests/xf/primsec.s
+@@ -12,4 +12,4 @@ rem a 6
+ and a 7
+ or a 8
+ xor a a(a,a)
+-xorcallx a a(a,a)
++xorxcall a a(a,a)
