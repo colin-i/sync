@@ -1,0 +1,585 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+110) xenial; urgency=medium
+ .
+   * fix exe
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-11-30
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1E16Y8q6SiNmf4pcKMDp_ZFrnnomaoSgw
++File ID: 10roEk-tuk6POWtpOB25MFyFoqmbAhzie
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+108.x86_64.rpm, 10roEk-tuk6POWtpOB25MFyFoqmbAhzie, 2023-11-29T15:28:07.278Z, https://drive.google.com/uc?id=10roEk-tuk6POWtpOB25MFyFoqmbAhzie&export=download
+ Found file: ocompiler-1-5+107.x86_64.rpm, 1E16Y8q6SiNmf4pcKMDp_ZFrnnomaoSgw, 2023-11-26T09:02:42.259Z, https://drive.google.com/uc?id=1E16Y8q6SiNmf4pcKMDp_ZFrnnomaoSgw&export=download
+ Found file: ocompiler-1-5+105.x86_64.rpm, 1GCbazf8mz5iyI5CgImI0SMcA2onhyji7, 2023-11-25T16:40:31.101Z, https://drive.google.com/uc?id=1GCbazf8mz5iyI5CgImI0SMcA2onhyji7&export=download
+ Found file: ocompiler-1-5+102.x86_64.rpm, 1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O, 2023-11-24T14:29:49.425Z, https://drive.google.com/uc?id=1Qz7lu9FxDdwAXRaG8nzhc-b4cQhH_74O&export=download
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -98,7 +98,8 @@ uninstall:
+ test:
+ 	echo "test"
+ 	cd linux; ../o o.s nul_res_pref 1; mv o z; ${linker} ./z o.s nul_res_pref 1; diff o z
+-#/home/bc/Desktop/out/libc6-i386.AppImage /home/bc/o/ocompiler-1/src/linux/z /home/bc/o/ocompiler-1/src/linux/o.s nul_res_pref 1
++#/home/bc/Desktop/out/libc6/lib32/ld-linux.so.2 /home/bc/o/ocompiler-1/src/linux/z /home/bc/o/ocompiler-1/src/linux/o.s nul_res_pref 1
++#/home/bc/Desktop/out/libc6-i386.AppImage
+ #2.36-0ubuntu4 (jammy) was ok, backportpackage is working for esm packages (tested)
+ #DEB_BUILD_OPTIONS=nocheck debuild -us -uc
+ 
+--- ocompiler-1.orig/src/files/actions.s
++++ ocompiler-1/src/files/actions.s
+@@ -1,6 +1,10 @@
+ 
+ #inits needed on top then some allocs at openfilename then frees needing inits, then these allocs
+-Include "./inits/alloc.s"
++SetCall errormsg enumbags(true)
++#here is the start of mem worries for linux
++If errormsg!=noerr
++	Call msgerrexit(errormsg)
++EndIf
+ 
+ Include "./actions/setdefdir.s"
+ 
+--- ocompiler-1.orig/src/files/actions/main/index.s
++++ ocompiler-1/src/files/actions/main/index.s
+@@ -112,8 +112,12 @@ if errormsg=(noerror)
+ 						#tested at function gather; FORMAT is here starting with FUNCTIONX to set the mask knowing the format
+ 						if formatdefined=0
+ 							if commandset!=(cFORMAT)
+-								set nobits_virtual (No)     #this is default pe_exe format, same behavior for nobits
+-								call backup_pref(#formatdefined)
++								setcall errormsg pe_init()
++								if errormsg=(noerror)
++									call backup_pref(#formatdefined)
++								else
++									set commandset (Error)
++								endelse
+ 							endif
+ 						endif
+ 						#needing to find virtual start
+@@ -212,11 +216,11 @@ if errormsg=(noerror)
+ 				setcall errormsg override_com(#content,#comsize)
+ 			ElseIf commandset=(cORPHAN)
+ 				Include "./index/warning.s"
+-			Else
+-			#If commandset==(cI3)
++			ElseIf commandset=(cI3)
+ 		call entryscope_verify_code()
+ 				Include "./index/i3.s"
+-			EndElse
++			EndElseIf
++			#else commandset==(Error)
+ 			If errormsg=(noerror)
+ 				#set when code started
+ 				#this can be at line 0
+--- ocompiler-1.orig/src/files/actions/main/index/aftercall.s
++++ ocompiler-1/src/files/actions/main/index/aftercall.s
+@@ -44,7 +44,8 @@ else
+ 					else
+ 						#since aftercall(activate/clear)
+ 						call stepcursors(pcontent,pcomsize)
+-						set ac_store_c "";set ac_store_s 0
++						set ac_store_c (NULL);set ac_store_s 0
++						#              ok not "", is content!=null once and inside that libc memcpy
+ 						setcall errormsg xfile_add_base_if((Xfile_declfeature_unref),content,comsize)
+ 						call advancecursors(pcontent,pcomsize,comsize)
+ 					endelse
+--- ocompiler-1.orig/src/files/actions/main/index/format.s
++++ ocompiler-1/src/files/actions/main/index/format.s
+@@ -87,7 +87,7 @@ else
+ 			EndElse
+ 		EndIf
+ 	Else
+-		set nobits_virtual (No)  #.dtnb is not yet at exe format
++		setcall errormsg pe_init()
+ 	EndElse
+ 
+ 	If errormsg=noerr
+--- ocompiler-1.orig/src/files/actions/main/index/include.s
++++ ocompiler-1/src/files/actions/main/index/include.s
+@@ -9,7 +9,7 @@ SetCall errormsg xfile_add_char_ifif((Xf
+ if errormsg=noerr
+ 	SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
+ 	if errormsg=noerr
+-		SetCall errormsg xfile_add_base_ifif(subtype,content,quotsz)
++		SetCall errormsg xfile_add_char_ifif(subtype)
+ 		if errormsg=noerr
+ 			if include_sec=(TRUE)
+ 				ss include_test
+@@ -19,12 +19,15 @@ if errormsg=noerr
+ 				setcall include_test mem_spaces(include_test,pointer)
+ 				if include_test!=pointer
+ 					if include_test#=(asciidoublequote)
+-						sub include_test content
+-						sub comsize include_test
+-						add content include_test
+-						SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
++						SetCall errormsg addtosecstresc_xfile(pcontent,pcomsize,quotsz,escapes,ptrtempdata) #is ok with casts, at misc if set must set reg 0
+ 						if errormsg=noerr
+-							SetCall errormsg xfile_add_base_ifif((Xfile_include_alternative_yes),content,quotsz)
++							sub include_test content
++							sub comsize include_test
++							add content include_test
++							SetCall errormsg quotinmem(pcontent,pcomsize,pquotsz,pescapes)
++							if errormsg=noerr
++								SetCall errormsg xfile_add_char_ifif((Xfile_include_alternative_yes))
++							endif
+ 						endif
+ 					else
+ 						setcall errormsg xfile_add_char_ifif((Xfile_include_alternative_no))
+@@ -32,7 +35,7 @@ if errormsg=noerr
+ 				endif
+ 			endif
+ 			if errormsg=noerr
+-				SetCall errormsg addtosecstresc(pcontent,pcomsize,quotsz,escapes,ptrmiscbag,zero)
++				SetCall errormsg addtosecstresc_xfile(pcontent,pcomsize,quotsz,escapes,ptrmiscbag)
+ 				If errormsg=noerr
+ 					Call stepcursors(pcontent,pcomsize)
+ 					Set includebool one
+--- ocompiler-1.orig/src/files/functions/add/addstresc.s
++++ ocompiler-1/src/files/functions/add/addstresc.s
+@@ -6,8 +6,8 @@ Function addtosecstresc(sd pcontent,sd p
+ 	return err
+ endFunction
+ #errnr
+-Function addtosecstresc_xfile(sd pcontent,sd psize,sd sz,sd escapes,sd pdest,sd wordpad)
+-	sd err;setcall err addtosecstresc_base(pcontent,psize,sz,escapes,pdest,wordpad,(TRUE))
++Function addtosecstresc_xfile(sd pcontent,sd psize,sd sz,sd escapes,sd pdest)
++	sd err;setcall err addtosecstresc_base(pcontent,psize,sz,escapes,pdest,(FALSE),(TRUE))
+ 	return err
+ endFunction
+ #errnr
+@@ -71,7 +71,8 @@ Function addtosecstresc_base(sd pcontent
+ 	EndIf
+ 
+ 	if write_to_xfile=(TRUE)
+-		setcall errnr xfile_add_string_if(xfileloc,xfilesz)
++		#ifif only for include tag
++		setcall errnr xfile_add_string_ifif(xfileloc,xfilesz)
+ 		return errnr
+ 	endif
+ 
+--- ocompiler-1.orig/src/files/functions/add/addtomem.s
++++ ocompiler-1/src/files/functions/add/addtomem.s
+@@ -36,62 +36,50 @@ Function addtosec(str content,data size,
+ 	Set avail destMax
+ 	Sub avail destData
+ 	If avail<size
+-		Data datasec%%ptr_datasec
+-		Data codesec%%ptr_codesec
+-		Data debugsec%%ptr_debug
+ 		Data ptrfileformat%ptrfileformat
+-		Data elf_unix=elf_unix
+-		Data false=FALSE
+-		Data true=TRUE
+-		Data sectionexpand#1
+-		Set sectionexpand false
+-		If ptrfileformat#=elf_unix
+-			Set sectionexpand true
+-		Else
+-			If dst=datasec
+-				Set sectionexpand true
+-			ElseIf dst=codesec
+-				Set sectionexpand true
+-			ElseIf dst=debugsec
+-			#this is only because there is no blocking at writefile_errversion_debug for speed reasons
+-			#this is also called before format is defined
+-				Set sectionexpand true
+-			EndElseIf
+-		EndElse
+-		If sectionexpand=false
++		Data pe_exec=pe_exec
++		If ptrfileformat#=pe_exec
+ 			Char _memerr="Memory space error."
+-			Str memerr^_memerr
+-			Return memerr
+-		Else
+-			Data value#1
+-			sd err
++			vStr memerr^_memerr
++			Value ptrtable%%ptr_table
++			Value ptrnames%%ptr_names
++			Value ptraddresses%%ptr_addresses
++			If dst=ptrtable
++				Return memerr
++			ElseIf dst=ptrnames
++				Return memerr
++			ElseIf dst=ptraddresses
++				Return memerr
++			EndElseIf
++		Endif
++		Data value#1
++		sd err
+ 
+-			Set value destData
+-			setcall err maxsectioncheck(size,#value)
+-			If err!=noerr
+-				Return err
+-			EndIf
+-			Data pad#1
+-			Data ptrsecalign%ptrpage_sectionalignment
+-			Data secalign#1
+-			Set secalign ptrsecalign#
+-			SetCall pad requiredpad(value,secalign)
+-			setcall err maxsectioncheck(pad,#value)
+-			If err!=noerr
+-				Return err
+-			EndIf
++		Set value destData
++		setcall err maxsectioncheck(size,#value)
++		If err!=noerr
++			Return err
++		EndIf
++		Data pad#1
++		Data ptrsecalign%ptrpage_sectionalignment
++		Data secalign#1
++		Set secalign ptrsecalign#
++		SetCall pad requiredpad(value,secalign)
++		setcall err maxsectioncheck(pad,#value)
++		If err!=noerr
++			Return err
++		EndIf
+ 
+-			Data contoffset=containersdataoffset
+-			Data container#1
+-			Set container dst
+-			Add container contoffset
++		Data contoffset=containersdataoffset
++		Data container#1
++		Set container dst
++		Add container contoffset
+ 
+-			SetCall err memrealloc(container,value)
+-			If err!=noerr
+-				Return err
+-			EndIf
+-			Set dst# value
+-		EndElse
++		SetCall err memrealloc(container,value)
++		If err!=noerr
++			Return err
++		EndIf
++		Set dst# value
+ 	EndIf
+ 	If content!=null
+ 		Str destloc#1
+--- ocompiler-1.orig/src/files/functions/argument/arg.s
++++ ocompiler-1/src/files/functions/argument/arg.s
+@@ -121,7 +121,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 			setcall location# get_img_vdata_dataReg()
+ 			#set string to data
+ 			data ptrdatasec%%ptr_datasec
+-			SetCall errnr addtosecstresc_xfile(#content,#size,q_size,escapes,ptrdatasec,(FALSE))
++			SetCall errnr addtosecstresc_xfile(#content,#size,q_size,escapes,ptrdatasec)
+ 			If errnr!=(noerror)
+ 				return errnr
+ 			endif
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -418,6 +418,7 @@ Const numberofcommandsvars=(!-commandsva
+ 		Data *#1
+ 		Data *=spacenotreq
+ Const numberofcommands=(!-coms_start)/com_size
++Const Error=!-coms_start
+ 
+ Data pointers#numberofcommands+1
+ Const compointersloc^pointers
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -417,7 +417,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 		sd escapes
+ 		SetCall err quotinmem(ptrcontent,ptrsize,ptrvalue,#escapes)
+ 		if punitsize=(NULL)
+-			SetCall err addtosecstresc_xfile(ptrcontent,ptrsize,value,escapes,ptrdatasec,(FALSE))
++			SetCall err addtosecstresc_xfile(ptrcontent,ptrsize,value,escapes,ptrdatasec)
+ 			if err=(noerror)
+ 				Call stepcursors(ptrcontent,ptrsize)
+ 			endif
+--- ocompiler-1.orig/src/files/functions/include.s
++++ ocompiler-1/src/files/functions/include.s
+@@ -166,16 +166,15 @@ function include_sec_skip(sv pcontent,sd
+ 	call spaces(pcontent,pcomsize)
+ 	ss content;set content pcontent#
+ 	if content#=(asciidoublequote)
+-		sd size;set size pcomsize#
++		sd sz;sd escapes
+ 		sd err
+-		sd s;sd dummy
+-		SetCall err quotinmem(#content,#size,#s,#dummy)
++		SetCall err quotinmem(pcontent,pcomsize,#sz,#escapes)
+ 		if err=(noerror)
+-			setcall err xfile_add_base_ifif((Xfile_include_alternative_yes),content,s)
++			setcall err xfile_add_char_ifif((Xfile_include_alternative_yes))
+ 			if err=(noerror)
+-				add content s;sub size s
+-				call stepcursors(#content,#size)
+-				set pcontent# content;set pcomsize# size
++				Value ptrtemp%%ptr_tempdata
++				setcall err addtosecstresc_xfile(pcontent,pcomsize,sz,escapes,ptrtemp) #misc has first include file, and is ok with casts
++				call stepcursors(pcontent,pcomsize) #only mem/file write errors
+ 			endif
+ 		endif
+ 	else
+--- ocompiler-1.orig/src/files/functions/inits.s
++++ ocompiler-1/src/files/functions/inits.s
+@@ -81,3 +81,24 @@ function comline_pointer(ss a,sd p_p)
+ 	endwhile
+ 	return "command line argument not found"
+ endfunction
++
++#err
++function pe_init()
++	sd ptr_nobits_virtual%ptr_nobits_virtual
++	set ptr_nobits_virtual# (No)  #.dtnb is not yet at exe format
++	#this is default pe_exe format, same behavior for nobits
++
++	vdata ptrdatasec%%ptr_datasec
++	vdata ptrcodesec%%ptr_codesec
++	vdata ptrtable%%ptr_table
++	vdata ptraddresses%%ptr_addresses
++	vdata ptrnames%%ptr_names
++
++	sd err
++	set ptrdatasec# (page_sectionalignment);setcall err enumbags_alloc(ptrdatasec);if err!=(noerror);Return err;EndIf
++	set ptrcodesec# (page_sectionalignment);setcall err enumbags_alloc(ptrcodesec);if err!=(noerror);Return err;EndIf
++	set ptrtable# (sizeofiedataparts);setcall err enumbags_alloc(ptrtable);if err!=(noerror);Return err;EndIf
++	set ptraddresses# (iaddressessize);setcall err enumbags_alloc(ptraddresses);if err!=(noerror);Return err;EndIf
++	set ptrnames# (sizeofienames);setcall err enumbags_alloc(ptrnames)
++	return err
++endfunction
+--- ocompiler-1.orig/src/files/functions/xfile.s
++++ ocompiler-1/src/files/functions/xfile.s
+@@ -50,6 +50,14 @@ function xfile_add_string_if(sd text,sd
+ 	endif
+ 	return (noerror)
+ endfunction
++function xfile_add_string_ifif(sd text,sd size)
++	if main.parses=(pass_write)
++		sd err
++		setcall err xfile_add_string_if(text,size)
++		return err
++	endif
++	return (noerror)
++endfunction
+ function xfile_add_base(sd type,sd text,sd size)
+ 	sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+ 	if err=(noerror)
+--- ocompiler-1.orig/src/files/functions/xfile_details.s
++++ ocompiler-1/src/files/functions/xfile_details.s
+@@ -264,3 +264,13 @@ function xfile_add_format_if(sd format,s
+ 	endif
+ 	return (noerror)
+ endfunction
++
++#err
++#function xfile_add_import_if(sv pcontent,sd psize)
++#	if main.xfile!=(openno)
++#		Datax impquotsz#1
++#		Datax impescapes#1
++#		#the spelling errors were at pass init
++#		Call quotinmem(pcontent,psize,#impquotsz,#impescapes)
++#	return (noerror)
++#endfunction
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -59,7 +59,7 @@ Const ptrfileout^fileout
+ Data ptrfileout%ptrfileout
+ 
+ #alloc.o
+-Const mainscope=10*0x1000
++#Const mainscope=10*0x1000
+ Const subscope=2*0x1000
+ Const _open_read=_O_RDONLY|flag_O_BINARY
+ Const _open_write=_O_WRONLY|flag_O_BINARY|flag_O_CREAT|_O_TRUNC
+@@ -73,7 +73,7 @@ Const containersdataoffset=4
+ Const containersdataRegoffset=8
+ Const sizeofcontainer=3*dwsz
+ #base containers
+-Const includesSize=50*includesetSz
++#Const includesSize=50*includesetSz
+ #includesSize
+ 
+ #this, not yet at simple exec Const containersbegin=!!
+@@ -89,7 +89,7 @@ Datax miscbag#1
+ Datax miscbagReg#1
+ Const ptr_miscbag^miscbagMax
+ 
+-Const conditionssize=200*dwsz
++#Const conditionssize=200*dwsz
+ #conditionssize
+ Datax conditionsloopsMax#1
+ Datax *conditionsloops#1
+@@ -105,38 +105,38 @@ Const ptr_unresolvedcalls^unresolvedcall
+ Datax integerMax#1
+ Datax *#1
+ Datax *#1
+-Datax stringMax#1
++Datax *stringMax#1
+ Datax *#1
+ Datax *#1
+-Datax charMax#1
++Datax *charMax#1
+ Datax *#1
+ Datax *#1
+-Datax sdMax#1
++Datax *sdMax#1
+ Datax *#1
+ Datax *#1
+-Datax ssMax#1
++Datax *ssMax#1
+ Datax *#1
+ Datax *#1
+-Datax svMax#1
++Datax *svMax#1
+ Datax *#1
+ Datax *#1
+ 
+ Datax integerfnscopeMax#1
+ Datax *#1
+ Datax *#1
+-Datax stringfnscopeMax#1
++Datax *stringfnscopeMax#1
+ Datax *#1
+ Datax *#1
+-Datax charfnscopeMax#1
++Datax *charfnscopeMax#1
+ Datax *#1
+ Datax *#1
+-Datax sdfnMax#1
++Datax *sdfnMax#1
+ Datax *#1
+ Datax *#1
+-Datax ssfnMax#1
++Datax *ssfnMax#1
+ Datax *#1
+ Datax *#1
+-Datax svfnMax#1
++Datax *svfnMax#1
+ Datax *#1
+ Datax *#1
+ 
+@@ -165,7 +165,7 @@ Const afterscopes=numberofvars*2
+ 	Const functionsnumber=afterscopes+1
+ const sizeofscope=sizeofcontainer*numberofvars
+ 
+-Const constantssize=10*mainscope
++#Const constantssize=10*mainscope
+ #constantssize
+ Datax constantsMax#1
+ Datax *constants#1
+@@ -208,6 +208,7 @@ Datax addressesMax#1
+ Datax addresses#1
+ Datax addressesReg#1
+ Const ptr_addresses^addressesMax
++#data relocs at object
+ 
+ Const sizeofienames=sizeofsecdata-iaddressessize-itablesize
+ #Const inamessize=sizeofienames
+@@ -221,6 +222,7 @@ Datax extraMax#1
+ Datax extra#1
+ Datax extraReg#1
+ Const ptr_extra^extraMax
++#code relocs at object
+ 
+ Datax unresLocalMax#1
+ Datax unresLocal#1
+@@ -318,6 +320,7 @@ Value ptraddresses%%ptr_addresses
+ Value ptrextra%%ptr_extra
+ Value ptrconditionsloops%%ptr_conditionsloops
+ Value ptrdebug%%ptr_debug
++Value ptrtempdata%%ptr_tempdata
+ Value ptrnull^null
+ 
+ Data allocerrormsg#1
+--- ocompiler-1.orig/src/files/headers/pe_format.h
++++ ocompiler-1/src/files/headers/pe_format.h
+@@ -34,7 +34,7 @@ Data *SizeOfUninitializedData=0
+ ####completed later
+ Data AddressOfEntryPoint#1
+ ####virtual base code section
+-Data BaseOfCode=0x3000
++Data BaseOfCode=0x3000          #this is moved if required
+ ####virtual base data section
+ Data *BaseOfData=0x1000
+ #NT additional fields.
+--- ocompiler-1.orig/src/files/inits/alloc.s
++++ /dev/null
+@@ -1,58 +0,0 @@
+-
+-
+-#containers initialisations (bags alloc using Max)
+-
+-Data mainscope=mainscope
+-Data subscope=subscope
+-
+-##base containers
+-Data includesSize=includesSize
+-Data conditionssize=conditionssize
+-Set includesMax includesSize
+-Set miscbagMax subscope
+-Set conditionsloopsMax conditionssize
+-Set unresolvedcallsMax mainscope
+-
+-##variables, constants and functions containers
+-Data constantssize=constantssize
+-Set integerMax mainscope
+-Set stringMax mainscope
+-Set charMax mainscope
+-Set sdMax mainscope
+-Set ssMax mainscope
+-Set svMax mainscope
+-
+-Set integerfnscopeMax subscope
+-Set stringfnscopeMax subscope
+-Set charfnscopeMax subscope
+-Set sdfnMax subscope
+-Set ssfnMax subscope
+-Set svfnMax subscope
+-
+-Set constantsMax constantssize
+-Set functionsMax mainscope
+-
+-##file containers
+-Data ienamessize=sizeofienames
+-
+-Set datasecMax page_sectionalignment
+-Set codesecMax page_sectionalignment
+-
+-Data itablesize=sizeofiedataparts
+-Data iaddressessize=iaddressessize
+-Set tableMax itablesize
+-Set addressesMax iaddressessize
+-Set namesMax ienamessize
+-
+-Set extraMax subscope
+-
+-Set unresLocalMax mainscope
+-
+-set debugsecMax 0    #(subscope)
+-set tempdataMax 0
+-
+-SetCall errormsg enumbags(true)
+-#here is the start of mem worries for linux
+-If errormsg!=noerr
+-	Call msgerrexit(errormsg)
+-EndIf
