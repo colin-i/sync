@@ -1,0 +1,86 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+116) xenial; urgency=medium
+ .
+   * line end comment at override
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-06
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1lrJuO2v99zp24qwEeom8h2uiHroO78i8
++File ID: 1utqWfoFjLX4nJSDlFm81-MO7-Y_4TSm5
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+115.x86_64.rpm, 1utqWfoFjLX4nJSDlFm81-MO7-Y_4TSm5, 2023-12-06T07:31:26.997Z, https://drive.google.com/uc?id=1utqWfoFjLX4nJSDlFm81-MO7-Y_4TSm5&export=download
+ Found file: ocompiler-1-5+114.x86_64.rpm, 1lrJuO2v99zp24qwEeom8h2uiHroO78i8, 2023-12-04T17:08:05.785Z, https://drive.google.com/uc?id=1lrJuO2v99zp24qwEeom8h2uiHroO78i8&export=download
+ Found file: ocompiler-1-5+113.x86_64.rpm, 1TF6p22aESDnfeJc9YRchf1anwCp5M28C, 2023-12-04T16:26:51.426Z, https://drive.google.com/uc?id=1TF6p22aESDnfeJc9YRchf1anwCp5M28C&export=download
+ Found file: ocompiler-1-5+110.x86_64.rpm, 1p9pR6w1wlJ7SMN06NuZc4MAY8mRLO5bB, 2023-12-04T08:48:00.105Z, https://drive.google.com/uc?id=1p9pR6w1wlJ7SMN06NuZc4MAY8mRLO5bB&export=download
+--- ocompiler-1.orig/src/files/functions/override.s
++++ ocompiler-1/src/files/functions/override.s
+@@ -1,6 +1,6 @@
+ 
+ #err
+-function override_com(sd pcontent,sd psize,sd parses)
++function override_com(sv pcontent,sd psize,sd parses)
+ 	sd name
+ 	sd namesize
+ 	setcall namesize valinmem(pcontent#,psize#,(asciispace))
+@@ -13,11 +13,10 @@ function override_com(sd pcontent,sd psi
+ 	if psize#=0
+ 		return "second argument is missing at override"
+ 	endif
+-	#work can be done do allow line comment here
+ 
+ 	sd err
+ 	ss mem
+-	sd valuesize;set valuesize psize#
++	sd valuesize;setcall valuesize find_whitespaceORcomment(pcontent#,psize#)
+ 
+ 	sd allocsize=1+1;add allocsize valuesize
+ 	add allocsize namesize
+--- ocompiler-1.orig/tests/acall/b.s
++++ ocompiler-1/tests/acall/b.s
+@@ -1,4 +1,4 @@
+ 
+ format elfobj64
+ 
+-importaftercall test
++importaftercall test #com
+--- ocompiler-1.orig/tests/ret.s
++++ ocompiler-1/tests/ret.s
+@@ -1,7 +1,7 @@
+ 
+ format elfobj
+ 
+-orphan off
++orphan off #test
+ 
+ function inner()
+ ret
+@@ -11,6 +11,6 @@ entry main()
+ ret
+ override exit_end 1
+ ret
+-override exit_end 0
++override exit_end 0 #test
+ ret
+ exit 2
