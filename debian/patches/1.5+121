@@ -1,0 +1,95 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+121) xenial; urgency=medium
+ .
+   * overflow
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-08
+
+--- ocompiler-1.orig/makewin32
++++ ocompiler-1/makewin32
+@@ -9,7 +9,7 @@ fi
+ 
+ #must also use mingw-w64-i686-dev
+ 
+-${OCOMP} ./src/windows/obj32.s inplace_reloc 0 && \
++${OCOMP} ./src/windows/obj32.s inplace_reloc 0 ${OFLAGS} && \
+ #argc argv? more info at obj.s. _WinMain@16
+ i686-w64-mingw32-ld -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
+ ounused ./src/windows/obj32.s.log && \
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -326,15 +326,15 @@
+ 	</p>
+ <br>
+ 	<p>
+-	Operations can be performed at declarations with arithmetic (+,-,*,/,%,$), bitwise (&,|,^,~,&lt;&lt;,&gt;&gt;,&gt;&gt;&gt;) and logical (&lt;,&gt;) signs. - and ~ can prefix a number/constant.
++	Operations can be performed at declarations with arithmetic (+,-,*,/,//,%,%%,$), bitwise (&,|,^,~,&lt;&lt;,&gt;&gt;,&gt;&gt;&gt;) and logical (&lt;,&gt;) signs. - and ~ can prefix a number/constant.
+ 	<br>
+ 	Example:
+ 	<br>
+ 	<table class="code">
+ 	<tr><td>const a=1</td></tr>
+-	<tr><td>#</td>               <td>add</td> <td>sub</td> <td>mul</td> <td>div</td>   <td>rem</td>   <td>pow</td> <td>and</td> <td>or</td>  <td>xor</td> <td>shl1</td> <td>sar1</td> <td>shr1</td>    <td>less</td><td>greater</td><td>neg</td><td>not</td></tr>
+-	<tr><td>char *examples={</td><td>3+2,</td><td>6-4,</td><td>5*5,</td><td>32/10,</td><td>32%10,</td><td>3$2,</td><td>7&2,</td><td>5|2,</td><td>7^2,</td><td>2<<2,</td><td>8>>3,</td><td>-1>>>25,</td><td>2<3,</td><td>2>3,</td>   <td>-a,</td><td>~0}</td></tr>
+-	<tr><td>#hex:</td>           <td>5</td>   <td>2</td>   <td>19</td>  <td>3</td>     <td>2</td>     <td>9</td>   <td>2</td>   <td>7</td>   <td>5</td>   <td>8</td>    <td>1</td>    <td>7f</td>      <td>1</td>   <td>0</td>      <td>ff</td> <td>ff</td></tr>
++	<tr><td>#</td>               <td>add</td> <td>sub</td> <td>mul</td> <td>div</td>   <td>divu</td>          <td>remu</td>  <td>remu</td>    <td>pow</td> <td>and</td> <td>or</td>  <td>xor</td> <td>shl1</td> <td>sar1</td> <td>shr1</td>    <td>less</td><td>greater</td><td>neg</td><td>not</td></tr>
++	<tr><td>char *examples={</td><td>3+2,</td><td>6-4,</td><td>5*5,</td><td>32/10,</td><td>-1//0x10000000</td><td>32%10,</td><td>-1%%0x10</td><td>3$2,</td><td>7&2,</td><td>5|2,</td><td>7^2,</td><td>2<<2,</td><td>8>>3,</td><td>-1>>>25,</td><td>2<3,</td><td>2>3,</td>   <td>-a,</td><td>~0}</td></tr>
++	<tr><td>#hex:</td>           <td>5</td>   <td>2</td>   <td>19</td>  <td>3</td>     <td>f</td>             <td>2</td>     <td>f</td>       <td>9</td>   <td>2</td>   <td>7</td>   <td>5</td>   <td>8</td>    <td>1</td>    <td>7f</td>      <td>1</td>   <td>0</td>      <td>ff</td> <td>ff</td></tr>
+ 	</table>
+ 	<a class="code">
+ 	 const a=3*(1+2)<br>
+--- ocompiler-1.orig/src/files/functions/64/bit.s
++++ ocompiler-1/src/files/functions/64/bit.s
+@@ -318,7 +318,7 @@ function function_call_64f(sd hex_n,sd c
+ 				#shadow space
+ 				#sub esp,x;default 4 args stack space convention
+ 				char hex_w={REX_Operand_64,0x83,0xEC};char argspush#1
+-				set argspush nr_of_args;sub argspush conv;mult argspush (-1*qwsz)
++				set argspush nr_of_args;sub argspush conv;mult argspush ~qwszbits #minus 1 mult qwsz
+ 				SetCall err addtosec(#hex_w,4,code)
+ 			endif
+ 		elseif nr_of_args>0
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -31,6 +31,7 @@ Const bsz=1
+ Const wsz=2
+ Const dwsz=4
+ Const qwsz=8
++const qwszbits=qwsz-1
+ 
+ const wmax=0xffFF
+ 
+--- ocompiler-1.orig/tests/operations.s
++++ ocompiler-1/tests/operations.s
+@@ -2,9 +2,9 @@
+ format elfobj
+ 
+ const a=1
+-#               add sub mul div   rem   pow and or  xor shl1 sar1  shr1   less greater neg not
+-char *examples={3+2,6-4,5*5,32/10,32%10,3$2,7&2,5|2,7^2,2<<2,8>>3,-1>>>25,2<3, 2>3,    -a, ~0}
+-#hex:           5   2   19  3     2     9   2   7   5   8    1    7f      1    0       ff  ff
++#               add sub mul div   divu           rem   remu     pow and or  xor shl1 sar1  shr1   less greater neg not
++char *examples={3+2,6-4,5*5,32/10,-1//0x10000000,32%10,-1%%0x10,3$2,7&2,5|2,7^2,2<<2,8>>3,-1>>>25,2<3, 2>3,    -a, ~0}
++#hex:           5   2   19  3     f              2     f        9     2   7   5   8    1    7f  1       0       ff  ff
+ 
+ override w_as_e 0
+ data *overflows=2$31  #80..
