@@ -1,0 +1,108 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+126) xenial; urgency=medium
+ .
+   * log file entirely fix
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-14
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1Q-l2Ovv4njUWQ5CQSfariZ0aoe-uVaDZ
++File ID: 10Jw0V0M1d4p6K6WI4Phz9org6ILOTHpY
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+125.x86_64.rpm, 10Jw0V0M1d4p6K6WI4Phz9org6ILOTHpY, 2023-12-14T21:21:33.652Z, https://drive.google.com/uc?id=10Jw0V0M1d4p6K6WI4Phz9org6ILOTHpY&export=download
+ Found file: ocompiler-1-5+124.x86_64.rpm, 1Q-l2Ovv4njUWQ5CQSfariZ0aoe-uVaDZ, 2023-12-14T13:22:31.316Z, https://drive.google.com/uc?id=1Q-l2Ovv4njUWQ5CQSfariZ0aoe-uVaDZ&export=download
+ Found file: ocompiler-1-5+123.x86_64.rpm, 1fSphOsqSyTjQXwz-PgKSGncrU5-_w3kA, 2023-12-12T11:15:42.185Z, https://drive.google.com/uc?id=1fSphOsqSyTjQXwz-PgKSGncrU5-_w3kA&export=download
+ Found file: ocompiler-1-5+119.x86_64.rpm, 1Ugb3Ix7-f8Ho7vSayqht_EpHtMP3cCi7, 2023-12-08T09:11:30.496Z, https://drive.google.com/uc?id=1Ugb3Ix7-f8Ho7vSayqht_EpHtMP3cCi7&export=download
+--- ocompiler-1.orig/src/files/actions.s
++++ ocompiler-1/src/files/actions.s
+@@ -18,8 +18,18 @@ include "./inits/inits.s"
+ 
+ Include "./actions/main.s"
+ 
++Include "./actions/terminations.s"
++
+ if xbool!=(Yes_strict)
+-	Include "./actions/terminations.s"
++	#close the last LIBRARY
++	If fileformat=pe_exec
++		If implibsstarted=true
++			SetCall errormsg closelib()
++			If errormsg!=noerr
++				Call msgerrexit(errormsg)
++			EndIf
++		EndIf
++	EndIf
+ 	Include "./actions/pathout.s"
+ 	Include "./actions/fileformat.s"
+ 	Include "./actions/resolve.s" #call to resolve local or imported functions
+--- ocompiler-1.orig/src/files/actions/fileformat.s
++++ ocompiler-1/src/files/actions/fileformat.s
+@@ -1,9 +1,4 @@
+ 
+-setcall errormsg addtolog_natural(datasecReg)
+-if errormsg!=(noerror)
+-	call msgerrexit(errormsg)
+-endif
+-
+ #also needed at dtnb and old
+ sub datasecSize datasecReg
+ 
+--- ocompiler-1.orig/src/files/actions/terminations.s
++++ ocompiler-1/src/files/actions/terminations.s
+@@ -6,16 +6,6 @@ If errormsg!=noerr
+ 	Call msgerrexit(errormsg)
+ EndIf
+ 
+-#close the last LIBRARY
+-If fileformat=pe_exec
+-	If implibsstarted=true
+-		SetCall errormsg closelib()
+-		If errormsg!=noerr
+-			Call msgerrexit(errormsg)
+-		EndIf
+-	EndIf
+-EndIf
+-
+ #verify preferences
+ sd err_bool
+ setCall err_bool warnings(#errormsg,el_or_e)
+@@ -25,3 +15,9 @@ If errormsg!=noerr
+ 	endif
+ 	call errexit()
+ EndIf
++
++#last entry for log file
++setcall errormsg addtolog_natural(datasecReg)
++if errormsg!=(noerror)
++	call msgerrexit(errormsg)
++endif
+--- ocompiler-1.orig/src/md
++++ ocompiler-1/src/md
+@@ -1,5 +1,5 @@
+ 
+-OFLAGS="function_name 1 nul_res_pref 1" make linkerflags= $@
++OFLAGS+=" function_name 1 nul_res_pref 1" make linkerflags= $@
+ 
+ #last working glibc linker: 2.36
+ #linker=/home/bc/arh/libc6-i386/lib32/ld-linux.so.2 make test
