@@ -1,0 +1,197 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+125) xenial; urgency=medium
+ .
+   * x_file strict
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-14
+
+--- ocompiler-1.orig/ocompiler.conf
++++ ocompiler-1/ocompiler.conf
+@@ -93,6 +93,6 @@
+ #0 is No; 1 is Yes
+ #has_debug=0
+ 
+-#23. Make .x file at the same time.
+-#0 is No; 1 is Yes
++#23. Make .x file.
++#0 is No; 1 is Yes; 2 is Yes_strict without making exe/elf
+ #x_file=0
+\ No newline at end of file
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,7 @@
+-File ID: 1Ugb3Ix7-f8Ho7vSayqht_EpHtMP3cCi7
++File ID: 1Q-l2Ovv4njUWQ5CQSfariZ0aoe-uVaDZ
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+124.x86_64.rpm, 1Q-l2Ovv4njUWQ5CQSfariZ0aoe-uVaDZ, 2023-12-14T13:22:31.316Z, https://drive.google.com/uc?id=1Q-l2Ovv4njUWQ5CQSfariZ0aoe-uVaDZ&export=download
++Found file: ocompiler-1-5+123.x86_64.rpm, 1fSphOsqSyTjQXwz-PgKSGncrU5-_w3kA, 2023-12-12T11:15:42.185Z, https://drive.google.com/uc?id=1fSphOsqSyTjQXwz-PgKSGncrU5-_w3kA&export=download
+ Found file: ocompiler-1-5+119.x86_64.rpm, 1Ugb3Ix7-f8Ho7vSayqht_EpHtMP3cCi7, 2023-12-08T09:11:30.496Z, https://drive.google.com/uc?id=1Ugb3Ix7-f8Ho7vSayqht_EpHtMP3cCi7&export=download
+ Found file: ocompiler-1-5+118.x86_64.rpm, 1XhJ7mNelj8C9O7peSOhDm7xTbyc09EIv, 2023-12-07T17:00:54.254Z, https://drive.google.com/uc?id=1XhJ7mNelj8C9O7peSOhDm7xTbyc09EIv&export=download
+ Found file: ocompiler-1-5+117.x86_64.rpm, 1mPnNxVoS7UjAO9GiSnY2KeUuwLHeBH5H, 2023-12-07T14:00:38.468Z, https://drive.google.com/uc?id=1mPnNxVoS7UjAO9GiSnY2KeUuwLHeBH5H&export=download
+--- ocompiler-1.orig/ostrip/Makefile
++++ ocompiler-1/ostrip/Makefile
+@@ -29,7 +29,7 @@ FULLOBJ = ./${OB}
+ FULLOBJS = ${FULLOBJ}.s
+ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+-OUNUSED=../ounused/ounused
++OLINK=../ounused/ounused
+ 
+ %.o: ${FULLOBJS}
+ 	${OCOMP} $< ${OFLAGS}
+@@ -37,7 +37,7 @@ OUNUSED=../ounused/ounused
+ ATCCCOM = $(CC) ${linkerflags} -o ${OB}
+ 
+ ${OB}: ${OBJ}
+-	${OUNUSED} ${FULLOBJLOG}
++	${OLINK} ${FULLOBJLOG}
+ 	@echo
+ 	${ATCCCOM} ${FULLOBJO}
+ 	if [ "${nobits_virtual}" != "1" ]; then \
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -9,8 +9,11 @@ endif
+ ifndef OCOMP
+ OCOMP=../src/o
+ endif
+-ifndef OUNUSED
+-OUNUSED=../ounused/ounused
++ifndef OLINK
++OLINK=../ounused/ounused
++endif
++ifndef conv_64
++conv_64=0
+ endif
+ 
+ OBJ = ${prog}.o
+@@ -18,15 +21,21 @@ FULLOBJ = ./${prog}
+ FULLOBJS = ${FULLOBJ}.s
+ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+-#OFLAGS=
++
++ifeq (${conv_64},0)
++ATCCCOM = $(CC) ${linkerflags} -o ${prog}
++else
++ATCCCOM = $(CC) -m32 ${linkerflags} -o ${prog}
++OFLAGS=conv_64 1
++endif
++
++OFLAGS+=${OFLAGSEXTRA}
+ 
+ %.o: ${FULLOBJS}
+ 	${OCOMP} $< ${OFLAGS}
+ 
+-ATCCCOM = $(CC) ${linkerflags} -o ${prog}
+-
+ ${prog}: ${OBJ}
+-	${OUNUSED} ${FULLOBJLOG}
++	${OLINK} ${FULLOBJLOG}
+ 	@echo
+ 	${ATCCCOM} ${FULLOBJO}
+ 
+--- /dev/null
++++ ocompiler-1/otoc/mcd
+@@ -0,0 +1,2 @@
++
++make clean && ./md
+--- ocompiler-1.orig/otoc/md
++++ ocompiler-1/otoc/md
+@@ -1,2 +1,2 @@
+ 
+-OFLAGS="function_name 1 nul_res_pref 1" make linkerflags= $@
++OCOMP=o OUNUSED=ounused OFLAGSEXTRA="function_name 1 nul_res_pref 1" make linkerflags= $@
+--- ocompiler-1.orig/otoc/otoc.s
++++ ocompiler-1/otoc/otoc.s
+@@ -1,5 +1,24 @@
+ 
+ format elfobj64
+ 
+-entry main()
+-return 0
++const EXIT_SUCCESS=0
++const EXIT_FAILURE=1
++const NULL=0
++
++importx "puts" puts
++importx "fopen" fopen
++importx "fclose" fclose
++
++entry main(sd argc,sv argv)
++	if argc=2
++		incst argv
++		sd f;setcall f fopen(argv#,"rb")
++		if f!=(NULL)
++			call fclose(f)
++			return (EXIT_SUCCESS)
++		end
++		call puts("Cannot open main file")
++		return (EXIT_FAILURE)
++	end
++	call puts("Usage otoc Xfile name")
++	return (EXIT_FAILURE)
+--- ocompiler-1.orig/src/files/actions.s
++++ ocompiler-1/src/files/actions.s
+@@ -18,15 +18,12 @@ include "./inits/inits.s"
+ 
+ Include "./actions/main.s"
+ 
+-Include "./actions/terminations.s"
+-
+-Include "./actions/pathout.s"
+-
+-Include "./actions/fileformat.s"
+-
+-#call to resolve local or imported functions
+-Include "./actions/resolve.s"
+-
+-Include "./actions/write.s"
++if xbool!=(Yes_strict)
++	Include "./actions/terminations.s"
++	Include "./actions/pathout.s"
++	Include "./actions/fileformat.s"
++	Include "./actions/resolve.s" #call to resolve local or imported functions
++	Include "./actions/write.s"
++endif
+ 
+ Call freeclose()
+--- ocompiler-1.orig/src/files/actions/setdefdir.s
++++ ocompiler-1/src/files/actions/setdefdir.s
+@@ -63,7 +63,7 @@ if logbool=true
+ 		endelse
+ 	endif
+ endif
+-if xbool=true
++if xbool!=(No)
+ 	setcall errormsg openfile_mode_add_extension(safecurrentdirtopath,".x",#xfile,(_open_readwrite))
+ endif
+ if errormsg!=noerr
+--- ocompiler-1.orig/src/files/headers/commons.h
++++ ocompiler-1/src/files/headers/commons.h
+@@ -5,6 +5,7 @@ Const FALSE=0
+ Const NULL=0
+ Const No=FALSE
+ Const Yes=TRUE
++Const Yes_strict=2
+ const negative=-1
+ const nonzero=-1
+ 
