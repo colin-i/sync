@@ -1,0 +1,272 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+131) xenial; urgency=medium
+ .
+   * getsign with spaces
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-18
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL
++File ID: 1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+130.x86_64.rpm, 1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM, 2023-12-18T13:26:09.306Z, https://drive.google.com/uc?id=1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM&export=download
+ Found file: ocompiler-1-5+129.x86_64.rpm, 1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL, 2023-12-17T16:43:23.017Z, https://drive.google.com/uc?id=1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL&export=download
+ Found file: ocompiler-1-5+127.x86_64.rpm, 1b919dA9xOnF7abXvogG65aUPbSevbD1v, 2023-12-17T13:50:27.308Z, https://drive.google.com/uc?id=1b919dA9xOnF7abXvogG65aUPbSevbD1v&export=download
+ Found file: ocompiler-1-5+126.x86_64.rpm, 1rymbZCtmIZ_4F29mHDRN0zrgEMBKktsL, 2023-12-15T13:52:42.465Z, https://drive.google.com/uc?id=1rymbZCtmIZ_4F29mHDRN0zrgEMBKktsL&export=download
+--- ocompiler-1.orig/otoc/loop.s
++++ ocompiler-1/otoc/loop.s
+@@ -12,7 +12,9 @@ einclude "../src/files/headers/xfile.h"
+ #einclude? will use all constants in the header. yes, but some are used without touching them, like in this next function
+ const Xfile_last_command=Xfile_line
+ 
+-function loop(sd input)
++charx result#1
++
++function loop(sd input,sd output)
+ 	sd a;set a fseek(input,0,(SEEK_END)) #on 32 can be -1 return error
+ 	if a=0
+ 		sd delim;set delim ftell(input) #is still same place if file deleted in parallel
+@@ -24,6 +26,7 @@ function loop(sd input)
+ 			if r=1
+ 				ss pointer;set pointer buffer
+ 				add delim buffer
++				set main.result -1
+ 				while pointer!=delim
+ 					charx command#1;call get_char(#pointer,#command)
+ 					if command>(Xfile_last_command)
+@@ -58,7 +61,8 @@ function loop(sd input)
+ 					mult command :
+ 					sv dest^Xfile_comment;add dest command
+ 					set dest dest#
+-					call dest(#pointer)
++					call dest(#pointer,output)
++					if main.result=0;break;end
+ 				end
+ 			end
+ 			call free(buffer)
+@@ -112,7 +116,8 @@ function break(sv *pbuffer)
+ end
+ function continue(sv *pbuffer)
+ end
+-function end(sv *pbuffer)
++function end(sv *pbuffer,sd outfile)
++	call write(outfile,"}")
+ end
+ function ret(sv *pbuffer)
+ end
+@@ -150,3 +155,18 @@ function get_string(sv pbuffer,sd psize,
+ 	set ppointer# pbuffer#
+ 	add pbuffer# psize#
+ end
++
++importx "strlen" strlen
++importx "fwrite" fwrite
++
++function write(sd outfile,ss string)
++	sd sz;set sz strlen(string)
++	sd items;set items fwrite(string,sz,1,outfile)
++	if items!=1
++		set main.result 0
++	end
++	set items fwrite("\n",1,1,outfile)
++	if items!=1
++		set main.result 0
++	end
++end
+--- ocompiler-1.orig/otoc/md
++++ ocompiler-1/otoc/md
+@@ -1,3 +1,3 @@
+ 
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+-OLINK=ounused OFLAGSEXTRA="function_name 1 nul_res_pref 1" make linkerflags= $@
++OCOMP=${OCOMP} OLINK=ounused OFLAGSEXTRA="function_name 1 nul_res_pref 1" make linkerflags= $@
+--- ocompiler-1.orig/otoc/otoc.s
++++ ocompiler-1/otoc/otoc.s
+@@ -46,7 +46,7 @@ entry main(sd argc,sv argv)
+ 			sd out;set out out_file(s)
+ 			sd exit=EXIT_SUCCESS
+ 			if out!=(NULL)
+-				call loop(f)
++				call loop(f,out)
+ 				call fclose(out)
+ 			else
+ 				set exit (EXIT_FAILURE)
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.s
++++ ocompiler-1/src/files/functions/actions/dataparse.s
+@@ -166,24 +166,31 @@ function addvarreferenceorunref(sv ptrco
+ 			endif
+ 		endelseif
+ 		SetCall err addvarreference(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
+-		If err!=noerr
+-			Return err
+-		EndIf
+-	Else
+-		If typenumber=(constantsnumber)
+-			Char unrefconstant="Unexpected unreference sign ('*') at constant declaration."
+-			vStr ptrunrefconstant^unrefconstant
+-			Return ptrunrefconstant
+-		EndIf
+-		Call advancecursors(ptrcontent,ptrsize,valsize)
+-		Return noerr
+-	EndElse
++		Return err
++	EndIf
++	If typenumber=(constantsnumber)
++		Char unrefconstant="Unexpected unreference sign ('*') at constant declaration."
++		vStr ptrunrefconstant^unrefconstant
++		Return ptrunrefconstant
++	EndIf
++	Call advancecursors(ptrcontent,ptrsize,valsize)
++	Return noerr
+ endfunction
+ 
++function getsign_size(sd start,sd last,sd mark,sd pdest) #mark is if was ended by a sign or whitespaces
++	if start!=mark
++		sub mark start
++		set pdest# mark
++		ret
++	endif
++	sub last start
++	set pdest# last
++endfunction
+ #er
+ function getsign(ss content,sd size,ss assigntype,sd ptrsz,sd typenumber,sd stack,sd ptrrelocbool,sd ptrdataxrel)
+ 	if size>0
+ 		sd start;set start content
++		sd size_mark;set size_mark start
+ 		if content#=(unrefsign)
+ 			call stepcursors(#content,#size)
+ 			add size content
+@@ -198,35 +205,45 @@ function getsign(ss content,sd size,ss a
+ 						endif
+ 					endif
+ 				endif
++				set size_mark content
+ 				break
+ 			endwhile
+ 		else
+-			if content#=(throwlesssign)
+-				call stepcursors(#content,#size)
+-			endif
+ 			add size content
+ 			while content!=size
+-				sd bool;setcall bool is_variable_char(content#)
+-				if bool=(FALSE)
+-					break
++				if content#!=(assignsign)
++					if content#!=(reservesign)
++						if content#!=(pointersigndeclare)
++							if content#!=(relsign)
++								if content#=(asciispace)
++									set size_mark content
++									setcall content mem_spaces(content,size)
++									break
++								elseif content#=(asciitab)
++									set size_mark content
++									setcall content mem_spaces(content,size)
++									break
++								endelseif
++								inc content
++								continue
++							endif
++						endif
++					endif
+ 				endif
+-				inc content
++				set size_mark content
++				break
+ 			endwhile
+ 		endelse
+ 		if content=size
+ 			if stack=(TRUE)
++				call getsign_size(start,content,size_mark,ptrsz)
+ 				Set assigntype# (nosign)
+-
+-				sub content start
+-				set ptrsz# content
+ 				return (noerror)
+ 			endif
+ 		else
++			call getsign_size(start,content,size_mark,ptrsz)
+ 			if content#=(assignsign)
+ 				Set assigntype# (assignsign)
+-
+-				sub content start
+-				set ptrsz# content
+ 				return (noerror)
+ 			elseif content#=(reservesign)
+ 				If typenumber=(constantsnumber)
+@@ -235,9 +252,6 @@ function getsign(ss content,sd size,ss a
+ 					Return ptrconstreserveerr
+ 				EndIf
+ 				Set assigntype# (reservesign)
+-
+-				sub content start
+-				set ptrsz# content
+ 				return (noerror)
+ 			elseif content#=(pointersigndeclare)
+ 				If typenumber=(charnumber)
+@@ -253,8 +267,6 @@ function getsign(ss content,sd size,ss a
+ 					Set ptrrelocbool# (TRUE)
+ 				EndIf
+ 
+-				sub content start
+-				set ptrsz# content
+ 				return (noerror)
+ 			elseif content#=(relsign)
+ 				Char ptrrelchar="Incorrect relocation sign ('%') used at CHAR/CONST declaration."
+@@ -272,20 +284,17 @@ function getsign(ss content,sd size,ss a
+ 
+ 				#call advancecursors(#content,#size,valsize)
+ 				#call stepcursors(#content,#size)
+-				ss pointer=1;add pointer content
++				inc content
+ 
+-				if pointer=size
++				if content=size
+ 					return "Size 0 when testing for datax relocation."
+ 				endif
+ 				#this was moved here because of xfile, to know datax relocation
+-				if pointer#=(relsign)
++				if content#=(relsign)
+ 					set ptrdataxrel# (TRUE)
+ 				else
+ 					set ptrdataxrel# (FALSE)
+ 				endelse
+-
+-				sub content start
+-				set ptrsz# content
+ 				return (noerror)
+ 			endelseif
+ 		endelse
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -63,6 +63,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 		call advancecursors(ptrcontent,ptrsize,valsize)
+ 	endelse
+ 
++	call spaces(ptrcontent,ptrsize) #since 5 131
+ 	Call stepcursors(ptrcontent,ptrsize)
+ 
+ 	Data size#1
