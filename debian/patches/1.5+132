@@ -1,0 +1,382 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+132) xenial; urgency=medium
+ .
+   * octal and fixes
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-20
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -9,16 +9,17 @@ last=`curl https://api.github.com/repos/
+ ~/test/debinit2 "${1}" && \
+ ~/test/deb && \
+ ~/test/publp && \
+-~/test/ai && \
+-~/test/pub appimage && \
+ ./makewin32 && \
+ ~/test/del && \
+ ~/test/rel && \
+ ~/test/pub rel && \
++~/test/up && \
+ ~/test/rpm && \
++~/test/pub rpm && \
++~/test/ai && \
++~/test/pub appimage && \
+ ~/test/upapp && \
+-~/test/up && \
+-~/test/pub upapp rpm && \
++~/test/pub upapp && \
+ ~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM
++File ID: 1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+131.x86_64.rpm, 1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D, 2023-12-20T12:27:23.298Z, https://drive.google.com/uc?id=1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D&export=download
+ Found file: ocompiler-1-5+130.x86_64.rpm, 1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM, 2023-12-18T13:26:09.306Z, https://drive.google.com/uc?id=1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM&export=download
+ Found file: ocompiler-1-5+129.x86_64.rpm, 1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL, 2023-12-17T16:43:23.017Z, https://drive.google.com/uc?id=1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL&export=download
+ Found file: ocompiler-1-5+127.x86_64.rpm, 1b919dA9xOnF7abXvogG65aUPbSevbD1v, 2023-12-17T13:50:27.308Z, https://drive.google.com/uc?id=1b919dA9xOnF7abXvogG65aUPbSevbD1v&export=download
+--- ocompiler-1.orig/src/files/functions/actions/argstwo.s
++++ ocompiler-1/src/files/functions/actions/argstwo.s
+@@ -208,6 +208,7 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 				SetCall errnr arg(ptrcontent,ptrsize,ptrdataargsec,ptrlowsec,ptrsufixsec,true,(allow_no))
+ 			endelse
+ 		else
++			call resetisimm() #the first imm is stored, isimm is only set, and if is not will not unset it
+ 			SetCall errnr arg(ptrcontent,ptrsize,ptrdataargsec,ptrlowsec,ptrsufixsec,true,(allow_no)) #if not this allow no, Xfile_arg_varfn can go in the next if, that with allow yes
+ 		endelse
+ 		If errnr!=noerr
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.s
++++ ocompiler-1/src/files/functions/values/numbersandconstants.s
+@@ -1,7 +1,7 @@
+ 
+ 
+ #bool numeric
+-Function numeric(char c)
++Function is_numeric(char c)
+ 	Char zero={asciizero}
+ 	Char nine={asciinine}
+ 	Data false=FALSE
+@@ -27,12 +27,12 @@ Function memtoint(str content,data size,
+ 
+ 	Add content size
+ 	While size!=0
+-		Dec content;Dec size
+-
+ 		Data bool#1
+ 		Char byte#1
++
++		Dec content
+ 		Set byte content#
+-		SetCall bool numeric(byte)
++		SetCall bool is_numeric(byte)
+ 		If bool=(FALSE)
+ 			Return (FALSE)
+ 		EndIf
+@@ -42,35 +42,30 @@ Function memtoint(str content,data size,
+ 		const bil_1=1000*1000*1000
+ 		const bil_2=2*bil_1
+ 		const max_int=0x80<<8<<8<<8
+-		const max_int_bil_2_rest=max_int-bil_2
++		const max_int_bil_2_rest=max_int-bil_2   #147 483 648
+ 		if multx=(bil_1)
+-			if size!=0
+-				#(...)x xxx xxx xxx
+-				while size!=0
+-					Dec content;Dec size
+-					if content#!=(asciizero)
+-						return (FALSE)
+-					endif
+-				endwhile
+-			endif
+-			if number>2
+-				#3 xxx xxx xxx-9 xxx xxx xxx
++			if size!=1    #0 is not
+ 				return (FALSE)
+ 			elseif number=2
+-				if value>(max_int_bil_2_rest)
+-					#2 147 483 649-2 999 999 999
+-					return (FALSE)
+-				elseif value=(max_int_bil_2_rest)
++				if value=(max_int_bil_2_rest)
+ 					if minusbool=(FALSE)
+ 						#2 147 483 648 is the first positive overflow
+ 						return (FALSE)
+ 					endif
++				elseif value>(max_int_bil_2_rest)
++					#2 147 483 649-2 999 999 999
++					return (FALSE)
+ 				endelseif
++			elseif number>2
++				#3 xxx xxx xxx-9 xxx xxx xxx
++				return (FALSE)
+ 			endelseif
+ 		endif
+ 
+-		mult number multx;mult multx 10
++		mult number multx
+ 		Add value number
++		mult multx 10
++		Dec size
+ 	EndWhile
+ 	Set outvalue# value
+ 	Return (TRUE)
+@@ -108,58 +103,96 @@ Function hexnr(char byte)
+ EndFunction
+ 
+ #bool
+-Function memtohex(str content,data size,data outvalue)
+-	Data initialval=0
+-	Data initiallimit=3
+-	Data val#1
+-	Data limit#1
+-	Data false=FALSE
+-	Data true=TRUE
+-	Data seven=7
+-
+-	Set val initialval
+-	Set limit initiallimit
+-
+-	If size<limit
+-		Return false
+-	EndIf
+-	Add limit seven
+-	If limit<size
+-		Return false
+-	EndIf
+-
+-	Str pc^content
++Function memtohex(vstr content,data size,data outvalue)
++	Data bool#1
++	vStr pc^content
+ 	Data ps^size
+-	Data bool=0
+-	Data zero=0
+-	Char byte#1
+-	Data nr#1
+-	Data initialmultp=1
+-	Data multp#1
+ 
+-	Set multp initialmultp
+ 	SetCall bool stratmem(pc,ps,"0X")
+-	If bool=false
+-		Return false
++	If bool=(TRUE)
++		Data val#1
++		Set val 0
++		if size!=0
++			While content#=(asciizero)
++				inc content
++				dec size
++				if size=0
++					break  #no return. set outval is required
++				endif
++			endwhile
++			if size>8  #signed compare? not using alloc on sign bit (see at addtosec)
++				return (FALSE)
++			endif
++			Char byte#1
++			Data nr#1
++			Data multp#1
++
++			Set multp 1
++			Add content size
++			While size!=0
++				Dec content
++				Dec size
++				Set byte content#
++				SetCall nr hexnr(byte)
++				If nr=(nothex_value)
++					Return (FALSE)
++				EndIf
++				Mult nr multp
++				Add val nr
++				Data hextimes=16
++				Mult multp hextimes
++			EndWhile
++		endif
++		Set outvalue# val
++		Return (TRUE)
+ 	EndIf
+-	Add content size
+-	While size!=zero
+-		Dec content
+-		Dec size
+-		Set byte content#
+-		SetCall nr hexnr(byte)
+-		If nr=(nothex_value)
+-			Return false
+-		EndIf
+-		Mult nr multp
+-		Add val nr
+-		Data hextimes=16
+-		Mult multp hextimes
+-	EndWhile
+-	Set outvalue# val
+-	Return true
++	return (FALSE)
+ EndFunction
+ 
++#bool
++function memtooct(ss content,sd size,sd outvalue)
++	if content#=(asciizero)
++		while content#=(asciizero)
++			inc content
++			dec size
++			if size=0
++				break  #no return. set outval is required
++			endif
++		endwhile
++		#32/3=10+2/3 10 digits on 30 bits and 1 or 3 on the last 2 bits
++		if size=11
++			if content#!=(asciione)
++				if content#!=(asciithree)
++					return (FALSE)
++				endif
++			endif
++		elseif size>11   #same signed compare
++			return (FALSE)
++		endelseif
++		sd val=0
++		sd mult=1
++		add content size
++		while size!=0
++			dec content
++			sd b;set b content#
++			if b<=(asciieight)
++				if b>=(asciizero)
++					sub b (asciizero)
++					mult b mult
++					add val b
++					mult mult 8
++					dec size
++					continue
++				endif
++			endif
++			return (FALSE)
++		endwhile
++		Set outvalue# val
++		return (TRUE)
++	endif
++	return (FALSE)
++endfunction
++
+ const calculationmark=asciibs
+ #error
+ function numbertoint(vstrx content,datax size,datax outval,datax minusbool)
+@@ -300,21 +333,27 @@ function numbertoint(vstrx content,datax
+ 		setcall err xfile_add_char_ifif((Xfile_numbers_type_ilong))
+ 		return err
+ 	endelseif
+-	#decimal or hex number
++	#0X ?
++	SetCall bool memtohex(content,size,outval)
++	If bool=(TRUE)
++		setcall err xfile_add_base_ifif((Xfile_numbers_type_thex),content,size)
++		return err
++	endif
++	#0 ?
++	SetCall bool memtooct(content,size,outval)
++	If bool=(TRUE)
++		setcall err xfile_add_base_ifif((Xfile_numbers_type_toct),content,size)
++		return err
++	endif
++	#decimal number
+ 	SetCall bool memtoint(content,size,outval,minusbool)
+-	If bool=0
+-		SetCall bool memtohex(content,size,outval)
+-		If bool=0
+-			Char _intvalerr="Integer(dec/hex) value not recognized."
+-			Str intvallerr^_intvalerr
+-			Return intvallerr
+-		Else
+-			setcall err xfile_add_base_ifif((Xfile_numbers_type_thex),content,size)
+-		EndElse
+-	Else
++	If bool=(TRUE)
+ 		setcall err xfile_add_base_ifif((Xfile_numbers_type_tdecimal),content,size)
+-	EndElse
+-	return err
++		return err
++	endif
++	Char _intvalerr="Integer(dec/oct/hex) value not recognized."
++	vStr intvallerr^_intvalerr
++	Return intvallerr
+ endfunction
+ 
+ #size of function
+--- ocompiler-1.orig/src/files/headers/ascii.h
++++ ocompiler-1/src/files/headers/ascii.h
+@@ -13,6 +13,9 @@ Const asciiparenthesisend=0x29
+ Const asciicomma=0x2C
+ Const asciidot=0x2E
+ Const asciizero=0x30
++Const asciione=0x31
++Const asciithree=0x33
++Const asciieight=0x38
+ Const asciinine=0x39
+ Const asciisemicolon=0x3B
+ Const asciiaround=0x40
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -121,17 +121,18 @@ const Xfile_numbers_type_idata=1
+ const Xfile_numbers_type_idatax=2
+ #t from text
+ const Xfile_numbers_type_tdecimal=3
+-const Xfile_numbers_type_thex=4
+-const Xfile_numbers_type_tconstant=5
++const Xfile_numbers_type_toct=4
++const Xfile_numbers_type_thex=5
++const Xfile_numbers_type_tconstant=6
+ #f from function
+-const Xfile_numbers_type_fsize=6
+-const Xfile_numbers_type_fsizeX=7
++const Xfile_numbers_type_fsize=7
++const Xfile_numbers_type_fsizeX=8
+ #v from var
+-const Xfile_numbers_type_vsizeVar=8
+-const Xfile_numbers_type_voffsetVar=9
++const Xfile_numbers_type_vsizeVar=9
++const Xfile_numbers_type_voffsetVar=10
+ 
+-const Xfile_suffix_true=1
+ const Xfile_suffix_false=0
++const Xfile_suffix_true=1
+ const Xfile_suffix_cast_none=0
+ const Xfile_suffix_cast_value=asciiV
+ const Xfile_suffix_cast_data=asciiD
+--- /dev/null
++++ ocompiler-1/tests/decocthex.s
+@@ -0,0 +1,10 @@
++
++#data *=2147483648
++data *=-2147483648
++#data *=0x000000000000000000000000000000000000000001FFffFFff
++data * =0x000000000000000000000000000000000000000000FFffFFff
++data * =000000000000000000000000000
++#data *=00000000000777777777777
++#data *=0000000000077777777777
++data * =0000000000037777777777
++data * =0000000000017777777777
