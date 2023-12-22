@@ -1,0 +1,605 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+133) xenial; urgency=medium
+ .
+   * words
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-22
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -28,37 +28,19 @@ last=`curl https://api.github.com/repos/
+ # && \
+ #sed -i '1s/jammy/bionic/' debian/changelog && \
+ #sed -i '1s/)/b)/' debian/changelog && \
+-#~/test/debuild && \
+-#~/test/deb && \
+-#~/test/publp && \
+-#~/test/publp2 && \
+-#~/test/lp 0 "focal" && \
+-#~/test/lp x "focal" && \
+-#git restore debian/changelog && \
+ #sed -i '1s/jammy/xenial/' debian/changelog && \
+ #sed -i '1s/)/x)/' debian/changelog && \
+-#~/test/debuild && \
+-#~/test/deb && \
+-#~/test/publp && \
+-#~/test/publp2 && \
+-#git restore debian/changelog && \
+-#git restore debian/files && \
+-#git diff && echo git-diff=$? && \
+ 
+ #is something wrong with copy package and rebuild (maybe same with copy-package without -b)
+-#restore after last lp where inside publp2 will check version
+ #the xenial ostrip is not working, but was ok on edb testing here on jammy
+ 
+ #plans:
+ 
+-#subproject otoc
+-
+-#>>>
+ #vars/fns/consts and usage locations in dbg sec for odbg
+-#simple and or
++#and or
+ #={"a","b"}
+ #~(page_sectionalignment-1)
+-#function in code exes
++#function in code at execs
+ #SizeofStackReserve against growramp?
+ #at write when there is at 0x80.... or at exes it is a fixed virtual
+ #there is 0x66 prefix for words and some movsw/movzw
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D
++File ID: 1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+132.x86_64.rpm, 1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs, 2023-12-22T13:23:42.575Z, https://drive.google.com/uc?id=1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs&export=download
+ Found file: ocompiler-1-5+131.x86_64.rpm, 1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D, 2023-12-20T12:27:23.298Z, https://drive.google.com/uc?id=1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D&export=download
+ Found file: ocompiler-1-5+130.x86_64.rpm, 1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM, 2023-12-18T13:26:09.306Z, https://drive.google.com/uc?id=1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM&export=download
+ Found file: ocompiler-1-5+129.x86_64.rpm, 1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL, 2023-12-17T16:43:23.017Z, https://drive.google.com/uc?id=1cnDZ8cSmvJzw4mFEajOIBuMONWl9_paL&export=download
+--- ocompiler-1.orig/otoc/loop.s
++++ ocompiler-1/otoc/loop.s
+@@ -141,13 +141,13 @@ end
+ function get_char(sv pbuffer,ss pchar)
+ 	ss buffer;set buffer pbuffer#
+ 	set pchar# buffer#
+-	inc pbuffer#
++	add pbuffer# (Xfile_sz_char)
+ end
+ 
+ function get_data(sv pbuffer,sd pdata)
+ 	sd buffer;set buffer pbuffer#
+ 	set pdata# buffer#
+-	add pbuffer# 4
++	add pbuffer# (Xfile_sz_int)
+ end
+ 
+ function get_string(sv pbuffer,sd psize,sv ppointer)
+--- ocompiler-1.orig/src/files/functions/actions/declare.s
++++ ocompiler-1/src/files/functions/actions/declare.s
+@@ -23,8 +23,8 @@ function declare(sv pcontent,sd pcomsize
+ 	#endif
+ 
+ 	sd xfile_decltype
+-	if declare_typenumber=(vintegersnumber)
+-		set is_stack (FALSE);set typenumber (integersnumber)
++	if declare_typenumber=(vintegernumber)
++		set is_stack (FALSE);set typenumber (integernumber)
+ 		if bool_64=(TRUE);set mask (datapointbit)
+ 			if parses=(pass_init)
+ 				set unitsize (qwsz)
+@@ -38,8 +38,8 @@ function declare(sv pcontent,sd pcomsize
+ 				set xfile_decltype (Xfile_decltype_longInt)
+ 			endelse
+ 		endelse
+-	elseif declare_typenumber=(vstringsnumber)
+-		set is_stack (FALSE);set typenumber (stringsnumber)
++	elseif declare_typenumber=(vstringnumber)
++		set is_stack (FALSE);set typenumber (stringnumber)
+ 		if bool_64=(TRUE);set mask (datapointbit)
+ 			if parses=(pass_init)
+ 				set unitsize (qwsz)
+@@ -53,8 +53,8 @@ function declare(sv pcontent,sd pcomsize
+ 				set xfile_decltype (Xfile_decltype_longByte)
+ 			endelse
+ 		endelse
+-	elseif declare_typenumber=(valuesnumber)
+-		set is_stack (FALSE);set typenumber (integersnumber)
++	elseif declare_typenumber=(valuenumber)
++		set is_stack (FALSE);set typenumber (integernumber)
+ 		if bool_64=(TRUE);set mask (valueslongmask)
+ 			if parses=(pass_init)
+ 				set unitsize (qwsz)
+@@ -68,11 +68,26 @@ function declare(sv pcontent,sd pcomsize
+ 				set xfile_decltype (Xfile_decltype_long)
+ 			endelse
+ 		endelse
++	elseif declare_typenumber=(vwordnumber)
++		set is_stack (FALSE);set typenumber (integernumber) #place them at integers so they can be callable, "word" are still going to words section, the 2 bytes size is not here, is only at the x file at the moment
++		if bool_64=(TRUE);set mask (datapointbit)
++			if parses=(pass_init)
++				set unitsize (qwsz)
++			else
++				set xfile_decltype (Xfile_decltype_longWord)
++			endelse
++		else;set mask 0
++			if parses=(pass_init)
++				set unitsize (dwsz)
++			else
++				set xfile_decltype (Xfile_decltype_longWord)
++			endelse
++		endelse
+ 	else
+ 		setcall typenumber stackfilter(declare_typenumber,#is_stack)
+ 		if parses=(pass_init)
+ 			if is_stack=(TRUE)
+-				if typenumber=(stringsnumber)
++				if typenumber=(stringnumber)
+ 					set unitsize 0
+ 				else
+ 					call advancecursors(pcontent,pcomsize,pcomsize#)
+@@ -95,10 +110,13 @@ function declare(sv pcontent,sd pcomsize
+ 				#xfile part
+ 				if typenumber=(valuesinnernumber)
+ 					set xfile_decltype (Xfile_decltype_long)
+-				elseif typenumber=(integersnumber)
++				elseif typenumber=(integernumber)
+ 					set xfile_decltype (Xfile_decltype_longInt)
+-				else #(stringsnumber)
++				elseif typenumber=(stringnumber)
+ 					set xfile_decltype (Xfile_decltype_longByte)
++				else
++				#if typenumber=(wordnumber)
++					set xfile_decltype (Xfile_decltype_longWord)
+ 				endelse
+ 			else
+ 				#xfile part
+@@ -106,10 +124,13 @@ function declare(sv pcontent,sd pcomsize
+ 					set xfile_decltype (Xfile_decltype_const)
+ 				elseif typenumber=(charnumber)
+ 					set xfile_decltype (Xfile_decltype_byte)
+-				elseif typenumber=(integersnumber)
++				elseif typenumber=(integernumber)
+ 					set xfile_decltype (Xfile_decltype_int)
+-				else #(stringsnumber)
++				elseif typenumber=(stringnumber)
+ 					set xfile_decltype (Xfile_decltype_intByte)
++				else
++				#if typenumber=(wordnumber)
++					set xfile_decltype (Xfile_decltype_word)
+ 				endelse
+ 			endelse
+ 		endelse
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -340,17 +340,19 @@ function prepare_function_call(sd pconte
+ 
+ 	SetCall p_data# vars(pcontent#,sz,fns)
+ 	If p_data#=0
+-		setcall p_data# vars_number(pcontent#,sz,(integersnumber))
++		data calls={integernumber,stackdatanumber,stackvaluenumber,stackwordnumber,notanumber}
++		sd callables^calls
++		while callables#!=(notanumber)
++			setcall p_data# vars_number(pcontent#,sz,callables#)
++			If p_data#!=0
++				break
++			endif
++			incst callables
++		endwhile
+ 		If p_data#=0
+-			setcall p_data# vars_number(pcontent#,sz,(stackdatanumber))
+-			If p_data#=0
+-				setcall p_data# vars_number(pcontent#,sz,(stackvaluenumber))
+-				If p_data#=0
+-					Char unfndeferr="Undefined function/data call."
+-					Str ptrunfndef^unfndeferr
+-					Return ptrunfndef
+-				EndIf
+-			EndIf
++			Char unfndeferr="Undefined function/data call."
++			vStr ptrunfndef^unfndeferr
++			Return ptrunfndef
+ 		EndIf
+ 		set p_bool_indirect# (TRUE)
+ 		call is_for_64_is_impX_or_fnX_set_force(subtype)
+--- ocompiler-1.orig/src/files/functions/actions/fndecargs.s
++++ ocompiler-1/src/files/functions/actions/fndecargs.s
+@@ -39,53 +39,19 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 	call stackfilter(vartype,ptrstack)
+ 
+ 	sd datasize=dwsz
+-	sd long_mask=0
+ 	sd b;setcall b is_for_64()
+-	sd xfile_decltype
+-	if vartype>=(vnumbers)
+-		sub vartype (vnumbers)
+-		if vartype=(valuesinnernumber)
+-			set vartype (integersnumber)
+-			if b=(TRUE)
+-				set long_mask (valueslongmask)
+-				set datasize (qwsz)
+-			endif
+-			set xfile_decltype (Xfile_decltype_long) #can also be an ifif
+-		else
+-			if b=(TRUE)
+-				set long_mask (datapointbit)
+-				set datasize (qwsz)
+-			endif
+-			if vartype=(integersnumber)
+-				set xfile_decltype (Xfile_decltype_longInt)
+-			else
+-			#was vstringsnumber
+-				set xfile_decltype (Xfile_decltype_longByte)
+-			endelse
+-		endelse
+-	elseif vartype=(charnumber)
+-		set datasize (bsz)
+-		set xfile_decltype (Xfile_decltype_byte)
+-	elseif is_stack=(TRUE)
+-		if vartype=(stackdatanumber)
+-			set xfile_decltype (Xfile_decltype_longInt)
+-		elseif vartype=(stackstringnumber)
+-			set xfile_decltype (Xfile_decltype_longByte)
+-		else
+-		#stackvaluenumber
+-			set xfile_decltype (Xfile_decltype_long)
+-		endelse
+-	elseif vartype=(integersnumber)
+-		set xfile_decltype (Xfile_decltype_int)
+-	else
+-	#stringsnumber
+-		set xfile_decltype (Xfile_decltype_intByte)
+-	endelse
+ 
+ 	vdata ptrdataSize%ptrdataSize
+ 
+ 	if parses=(pass_init)
+ 		if is_stack=(FALSE)
++			if vartype>=(vnumbers)
++				if b=(TRUE)
++					set datasize (qwsz)
++				endif
++			elseif vartype=(charnumber)
++				set datasize (bsz)
++			endelseif
+ 			if is_expand=(FALSE)
+ 				vdata ptrdataReg%%ptr_dataReg
+ 				add ptrdataReg# datasize
+@@ -95,12 +61,61 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 		endif
+ 		call advancecursors(ptrcontent,ptrsize,sz)
+ 		return (noerror)
++	endif
++
++	sd xfile_decltype
++	sd long_mask=0
++	if is_stack=(TRUE)
++		if vartype=(stackdatanumber)
++			set xfile_decltype (Xfile_decltype_longInt)
++		elseif vartype=(stackstringnumber)
++			set xfile_decltype (Xfile_decltype_longByte)
++		elseif vartype=(stackvaluenumber)
++			set xfile_decltype (Xfile_decltype_long)
++		else
++		#if vartype=(stackwordnumber)
++			set xfile_decltype (Xfile_decltype_longWord)
++		endelse
+ 	else
+-		setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,ptrcontent#,sz,(sign_not_required)) #2 more
+-		If err!=noerr
+-			Return err
+-		EndIf
++		if vartype>=(vnumbers)
++			sub vartype (vnumbers)
++			if vartype=(valuesinnernumber)
++				set vartype (integernumber)
++				if b=(TRUE)
++					set long_mask (valueslongmask)
++					set datasize (qwsz)
++				endif
++				set xfile_decltype (Xfile_decltype_long)
++			else
++				if b=(TRUE)
++					set long_mask (datapointbit)
++					set datasize (qwsz)
++				endif
++				if vartype=(integernumber)
++					set xfile_decltype (Xfile_decltype_longInt)
++				elseif vartype=(stringnumber)
++					set xfile_decltype (Xfile_decltype_longByte)
++				else
++				#if vartype=(wordnumber)
++					set xfile_decltype (Xfile_decltype_longWord)
++				endelse
++			endelse
++		elseif vartype=(charnumber)
++			set datasize (bsz)
++			set xfile_decltype (Xfile_decltype_byte)
++		elseif vartype=(integernumber)
++			set xfile_decltype (Xfile_decltype_int)
++		elseif vartype=(stringnumber)
++			set xfile_decltype (Xfile_decltype_intByte)
++		else
++		#if vartype=(wordnumber)
++			set xfile_decltype (Xfile_decltype_word)
++		endelse
+ 	endelse
++	setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,ptrcontent#,sz,(sign_not_required)) #2 more
++	If err!=noerr
++		Return err
++	EndIf
+ 
+ 	#this is a write to sec for old data args, careful with stackoff
+ 	Char stacktransfer1#1;char *={0x84,0x24}
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -7,10 +7,10 @@ Const spacenotreq=0
+ #and shl1,i3,... are ok, only AZ are going to az
+ 
+ Char cCOMMENT_c={commentascii,0}
+-Char cDATA_c="DATA";Char cSTR_c="STR";Char cCHAR_c="CHAR";Char cSD_c="SD";Char cSS_c="SS";Char cSV_c="SV"
+-	Char cVDATA_c="VDATA";Char cVSTR_c="VSTR";Char cVALUE_c="VALUE"
+-	Char cDATAX_c="DATAX";Char cSTRX_c="STRX";Char cCHARX_c="CHARX"
+-	Char cVDATAX_c="VDATAX";Char cVSTRX_c="VSTRX";Char cVALUEX_c="VALUEX"
++Char cDATA_c="DATA";Char cSTR_c="STR";Char cCHAR_c="CHAR";Char cWORD_c="WORD";Char cSD_c="SD";Char cSS_c="SS";Char cSV_c="SV";Char cSW_c="SW"
++	Char cVDATA_c="VDATA";Char cVSTR_c="VSTR";Char cVALUE_c="VALUE";Char cVWORD_c="VWORD"
++	Char cDATAX_c="DATAX";Char cSTRX_c="STRX";Char cCHARX_c="CHARX";Char cWORDX_c="WORDX"
++	Char cVDATAX_c="VDATAX";Char cVSTRX_c="VSTRX";Char cVALUEX_c="VALUEX";Char cVWORDX_c="VWORDX"
+ 	Char cCONST_c="CONST"
+ Char cSET_c="SET";Char cADD_c="ADD";Char cSUB_c="SUB";Char cMULT_c="MULT";Char cDIV_c="DIV";Char cDIVU_c="DIVU";Char cREM_c="REM";Char cREMU_c="REMU";Char cAND_c="AND";Char cOR_c="OR";Char cXOR_c="XOR"
+ Char cRETURN_c="RETURN";Char cINC_c="INC";Char cDEC_c="DEC";Char cINCST_c="INCST";Char cDECST_c="DECST";Char cNEG_c="NEG";Char cNOT_c="NOT";Char cSHL1_c="SHL1";Char cSHR1_c="SHR1";Char cSAR1_c="SAR1";Char cEXIT_c="EXIT"
+@@ -61,6 +61,11 @@ Const com_size=cSTR-cDATA
+ 			Data *=cDECLARE
+ 			Data *=cCHAR
+ 			Data *=spacereq
++		Const cWORD=\-cDECLARE_top
++			data *^cWORD_c
++			Data *=cDECLARE
++			Data *=cWORD
++			Data *=spacereq
+ 		Const cSD=\-cDECLARE_top
+ 			data *^cSD_c
+ 			Data *=cDECLARE
+@@ -76,6 +81,11 @@ Const com_size=cSTR-cDATA
+ 			Data *=cDECLARE
+ 			Data *=cSV
+ 			Data *=spacereq
++		Const cSW=\-cDECLARE_top
++			data *^cSW_c
++			Data *=cDECLARE
++			Data *=cSW
++			Data *=spacereq
+ 		Const cVDATA=\-cDECLARE_top
+ 			data *^cVDATA_c
+ 			Data *=cDECLARE
+@@ -91,6 +101,11 @@ Const com_size=cSTR-cDATA
+ 			Data *=cDECLARE
+ 			Data *=cVALUE
+ 			Data *=spacereq
++		Const cVWORD=\-cDECLARE_top
++			data *^cVWORD_c
++			Data *=cDECLARE
++			Data *=cVWORD
++			Data *=spacereq
+ 		Const cDATAX=\-cDECLARE_top
+ 			data *^cDATAX_c
+ 			Data *=cDECLARE
+@@ -106,6 +121,11 @@ Const com_size=cSTR-cDATA
+ 			Data *=cDECLARE
+ 			Data *=cCHARX
+ 			Data *=spacereq
++		Const cWORDX=\-cDECLARE_top
++			data *^cWORDX_c
++			Data *=cDECLARE
++			Data *=cWORDX
++			Data *=spacereq
+ 		Const cVDATAX=\-cDECLARE_top
+ 			data *^cVDATAX_c
+ 			Data *=cDECLARE
+@@ -121,6 +141,11 @@ Const com_size=cSTR-cDATA
+ 			Data *=cDECLARE
+ 			Data *=cVALUEX
+ 			Data *=spacereq
++		Const cVWORDX=\-cDECLARE_top
++			data *^cVWORDX_c
++			Data *=cDECLARE
++			Data *=cVWORDX
++			Data *=spacereq
+ #numberofcommandsvars to set these commands to search for them at function parameter declare
+ Const numberofcommandsvars=(\-commandsvars_start)/com_size
+ 		Const cCONST=\-cDECLARE_top
+--- ocompiler-1.orig/src/files/functions/commons/vars.s
++++ ocompiler-1/src/files/functions/commons/vars.s
+@@ -429,7 +429,7 @@ endfunction
+ #bool is_string
+ function cast_resolve(sd number,sd cast,sv ptrdata,sv p_error)
+ 	if cast=(no_cast)
+-		Data stringsnumber=stringsnumber
++		Data stringsnumber=stringnumber
+ 		Data stackstringnumber=stackstringnumber
+ 		if number=stringsnumber
+ 			return (TRUE)
+--- ocompiler-1.orig/src/files/functions/dataassign.s
++++ ocompiler-1/src/files/functions/dataassign.s
+@@ -10,7 +10,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 
+ 	Data constantsnr=constantsnumber
+ 	Data charnr=charnumber
+-	Data stringsnr=stringsnumber
++	Data stringsnr=stringnumber
+ 
+ 	data offset_const#1
+ 	Data ptroffset_const^offset_const
+--- ocompiler-1.orig/src/files/functions/xfile.s
++++ ocompiler-1/src/files/functions/xfile.s
+@@ -1,8 +1,6 @@
+ 
+-const Xfile_sz_char=bsz
+-const Xfile_sz_int=dwsz
+ const Xfile_function_not_x=Xfile_function_traw
+-const Xfile_decltype_const=Xfile_decltype_longByte+1
++const Xfile_decltype_const=Xfile_decltype_longInt+1
+ 
+ #err
+ function xfile_add_int(sd int)
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -111,6 +111,9 @@ Datax *#1
+ Datax *charMax#1
+ Datax *#1
+ Datax *#1
++Datax *wordMax#1
++Datax *#1
++Datax *#1
+ Datax *sdMax#1
+ Datax *#1
+ Datax *#1
+@@ -120,6 +123,9 @@ Datax *#1
+ Datax *svMax#1
+ Datax *#1
+ Datax *#1
++Datax *swMax#1
++Datax *#1
++Datax *#1
+ 
+ Datax integerfnscopeMax#1
+ Datax *#1
+@@ -130,6 +136,9 @@ Datax *#1
+ Datax *charfnscopeMax#1
+ Datax *#1
+ Datax *#1
++Datax *wordfnscopeMax#1
++Datax *#1
++Datax *#1
+ Datax *sdfnMax#1
+ Datax *#1
+ Datax *#1
+@@ -139,24 +148,31 @@ Datax *#1
+ Datax *svfnMax#1
+ Datax *#1
+ Datax *#1
++Datax *swfnMax#1
++Datax *#1
++Datax *#1
+ 
++const notanumber=-1
+ Const memvariablesnumber=0
+-	Const integersnumber=memvariablesnumber+0
+-	Const stringsnumber=memvariablesnumber+1
++	Const integernumber=memvariablesnumber+0
++	Const stringnumber=memvariablesnumber+1
+ 	Const charnumber=memvariablesnumber+2
+-	const valuesinnernumber=charnumber
+-Const totalmemvariables=charnumber+1
+-	Const stackdatanumber=totalmemvariables+integersnumber
+-	Const stackstringnumber=totalmemvariables+stringsnumber
++		const valuesinnernumber=charnumber
++	Const wordnumber=memvariablesnumber+3
++Const totalmemvariables=wordnumber+1
++	Const stackdatanumber=totalmemvariables+integernumber
++	Const stackstringnumber=totalmemvariables+stringnumber
+ 	Const stackvaluenumber=totalmemvariables+valuesinnernumber
+-	#that was +charnumber because it is compared against 2. and more reasons
+-Const numberofvars=stackvaluenumber+1
++		#that was +charnumber because it is compared against 2. and more reasons
++	Const stackwordnumber=totalmemvariables+wordnumber
++Const numberofvars=stackwordnumber+1
+ 
+ const vnumbers=numberofvars
+-	const vintegersnumber=vnumbers+integersnumber
+-	const vstringsnumber=vnumbers+stringsnumber
+-	const valuesnumber=vnumbers+valuesinnernumber
+-const xnumbers=valuesnumber+1
++	const vintegernumber=vnumbers+integernumber
++	const vstringnumber=vnumbers+stringnumber
++	const valuenumber=vnumbers+valuesinnernumber
++	const vwordnumber=vnumbers+wordnumber
++const xnumbers=vwordnumber+1
+ const xvnumbers=xnumbers+totalmemvariables
+ 
+ #from numberofvars to afterscopes comes inner function local scopes
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -1,4 +1,7 @@
+ 
++const Xfile_sz_char=1
++const Xfile_sz_int=4
++
+ Include "./xfileascii.h"
+ 
+ const Xfile_comment=0
+@@ -51,12 +54,14 @@ const Xfile_declfield_data_concrete=0
+ const Xfile_declfield_data_expand=1
+ 
+ const Xfile_decltype_byte=0
+-const Xfile_decltype_int=1
+-const Xfile_decltype_intByte=2
+-const Xfile_decltype_long=3
+-const Xfile_decltype_longInt=4
++const Xfile_decltype_word=1
++const Xfile_decltype_int=2
++const Xfile_decltype_intByte=3
++const Xfile_decltype_long=4
+ const Xfile_decltype_longByte=5
+-#const Xfile_decltype_const=Xfile_decltype_longByte+1
++const Xfile_decltype_longWord=6
++const Xfile_decltype_longInt=7
++#const Xfile_decltype_const=Xfile_decltype_longInt+1  #here will be used Xfile_declfield_const
+ 
+ const Xfile_declfeature_normal=0
+ const Xfile_declfeature_unref=1
+--- ocompiler-1.orig/tests/xf/declare.s
++++ ocompiler-1/tests/xf/declare.s
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-char a=~-1+(~1+-1)
++char a=~-1-(~1+1)
+ 
+ data b={2,2}
+ 
+@@ -29,3 +29,7 @@ return 1+1
+ 
+ vstr *z="123"
+ value *z^dd
++
++word w^a
++vword ww^a
++sw www^a
+--- ocompiler-1.orig/tests/xf/function.s
++++ ocompiler-1/tests/xf/function.s
+@@ -1,7 +1,7 @@
+ 
+ format elfobj
+ 
+-function test(char a,data b,value c,sv d,str e,ss f,vstr g,sd h,vdata *i,valuex j)
++function test(char a,data b,str c,value d,sv e,vstr f,ss g,vdata h,sd i,valuex j)
+ endfunction
+ 
+ functionx test2()
+@@ -10,4 +10,4 @@ endfunction
+ functionxx test3()
+ endfunction
+ 
+-entry test4()
++entry test4(word a,vword b,sw c)
