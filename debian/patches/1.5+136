@@ -1,0 +1,315 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+136) xenial; urgency=medium
+ .
+   * previous release was broken. and no aftercalls at call[ex]ret
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-23
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1dsoBW85egpSX1DLzLg0quGWy8-UPTxpa
++File ID: 1eIb9HxzUBYHFtGW5mMWyj5MnoX5O1KxZ
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+135.x86_64.rpm, 1eIb9HxzUBYHFtGW5mMWyj5MnoX5O1KxZ, 2023-12-23T13:56:58.588Z, https://drive.google.com/uc?id=1eIb9HxzUBYHFtGW5mMWyj5MnoX5O1KxZ&export=download
+ Found file: ocompiler-1-5+134.x86_64.rpm, 1dsoBW85egpSX1DLzLg0quGWy8-UPTxpa, 2023-12-23T10:21:30.371Z, https://drive.google.com/uc?id=1dsoBW85egpSX1DLzLg0quGWy8-UPTxpa&export=download
+ Found file: ocompiler-1-5+133.x86_64.rpm, 1A_YjZQCguHQz03-CgP822HwdMcQmbdU1, 2023-12-23T04:36:44.076Z, https://drive.google.com/uc?id=1A_YjZQCguHQz03-CgP822HwdMcQmbdU1&export=download
+ Found file: ocompiler-1-5+132.x86_64.rpm, 1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs, 2023-12-22T13:23:42.575Z, https://drive.google.com/uc?id=1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs&export=download
+--- ocompiler-1.orig/otoc/loop.s
++++ ocompiler-1/otoc/loop.s
+@@ -12,9 +12,11 @@ einclude "../src/files/headers/xfile.h"
+ #einclude? will use all constants in the header. yes, but some are used without touching them, like in this next function
+ const Xfile_last_command=Xfile_line
+ 
+-charx result#1
++datax result#1
+ 
++#exit
+ function loop(sd input,sd output)
++	set main.result (EXIT_FAILURE)
+ 	sd a;set a fseek(input,0,(SEEK_END)) #on 32 can be -1 return error
+ 	if a=0
+ 		sd delim;set delim ftell(input) #is still same place if file deleted in parallel
+@@ -26,7 +28,7 @@ function loop(sd input,sd output)
+ 			if r=1
+ 				ss pointer;set pointer buffer
+ 				add delim buffer
+-				set main.result -1
++				set main.result (EXIT_SUCCESS)
+ 				while pointer!=delim
+ 					charx command#1;call get_char(#pointer,#command)
+ 					if command>(Xfile_last_command)
+@@ -62,12 +64,13 @@ function loop(sd input,sd output)
+ 					sv dest^Xfile_comment;add dest command
+ 					set dest dest#
+ 					call dest(#pointer,output)
+-					if main.result=0;break;end
++					if main.result=(EXIT_FAILURE);break;end
+ 				end
+ 			end
+ 			call free(buffer)
+ 		end
+ 	end
++	return main.result
+ end
+ 
+ function comment(sv *pbuffer)
+@@ -117,7 +120,7 @@ end
+ function continue(sv *pbuffer)
+ end
+ function end(sv *pbuffer,sd outfile)
+-	call write(outfile,"}")
++	call writen(outfile,"}",1)
+ end
+ function ret(sv *pbuffer)
+ end
+@@ -159,14 +162,14 @@ end
+ importx "strlen" strlen
+ importx "fwrite" fwrite
+ 
+-function write(sd outfile,ss string)
+-	sd sz;set sz strlen(string)
+-	sd items;set items fwrite(string,sz,1,outfile)
++function writen(sd outfile,ss buf,sd sz)
++	sd items;set items fwrite(buf,sz,1,outfile)
+ 	if items!=1
+-		set main.result 0
++		set main.result (EXIT_FAILURE)
++		ret
+ 	end
+ 	set items fwrite("\n",1,1,outfile)
+ 	if items!=1
+-		set main.result 0
++		set main.result (EXIT_FAILURE)
+ 	end
+ end
+--- ocompiler-1.orig/otoc/otoc.s
++++ ocompiler-1/otoc/otoc.s
+@@ -46,7 +46,7 @@ entry main(sd argc,sv argv)
+ 			sd out;set out out_file(s)
+ 			sd exit=EXIT_SUCCESS
+ 			if out!=(NULL)
+-				call loop(f,out)
++				set exit loop(f,out)
+ 				call fclose(out)
+ 			else
+ 				set exit (EXIT_FAILURE)
+--- ocompiler-1.orig/src/files/actions/main/index/callex.s
++++ ocompiler-1/src/files/actions/main/index/callex.s
+@@ -44,7 +44,7 @@ if errormsg=(noerror)
+ 			if errormsg=(noerror)
+ 				SetCall errormsg addtosec(callex_data,callex_sz,ptrcodesec)
+ 				if errormsg=(noerror)
+-					setcall errormsg write_function_call(top_data,bool_indirect,(TRUE))
++					setcall errormsg write_function_call(top_data,bool_indirect,(TRUE),subtype)
+ 					if errormsg=(noerror)
+ 						setcall errormsg after_after_call(subtype)
+ 					endif
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -320,7 +320,7 @@ Function parsefunction(data ptrcontent,d
+ 					if err!=noerr;return err;endif
+ 				endelse
+ 
+-				setcall err write_function_call(ptrdata,boolindirect,(FALSE))
++				setcall err write_function_call(ptrdata,boolindirect,(FALSE),subtype)
+ 				if err!=noerr;return err;endif
+ 			endelse
+ 		endelse
+@@ -349,8 +349,11 @@ function prepare_function_call(sv pconte
+ 			endif
+ 		else
+ 			sd test;setcall test pointbit(p_data#)
+-			if test=0     #there will be no pointbit on 32
+-				return #unfndeferr
++			if test=0
++				sd b;setcall b is_for_64() #there will be no pointbit on 32
++				if b=(TRUE)
++					return #unfndeferr
++				endif
+ 			endif
+ 		endelse
+ 		set p_bool_indirect# (TRUE)
+@@ -381,7 +384,7 @@ function prepare_function_call(sv pconte
+ endfunction
+ 
+ #err
+-function write_function_call(sd ptrdata,sd boolindirect,sd is_callex)
++function write_function_call(sd ptrdata,sd boolindirect,sd is_callex,sd subtype)
+ 	sd err
+ 	Data code%%ptr_codesec
+ 
+@@ -451,74 +454,73 @@ function write_function_call(sd ptrdata,
+ 		#call stack64_op_set()
+ 		SetCall err writeopera(ptrdata,callaction,callactionopcode,eaxregnumber) #no sufix was
+ 	EndElse
+-	If err!=(noerror)
+-		Return err
+-	EndIf
+-
+-	#afterbit throwless is at fns imps if before aftercall; at values is throwless after aftercall if sign set
+-	sd tless=aftercallthrowlessbit
+-	and tless mask
+-	if tless=0
+-		if is_valuedata_call=(FALSE)
+-			sd global_err_pB;setcall global_err_pB global_err_pBool()
+-			if global_err_pB#=(FALSE)
+-				set tless -1    #don't want to throw before aftercall
++	If err=(noerror)
++		#afterbit throwless is at fns imps if before aftercall; at values is throwless after aftercall if sign set
++		sd tless=aftercallthrowlessbit
++		and tless mask
++		if tless=0
++			if is_valuedata_call=(FALSE)
++				sd global_err_pB;setcall global_err_pB global_err_pBool()
++				if global_err_pB#=(FALSE)
++					#we are before aftercall and calling a fn/imp from after aftercall
++					return (noerror)
++				endif
++			endif
++			setcall subtype callret_flag(subtype)
++			if subtype=0  #is useless if a RET will come
++				sd global_err_ptr;setcall global_err_ptr global_err_p()
++				Data ptrextra%%ptr_extra
++				If ptrobject#=(FALSE)
++				#absolute
++					const global_err_ex_start=\
++					#mov ecx,imm32
++					char g_err_mov=0xb8+ecxregnumber;data g_err_mov_disp32#1
++					#cmp byte[ecx],0
++					char *={0x80,7*toregopcode|ecxregnumber};char *=aftercall_disable
++					const global_err_ex_sz=\-global_err_ex_start
++					#add rel,1 is (b8+ecx), one byte
++					set g_err_mov_disp32 global_err_ptr#
++					#
++					SetCall err addtosec(#g_err_mov,(global_err_ex_sz),code)
++				Else
++					#mov to ecx is reseting the high part of the rcx
++					char g_err=0xb9
++					data *rel=0
++					#
++					sd af_relof
++					setcall af_relof reloc64_offset((bsz))
++					setcall err adddirectrel_base(ptrextra,af_relof,global_err_ptr#,0);If err!=(noerror);Return err;EndIf
++					setcall err reloc64_ante();If err!=(noerror);Return err;EndIf
++					SetCall err addtosec(#g_err,5,code);If err!=(noerror);Return err;EndIf
++					setcall err reloc64_post();If err!=(noerror);Return err;EndIf
++					char g_cmp={0x80,7*toregopcode|ecxregnumber,0}
++					SetCall err addtosec(#g_cmp,3,code)
++				EndElse
++				If err!=(noerror);Return err;EndIf
++				#jz
++				char g_err_jz=0x74;char ret_end_sz#1
++				#
++				ss ret_end_p
++				sd is_linux_term;setcall is_linux_term is_linux_end()
++				if is_linux_term=(TRUE)
++					#int 0x80, sys_exit, eax 1,ebx the return number
++					const g_err_sys_start=\
++					char g_err_sys={0x8b,ebxregnumber*toregopcode|0xc0|eaxregnumber}
++					char *={0xb8,1,0,0,0}
++					Char *={intimm8,0x80}
++					const g_err_sys_size=\-g_err_sys_start
++					set ret_end_sz (g_err_sys_size)
++					set ret_end_p #g_err_sys
++				else
++					setcall ret_end_sz getreturn(#ret_end_p)
++				endelse
++				SetCall err addtosec(#g_err_jz,(bsz+bsz),code);If err!=(noerror);Return err;EndIf
++				#return
++				SetCall err addtosec(ret_end_p,ret_end_sz,code)
++				#;If err!=(noerror);Return err;EndIf
+ 			endif
+ 		endif
+ 	endif
+-	if tless=0
+-		sd global_err_ptr;setcall global_err_ptr global_err_p()
+-		Data ptrextra%%ptr_extra
+-		If ptrobject#=(FALSE)
+-		#absolute
+-			const global_err_ex_start=\
+-			#mov ecx,imm32
+-			char g_err_mov=0xb8+ecxregnumber;data g_err_mov_disp32#1
+-			#cmp byte[ecx],0
+-			char *={0x80,7*toregopcode|ecxregnumber};char *=aftercall_disable
+-			const global_err_ex_sz=\-global_err_ex_start
+-			#add rel,1 is (b8+ecx), one byte
+-			set g_err_mov_disp32 global_err_ptr#
+-			#
+-			SetCall err addtosec(#g_err_mov,(global_err_ex_sz),code)
+-		Else
+-			#mov to ecx is reseting the high part of the rcx
+-			char g_err=0xb9
+-			data *rel=0
+-			#
+-			sd af_relof
+-			setcall af_relof reloc64_offset((bsz))
+-			setcall err adddirectrel_base(ptrextra,af_relof,global_err_ptr#,0);If err!=(noerror);Return err;EndIf
+-			setcall err reloc64_ante();If err!=(noerror);Return err;EndIf
+-			SetCall err addtosec(#g_err,5,code);If err!=(noerror);Return err;EndIf
+-			setcall err reloc64_post();If err!=(noerror);Return err;EndIf
+-			char g_cmp={0x80,7*toregopcode|ecxregnumber,0}
+-			SetCall err addtosec(#g_cmp,3,code)
+-		EndElse
+-		If err!=(noerror);Return err;EndIf
+-		#jz
+-		char g_err_jz=0x74;char ret_end_sz#1
+-		#
+-		ss ret_end_p
+-		sd is_linux_term;setcall is_linux_term is_linux_end()
+-		if is_linux_term=(TRUE)
+-			#int 0x80, sys_exit, eax 1,ebx the return number
+-			const g_err_sys_start=\
+-			char g_err_sys={0x8b,ebxregnumber*toregopcode|0xc0|eaxregnumber}
+-			char *={0xb8,1,0,0,0}
+-			Char *={intimm8,0x80}
+-			const g_err_sys_size=\-g_err_sys_start
+-			set ret_end_sz (g_err_sys_size)
+-			set ret_end_p #g_err_sys
+-		else
+-			setcall ret_end_sz getreturn(#ret_end_p)
+-		endelse
+-		SetCall err addtosec(#g_err_jz,(bsz+bsz),code);If err!=(noerror);Return err;EndIf
+-		#return
+-		SetCall err addtosec(ret_end_p,ret_end_sz,code)
+-		#;If err!=(noerror);Return err;EndIf
+-	endif
+-
+ 	return err
+ endfunction
+ 
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -460,10 +460,11 @@ Const compointersloc^pointers
+ Data pointersvars#numberofcommandsvars+1
+ Const compointersvarsloc^pointersvars
+ 
+-const x_call_flag=0x80000000   #at setcall...
+ const x_func_flag=0x80000000   #at def, varargs
++
+ const call_ret_flag=0x80000000 #at call
+-const x_callx_flag=0x40000000 ;#at call and setcall..., call a variable/function/import like functionx/importx
++const x_callx_flag=0x40000000  ;#at call and setcall..., call a variable/function/import like functionx/importx
++const x_call_flag=0x20000000   #at setcall... ,this can be 0x8.. why not 0x8 then? at write_func is asking about callret and anyway this comes And ~primsec_flags at that point
+ 
+ const primsec_flags=x_call_flag|x_callx_flag
+ 
