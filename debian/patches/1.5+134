@@ -1,0 +1,716 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+134) xenial; urgency=medium
+ .
+   * call int, fix
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-23
+
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -99,7 +99,7 @@
+ 	<br>
+ 	The commands are from i386 with extension for x86-64 (but with the HEX macro anything can be wrote to code section).
+ 	<br>
+-	All 4/8 bytes variables are sign extended. 1 byte variables are zero extended.
++	4 bytes variables are sign extended to 8. 1 byte variables are zero extended to 4/8 bytes when needed.
+ </p>
+ 
+ <h3><a name="declaringdata">II. Declaring data</a></h3>
+@@ -150,9 +150,10 @@
+ 	Example:
+ 	<br>
+ 	<a class="code">
+-    Char chardata="Text"<br>
+-    Str string^chardata<br>
+-    Str text="Text data"</a>
++	#for compatibility, on 64 reloc_64 pref is 1, if was 0 must use vstr mostly<br>
++	Char chardata="Text"<br>
++	Str string^chardata<br>
++	Str text="Text data"</a>
+ 	</p>
+ 
+ 	<p>
+@@ -251,7 +252,7 @@
+         Const fruits=20<br>
+         Data value=-70<br>
+         Char text="The quick brown fox jumps over the laxy dog."<br>
+-        Str stringASM=0x401000</a>
++        vStr stringASM=0x401000</a>
+ 	</p>
+ 	<p>
+ 	Second method is with '{}' signs.
+@@ -261,7 +262,7 @@
+ 	<a class="code">
+         Data values={1,3,900}<br>
+         Char bytes={1,4,100}<br>
+-        Str pointers={0x401010,0x401020}</a>
++        vStr pointers={0x401010,0x401020}</a>
+ 	</p>
+ 	</p>
+ 
+@@ -275,7 +276,7 @@
+         #the data section will have 40 bytes reserved<br>
+         Char reserveCHAR#10<br>
+         #the data section will have 10 bytes reserved<br>
+-        Str reservePointers#10<br>
++        vStr reservePointers#10<br>
+         #the data section will have 40 bytes reserved</a>
+ 	</p>
+ 
+@@ -283,7 +284,7 @@
+ 	3. Pointer sign ('^')
+ 	<br>
+ 	Right side can have variables and at object format, when left side is not constant, can have functions.
+-	Variables that point to a function can be called like a function. At the executables format (ex: not elfobj), when pointing to an import function the supported manner is with double pointer(^^); all cases, except this one, use the normal pointer(^).
++	Variables (value and sv) that point to a function can be called like a function. At the executables format (ex: not elfobj), when pointing to an import function the supported manner is with double pointer(^^); all cases, except this one, use the normal pointer(^).
+ 	<br>
+ 	Example:
+ 	<br>
+@@ -291,7 +292,7 @@
+         Data value=1<br>
+         Data pointervalue^value<br>
+         Char bytes="Raw text data declaration."<br>
+-        Str text^bytes</a>
++        vStr text^bytes</a>
+ 	</p>
+ 
+ 	<p>
+@@ -350,7 +351,7 @@
+ 	<a class="code">
+         Data struct=3<br>
+         Data *structValue=1000<br>
+-        Data structures^struct<br>
++        vData structures^struct<br>
+         #the "structures" variable can be used in the program as a pointer<br>
+         Entry event(data *widget,data signal)<br>
+         return signal<br>
+@@ -639,7 +640,7 @@
+ 
+ 	<p>
+         Char data="ABC"<br>
+-        Str string^data<br>
++        vStr string^data<br>
+         Char c1#1<br>
+         Set c1 string#<br>
+         #the c1 will be A</p>
+@@ -749,9 +750,9 @@
+         Library "user32.dll"<br>
+         Import "MessageBoxA" Message<br>
+         Char program="Program"<br>
+-        Str title^program<br>
++        vStr title^program<br>
+         Char data="Hello World"<br>
+-        Str text^data<br>
++        vStr text^data<br>
+         Data null=0<br>
+         Call Message(null,text,title,null)<br>
+         #a message will be displayed with the "Hello World" text and the title "Program"<br>
+@@ -875,10 +876,10 @@
+         #at first library, the interpretor is created: "lib/ld-linux.so.2"<br>
+         Import "printf" printf<br>
+         char newlinedata={0xa,0}<br>
+-        str newline^newlinedata<br>
++        vstr newline^newlinedata<br>
+         call printf(newline)<br>
+         char hello="Hello World!"<br>
+-        str helloworld^hello<br>
++        vstr helloworld^hello<br>
+         call printf(helloworld)<br>
+         call printf(newline)<br>
+         data one=1;return one<br>
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs
++File ID: 1A_YjZQCguHQz03-CgP822HwdMcQmbdU1
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+133.x86_64.rpm, 1A_YjZQCguHQz03-CgP822HwdMcQmbdU1, 2023-12-23T04:36:44.076Z, https://drive.google.com/uc?id=1A_YjZQCguHQz03-CgP822HwdMcQmbdU1&export=download
+ Found file: ocompiler-1-5+132.x86_64.rpm, 1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs, 2023-12-22T13:23:42.575Z, https://drive.google.com/uc?id=1Z3YQwRRlBDWGS-7dAKB7TgqG0-wpEOXs&export=download
+ Found file: ocompiler-1-5+131.x86_64.rpm, 1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D, 2023-12-20T12:27:23.298Z, https://drive.google.com/uc?id=1sgkT4zZkKK_g5XJDF2X2EPcf-NG9PH9D&export=download
+ Found file: ocompiler-1-5+130.x86_64.rpm, 1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM, 2023-12-18T13:26:09.306Z, https://drive.google.com/uc?id=1mn34G3kNJ6R6qhYHjbMN-nLv4CoikayM&export=download
+--- ocompiler-1.orig/src/files/functions/actions/fn.s
++++ ocompiler-1/src/files/functions/actions/fn.s
+@@ -334,26 +334,35 @@ function fn_text_info()
+ 	return #text_info
+ endfunction
+ 
++
++#err
++function callable_var(ss content,sd sz,sd p_data)
++	setcall p_data# vars_number(content,sz,(integernumber))
++	if p_data#!=0
++		sd b
++		setcall b is_for_64()
++		if b=(TRUE)
++			sd test;setcall test pointbit(p_data#)
++			if test=0
++				set p_data# 0
++			endif
++		endif
++		ret
++	endif
++	setcall p_data# vars_number(content,sz,(stackvaluenumber))
++endfunction
+ #err
+ function prepare_function_call(sd pcontent,sd psize,sd sz,sd p_data,sd p_bool_indirect,sd subtype)
+ 	Data fns%%ptr_functions
++	sd err
+ 
+ 	SetCall p_data# vars(pcontent#,sz,fns)
+ 	If p_data#=0
+-		data calls={integernumber,stackdatanumber,stackvaluenumber,stackwordnumber,notanumber}
+-		sd callables^calls
+-		while callables#!=(notanumber)
+-			setcall p_data# vars_number(pcontent#,sz,callables#)
+-			If p_data#!=0
+-				break
+-			endif
+-			incst callables
+-		endwhile
+-		If p_data#=0
++		setcall err callable_var(pcontent#,sz,p_data)
++		if p_data#=0
+ 			Char unfndeferr="Undefined function/data call."
+-			vStr ptrunfndef^unfndeferr
+-			Return ptrunfndef
+-		EndIf
++			return #unfndeferr
++		endif
+ 		set p_bool_indirect# (TRUE)
+ 		call is_for_64_is_impX_or_fnX_set_force(subtype)
+ 	Else
+@@ -362,7 +371,6 @@ function prepare_function_call(sd pconte
+ 		call is_for_64_is_impX_or_fnX_set(p_data#,subtype)
+ 	EndElse
+ 
+-	sd err
+ 	setcall err xfile_add_call_if(pcontent#,sz,subtype)
+ 	if err=(noerror)   #here is coming from calls and callex
+ 		Call advancecursors(pcontent,psize,sz)
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -152,7 +152,6 @@ Datax *swfnMax#1
+ Datax *#1
+ Datax *#1
+ 
+-const notanumber=-1
+ Const memvariablesnumber=0
+ 	Const integernumber=memvariablesnumber+0
+ 	Const stringnumber=memvariablesnumber+1
+--- ocompiler-1.orig/tests/call-ret.s
++++ /dev/null
+@@ -1,13 +0,0 @@
+-
+-format elfobj64
+-
+-function a()
+-endfunction
+-
+-entry main()
+-
+-sv b
+-hex 144;call a()
+-hex 144;callex a b 2
+-hex 144;callret a()
+-hex 144;callexret a b 2
+--- /dev/null
++++ ocompiler-1/tests/call/call-ret.s
+@@ -0,0 +1,13 @@
++
++format elfobj64
++
++function a()
++endfunction
++
++entry main()
++
++sv b
++hex 144;call a()
++hex 144;callex a b 2
++hex 144;callret a()
++hex 144;callexret a b 2
+--- /dev/null
++++ ocompiler-1/tests/call/call-var.s
+@@ -0,0 +1,11 @@
++
++format elfobj
++
++data a#1
++call a()
++vdata c#1
++call c()
++value e#1
++call e()
++sv h#1
++call h()
+--- /dev/null
++++ ocompiler-1/tests/call/call-var64.s
+@@ -0,0 +1,11 @@
++
++format elfobj64
++
++data a#1
++#call a()
++vdata c#1
++#call c()
++value e#1
++call e()
++sv h#1
++call h()
+--- /dev/null
++++ ocompiler-1/tests/call/callx.s
+@@ -0,0 +1,14 @@
++
++format elfobj64
++
++value a#1
++function b()
++endfunction
++
++entry main()
++hex 144;call a(1)
++hex 144;call b(1)
++hex 144;callx a(1)
++hex 144;callx b(1)
++hex 144;setxcall a b(2)
++i3
+--- ocompiler-1.orig/tests/callx.s
++++ /dev/null
+@@ -1,14 +0,0 @@
+-
+-format elfobj64
+-
+-value a#1
+-function b()
+-endfunction
+-
+-entry main()
+-hex 144;call a(1)
+-hex 144;call b(1)
+-hex 144;callx a(1)
+-hex 144;callx b(1)
+-hex 144;setxcall a b(2)
+-i3
+--- /dev/null
++++ ocompiler-1/tests/comments.h
+@@ -0,0 +1 @@
++#asdasdsadasdasd
+\ No newline at end of file
+--- /dev/null
++++ ocompiler-1/tests/comments.s
+@@ -0,0 +1,18 @@
++
++include "comments.h"
++
++     #wqeqweqwe
++
++     #!
++qwe
++ !
++
++entry test()    #123
++
++sd a=1  #456
++set a a ##789
++set a 1 #abc
++
++#def
++
++#!zz
+--- /dev/null
++++ ocompiler-1/tests/cond.s
+@@ -0,0 +1,26 @@
++
++format elfobj64
++entry main()
++if 1=1
++elseif 1=1
++endelseif
++while 1=1
++break
++continue
++endwhile
++
++if 1>=^1
++elseif 1<^1
++elseif 1!=1
++elseif 1=1
++elseif 1>^1
++elseif 1<=^1
++elseif 1>=1
++elseif 1<1
++elseif 1>1
++elseif 1<=1
++endelseif
++if 4!1
++end
++if 2!!1
++end
+--- /dev/null
++++ ocompiler-1/tests/declare.s
+@@ -0,0 +1,35 @@
++
++format elfobj64
++
++char a=~-1-(~1+1)
++
++data b={2,2}
++
++value c%1
++sv d
++value *d#1
++value &dd^c
++
++str e#1
++vstr f#1
++ss g="qweqwe"
++
++vdata h#1
++sd i#1
++
++const j=1
++
++#value k%
++value k%%1
++
++valuex l#1
++
++#return 1+
++return 1+1
++
++vstr *z="123"
++value *z^dd
++
++word w^a
++vword ww^a
++sw www^a
+--- /dev/null
++++ ocompiler-1/tests/declareN.s
+@@ -0,0 +1,22 @@
++
++format elfobj64
++
++function b()
++char a=1
++value aa^a
++return aa#s^
++endfunction
++
++#const a=\b.a\
++const a=1
++
++char *z=:
++char *z=\
++char *z=\\
++char *z=1
++char *z=0xf
++char *z=a
++char *z=\b
++char *z=\\b
++char *z=\b.a
++char *z=\b.a\
+--- /dev/null
++++ ocompiler-1/tests/function.s
+@@ -0,0 +1,13 @@
++
++format elfobj
++
++function test(char a,data b,str c,value d,sv e,vstr f,ss g,vdata h,sd i,valuex j)
++endfunction
++
++functionx test2()
++endfunction
++
++functionxx test3()
++endfunction
++
++entry test4(word a,vword b,sw c)
+--- /dev/null
++++ ocompiler-1/tests/function2.s
+@@ -0,0 +1,2 @@
++
++entryraw test()
+--- /dev/null
++++ ocompiler-1/tests/hex.s
+@@ -0,0 +1,2 @@
++
++hex 1,2,3
+\ No newline at end of file
+--- /dev/null
++++ ocompiler-1/tests/include.s
+@@ -0,0 +1,7 @@
++
++include "include.h"
++einclude "include.h" "fakefile"
++
++override include_sec 1
++include "include.h"
++include "fakefile" "include.h"
+--- /dev/null
++++ ocompiler-1/tests/onearg.s
+@@ -0,0 +1,26 @@
++
++format elfobj64
++
++function b()
++data a#1
++endfunction
++
++entry main()
++
++vstr a="qwer"
++
++return 2
++inc #a:b.a
++inc #a
++incst #b.a
++dec a
++decst a
++neg a
++not a
++shl1 a
++shr1 a
++sar1 b.a
++exit 3
++return "asdf"
++return main.a#:a
++return b
+--- /dev/null
++++ ocompiler-1/tests/primsec.s
+@@ -0,0 +1,15 @@
++
++format elfobj64
++
++value a=0
++
++set a 1
++add a 2
++sub a 3
++mult a 4
++div a 5
++rem a 6
++and a 7
++or a 8
++xor a a(a,a)
++xorxcall a a(a,a)
+--- ocompiler-1.orig/tests/xf/comments.h
++++ /dev/null
+@@ -1 +0,0 @@
+-#asdasdsadasdasd
+\ No newline at end of file
+--- ocompiler-1.orig/tests/xf/comments.s
++++ /dev/null
+@@ -1,18 +0,0 @@
+-
+-include "comments.h"
+-
+-     #wqeqweqwe
+-
+-     #!
+-qwe
+- !
+-
+-entry test()    #123
+-
+-sd a=1  #456
+-set a a ##789
+-set a 1 #abc
+-
+-#def
+-
+-#!zz
+--- ocompiler-1.orig/tests/xf/cond.s
++++ /dev/null
+@@ -1,26 +0,0 @@
+-
+-format elfobj64
+-entry main()
+-if 1=1
+-elseif 1=1
+-endelseif
+-while 1=1
+-break
+-continue
+-endwhile
+-
+-if 1>=^1
+-elseif 1<^1
+-elseif 1!=1
+-elseif 1=1
+-elseif 1>^1
+-elseif 1<=^1
+-elseif 1>=1
+-elseif 1<1
+-elseif 1>1
+-elseif 1<=1
+-endelseif
+-if 4!1
+-end
+-if 2!!1
+-end
+--- ocompiler-1.orig/tests/xf/declare.s
++++ /dev/null
+@@ -1,35 +0,0 @@
+-
+-format elfobj64
+-
+-char a=~-1-(~1+1)
+-
+-data b={2,2}
+-
+-value c%1
+-sv d
+-value *d#1
+-value &dd^c
+-
+-str e#1
+-vstr f#1
+-ss g="qweqwe"
+-
+-vdata h#1
+-sd i#1
+-
+-const j=1
+-
+-#value k%
+-value k%%1
+-
+-valuex l#1
+-
+-#return 1+
+-return 1+1
+-
+-vstr *z="123"
+-value *z^dd
+-
+-word w^a
+-vword ww^a
+-sw www^a
+--- ocompiler-1.orig/tests/xf/declareN.s
++++ /dev/null
+@@ -1,22 +0,0 @@
+-
+-format elfobj64
+-
+-function b()
+-char a=1
+-value aa^a
+-return aa#s^
+-endfunction
+-
+-#const a=\b.a\
+-const a=1
+-
+-char *z=:
+-char *z=\
+-char *z=\\
+-char *z=1
+-char *z=0xf
+-char *z=a
+-char *z=\b
+-char *z=\\b
+-char *z=\b.a
+-char *z=\b.a\
+--- ocompiler-1.orig/tests/xf/function.s
++++ /dev/null
+@@ -1,13 +0,0 @@
+-
+-format elfobj
+-
+-function test(char a,data b,str c,value d,sv e,vstr f,ss g,vdata h,sd i,valuex j)
+-endfunction
+-
+-functionx test2()
+-endfunction
+-
+-functionxx test3()
+-endfunction
+-
+-entry test4(word a,vword b,sw c)
+--- ocompiler-1.orig/tests/xf/function2.s
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-entryraw test()
+--- ocompiler-1.orig/tests/xf/hex.s
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-hex 1,2,3
+\ No newline at end of file
+--- ocompiler-1.orig/tests/xf/include.s
++++ /dev/null
+@@ -1,7 +0,0 @@
+-
+-include "include.h"
+-einclude "include.h" "fakefile"
+-
+-override include_sec 1
+-include "include.h"
+-include "fakefile" "include.h"
+--- ocompiler-1.orig/tests/xf/onearg.s
++++ /dev/null
+@@ -1,26 +0,0 @@
+-
+-format elfobj64
+-
+-function b()
+-data a#1
+-endfunction
+-
+-entry main()
+-
+-vstr a="qwer"
+-
+-return 2
+-inc #a:b.a
+-inc #a
+-incst #b.a
+-dec a
+-decst a
+-neg a
+-not a
+-shl1 a
+-shr1 a
+-sar1 b.a
+-exit 3
+-return "asdf"
+-return main.a#:a
+-return b
+--- ocompiler-1.orig/tests/xf/primsec.s
++++ /dev/null
+@@ -1,15 +0,0 @@
+-
+-format elfobj64
+-
+-value a=0
+-
+-set a 1
+-add a 2
+-sub a 3
+-mult a 4
+-div a 5
+-rem a 6
+-and a 7
+-or a 8
+-xor a a(a,a)
+-xorxcall a a(a,a)
