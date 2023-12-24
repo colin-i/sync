@@ -1,0 +1,138 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+138) xenial; urgency=medium
+ .
+   * optimization
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-24
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1DmTIKJ-f-LqDsrN4TrrqKDEZlwtX-wef
++File ID: 1ra0VXgFWYbvaauEEQboNbR8OMTvhegUe
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+137.x86_64.rpm, 1ra0VXgFWYbvaauEEQboNbR8OMTvhegUe, 2023-12-24T04:49:39.787Z, https://drive.google.com/uc?id=1ra0VXgFWYbvaauEEQboNbR8OMTvhegUe&export=download
+ Found file: ocompiler-1-5+136.x86_64.rpm, 1DmTIKJ-f-LqDsrN4TrrqKDEZlwtX-wef, 2023-12-23T15:59:55.368Z, https://drive.google.com/uc?id=1DmTIKJ-f-LqDsrN4TrrqKDEZlwtX-wef&export=download
+ Found file: ocompiler-1-5+135.x86_64.rpm, 1eIb9HxzUBYHFtGW5mMWyj5MnoX5O1KxZ, 2023-12-23T13:56:58.588Z, https://drive.google.com/uc?id=1eIb9HxzUBYHFtGW5mMWyj5MnoX5O1KxZ&export=download
+ Found file: ocompiler-1-5+134.x86_64.rpm, 1dsoBW85egpSX1DLzLg0quGWy8-UPTxpa, 2023-12-23T10:21:30.371Z, https://drive.google.com/uc?id=1dsoBW85egpSX1DLzLg0quGWy8-UPTxpa&export=download
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.s
++++ ocompiler-1/src/files/functions/commons/getcommand.s
+@@ -501,6 +501,7 @@ Function getcommand(value pcontent,data
+ 
+ 	Data dsz=dwsz
+ 
++	valuex start#1;set start pcontent#
+ 	Set cursor pointercommands#
+ 	While cursor!=zero
+ 		Data offset#1
+@@ -526,16 +527,15 @@ Function getcommand(value pcontent,data
+ 		sd extbooldata=FALSE
+ 		sv extbool^extbooldata
+ 		sd intercursors=NULL
++		set pointer start
+ 
+ 		If command=(cPRIMSEC)
+ 			Set extstr xstr
+ 			set intercursors #pointer
+-			set pointer pcontent#
+ 		elseif command=(cCALL)
+ 		vstr call_ret_str="RET"
+ 			set extstr call_ret_str
+ 			set intercursors #pointer
+-			set pointer pcontent#
+ 		Elseif command=(cSTARTFUNCTION)
+ 			sd x_fn;setcall x_fn func_xfile(ptrsubtype#)
+ 			if x_fn!=(Xfile_function_not_x)
+@@ -544,14 +544,17 @@ Function getcommand(value pcontent,data
+ 		elseif command=(cCALLEX)
+ 			set extstr call_ret_str
+ 			set intercursors #pointer
+-			set pointer pcontent#
+ 		endElseif
+ 
+ 		SetCall result stringsatmemspc(pcontent,psize,offset,spacebool,extstr,extbool,intercursors)
+ 		If extbooldata=true
+ 		#here firstAndSecond part was recognized
+ 			If command=(cPRIMSEC)
+-				if result=(FALSE)
++				if result=(TRUE)
++				#setx
++					or ptrsubtype# (x_call_flag|x_callx_flag)
++					Return command
++				else
+ 					#here there was not a space
+ 					setcall result stratmemspc(#pointer,#sz,skipaftercall,spacebool)
+ 					if result=(TRUE)
+@@ -569,10 +572,6 @@ Function getcommand(value pcontent,data
+ 						set psize# sz
+ 						Return command
+ 					endif
+-				else
+-				#setx
+-					or ptrsubtype# (x_call_flag|x_callx_flag)
+-					Return command
+ 				endelse
+ 			Elseif result=(TRUE)
+ 				If command=(cSTARTFUNCTION)
+@@ -592,8 +591,8 @@ Function getcommand(value pcontent,data
+ 		elseIf result=true
+ 		#here (first/onlyone)+-space was ok
+ 			Return command
+-		elseif command=(cPRIMSEC)
+-			if pcontent#!=pointer  ##here first was ok, but not extra x
++		elseif start!=pointer  ##here first was ok, but not extra part
++			if command=(cPRIMSEC)
+ 				setcall result stratmemspc(#pointer,#sz,skipaftercall,spacebool)
+ 				if result=(TRUE)
+ 					or ptrsubtype# (x_call_flag|x_callg_flag)
+@@ -610,9 +609,9 @@ Function getcommand(value pcontent,data
+ 					Return command
+ 				endif
+ 				#break #don't want to remember this when having something like addend command, and who will wrong here?
+-			endif
+-		elseif command=(cCALL)
+-			if pcontent#!=pointer  ##here first was ok, but not extra ret
++			else
++			#if command=(cCALL)
++			#if command=(cCALLEX)  #cSTARTFUNCTION is not coming here with intercursors=NULL
+ 				setcall result stratmemspc(#pointer,#sz,skipaftercall,spacebool)
+ 				if result=(TRUE)
+ 					or ptrsubtype# (x_callg_flag)
+@@ -620,17 +619,7 @@ Function getcommand(value pcontent,data
+ 					set psize# sz
+ 					Return command
+ 				endif
+-			endif
+-		elseif command=(cCALLEX)
+-			if pcontent#!=pointer  ##here first was ok, but not extra ret
+-				setcall result stratmemspc(#pointer,#sz,skipaftercall,spacebool)
+-				if result=(TRUE)
+-					or ptrsubtype# (x_callg_flag)
+-					set pcontent# pointer
+-					set psize# sz
+-					Return command
+-				endif
+-			endif
++			endelse
+ 		endelseIf
+ 		Add pointercommands dsz
+ 		Set cursor pointercommands#
