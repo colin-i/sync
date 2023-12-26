@@ -1,0 +1,832 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x44) focal; urgency=medium
+ .
+   * aftercall and rows_tot
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-26
+
+--- edor-1.orig/configure.ac
++++ edor-1/configure.ac
+@@ -100,7 +100,8 @@ return sizeof(long)==sizeof(int);//0 is
+ ])], [AC_DEFINE(PLATFORM64, 1, "64")], [])
+ 
+ #back at CFLAGS
+-test "x${enable_cflags_setting}" = xyes && CFLAGS="-O1 -s"
++test "x${enable_cflags_setting}" = xyes && CFLAGS="-O3 -s"
++#                                                  -O1
+ #O3 is not removing symbols
+ 
+ # Checks for library functions.
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -1056,6 +1056,7 @@ static int word_at_cursor(char*z){
+ 	}while(x<sz&&is_word_char(d[x])/*true*/);
+ 	return cursor;
+ }
++
+ //-2resize,-1no/quit,0er/fals,1ok
+ int command(char*comnrp){
+ 	int rightexcl=get_right;
+@@ -1064,7 +1065,7 @@ int command(char*comnrp){
+ 	if(visib<2)return 0;//phisical visib is 1
+ 	bar_clear();
+ 	int y=getmaxy(stdscr)-1;int pos=0;
+-	char*input;int cursor;bool is_find=*comnrp>=com_nr_find;
++	char*input;int cursor;bool is_find=*comnrp<=com_nr_find_numbers;
+ 	if(is_find/*true*/){
+ 		if(*comnrp==com_nr_findagain)cursor=cursorf;
+ 		else cursor=*comnrp>=com_nr_findword?word_at_cursor(comnrp):0;
+@@ -1073,6 +1074,7 @@ int command(char*comnrp){
+ 		input=input0;
+ 		if(*comnrp==com_nr_goto_alt)cursor=sprintf(input,protocol ",",1+ytext
+ 			+(size_t)getcury(quick_get(comnrp)));
++		else if(*comnrp==com_nr_ext)cursor=sprintf(input,"%s",ocode_extension);//on prefs is len<=0xff and max_path_0 is 0x100
+ 		else cursor=0;
+ 	}
+ 	if(cursor==0)move(y,com_left);
+@@ -1083,28 +1085,7 @@ int command(char*comnrp){
+ 		int a=getch();
+ 		if(a==Char_Return){
+ 			char comnr=comnrp[0];
+-			if(comnr==com_nr_save){
+-				input[cursor]='\0';
+-				r=saves();
+-				if(r==-1){
+-					int x=getcurx(stdscr);
+-					clear_com(y,visib,pos,cursor);
+-					r=question("Overwrite");
+-					if(r==1){
+-						inputpath();
+-						//new_f=false;
+-						r=saving();
+-					}else if(r==0){
+-						command_rewrite(y,x,pos,input0,cursor,visib);
+-						continue;
+-					}else if(r==-2)return -2;
+-					wnoutrefresh(stdscr);
+-					return r;
+-				}
+-			}else if(comnr==com_nr_goto||comnr==com_nr_goto_alt){
+-				input[cursor]='\0';
+-				r=go_to(cursor);
+-			}else{//if is_find
++			if(is_find/*true*/){
+ 				int ifback=getcurx(stdscr);
+ 				r=find(comnrp,(size_t)cursor,(size_t)pos,(size_t)visib,y);
+ 				if(r==-2)break;
+@@ -1122,6 +1103,30 @@ int command(char*comnrp){
+ 					command_rewrite(y,ifback>right?right:ifback,pos,inputf,cursor,visib);
+ 					continue;
+ 				}
++			}else if(comnr<=com_nr_goto_numbers){
++				input[cursor]='\0';
++				r=go_to(cursor);
++			}else if(comnr==com_nr_save){
++				input[cursor]='\0';
++				r=saves();
++				if(r==-1){
++					int x=getcurx(stdscr);
++					clear_com(y,visib,pos,cursor);
++					r=question("Overwrite");
++					if(r==1){
++						inputpath();
++						//new_f=false;
++						r=saving();
++					}else if(r==0){
++						command_rewrite(y,x,pos,input0,cursor,visib);
++						continue;
++					}else if(r==-2)return -2;
++					wnoutrefresh(stdscr);
++					return r;
++				}
++			}else{//com_nr_ext
++				(*reinterpret_cast<void(*)(char*,unsigned long int)>(  ((char**)comnrp)[1]  ))(input,cursor);
++				r=1;
+ 			}
+ 			break;
+ 		}
+@@ -1239,3 +1244,44 @@ bool is_dir(int fd){
+ 	if(d!=nullptr){closedir(d);return true;}
+ 	return false;
+ }
++
++#define acall      "aftercall"
++#define acall_size (1+2+2+2+2)
++#define acallu     "AFTERCALL"
++#define acall_size1 acall_size+1
++char*ocode_extension=(char*)"oc";// iso forbids
++
++size_t aftercall_find(){
++	for(size_t i=0;i<rows_tot;i++){
++		row*r=&rows[i];
++		if(r->sz>acall_size1){//if still '\0' end at new mem, that is undefined
++		//>= is enough if without # check, but is still a definition next, then without = is ok
++			char*data=r->data;
++			if(data[0]=='#'){//a fast solution is to comment in included .oc files to show them here
++				data++;
++			}
++			int j;
++			for(j=0;(acall[j]==data[j]||acallu[j]==data[j])&&j<acall_size;j++){}//readed text has a\n\b0
++			if(j==acall_size){
++				char ext=data[j];
++				if(ext=='i'||ext=='I'||ext==' '||ext=='\t')return i;
++			}
++		}
++	}
++	return rows_tot;
++}
++void aftercall_draw(WINDOW*w){
++	int row=getcury(w);int col=getcurx(w);
++	refreshpage(w);
++	wmove(w,row,col);
++}
++size_t init_aftercall(){
++	if(textfile!=nullptr){
++		char*pos=strrchr(textfile,'.');
++		if(pos!=nullptr){
++			pos++;
++			if(strcmp(pos,ocode_extension)==0)return aftercall_find();
++		}
++	}
++	return rows_tot;//still need a value
++}
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -58,6 +58,9 @@ bool is_dir(int);
+ void err_set(WINDOW*);
+ int open_new(char*);
+ void texter_macro(const char*);
++size_t aftercall_find();
++void aftercall_draw(WINDOW*);
++size_t init_aftercall();
+ //tw
+ void position_core(size_t,size_t);
+ void centering3(WINDOW*,size_t*,size_t*,bool);
+@@ -72,8 +75,12 @@ extern size_t ln_term_sz;
+ extern char*textfile;
+ extern bool mod_flag;
+ extern bool issensitive;
++extern char*ocode_extension;
+ //main,bar,tw
+ extern row*rows;
+ extern size_t rows_tot;
+ extern size_t ytext;
+ extern size_t xtext;
++//main,tw
++extern bool ocompiler_flag;
++extern size_t aftercall;
+--- edor-1.orig/s/inc/main/curses.h
++++ edor-1/s/inc/main/curses.h
+@@ -3,6 +3,8 @@
+ 
+ #define ALL_MOUSE_EVENTS 0xFffFFff
+ #define COLOR_BLACK 0
++#define COLOR_GREEN 2
++#define COLOR_YELLOW 3
+ #define COLOR_CYAN 6
+ #define COLOR_WHITE 7
+ #define ERR -1
+--- edor-1.orig/s/inc/main/stdio.h
++++ edor-1/s/inc/main/stdio.h
+@@ -2,7 +2,8 @@
+ #include "inc/stdio.h"
+ 
+ typedef struct __sFILE FILE;
+-extern FILE*stdin __attribute__((annotate("introduced_in=" "23")));
++//extern FILE*stdin __attribute__((annotate("introduced_in=" "23")));//warning on headless
++extern FILE *stdin;//this is amd def
+ 
+ #ifdef __cplusplus
+ extern "C" {
+--- edor-1.orig/s/inc/sep/string.h
++++ edor-1/s/inc/sep/string.h
+@@ -1,11 +1,3 @@
+ 
+ #define is_sep_c
+ #include "inc/string.h"
+-
+-#ifdef __cplusplus
+-extern "C"{
+-#endif
+-char*strrchr(const char*,int);
+-#ifdef __cplusplus
+-}
+-#endif
+--- edor-1.orig/s/inc/string.h
++++ edor-1/s/inc/string.h
+@@ -20,3 +20,13 @@ void*memcpy(void*,const void*,size_t);
+ }
+ #endif
+ #endif
++
++#if defined(is_bar_c)||defined(is_sep_c)
++#ifdef __cplusplus
++extern "C" {
++#endif
++char*strrchr(const char*,int);
++#ifdef __cplusplus
++}
++#endif
++#endif
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -28,10 +28,11 @@
+ \n    other key to return\
+ \nCtrl+u = undo; Alt+u = undo mode: left=undo,right=redo,other key to return\
+ \nCtrl+r = redo\
++\nCtrl+w = text wrapping (movement. another key to return)\
+ \nCtrl+e = enable/disable internal mouse/touch\
+ \nCtrl+n = disable/enable indentation\
+ \nCtrl+t = enable/disable insensitive search\
+-\nCtrl+w = text wrapping (movement. another key to return)\
++\nCtrl+a = enable/disable O language syntax; Alt+a = syntax rescan; Alt+A = change extension test\
+ \nCtrl+q = quit"
+ 
+ #include "top.h"
+@@ -168,6 +169,8 @@ static void __attribute__((noreturn)) si
+ 
+ #include"base.h"
+ 
++#define ignored 0
++
+ char ln_term[3]="\n";
+ size_t ln_term_sz=1;
+ char*textfile=nullptr;
+@@ -176,6 +179,8 @@ size_t rows_tot=1;
+ size_t ytext=0;
+ size_t xtext=0;
+ bool mod_flag=true;
++bool ocompiler_flag=false;
++size_t aftercall;
+ 
+ #define Char_Escape 27
+ static char*mapsel=nullptr;
+@@ -195,13 +200,18 @@ static char restorefile_buf2[max_path_0]
+ static char*editingfile=nullptr;
+ static char editingfile_buf[max_path_0];
+ static char editingfile_buf2[max_path_0];
++
+ static mmask_t stored_mouse_mask=0;
+ static bool indent_flag=true;
+ #define mask_size 1
++#define mask_nomask 0
+ #define mask_mouse 1
+ #define mask_indent 2
+ #define mask_insensitive 4
++#define mask_ocompiler 8
+ static char prefs_file[max_path_0]={'\0'};//only the first byte is set
++#define extlen_size 1
++static char*ocode_extension_new=nullptr;
+ 
+ static bool visual_bool=false;
+ static char*cutbuf=nullptr;
+@@ -213,14 +223,17 @@ static char*text_init_e;//is init? mallo
+ static int _rb;static int _cb;
+ static int _re;static int _ce;
+ static int topspace=1;
+-static int leftspace=1;
++//left,syntax,right individual size
++#define contentmarginsize 1
++static int leftspace=contentmarginsize+contentmarginsize;
+ #define view_margin 8
+ #define known_stdin 0
+-static WINDOW*leftcontent;
+-static WINDOW*rightcontent;
++static WINDOW*leftcontent=nullptr;
++static WINDOW*rightcontent=nullptr;
+ static char at_right_mark='>';
+ static char at_left_mark='<';
+ static char at_content_nomark=' ';
++static WINDOW*syntaxcontent=nullptr;
+ 
+ bool no_char(char z){return z<32||z>=127;}
+ static size_t tab_grow(WINDOW*w,char*a,size_t sz,int*ptr){
+@@ -258,6 +271,10 @@ static size_t tab_grow(WINDOW*w,char*a,s
+ 	}
+ 	return i;
+ }
++static void printsyntax(int pair,int y){
++	wattrset(syntaxcontent,COLOR_PAIR(pair));
++	mvwaddch(syntaxcontent,y,0,' ');
++}
+ void refreshrowsbot(WINDOW*w,int i,int maxy){
+ 	size_t maxx=xtext+(size_t)getmaxx(w);
+ 	do{
+@@ -281,15 +298,22 @@ void refreshrowsbot(WINDOW*w,int i,int m
+ 			//if(getcury(w)==i)wclrtoeol(w);
+ 			//this was the case when there was nothing on the row or xtext was big and nothing to print
+ 			//was moved inside tab_grow
++
++			if(ocompiler_flag/*true*/){
++				if(aftercall<=j)printsyntax(4,i);
++				else printsyntax(0,i);//when coming back
++			}else printsyntax(0,i);//when coming back
+ 		}else{
+ 			x_right[i]=false;
+ 			wclrtoeol(w);
++			printsyntax(3,i);
+ 		}
+ 		mvwaddch(leftcontent,i,0,at_left);
+ 		mvwaddch(rightcontent,i,0,at_right);
+ 		i++;
+ 	}while(i<maxy);
+ 	wnoutrefresh(leftcontent);
++	wnoutrefresh(syntaxcontent);
+ 	wnoutrefresh(rightcontent);
+ }
+ static void content_at_right(int i){
+@@ -1083,7 +1107,7 @@ static bool rows_expand(size_t n){
+ static void text_free(size_t b,size_t e){
+ 	for(size_t i=b;i<e;i++){
+ 		char*d=rows[i].data;
+-		if(d<text_init_b||text_init_e<=d)free(d);
++		if(d<text_init_b||text_init_e<=d)free(d);//the check is if the text was not modified from the start in this case will be free at exit(all initial lines)
+ 	}
+ }
+ static size_t row_pad_sz(size_t sz){
+@@ -1144,7 +1168,7 @@ static void deleted(size_t ybsel,size_t
+ 	xtext=x;
+ 	c[0]=cl;
+ }
+-static void row_del(size_t a,size_t b){
++static void row_del(size_t a,size_t b,int r){
+ 	size_t c=b+1;
+ 	text_free(a,c);
+ 	row*j=&rows[a];
+@@ -1152,7 +1176,23 @@ static void row_del(size_t a,size_t b){
+ 		memcpy(j,&rows[i],sizeof(row));
+ 		j++;
+ 	}
+-	rows_tot-=c-a;
++	size_t diff=c-a;
++	rows_tot-=diff;
++	if(ocompiler_flag/*true*/){
++		if(aftercall<(a-1)){}//example deleting first new line aftercall=0 a=1 b=1
++		else if(b<aftercall)aftercall-=diff;
++		else if(b==aftercall){
++			aftercall-=diff;
++			if(r!=-1)printsyntax(4,r);//at backspace when moving one row up
++			//this r -1 is from backspacing first row on screen
++		}
++		else{
++			aftercall=rows_tot;//will be redrawn in the next functions
++			//on select all will be ok
++			//on backspace,delete need to set the current row, anyway on select is not fast without r=-1
++			if(r!=-1)printsyntax(0,r);
++		}
++	}
+ }
+ 
+ static void easytime(){
+@@ -1271,7 +1311,7 @@ void deleting(size_t ybsel,size_t xbsel,
+ 		r1->sz-=dif;
+ 	}else{
+ 		row_set(r1,xbsel,rows[yesel].sz-xesel,0,rows[yesel].data+xesel);
+-		row_del(ybsel+1,yesel);
++		row_del(ybsel+1,yesel,-1);
+ 	}
+ }
+ bool deleting_init(size_t ybsel,size_t xbsel,size_t yesel,size_t xesel){
+@@ -1342,6 +1382,9 @@ static void rows_insert(row*d,size_t sz,
+ 		a--;
+ 	}
+ 	memcpy(rows+off,d,sz*sizeof(row));
++	if(ocompiler_flag/*true*/){
++		if(aftercall>=(off-1))aftercall+=sz;  //example enter at 0,0 off will be 1
++	}
+ }
+ static size_t pasting(row*d,size_t y,size_t x,size_t*xe,char*buf,size_t buf_sz,size_t buf_r,bool fromcopy){
+ 	bool one=buf_r==1;
+@@ -1512,7 +1555,7 @@ static bool del_key(size_t y,size_t x,in
+ 		if(row_alloc(r1,x,r2->sz,0)==false){
+ 			if(undo_add_del(y,x,yy,0)==false){
+ 				row_set(r1,x,r2->sz,0,r2->data);
+-				row_del(yy,yy);
++				row_del(yy,yy,r);
+ 				rowfixdel(w,r,c,r1,x);
+ 				if(r+1<getmaxy(w))refreshrows(w,r+1);
+ 				return false;
+@@ -1549,9 +1592,9 @@ static bool bcsp(size_t y,size_t x,int*r
+ 		if(row_alloc(r0,sz0,r1->sz,0)==false){
+ 			if(undo_add_del(yy,sz0,y,0)==false){
+ 				row_set(r0,sz0,r1->sz,0,r1->data);
+-				row_del(y,y);
+-				cl[0]=c;
+ 				int r=rw[0];
++				row_del(y,y,r-1);
++				cl[0]=c;
+ 				if(r==0){
+ 					ytext--;refreshpage(w);
+ 				}
+@@ -1909,11 +1952,11 @@ static bool visual_mode(WINDOW*w,bool v_
+ }
+ #define quick_pack(nr,w) char*args[2];args[0]=(char*)nr;args[1]=(char*)w;
+ static bool find_mode(int nr,WINDOW*w){
+-	quick_pack(nr,w)
++	quick_pack((long)nr,w)
+ 	int r=command((char*)args);
+ 	if(r==-2)return true;
+ 	else if(r!=0){
+-		wmove(w,getcury(w),getcurx(w));
++		wmove(w,getcury(w),getcurx(w));//at 0 (false not err) will remain on the bar
+ 	}
+ 	return false;
+ }
+@@ -1922,9 +1965,9 @@ static bool goto_mode(char*args,WINDOW*w
+ 	if(r==1){
+ 		centering_simple(w)
+ 	}
+-	else if(r>-2)wmove(w,getcury(w),getcurx(w));
+-	else return true;
+-	return false;
++	else if(r>-2)wmove(w,getcury(w),getcurx(w));//-1 quit and 0 err
++	return true;//-2
++	//return false;
+ }
+ static bool savetofile(WINDOW*w,bool has_file){
+ 	char*d=textfile;
+@@ -1955,6 +1998,18 @@ static bool savetofile(WINDOW*w,bool has
+ 	wmove(w,getcury(w),getcurx(w));
+ 	return false;
+ }
++static void writeprefs(int f,char mask){
++	if(write(f,&mask,mask_size)==mask_size){
++		size_t sz=strlen(ocode_extension);
++		if(write(f,&sz,extlen_size)==extlen_size){
++			#pragma GCC diagnostic push
++			#pragma GCC diagnostic ignored "-Wunused-result"
++			write(f,ocode_extension,sz);
++			#pragma GCC diagnostic pop
++		}
++	}
++	close(f);
++}
+ static void setprefs(int flag,bool set){
+ 	if(prefs_file[0]!='\0'){
+ 		//can use O_RDWR and lseek SEEK_SET
+@@ -1963,20 +2018,36 @@ static void setprefs(int flag,bool set){
+ 			char mask;
+ 			if(read(f,&mask,mask_size)==mask_size){
+ 				close(f);
+-				if(set/*true*/)mask|=flag;
+-				else mask&=~flag;
+-				f=open(prefs_file,O_WRONLY);
+-				if(f!=-1){
+-					#pragma GCC diagnostic push
+-					#pragma GCC diagnostic ignored "-Wunused-result"
+-					write(f,&mask,mask_size);
+-					close(f);
+-					#pragma GCC diagnostic pop
++				if(flag!=(mask_nomask)){
++					if(set/*true*/)mask|=flag;
++					else mask&=~flag;
+ 				}
++				f=open(prefs_file,O_WRONLY);
++				if(f!=-1)writeprefs(f,mask);
+ 			}
+ 		}
+ 	}
+ }
++
++static void ocode_extension_change(char*newinput,size_t cursor){
++	if(ocode_extension_new!=nullptr){
++		size_t len=strlen(ocode_extension_new);
++		if(len<cursor){
++			char*newmem=(char*)malloc(cursor+1);
++			if(newmem!=nullptr)ocode_extension_new=newmem;
++			else return;
++		}
++	}else{
++		char*newmem=(char*)malloc(cursor+1);
++		if(newmem!=nullptr)ocode_extension_new=newmem;
++		else return;
++	}
++	memcpy(ocode_extension_new,newinput,cursor);
++	ocode_extension_new[cursor]='\0';
++	ocode_extension=ocode_extension_new;//at start extension_new is not 100%
++	setprefs(mask_nomask,ignored);
++}
++
+ static time_t guardian=0;
+ static bool loopin(WINDOW*w){
+ 	int c;
+@@ -2029,9 +2100,16 @@ static bool loopin(WINDOW*w){
+ 			else if(z=='c'){if(find_mode(6,w)/*true*/)return true;}
+ 			else if(z=='u'){vis('U',w);undo_loop(w);vis(' ',w);}
+ 			else if(z=='s'){bool b=savetofile(w,false);if(b/*true*/)return true;}
++			else if(z=='a'){aftercall=aftercall_find();aftercall_draw(w);}
++			else if(z=='A'){
++				char*args[2]={(char*)com_nr_ext,(char*)ocode_extension_change};
++				int nr=command((char*)args);
++				if(nr>-2)wmove(w,getcury(w),getcurx(w));//ok/quit/err
++				else return true;
++			}
+ 		}else{
+ 			//QWERTyUioP
+-			//aSdFGhjkl
++			//ASdFGhjkl
+ 			// zxcVbNm
+ 			const char*s=keyname(c);
+ 			if(strcmp(s,"^V")==0){
+@@ -2086,25 +2164,32 @@ static bool loopin(WINDOW*w){
+ 			}
+ 			else if(strcmp(s,"^E")==0){
+ 				bool b;char c;
+-				if(stored_mouse_mask==0){stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);b=false;c='E';}
+-				else{stored_mouse_mask=mousemask(0,nullptr);b=true;c='e';}
++				if(stored_mouse_mask==0){stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);c='E';}//;b=false
++				else{stored_mouse_mask=mousemask(0,nullptr);c='e';}//;b=true
++				setprefs(mask_mouse,!stored_mouse_mask);
+ 				vis(c,w);
+-				setprefs(mask_mouse,b);
+ 			}
+ 			else if(strcmp(s,"^N")==0){
+ 				char c;
+ 				if(indent_flag/*true*/){indent_flag=false;c='n';}
+ 				else{indent_flag=true;c='N';}
+-				vis(c,w);
+ 				setprefs(mask_indent,indent_flag);
++				vis(c,w);//is not showing on stdscr without wnoutrefresh(thisWindow)
+ 			}
+ 			else if(strcmp(s,"^T")==0){
+ 				bool b;char c;
+ 				if(issensitive/*true*/){issensitive=false;c='T';}
+ 				else{issensitive=true;c='t';}
+-				//doupdate();will change cursor
+-				vis(c,w);
+ 				setprefs(mask_insensitive,issensitive);
++				vis(c,w);//is not showing on stdscr without wnoutrefresh(thisWindow)
++			}
++			else if(strcmp(s,"^A")==0){
++				if(ocompiler_flag/*true*/){ocompiler_flag=false;c='a';}
++				else{ocompiler_flag=true;c='A';
++					aftercall=aftercall_find();}
++				setprefs(mask_ocompiler,!ocompiler_flag);
++				visual(c);//addch for more info, first to window, then wnoutrefresh to virtual, then doupdate to phisical
++				aftercall_draw(w);
+ 			}
+ 			else if(strcmp(s,"^W")==0){if(text_wrap(w)/*true*/)return true;}
+ 
+@@ -2302,6 +2387,17 @@ static void getprefs(){
+ 			if((mask&mask_mouse)==0)stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);
+ 			if((mask&mask_indent)==0)indent_flag=false;
+ 			if((mask&mask_insensitive)==0)issensitive=false;
++			if((mask&mask_ocompiler)==0)ocompiler_flag=true;
++			unsigned char len;
++			if(read(f,&len,extlen_size)==extlen_size){
++				ocode_extension_new=(char*)malloc(len+1);
++				if(ocode_extension_new!=nullptr){
++					if(read(f,ocode_extension_new,len)==len){
++						ocode_extension=ocode_extension_new;
++						ocode_extension[len]='\0';
++					}
++				}
++			}
+ 		}
+ 		close(f);
+ 		return;
+@@ -2309,10 +2405,7 @@ static void getprefs(){
+ 	f=open_new(prefs_file);
+ 	if(f!=-1){
+ 		mask=mask_mouse|mask_indent|mask_insensitive;
+-		#pragma GCC diagnostic push
+-		#pragma GCC diagnostic ignored "-Wunused-result"
+-		write(f,&mask,mask_size);
+-		#pragma GCC diagnostic pop
++		writeprefs(f,mask);
+ 	}
+ }
+ static bool help_cutbuffile_preffile(char*s,char*cutbuf_file){
+@@ -2368,25 +2461,26 @@ static void writefilebuf(char*cutbuf_fil
+ static void color(){
+ 	if(start_color()!=ERR){
+ 		if(init_pair(1,COLOR_BLACK,COLOR_WHITE)!=ERR){//TERM vt100
+-			init_pair(2,COLOR_BLACK,COLOR_CYAN);
++			if(init_pair(2,COLOR_BLACK,COLOR_CYAN)!=ERR){
++				if(init_pair(3,COLOR_BLACK,COLOR_GREEN)!=ERR){
++					init_pair(4,COLOR_BLACK,COLOR_YELLOW);
++				}
++			}
+ 		}
+ 	}
+ }
+ 
+ static void proced(char*cutbuf_file,WINDOW*w1){
+-	if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
+-
+-	bool loops=false;
++	bool loops;
+ 	int cy=0;int cx=0;
+ 	int r=getmaxy(stdscr)-1;
+ 	int old_r=r-1;//set -1 because at first compare is erasing new_visual
+-	int lrsize=1;//left right space
+ 	do{
+ 		void*a=realloc(x_right,(size_t)r);
+ 		if(a==nullptr)break;
+ 		x_right=(bool*)a;//is text,[xtext+nothing
+ 		int maxx=getmaxx(stdscr);
+-		int c=maxx-(2*lrsize);
++		int c=maxx-(leftspace+contentmarginsize);
+ 		tabs_rsz=1+(c/tab_sz);
+ 		if((c%tab_sz)!=0)tabs_rsz++;
+ 		void*b=realloc(tabs,sizeof(int)*(size_t)(r*tabs_rsz));
+@@ -2401,41 +2495,49 @@ static void proced(char*cutbuf_file,WIND
+ 			write_title();//this is also the first write
+ 		}
+ 
+-		WINDOW*w=newwin(r-topspace,c,topspace,lrsize);
+-		leftcontent=newwin(r-topspace,leftspace,topspace,0);
+-		rightcontent=newwin(r-topspace,1,topspace,maxx-1);
++		loops=false;
++		WINDOW*w=newwin(r-topspace,c,topspace,leftspace);//The functions which return a window pointer may also fail if there is insufficient memory for its data structures.
+ 		if(w!=nullptr){
+-			keypad(w,true);
++			leftcontent=newwin(r-topspace,contentmarginsize,topspace,0);
++			if(leftcontent!=nullptr){
++				syntaxcontent=newwin(r-topspace,contentmarginsize,topspace,contentmarginsize);
++				if(syntaxcontent!=nullptr){
++					rightcontent=newwin(r-topspace,contentmarginsize,topspace,maxx-contentmarginsize);
++					if(rightcontent!=nullptr){
++						keypad(w,true);
++
++						bar_init();
++						if(r<=old_r)clrtoeol();//resize to up,is over text
++						//or =, clear bar,visual and saves
++						old_r=r;
++						if(mod_flag==false){
++							if(hardtime==0)restore_visual();
++							else mod_visual(modif_visual);
++						}
++						else wnoutrefresh(stdscr);
++
++						refreshpage(w);//this must be after refresh stdscr, else first > at rightcontent will not show
++						wmove(w,cy,cx);
+ 
+-			bar_init();
+-			if(r<=old_r)clrtoeol();//resize to up,is over text
+-			//or =, clear bar,visual and saves
+-			old_r=r;
+-			if(mod_flag==false){
+-				if(hardtime==0)restore_visual();
+-				else mod_visual(modif_visual);
+-			}
+-			else wnoutrefresh(stdscr);
+-
+-			refreshpage(w);//this must be after refresh stdscr, else first > at rightcontent will not show
+-			wmove(w,cy,cx);
+-
+-			position_reset();
+-			position(cy,cx);
+-			loops=loopin(w);
+-			if(loops/*true*/){//is already resized and the cursor fits in the screen, not in the new size
+-				cy=getcury(w);
+-				r=getmaxy(stdscr)-1;
+-				if(cy==r){
+-					cy=r-1;
+-					if(ytext+1<rows_tot)ytext++;
+-				}
+-				cx=getcurx(w);
+-				//c=getmaxx(w1);never if(cx>=c)
+-			}
+-			delwin(w);delwin(leftcontent);delwin(rightcontent);
+-		}else break;
+-	}while(loops/*true*/);
++						position_reset();
++						position(cy,cx);
++						loops=loopin(w);
++						if(loops/*true*/){//is already resized and the cursor fits in the screen, not in the new size
++							cy=getcury(w);
++							r=getmaxy(stdscr)-1;
++							if(cy==r){
++								cy=r-1;
++								if(ytext+1<rows_tot)ytext++;
++							}
++							cx=getcurx(w);
++							//c=getmaxx(w1);never if(cx>=c)
++						}
++					}
++				}
++			}
++		}
++		delwin(w);delwin(leftcontent);delwin(syntaxcontent);delwin(rightcontent);//returns an error if the window pointer is null
++	}while(loops/*true*/);//this will reenter only if loopin() said
+ 	if(x_right!=nullptr){
+ 		free(x_right);
+ 		if(tabs!=nullptr){
+@@ -2585,6 +2687,8 @@ static void action_go(int argc,char**arg
+ 	if(ok!=0){
+ 		WINDOW*w1=initscr();
+ 		if(w1!=nullptr){
++			if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
++
+ 			//if set 1press_and_4,5 will disable right press (for copy menu) anyway
+ 			//on android longpress to select and copy is a gesture and is different from mouse events
+ 			//the only difference with ALL_..EVENTS is that we want to speed up and process all events here (if there is a curses implementation like that)
+@@ -2592,6 +2696,10 @@ static void action_go(int argc,char**arg
+ 			//stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);//for error, export TERM=vt100
+ 			if(prefs_file[0]!='\0')getprefs();
+ 
++			if(ocompiler_flag/*true*/){//this is here, in loop can be set if wanted with enable/disable and rescan keys
++				aftercall=init_aftercall();
++			}
++
+ 			use_default_colors();//assume_default_colors(-1,-1);//it's ok without this for color pair 0 (when attrset(0))
+ 			raw();//stty,cooked; characters typed are immediately passed through to the user program. interrupt, quit, suspend, and flow control characters are all passed through uninterpreted, instead of generating a signal
+ 			color();
+@@ -2604,7 +2712,8 @@ static void action_go(int argc,char**arg
+ 				delwin(pw);
+ 			}
+ 			endwin();
+-			//if(text_file!=nullptr)puts(text_file);
++
++			if(ocode_extension_new!=nullptr)free(ocode_extension_new);//still need it at change for view what is was
+ 		}
+ 	}
+ 	if(text_init_b!=nullptr){
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -29,13 +29,16 @@ typedef struct{
+ //can be 127(ascii Delete) or 263, note: Ctrl+h generates 263
+ #define is_KEY_BACKSPACE(a) a==KEY_BACKSPACE||a==0x7f
+ 
+-#define com_nr_save 0
+-#define com_nr_goto 1
+-#define com_nr_goto_alt 2
+-#define com_nr_find 3
+-#define com_nr_findagain 4
+-#define com_nr_findword 5
+-//#define com_nr_findwordfrom 6
++#define com_nr_find 0
++#define com_nr_findagain 1
++#define com_nr_findword 2
++#define com_nr_findwordfrom 3
++	#define com_nr_find_numbers com_nr_findwordfrom
++#define com_nr_goto 4
++#define com_nr_goto_alt 5
++	#define com_nr_goto_numbers com_nr_goto_alt
++#define com_nr_save 6
++#define com_nr_ext 7
+ //#define com_nr_is_find(a) *a>=com_nr_find
+ //#define com_nr_is_find_word(a) *a>=com_nr_findword
+ 
+--- edor-1.orig/s/tw.c
++++ edor-1/s/tw.c
+@@ -23,11 +23,15 @@ typedef struct{
+ static row*rowswrap;
+ static row*store_rows;
+ static size_t store_rows_tot;
++static size_t store_aftercall;
+ 
+ static void tw_unlock(size_t y,size_t x,WINDOW*w){
+ 	//restore variables
+ 	rows=store_rows;
+ 	rows_tot=store_rows_tot;
++	if(ocompiler_flag/**/){
++		aftercall=store_aftercall;
++	}
+ 	ytext=y;
+ 	xtext=x;
+ 	centering3(w,nullptr,nullptr,false);
+@@ -36,9 +40,13 @@ static void tw_unlock(size_t y,size_t x,
+ 
+ bool text_wrap(WINDOW*w){
+ 	//calculate rows required
++	size_t aftercall_aux;
+ 	int max=getmaxx(w);
+ 	size_t n=0;
+ 	for(size_t i=0;i<rows_tot;i++){
++		if(ocompiler_flag/**/){
++			if(i==aftercall)aftercall_aux=n;
++		}
+ 		row*r=&rows[i];
+ 		if(r->sz==0)n++;
+ 		else{
+@@ -119,6 +127,9 @@ bool text_wrap(WINDOW*w){
+ 		//tw store some variables
+ 		store_rows=rows;rows=rowswrap;
+ 		store_rows_tot=rows_tot;rows_tot=j;
++		if(ocompiler_flag/**/){
++			store_aftercall=aftercall;aftercall=aftercall_aux;
++		}
+ 
+ 		//window
+ 		ytext=y;xtext=0;
