@@ -1,0 +1,97 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x45) focal; urgency=medium
+ .
+   * [spaces]aftercall
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-27
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -1125,7 +1125,8 @@ int command(char*comnrp){
+ 					return r;
+ 				}
+ 			}else{//com_nr_ext
+-				(*reinterpret_cast<void(*)(char*,unsigned long int)>(  ((char**)comnrp)[1]  ))(input,cursor);
++				//                                              will not call on 8bits char*, can call on long* but long is not a pointer on all platform, better to define
++				(*reinterpret_cast<void(*)(char*,unsigned long int)>(  ((comnrp_define*)comnrp)[1]  ))(input,cursor);
+ 				r=1;
+ 			}
+ 			break;
+@@ -1254,9 +1255,14 @@ char*ocode_extension=(char*)"oc";// iso
+ size_t aftercall_find(){
+ 	for(size_t i=0;i<rows_tot;i++){
+ 		row*r=&rows[i];
+-		if(r->sz>acall_size1){//if still '\0' end at new mem, that is undefined
++		size_t sz=r->sz;
++		char*data=r->data;
++
++		//first must skip spaces
++		for(;sz!=0&&(*data=='\t'||*data==' ');sz--)data++;
++
++		if(sz>acall_size1){//if still '\0' end at new mem, that is undefined
+ 		//>= is enough if without # check, but is still a definition next, then without = is ok
+-			char*data=r->data;
+ 			if(data[0]=='#'){//a fast solution is to comment in included .oc files to show them here
+ 				data++;
+ 			}
+--- edor-1.orig/s/heads
++++ edor-1/s/heads
+@@ -1,8 +1,10 @@
+ 
++#1 remove
+ cp Makefile mk
+ a="\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1 \-DSTDC_HEADERS=1 \-DHAVE_DIRENT_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_POLL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1 \-DUSE_FS=1"
+ grep --color "${a}" mk
+ sed -i "s/${a}//g" mk
+ grep --color "${a}" mk
+ make -f mk
+-rm mk
++
++if [ -n "${1}" ]; then rm mk; fi
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -1950,7 +1950,7 @@ static bool visual_mode(WINDOW*w,bool v_
+ 	}while(z!=0);
+ 	return false;
+ }
+-#define quick_pack(nr,w) char*args[2];args[0]=(char*)nr;args[1]=(char*)w;
++#define quick_pack(nr,w) comnrp_define args[2];args[0]=(comnrp_define)nr;args[1]=(comnrp_define)w;
+ static bool find_mode(int nr,WINDOW*w){
+ 	quick_pack((long)nr,w)
+ 	int r=command((char*)args);
+@@ -2102,7 +2102,7 @@ static bool loopin(WINDOW*w){
+ 			else if(z=='s'){bool b=savetofile(w,false);if(b/*true*/)return true;}
+ 			else if(z=='a'){aftercall=aftercall_find();aftercall_draw(w);}
+ 			else if(z=='A'){
+-				char*args[2]={(char*)com_nr_ext,(char*)ocode_extension_change};
++				quick_pack(com_nr_ext,ocode_extension_change)
+ 				int nr=command((char*)args);
+ 				if(nr>-2)wmove(w,getcury(w),getcurx(w));//ok/quit/err
+ 				else return true;
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -48,3 +48,5 @@ typedef struct{
+ #define max_path_0 max_path+1
+ 
+ #define command_return_ok 1
++
++#define comnrp_define char*
