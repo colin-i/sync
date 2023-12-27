@@ -1,0 +1,85 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x46) focal; urgency=medium
+ .
+   * find word from fix
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-27
+
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -20,7 +20,7 @@ yum install edor-*.*.rpm
+ On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
+ 
+ ## From source
+-Use autoconf automake libncurses-dev ; on armv7l(alias armhf) cpu, libunwind-dev
++Use autoconf automake libncurses-dev ; on armv7l(alias armhf) cpu, libunwind-dev. There is a "headless" build file as well.
+ ```sh
+ autoreconf -i
+ ./configure
+--- /dev/null
++++ edor-1/s/headless
+@@ -0,0 +1,10 @@
++
++#1 remove
++cp Makefile mk
++a="\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1 \-DSTDC_HEADERS=1 \-DHAVE_DIRENT_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_POLL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1 \-DUSE_FS=1"
++grep --color "${a}" mk
++sed -i "s/${a}//g" mk
++grep --color "${a}" mk
++make -f mk
++
++if [ -n "${1}" ]; then rm mk; fi
+--- edor-1.orig/s/heads
++++ /dev/null
+@@ -1,10 +0,0 @@
+-
+-#1 remove
+-cp Makefile mk
+-a="\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1 \-DSTDC_HEADERS=1 \-DHAVE_DIRENT_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_POLL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1 \-DUSE_FS=1"
+-grep --color "${a}" mk
+-sed -i "s/${a}//g" mk
+-grep --color "${a}" mk
+-make -f mk
+-
+-if [ -n "${1}" ]; then rm mk; fi
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2097,7 +2097,7 @@ static bool loopin(WINDOW*w){
+ 				if(goto_mode((char*)args,w)/*true*/)return true;
+ 			}
+ 			else if(z=='f'){if(find_mode(com_nr_findagain,w)/*true*/)return true;}
+-			else if(z=='c'){if(find_mode(6,w)/*true*/)return true;}
++			else if(z=='c'){if(find_mode(com_nr_findwordfrom,w)/*true*/)return true;}
+ 			else if(z=='u'){vis('U',w);undo_loop(w);vis(' ',w);}
+ 			else if(z=='s'){bool b=savetofile(w,false);if(b/*true*/)return true;}
+ 			else if(z=='a'){aftercall=aftercall_find();aftercall_draw(w);}
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -39,8 +39,6 @@ typedef struct{
+ 	#define com_nr_goto_numbers com_nr_goto_alt
+ #define com_nr_save 6
+ #define com_nr_ext 7
+-//#define com_nr_is_find(a) *a>=com_nr_find
+-//#define com_nr_is_find_word(a) *a>=com_nr_findword
+ 
+ #define is_word_char(a) ('0'<=a&&(a<='9'||('A'<=a&&(a<='Z'||(a=='_'||('a'<=a&&a<='z'))))))
+ 
