@@ -1,0 +1,449 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+141) xenial; urgency=medium
+ .
+   * aftercall at ounused
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-30
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 1neBDKEBlwpDL-WajhK5bLyonyBuL7hVV
++File ID: 16AJ1l28fkTsCvrfV1-xRdglpff0pU0-M
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+140.x86_64.rpm, 16AJ1l28fkTsCvrfV1-xRdglpff0pU0-M, 2023-12-30T05:54:08.472Z, https://drive.google.com/uc?id=16AJ1l28fkTsCvrfV1-xRdglpff0pU0-M&export=download
+ Found file: ocompiler-1-5+139.x86_64.rpm, 1neBDKEBlwpDL-WajhK5bLyonyBuL7hVV, 2023-12-28T13:06:09.194Z, https://drive.google.com/uc?id=1neBDKEBlwpDL-WajhK5bLyonyBuL7hVV&export=download
+ Found file: ocompiler-1-5+138.x86_64.rpm, 1GgN1yYhZSB8YL5EVERaNKtp_r6VIpTvl, 2023-12-24T11:55:41.262Z, https://drive.google.com/uc?id=1GgN1yYhZSB8YL5EVERaNKtp_r6VIpTvl&export=download
+ Found file: ocompiler-1-5+137.x86_64.rpm, 1ra0VXgFWYbvaauEEQboNbR8OMTvhegUe, 2023-12-24T04:49:39.787Z, https://drive.google.com/uc?id=1ra0VXgFWYbvaauEEQboNbR8OMTvhegUe&export=download
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -31,6 +31,10 @@ endif
+ 
+ OFLAGS+=${OFLAGSEXTRA}
+ 
++#uncomment this to not see ->     make: Circular otoc.oc.o <- otoc.oc dependency dropped.
++#${FULLOBJS}:
++#	echo something or will not work
++
+ %.o: ${FULLOBJS}
+ 	${OCOMP} $< ${OFLAGS}
+ 
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -66,6 +66,9 @@ function loop(sd input,sd output)
+ 					call dest(#pointer,output)
+ 					if main.result=(EXIT_FAILURE);break;end
+ 				end
++				if main.result=(EXIT_SUCCESS)
++					call writen(output,"}",1)
++				end
+ 			end
+ 			call free(buffer)
+ 		end
+@@ -73,7 +76,35 @@ function loop(sd input,sd output)
+ 	return main.result
+ end
+ 
+-function comment(sv *pbuffer)
++function get_char(sv pbuffer,ss pchar)
++	ss buffer;set buffer pbuffer#
++	set pchar# buffer#
++	add pbuffer# (Xfile_sz_char)
++end
++
++function get_data(sv pbuffer,sd pdata)
++	sd buffer;set buffer pbuffer#
++	set pdata# buffer#
++	add pbuffer# (Xfile_sz_int)
++end
++
++function get_string(sv pbuffer,sd psize,sv ppointer)
++	call get_data(pbuffer,psize)
++	set ppointer# pbuffer#
++	add pbuffer# psize#
++end
++
++importx "fwrite" fwrite
++
++include "function.oc"
++
++aftercall *
++
++function comment(sv pbuffer,sd outfile)
++	call write(outfile,"//",2)
++	datax sz#1;valuex pointer#1
++	call get_string(pbuffer,#sz,#pointer)
++	callret writen(outfile,pointer,sz)
+ end
+ function commentmulti(sv *pbuffer)
+ end
+@@ -84,10 +115,14 @@ function format(sv pbuffer)
+ end
+ function include(sv *pbuffer)
+ end
+-include "function.oc"
+-function functiondef(sv pbuffer)
++function functiondef(sv pbuffer,sd outfile)
++	call write(outfile,"void ",5)
++
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
++	call write(outfile,pointer,sz)
++
++	call write(outfile,"(",1)
+ 
+ 	value intern^functiondef_intern
+ 	value *raw^functiondef_intern       #functiondef_raw
+@@ -98,6 +133,8 @@ function functiondef(sv pbuffer)
+ 	sv dest^intern;add dest type
+ 	set dest dest#
+ 	call dest(pbuffer)
++
++	callret writen(outfile,"){",2)
+ end
+ function declare(sv *pbuffer)
+ end
+@@ -120,7 +157,7 @@ end
+ function continue(sv *pbuffer)
+ end
+ function end(sv *pbuffer,sd outfile)
+-	call writen(outfile,"}",1)
++	callret writen(outfile,"}",1)
+ end
+ function ret(sv *pbuffer)
+ end
+@@ -141,34 +178,19 @@ end
+ function line(sv *pbuffer)
+ end
+ 
+-function get_char(sv pbuffer,ss pchar)
+-	ss buffer;set buffer pbuffer#
+-	set pchar# buffer#
+-	add pbuffer# (Xfile_sz_char)
+-end
+-
+-function get_data(sv pbuffer,sd pdata)
+-	sd buffer;set buffer pbuffer#
+-	set pdata# buffer#
+-	add pbuffer# (Xfile_sz_int)
+-end
+-
+-function get_string(sv pbuffer,sd psize,sv ppointer)
+-	call get_data(pbuffer,psize)
+-	set ppointer# pbuffer#
+-	add pbuffer# psize#
+-end
+-
+-importx "fwrite" fwrite
+-
+ function writen(sd outfile,ss buf,sd sz)
+-	sd items;set items fwrite(buf,sz,1,outfile)
++	call write(outfile,buf,sz)
++
++	sd items;set items fwrite("\n",1,1,outfile)
+ 	if items!=1
+ 		set main.result (EXIT_FAILURE)
+-		ret
+ 	end
+-	set items fwrite("\n",1,1,outfile)
++end
++
++function write(sd outfile,ss buf,sd sz)
++	sd items;set items fwrite(buf,sz,1,outfile)
+ 	if items!=1
+ 		set main.result (EXIT_FAILURE)
++		aftercallenable
+ 	end
+ end
+--- ocompiler-1.orig/otoc/otoc.oc
++++ ocompiler-1/otoc/otoc.oc
+@@ -14,8 +14,6 @@ importx "fopen" fopen
+ importx "fclose" fclose
+ importx "strrchr" strrchr
+ 
+-include "loop.oc"
+-
+ function out_file(sd in)
+ 	ss p;set p strrchr(in,(asciidot))
+ 	if p!=(NULL)
+@@ -37,6 +35,10 @@ function out_file(sd in)
+ 	return (NULL)
+ end
+ 
++include "loop.oc"
++
++#aftercalli
++
+ entry main(sd argc,sv argv)
+ 	if argc=2
+ 		incst argv
+--- ocompiler-1.orig/src/files/actions/main.oc
++++ ocompiler-1/src/files/actions/main.oc
+@@ -114,7 +114,7 @@ While includesReg!=null
+ 						call pref_restore()
+ 					endif
+ 					if parses=(pass_init)
+-						set g_e_b_p# (FALSE)  #in case was set, for writes
++						set g_e_b_p# (global_err_notset)  #in case was set, for writes
+ 
+ 						set datasecSize datasecReg
+ 						set datasecReg 0
+--- ocompiler-1.orig/src/files/actions/main/index.oc
++++ ocompiler-1/src/files/actions/main/index.oc
+@@ -202,8 +202,8 @@ if errormsg=(noerror)
+ 			ElseIf commandset=(cDECLAREAFTERCALL)
+ 				if parses=(pass_write);Include "./index/aftercall.oc";
+ 				else;if subtype=(cAFTERCALL);add datasecReg (aftercalldeclaresize);endif
++					set g_e_b_p# (global_err_set)
+ 					Call advancecursors(pcontent,pcomsize,comsize);endelse
+-				set g_e_b_p# (TRUE)
+ 			ElseIf commandset=(cMANIPULATEAFTERCALL)
+ 				Include "./index/aftercallmanipulate.oc"
+ 			ElseIf commandset=(cCALLEX)
+--- ocompiler-1.orig/src/files/actions/main/index/aftercall.oc
++++ ocompiler-1/src/files/actions/main/index/aftercall.oc
+@@ -16,13 +16,20 @@ else
+ 				set ac_store_c content;set ac_store_s comsize
+ 				set acsym_value 0;set acsym_size (sym_with_size);set acsym_shndx (NULL)
+ 				setcall errormsg xfile_add_base_if((Xfile_aftercall_import),content,comsize)
+-				call advancecursors(pcontent,pcomsize,comsize)
++				if errormsg=(noerror)
++					set g_e_b_p# (global_err_extern)
++					if codeFnObj=(log_warn)
++						#the reason is commented when unused aftercall is logged
++						setcall errormsg addtolog_withchar_ex_atunused_handle(ac_store_c,ac_store_s,(log_import),logfile)
++					endif
++					call advancecursors(pcontent,pcomsize,comsize)
++				endif
+ 			endelse
+ 		else
+ 		#(cAFTERCALL)
+ 			setcall errormsg xfile_add_char_if((Xfile_aftercall_declare))
+ 			if errormsg=(noerror)
+-				sd ac_current_data
++				set g_e_b_p# (global_err_local)
+ 				setcall ac_current_data get_img_vdata_dataReg()  #this must be before addtosec
+ 				SetCall errormsg addtosec(#null,(aftercalldeclaresize),ptrdatasec)
+ 				if errormsg=(noerror)
+@@ -53,7 +60,6 @@ else
+ 			endif
+ 		endelse
+ 		if errormsg=(noerror)
+-			#set g_e_b_p# (TRUE)
+ 			if object=(TRUE)
+ 				set g_e_p# tableReg
+ 				if p_is_for_64_value#=(TRUE)
+--- ocompiler-1.orig/src/files/actions/main/index/aftercallmanipulate.oc
++++ ocompiler-1/src/files/actions/main/index/aftercallmanipulate.oc
+@@ -1,5 +1,5 @@
+ 
+-if g_e_b_p#=(FALSE)
++if g_e_b_p#=(global_err_notset)
+ 	set errormsg "AfterCall is not defined."
+ else
+ 	setcall errormsg xfile_add_char_if((Xfile_aftercall))
+--- ocompiler-1.orig/src/files/actions/main/index/import.oc
++++ ocompiler-1/src/files/actions/main/index/import.oc
+@@ -64,8 +64,8 @@ If errormsg=noerr
+ 					Else
+ 						SetCall errormsg fnimp_exists(content,imp_size) #it is at first pass when only fns and imports are
+ 						If errormsg=noerr
+-							if codeFnObj=(log_warn)
+-								if subtype=(cIMPORT)
++							if subtype=(cIMPORT)
++								if codeFnObj=(log_warn)
+ 									sub impquotsz impescapes
+ 									add imp_mark names
+ 									setcall errormsg addtolog_withchar_ex_atunused_handle(imp_mark,impquotsz,(log_import),logfile)
+@@ -76,7 +76,7 @@ If errormsg=noerr
+ 								if subtype=(cIMPORTX)
+ 									or import_ref_mask (x86_64bit)
+ 								endif
+-								if g_e_b_p#=(FALSE)
++								if g_e_b_p#=(global_err_notset)
+ 									or import_ref_mask (aftercallthrowlessbit)
+ 								endif
+ 
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-1/src/files/functions/actions/dataparse.oc
+@@ -161,7 +161,7 @@ function addvarreferenceorunref(sv ptrco
+ 			call stepcursors(ptrcontent,ptrsize)
+ 		elseIf typenumber!=(constantsnumber)
+ 			sd global_err_pB;setcall global_err_pB global_err_pBool()
+-			if global_err_pB#=(FALSE)
++			if global_err_pB#=(global_err_notset)
+ 				or mask (aftercallthrowlessbit)
+ 			endif
+ 		endelseif
+--- ocompiler-1.orig/src/files/functions/actions/fn.oc
++++ ocompiler-1/src/files/functions/actions/fn.oc
+@@ -104,7 +104,7 @@ Function parsefunction(data ptrcontent,d
+ 				or mask (x86_64bit)
+ 			endif
+ 			sd err_pb;setcall err_pb global_err_pBool()
+-			if err_pb#=(FALSE)
++			if err_pb#=(global_err_notset)
+ 				or mask (aftercallthrowlessbit)
+ 			endif
+ 
+@@ -524,17 +524,6 @@ function write_function_call(sd ptrdata,
+ 	return err
+ endfunction
+ 
+-#p
+-function global_err_p()
+-	data e#1
+-	return #e
+-endfunction
+-#p
+-function global_err_pBool()
+-	data bool#1
+-	return #bool
+-endfunction
+-
+ #bool
+ function is_linux_end()
+ 	sd ptrfnavailable%ptrfnavailable
+--- ocompiler-1.orig/src/files/functions/add/addtomem.oc
++++ ocompiler-1/src/files/functions/add/addtomem.oc
+@@ -10,6 +10,7 @@
+ 
+ #err
+ Function maxsectioncheck(sd a,sd pb)
++#const unreachableReg=-1
+ 	add pb# a
+ 	if pb#<0
+ 		return "Section size cannot be greater than 2 147 483 647 (0x7fFFffFF)."
+--- ocompiler-1.orig/src/files/functions/commons/vars.oc
++++ ocompiler-1/src/files/functions/commons/vars.oc
+@@ -1,4 +1,14 @@
+ 
++#p
++function global_err_p()
++	data e#1
++	return #e
++endfunction
++#p
++function global_err_pBool()
++	data bool#1
++	return #bool
++endfunction
+ 
+ #same or zero
+ function warn_or_log(sd type,sd return_value,ss symbolname,sd log_option,sd p_err,sd size)
+@@ -28,6 +38,21 @@ function warn_or_log_vars(sd return_valu
+ 	endif
+ 	return return_value
+ endfunction
++#same
++function warn_or_log_vars_full(sd return_value,ss symbolname,sd p_err,sd size,sd location)
++	#can with unreachableReg but all the logic until now was without that, so don't init ac_current_data
++	if global_err_pBool.bool=(global_err_local)
++		if location=main.ac_current_data
++			data ptrcodeFnObj%ptrcodeFnObj
++			#here is a declared aftercall and not used here, can be used in another object with aftercallimport, it's useless to warn it like a variable, will not be imported like a file/scope.variable, will be imported with the linker, can be imitated with faftercall iaftercall for ounused
++			setcall return_value warn_or_log((log_function),return_value,symbolname,ptrcodeFnObj#,p_err,size)
++			#and global_err_p at objects is not dataReg is a reference to the relocation, so ac_current_data is free
++			return return_value
++		endif
++	endif
++	setcall return_value warn_or_log_vars(return_value,symbolname,p_err,size)
++	return return_value
++endfunction
+ 
+ function vars_log(sd type,sd val,sd sz)
+ 	char dot=asciidot
+@@ -130,7 +155,7 @@ function vars_core_ref_scope(ss content,
+ 					setcall cb constants_bool((const_warn_get))
+ 					setcall returnvalue warn_or_log((log_constant),returnvalue,container,cb,warningssearch,varsize)
+ 				else
+-					setcall returnvalue warn_or_log_vars(returnvalue,container,warningssearch,varsize)
++					setcall returnvalue warn_or_log_vars_full(returnvalue,container,warningssearch,varsize,entrypoint#)
+ 				endelse
+ 				if returnvalue!=zero
+ 					Return returnvalue
+--- ocompiler-1.orig/src/files/functions/global/end.oc
++++ ocompiler-1/src/files/functions/global/end.oc
+@@ -8,7 +8,7 @@ function endfunction(sd parses)
+ 			return unexeferr
+ 		else
+ 			Set main.innerfunction (FALSE)
+-			call vars_log_reset() #to let next variables be ".var"
++			call vars_log_reset() #to let next variables be "o.var"
+ 		endelse
+ 	elseif parses=(pass_write)
+ 		sd err
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.oc
++++ ocompiler-1/src/files/functions/pref/preffuncs.oc
+@@ -16,8 +16,7 @@ Function warnings(sd p_err,sd has_named_
+ 		setcall var scopes_searchinvars(p_err,#fn_name)
+ 		If var=(NULL)
+ 			if has_named_entry=(FALSE)
+-				#call vars_log_reset()
+-				#why this? init/endfunction is already doing this.
++				call vars_log_reset() #example: it just searched function q, not having a named entry, it remains there, now here needing "v.var"
+ 
+ 				SetCall var searchinvars((NULL),0,(NULL),p_err) #,setref unused
+ 				if var!=(NULL)
+--- ocompiler-1.orig/src/files/functions/scopes.oc
++++ ocompiler-1/src/files/functions/scopes.oc
+@@ -176,7 +176,8 @@ function scopes_searchinvars(sd p_err,sv
+ 			if scope!=entrybags ##calloc was for every scope
+ 				call vars_log_set(fns,size) #more at the function
+ 			else
+-				call vars_log_reset()
++			#named entry here
++				call vars_log_reset()  #for example, will not vmain.qwe but v.qwe, same for o.qwe. it's ok at ounused, it also has a realpath there
+ 			endelse
+ 			setcall data searchinvars_scope_warn(p_err,scope)
+ 			if data!=(NULL)
+@@ -191,7 +192,6 @@ function scopes_searchinvars(sd p_err,sv
+ 	return (NULL)
+ endfunction
+ 
+-
+ function scopes_store_class()
+ 	sd ptrfunctionTagIndex%ptrfunctionTagIndex
+ 	sd scope;setcall scope scopes_get_scope(ptrfunctionTagIndex#)
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -532,3 +532,9 @@ charx xfile_sharp_comment#1
+ 
+ charx endfunction_has_write#1
+ charx endfunction_has_write_marker#1
++
++valuex ac_current_data#1
++const global_err_notset=0
++const global_err_set=1     #pass_init
++const global_err_local=1
++const global_err_extern=2  #write and search unrefs
+--- ocompiler-1.orig/src/files/inits/inits.oc
++++ ocompiler-1/src/files/inits/inits.oc
+@@ -60,7 +60,7 @@ sd p_is_for_64_value;setcall p_is_for_64
+ call val64_init()
+ 
+ #afterCall
+-vdata g_e_b_p#1;setcall g_e_b_p global_err_pBool();set g_e_b_p# (FALSE)
++vdata g_e_b_p#1;setcall g_e_b_p global_err_pBool();set g_e_b_p# (global_err_notset)
+ 
+ set warn_hidden_whitespaces_times 0
+ 
