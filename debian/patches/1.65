@@ -1,0 +1,75 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-65) bionic; urgency=medium
+ .
+   * 1 frame and log less
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2023-12-31
+
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -261,24 +261,16 @@ function swf_actionblock(sd proc,sd arg,
+         call mem_block_add(p_block,arg,arg2)
+     elseif proc=(mem_exp_part_done)
+ 		sd frames
+-		if arg=(from_show)
+-			#id is 0/spriteid
+-			call debug_show(id)
+-			setcall frames word_arg_to_dword(arg2)
+-			inc frames
+-			call dword_to_word_arg(frames,arg2)
+-		endif
++		setcall frames word_arg_to_dword(arg2)
++
+ 		sd block
+ 		set block p_block#
+ 		sd size
+ 		setcall size block_get_size(block)
+-		if size!=0
+-			if arg=(from_done)
+-				call debug_show(id)  #even if is not a ShowFrame in the swf, ffdec or player will frame index them
+-				setcall frames word_arg_to_dword(arg2)
+-				inc frames
+-				call dword_to_word_arg(frames,arg2)
+-			endif
++		if size!=0  #here is an ending from show or done with size
++			inc frames      ##even if is not a ShowFrame in the swf, is action that resides in a frame, ffdec is saying same
++			call dword_to_word_arg(frames,arg2)
++
+ 			import "write_action" write_action
+ 			sd tagsz
+ 			setcall tagsz action_size(id)
+@@ -288,7 +280,14 @@ function swf_actionblock(sd proc,sd arg,
+ 			setcall poolblock actionpool_currentblock()
+ 			call block_reset_size(poolblock)
+ 			call block_reset_size(block)
+-		endif
++		elseif arg=(from_show)  #here is an ending from show with no size
++			call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
++			inc frames
++			call dword_to_word_arg(frames,arg2)
++		elseif frames=0    #here is an ending from done with no size and no previous show
++			inc frames  ##a default frame, how was before at root, and at sprite is ok
++			call dword_to_word_arg(frames,arg2)
++		endelseif
+     else
+     #if proc==(mem_exp_get_block)
+         return p_block#
