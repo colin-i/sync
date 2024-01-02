@@ -1,0 +1,437 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-66) bionic; urgency=medium
+ .
+   * alternative action
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-01-02
+
+--- actionswf-1.orig/include/lin.h
++++ actionswf-1/include/lin.h
+@@ -6,3 +6,5 @@ const S_IRUSR=0x100;const S_IWUSR=0x80
+ const S_IRGRP=0x20;const S_IWGRP=0x10
+ const S_IROTH=0x4;const S_IWOTH=0x2
+ Const flag_pmode=S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
++
++const path_separator=Slash
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -21,7 +21,7 @@ const pointer_rest=:-DWORD
+ const void=0
+ 
+ const SEEK_SET=0
+-const SEEK_CUR=1
++#const SEEK_CUR=1
+ const SEEK_END=2
+ 
+ const block_size=0x1000
+@@ -108,3 +108,8 @@ const from_show=0
+ const from_done=1
+ 
+ const debug_none=0
++#const debug_log=0x1
++const debug_alt=0x2
++
++const max_structures=999
++const ids_str_len=3 #"999"
+--- actionswf-1.orig/include/win.h
++++ actionswf-1/include/win.h
+@@ -2,3 +2,7 @@
+ const flag_O_CREAT=0x0100;const flag_O_BINARY=0x8000
+ const flag_S_IREAD=0x100;const flag_S_IWRITE=0x80
+ Const flag_pmode=flag_S_IREAD|flag_S_IWRITE
++
++#only because it is not used in ascii.h
++Const Backslash=0x5C
++const path_separator=Backslash
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -37,7 +37,7 @@ endif
+ 
+ #this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+ #	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt
+ expitems = action swf tool ../shared/action_dllmain
+ 
+ exte=libexte.a
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -5,6 +5,8 @@ include "../include/prog.h"
+ #this has throws but for mem_exp_change and back are not required
+ import "swf_actionblock" swf_actionblock
+ 
++import "alt_action" alt_action
++import "file_get_content__resources_free" file_get_content__resources_free
+ 
+ aftercallimport ebool
+ 
+@@ -16,15 +18,29 @@ import "debug_base" debug_base
+ 
+ functionX action(ss ac)
+ #ss ac       actionscript string to be parsed
+-	call debug_base(0)
+-	call action_base(ac)
++	sd alt_ac;set alt_ac alt_action(ac,0)
++	if alt_ac!=(NULL)  #can be two action() same DoAction
++		call debug_base(0)
++		call action_base(alt_ac)
++		if alt_ac!=ac
++			call file_get_content__resources_free()
++		end
++	end
+ endfunction
+ functionXx actionf(ss buffer,ss *format)
+ #ss buffer   the buffer where to sprintf the format and the arguments
+ #ss format   the format
+ #...         % arguments here
+-	call debug_base(0)
+-	call action_format(#buffer)
++	sd alt_ac;set alt_ac alt_action(buffer,0)
++	if alt_ac!=(NULL)
++		call debug_base(0)
++		if buffer=alt_ac
++			call action_format(#buffer)
++		else
++			call action_base(alt_ac)
++			call file_get_content__resources_free()
++		end
++	end
+ endfunction
+ 
+ #sprite
+@@ -32,17 +48,31 @@ endfunction
+ functionX action_sprite(sd sprite,ss actions)
+ #sd sprite    sprite id
+ #ss actions   same as action
+-	call debug_base(sprite)
+-    call swf_actionblock((mem_exp_change),sprite)
+-    call action_base(actions)
+-    call swf_actionblock((mem_exp_change_back))
++	call swf_actionblock((mem_exp_change),sprite)  #change also for alt_action to know current frame
++	sd alt_ac;set alt_ac alt_action(actions,sprite)
++	if alt_ac!=(NULL)
++		call debug_base(sprite)
++		call action_base(alt_ac)
++		if alt_ac!=actions
++			call file_get_content__resources_free()
++		end
++	end
++	call swf_actionblock((mem_exp_change_back))
+ endfunction
+ functionXx actionf_sprite(sd sprite,ss buffer,ss *format)
+ #sd sprite    sprite id
+ #ss buffer    same as actionf
+ #ss format    same as actionf
+-	call debug_base(sprite)
+-    call swf_actionblock((mem_exp_change),sprite)
+-    call action_format(#buffer)
+-    call swf_actionblock((mem_exp_change_back))
++	call swf_actionblock((mem_exp_change),sprite)
++	sd alt_ac;set alt_ac alt_action(buffer,sprite)
++	if alt_ac!=(NULL)
++		call debug_base(sprite)
++		if buffer=alt_ac
++			call action_format(#buffer)
++		else
++			call action_base(alt_ac)
++			call file_get_content__resources_free()
++		end
++	end
++	call swf_actionblock((mem_exp_change_back))
+ endfunction
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -77,7 +77,7 @@ function cond_blocks()
+     return blocks
+ endfunction
+ function cond_blocks_at_index(sd i)
+-    data blocks_mem#brace_blocks_max
++    datax blocks_mem#brace_blocks_max
+     sd blocks^blocks_mem
+     #
+     mult i (cond_block_size)
+--- /dev/null
++++ actionswf-1/src/alt.oc
+@@ -0,0 +1,82 @@
++
++format elfobj64
++
++const R_OK=4
++
++include "../include/prog.h"
++
++importx "strrchr" strrchr
++importx "strcpy" strcpy
++importx "memcpy" memcpy
++importx "sprintf" sprintf
++importx "access" access
++importx "unlink" unlink
++importx "rmdir" rmdir
++
++import "swf_frames_pointer" swf_frames_pointer
++import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
++import "word_arg_to_dword" word_arg_to_dword
++import "mem_free" mem_free
++
++function alt_join(vstr concat_point)
++	value folder=NULL
++	add concat_point folder
++	call strcpy(concat_point,".dbg")
++	add concat_point 4;set concat_point# (path_separator)
++	inc concat_point
++end
++function alt_free()
++	if alt_join.folder!=(NULL)
++		set alt_join.concat_point# (Nullchar)
++		call rmdir(alt_join.folder)
++		call mem_free(#alt_join.folder)
++	end
++end
++
++aftercallimport ebool
++
++import "memalloc" memalloc
++
++function alt_init(sd flags,sd path,sd size)
++	and flags (debug_alt)
++	if flags=(debug_alt)
++		sd r;set r strrchr(path,(Period))
++		if r!=(NULL)
++			sub r path
++			set size r
++		end
++		sd finalsize=4+1+ids_str_len+1+5+1  #ext separator ids _ word_str_len ... null
++		add finalsize size
++
++		setcall alt_join.folder memalloc(finalsize)
++		call memcpy(alt_join.folder,path,size)
++		call alt_join(size)
++		ret
++	end
++	set alt_join.folder (NULL)
++end
++
++import "file_get_content" file_get_content
++
++function alt_action(sd orig_action,sd preid)
++	if alt_join.folder!=(NULL)
++		sw p
++		if preid!=0
++			set p swf_sprite_frames_pointer(preid)
++		else
++			set p swf_frames_pointer()
++		end
++		sd f;set f word_arg_to_dword(p)
++		inc f  ##index 0 is frame 1 at ffdec
++		call sprintf(alt_join.concat_point,"%u_%u",preid,f)
++		sd read;set read access(alt_join.folder,(R_OK))
++		if read=0
++			sd mem
++			set mem file_get_content(alt_join.folder,(NULL))
++			call unlink(alt_join.folder) #if there are two action() at one frame, the second one must not see this
++			return mem
++		end
++		return (NULL)
++	end
++	return orig_action
++end
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -14,7 +14,7 @@ function args_advance(sv p_args)
+ endfunction
+ const max_char_records=256
+ function shapewithstyle_records()
+-    char shapewithstyle_record#max_char_records
++    charx shapewithstyle_record#max_char_records
+     return #shapewithstyle_record
+ endfunction
+ 
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -120,19 +120,21 @@ aftercallimport ebool
+ import "memalloc" memalloc
+ import "f_open_mem" f_open_mem
+ import "error" error
++import "alt_init" alt_init
+ 
+ function debug_init(sd flags,sd path)
+ 	sv of%p_offsets
+ 	if flags!=(debug_none)
+ 		setcall of# memalloc(0)
+ 
+-		sd a;setcall a strlen(path)
+-		add a 5
++		sd s;setcall s strlen(path)
++		sd a=5;add a s
+ 		sd b;setcall b memalloc(a)
+ 		call sprintf(b,"%s.log",path)
+ 		sv file%p_debug_file
+ 		setcall file# f_open_mem(b,"wb")
+ 	endif
++	call alt_init(flags,path,s) #is here because need to set a default value inside
+ endfunction
+ 
+ import "f_printf" f_printf
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -73,30 +73,26 @@ function file_open(ss filepath,sd flags)
+     EndIf
+     return file
+ endfunction
++#offset
+ function file_seek(sd file,sd off,sd method)
+     sd seekint
+-    setcall seekint lseek(file,off,method)
++	setcall seekint lseek(file,off,method) #Some devices are incapable of seeking and POSIX does not specify which devices must support lseek
++	#in the rest: a normal error will be when file is to large and seeking there
+     If seekint=-1
+         vstr seekerr="File seek error"
+         call error(seekerr)
+     endif
++	return seekint
+ endfunction
+-#sz
+-function file_tell(sd file)
+-    sd sz
+-    setcall sz lseek(file,0,(SEEK_CUR))
+-    if sz=-1
+-        vstr tellerr="File tell error"
+-        call error(tellerr)
+-    endif
+-    return sz
++#offset
++function file__seek(sd file,sd method)
++	callret file_seek(file,0,method) #here return is what file_seek is returning
+ endfunction
+ #size
+ function filesize(sd file)
+-    call file_seek(file,0,(SEEK_END))
+     sd len
+-    setcall len file_tell(file)
+-    call file_seek(file,0,(SEEK_SET))
++	set len file__seek(file,(SEEK_END))
++    call file__seek(file,(SEEK_SET))
+     return len
+ endfunction
+ 
+@@ -104,15 +100,26 @@ endfunction
+ import "memalloc" memalloc
+ #mem
+ function file_get_content(ss filepath,sv p_size)  #size is a stack variable
+-    sd file
+-    setcall file file_open(filepath,(_open_read))
+-    call file_get_content__resources((TRUE),file)
+-    setcall p_size# filesize(file)
+-    sd mem
+-    setcall mem memalloc(p_size#)
+-    call file_get_content__resources((TRUE),(fd_none),mem)
+-    call file_read(file,mem,p_size#)
+-    return mem
++	sd file
++	setcall file file_open(filepath,(_open_read))
++	call file_get_content__resources((TRUE),file)
++	sd mem; ss size
++	set size filesize(file)
++	if p_size!=(NULL)
++		set p_size# size
++		setcall mem memalloc(size)
++	else
++		inc size
++		setcall mem memalloc(size)
++		dec size
++	end
++	call file_get_content__resources((TRUE),(fd_none),mem)
++	call file_read(file,mem,size)
++	if p_size=(NULL)
++		add size mem
++		set size# (Nullchar)
++	end
++	return mem
+ endfunction
+ function file_read(sd file,sd mem,sd size)
+     sd read_sz
+--- actionswf-1.orig/src/mw64d
++++ actionswf-1/src/mw64d
+@@ -1,2 +1,2 @@
+ 
+-OFLAGSEXTRA="function_name 1 nul_res_pref 1" ./makewin64 $@ && ./makewin64 linkerflags= link
++OFLAGSEXTRA="function_name 1 nul_res_pref 1" ./makewin64 $@ linkerflags=
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -268,6 +268,9 @@ function swf_actionblock(sd proc,sd arg,
+ 		sd size
+ 		setcall size block_get_size(block)
+ 		if size!=0  #here is an ending from show or done with size
++			if arg=(from_show) #example: too action() and one show here
++				call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
++			end
+ 			inc frames      ##even if is not a ShowFrame in the swf, is action that resides in a frame, ffdec is saying same
+ 			call dword_to_word_arg(frames,arg2)
+ 
+@@ -281,7 +284,7 @@ function swf_actionblock(sd proc,sd arg,
+ 			call block_reset_size(poolblock)
+ 			call block_reset_size(block)
+ 		elseif arg=(from_show)  #here is an ending from show with no size
+-			call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
++			call debug_show(id) #to keep the count of frames at debugger
+ 			inc frames
+ 			call dword_to_word_arg(frames,arg2)
+ 		elseif frames=0    #here is an ending from done with no size and no previous show
+--- actionswf-1.orig/src/tool.e.oc
++++ actionswf-1/src/tool.e.oc
+@@ -18,6 +18,8 @@ functionx freereset()
+ #               and at some frees
+ 	import "debug_free" debug_free
+ 	call debug_free()
++	import "alt_free" alt_free
++	call alt_free()
+ 	#free and set initial null/-1.....
+ 	import "swf_mem" swf_mem
+ 	call swf_mem((mem_exp_free))
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -396,9 +396,8 @@ endfunction
+ 
+ #structure ids
+ 
+-const max_structures=100
+ function struct_ids(sd proc,sd id)
+-    vdata structures#max_structures
++    vdatax structures#max_structures
+     vdata strct^structures
+     data counter=0
+     sv ac_ptr
+@@ -465,12 +464,12 @@ function struct_ids(sd proc,sd id)
+     endelse
+ endfunction
+ function struct_ids_action(sd proc,sd id)
+-    vdata action_structures#max_structures
++    vdatax action_structures#max_structures
+     sd v;setcall v struct_ids_expand(proc,id,#action_structures)
+     return v
+ endfunction
+ function struct_ids_actionpool(sd proc,sd id)
+-    vdata actionpool_structures#max_structures
++    vdatax actionpool_structures#max_structures
+     sd v;setcall v struct_ids_expand(proc,id,#actionpool_structures)
+     return v
+ endfunction
