@@ -1,0 +1,321 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-67) bionic; urgency=medium
+ .
+   * unique preids for log and button alt code
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-01-03
+
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -1,5 +1,5 @@
+ 
+-last=$(curl https://api.github.com/repos/colin-i/$(cat debian/changelog | head -1 | grep -o ^[^\ ]*)/releases/latest -s | jq .tag_name -r) && \
++last=$(curl https://api.github.com/repos/colin-i/$(cat debian/changelog | head -1 | grep -o ^[^\ ]*)/releases/latest -s | jq .tag_name -r) && echo ${last} && \
+ ~/test/debinit2 "${1}" && \
+ ~/test/keyring2 && \
+ ~/test/deb && \
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -45,34 +45,27 @@ endfunction
+ 
+ #sprite
+ 
++import "action_sprite_base" action_sprite_base
++
+ functionX action_sprite(sd sprite,ss actions)
+ #sd sprite    sprite id
+ #ss actions   same as action
+-	call swf_actionblock((mem_exp_change),sprite)  #change also for alt_action to know current frame
+-	sd alt_ac;set alt_ac alt_action(actions,sprite)
+-	if alt_ac!=(NULL)
+-		call debug_base(sprite)
+-		call action_base(alt_ac)
+-		if alt_ac!=actions
+-			call file_get_content__resources_free()
+-		end
+-	end
+-	call swf_actionblock((mem_exp_change_back))
++	call action_sprite_base(sprite,actions,(TRUE))
+ endfunction
+ functionXx actionf_sprite(sd sprite,ss buffer,ss *format)
+ #sd sprite    sprite id
+ #ss buffer    same as actionf
+ #ss format    same as actionf
+-	call swf_actionblock((mem_exp_change),sprite)
+ 	sd alt_ac;set alt_ac alt_action(buffer,sprite)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
++		call swf_actionblock((mem_exp_change),sprite)   #alt action is not using actionblock, is using swfblock
+ 		if buffer=alt_ac
+ 			call action_format(#buffer)
+ 		else
+ 			call action_base(alt_ac)
+ 			call file_get_content__resources_free()
+ 		end
++		call swf_actionblock((mem_exp_change_back))
+ 	end
+-	call swf_actionblock((mem_exp_change_back))
+ endfunction
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -198,7 +198,9 @@ function pool_size(sd id)
+     return poolsize
+ endfunction
+ 
+-
++#this has throws but for mem_exp_change and back are not required
++import "swf_actionblock" swf_actionblock
++import "file_get_content__resources_free" file_get_content__resources_free
+ 
+ 
+ 
+@@ -424,3 +426,19 @@ function action_format(sv args)
+     callex sprintf args args_nr
+     call action_base(args#)
+ endfunction
++
++import "debug_base" debug_base
++import "alt_action_base" alt_action_base
++
++function action_sprite_base(sd sprite,ss actions,sd has_frames)
++	sd alt_ac;set alt_ac alt_action_base(actions,sprite,has_frames)
++	if alt_ac!=(NULL)
++		call debug_base(sprite)
++		call swf_actionblock((mem_exp_change),sprite)  #alt action is not using actionblock, is using swfblock
++		call action_base(alt_ac)
++		if alt_ac!=actions
++			call file_get_content__resources_free()
++		end
++		call swf_actionblock((mem_exp_change_back))
++	end
++endfunction
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -59,16 +59,23 @@ end
+ import "file_get_content" file_get_content
+ 
+ function alt_action(sd orig_action,sd preid)
++	call alt_action_base(orig_action,preid,(TRUE))
++end
++function alt_action_base(sd orig_action,sd preid,sd has_frames)
+ 	if alt_join.folder!=(NULL)
+-		sw p
+-		if preid!=0
+-			set p swf_sprite_frames_pointer(preid)
++		if has_frames=(TRUE)
++			sw p
++			if preid!=0
++				set p swf_sprite_frames_pointer(preid)
++			else
++				set p swf_frames_pointer()
++			end
++			sd f;set f word_arg_to_dword(p)
++			inc f  ##index 0 is frame 1 at ffdec
++			call sprintf(alt_join.concat_point,"%u_%u",preid,f)
+ 		else
+-			set p swf_frames_pointer()
++			call sprintf(alt_join.concat_point,"%u",preid)
+ 		end
+-		sd f;set f word_arg_to_dword(p)
+-		inc f  ##index 0 is frame 1 at ffdec
+-		call sprintf(alt_join.concat_point,"%u_%u",preid,f)
+ 		sd read;set read access(alt_join.folder,(R_OK))
+ 		if read=0
+ 			sd mem
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -118,7 +118,7 @@ aftercallimport ebool
+ importx "swf_text" swf_text
+ importx "swf_shape" swf_shape
+ 
+-importx "action_sprite" action_sprite
++import "action_sprite_base" action_sprite_base
+ 
+ 
+ #shape
+@@ -380,7 +380,7 @@ function swf_button_base(sd state_def_id
+     import "new_sprite_id" new_sprite_id
+     sd id
+     setcall id new_sprite_id()
+-    call action_sprite(id,actions)
++    call action_sprite_base(id,actions,(FALSE))
+ 
+     add size (BUTTONCONDACTION_header_size)
+     addcall size action_size(id)
+@@ -406,7 +406,7 @@ function swf_button_base(sd state_def_id
+     call swf_mem_add(#BUTTONCONDACTION,(BUTTONCONDACTION_header_size))
+     call write_action(id)
+ 
+-    call free_sprite_id(id)
++    call free_sprite_id(id,ButtonId)
+     return ButtonId
+ endfunction
+ 
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -9,14 +9,6 @@ importx "memcpy" memcpy
+ #this is throwless here
+ import "struct_ids" struct_ids
+ 
+-function free_sprite_id(sd id)
+-    call struct_ids((ids_free),id)
+-#these two are ok throwless
+-    call struct_ids_action((ids_free),id)
+-    call struct_ids_actionpool((ids_free),id)
+-#
+-endfunction
+-
+ #
+ function identifiers()
+     data id#1
+@@ -93,6 +85,16 @@ aftercallimport ebool
+ 
+ 
+ 
++function free_sprite_id(sd id,sd finalId_or_containerId) #containerId for buttons
++    call struct_ids((ids_free),id)
++#these two are ok throwless
++	callg struct_ids_action((ids_free),id)
++	callg struct_ids_actionpool((ids_free),id)
++#
++	import "debug_spritedone" debug_spritedone
++	call debug_spritedone(id,finalId_or_containerId)
++endfunction
++
+ import "error" error
+ import "struct_ids_actionpool" struct_ids_actionpool
+ import "struct_ids_action" struct_ids_action
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -866,10 +866,7 @@ functionX swf_sprite_done(sd spriteid)
+ 
+     call swf_mem_add(mem,size)
+ 
+-    call free_sprite_id(spriteid)
+-
+-	import "debug_spritedone" debug_spritedone
+-	call debug_spritedone(spriteid,id)
++    call free_sprite_id(spriteid,id)
+ 
+     return id
+ endfunction
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -402,7 +402,9 @@ function struct_ids(sd proc,sd id)
+     data counter=0
+     sv ac_ptr
+     sv pointer
+-    if proc=(ids_all_free)
++	if proc=(ids_counter)
++		return counter
++	elseif proc=(ids_all_free)
+         #starting with ids_all_free:
+         #                #counter increment#, then null at ac,pools
+         #   mem_free at struct_ids_action_expand
+@@ -415,36 +417,36 @@ function struct_ids(sd proc,sd id)
+             setcall ac_ptr struct_ids_actionpool((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+         endwhile
+         return (void)
+-    elseif proc=(ids_counter)
+-        return counter
+-    endelseif
++	endelseif
+ 
+     sd ident
+-    if proc=(ids_set)
+-        set ident counter
+-    else
+-        set ident id
+-    endelse
++	if proc!=(ids_set)
++		set ident id
++	else
++		set ident counter
++	endelse
+     setcall pointer move_to_n_pointer(strct,ident)
+-    if proc=(ids_set)
+-    #id
++	if proc=(ids_get)
++		return pointer#
++	elseif proc=(ids_set)
++	#id
+         if counter=(max_structures)
+             call error("too many objects")
+         endif
+-        sv iter
+         sd newblock
+         setcall newblock def_data()
+-        set iter pointer
+-        while iter!=strct
+-        #can be in a free place
+-            sub iter :
+-            if iter#=0
+-                set iter# newblock
+-                sub iter strct
+-                div iter :
+-                return iter
+-            endif
+-        endwhile
++	#can be in a free place, but since log, that will overwrite previous ids, to keep them compressed, a solution can be two parse twice
++	#	sv iter
++	#	set iter pointer
++	#	while iter!=strct
++	#		sub iter :
++	#		if iter#=0
++	#			set iter# newblock
++	#			sub iter strct
++	#			div iter :
++	#			return iter
++	#		endif
++	#	endwhile
+         set pointer# newblock
+         #counter increment#
+         #sd c; for counter verification inside
+@@ -456,8 +458,6 @@ function struct_ids(sd proc,sd id)
+     elseif proc=(ids_get_pointer)
+         if ident>=counter;call error("Unexistent input id.");endif
+         return pointer
+-    elseif proc=(ids_get)
+-        return pointer#
+     else
+     #if proc==(ids_free)
+         call mem_free(pointer)
+@@ -475,7 +475,9 @@ function struct_ids_actionpool(sd proc,s
+ endfunction
+ function struct_ids_expand(sd proc,sd id,sd p_action_structures)
+     sv pointer;setcall pointer move_to_n_pointer(p_action_structures,id)
+-    if proc=(ids_set)
++	if proc=(ids_get)
++		return pointer#
++	elseif proc=(ids_set)
+         setcall pointer# def_data()
+     elseif proc=(ids_get_pointer)
+         #call to verify if the user input has a wrong id
+@@ -483,8 +485,6 @@ function struct_ids_expand(sd proc,sd id
+         if id>=c;call error("Unregistered input id.");endif
+         #
+         return pointer
+-    elseif proc=(ids_get)
+-        return pointer#
+     else
+     #if proc==(ids_free)
+         call mem_free(pointer)
