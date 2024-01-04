@@ -1,0 +1,263 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-68) bionic; urgency=medium
+ .
+   * remove useless else
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-01-04
+
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -18,8 +18,6 @@ const QWORD=8
+ 
+ const pointer_rest=:-DWORD
+ 
+-const void=0
+-
+ const SEEK_SET=0
+ #const SEEK_CUR=1
+ const SEEK_END=2
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -512,7 +512,7 @@ function action_code_continue()
+             #
+             call add_dummy_jump()
+             call resolve_dummy_jump(off_to_jump)
+-            return (void)
++            ret
+         endif
+         dec counter
+     endwhile
+@@ -773,22 +773,22 @@ function action_one_command(ss command)
+     setcall compare strcmp("null",command)
+     if compare=0
+         call action_push((ap_Null),-1)
+-        return (void)
++        ret
+     endif
+     setcall compare strcmp("undefined",command)
+     if compare=0
+         call action_push((ap_Undefined),-1)
+-        return (void)
++        ret
+     endif
+     setcall compare strcmp("true",command)
+     if compare=0
+         call action_push((ap_Boolean),1,-1)
+-        return (void)
++        ret
+     endif
+     setcall compare strcmp("false",command)
+     if compare=0
+         call action_push((ap_Boolean),0,-1)
+-        return (void)
++        ret
+     endif
+     call action_get_one(command)
+ endfunction
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -770,7 +770,7 @@ endfunction
+ function action_code_take(ss ac)
+     sd b;setcall b numeric_code(ac)
+     if b=(TRUE)
+-        return (void)
++        ret
+     endif
+     ss test
+     setcall test action_code_membersplit(ac)
+@@ -1107,7 +1107,7 @@ function brace_blocks_remove_write_loopI
+         if ifoffset=0
+             #also remove the type of loop
+             call brace_blocks_counter_dec()
+-            return (void)
++            ret
+         endif
+         call write_forward_offset(ifoffset)
+     endwhile
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -145,7 +145,7 @@ function action_error()
+     sd p_action_errors
+     setcall p_action_errors action_debug((TRUE))
+     if p_action_errors#=(FALSE)
+-        return (void)
++        ret
+     endif
+ 
+     vstr ac#1
+@@ -368,7 +368,7 @@ import "error" error
+ import "forward_values_expand" forward_values_expand
+ function action_member_write(ss member)
+     const dup_member=256
+-    char dup_data#dup_member
++    charx dup_data#dup_member
+     vstr code^dup_data
+     sd len
+     setcall len strlen(member)
+--- actionswf-1.orig/src/bits.oc
++++ actionswf-1/src/bits.oc
+@@ -114,7 +114,7 @@ function matrix_translate(sv p_dest,sd p
+         if y=0
+             set matrix 0
+             set p_size# 1
+-            return (void)
++            ret
+         endif
+     endif
+     sd NBits
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -153,7 +153,7 @@ function shape_records_add(sd p_dest_pos
+         call shape_records_bits(flags,5,p_dest_pos)
+         if flags=0
+         #EndShapeRecord
+-            return (void)
++            ret
+         endif
+         #StateMoveTo
+         call shape_records_add_moveto(p_dest_pos,flags,p_args)
+@@ -176,14 +176,14 @@ function shape_records_add(sd p_dest_pos
+             setcall f_l_bits NumFill_NumLin(1,(FALSE))
+             call shape_records_bits(1,f_l_bits,p_dest_pos)
+         endif
+-        return (void)
++        ret
+     endif
+     call shape_records_add_edge(p_dest_pos,p_args)
+ endfunction
+ function shape_records_add_moveto(sd p_dest_pos,sd flags,sd p_args)
+     and flags (StateMoveTo)
+     if flags=0
+-        return (void)
++        ret
+     endif
+     sd x
+     setcall x args_advance(p_args)
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -133,12 +133,12 @@ endfunction
+ 
+ function file_write(sd file,sd buffer,sd size)
+     if size=0
+-        return (void)
++        ret
+     endif
+     sd len
+     setcall len write(file,buffer,size)
+     if len=size
+-        return (void)
++        ret
+     endif
+     vstr er="File write error"
+     call error(er)
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -116,7 +116,7 @@ function swf_mem(sd proc,sd arg,sd len)
+     if proc=(mem_exp_change_back)
+         set id swf_frames_reg.main_id
+         set call_struct c_main
+-        return (void)
++        ret
+     elseif proc=(mem_exp_init)
+     #arg is file
+     #len is filelength offset
+@@ -141,7 +141,7 @@ function swf_mem(sd proc,sd arg,sd len)
+         #
+         set filelength_offset len
+         #
+-        return (void)
++        ret
+     elseif proc=(mem_exp_free)
+         if path_mem!=(NULL)
+             #0
+@@ -159,7 +159,7 @@ function swf_mem(sd proc,sd arg,sd len)
+                 call file_close(#file_out)
+             endif
+         endif
+-        return (void)
++        ret
+     endelseif
+     if path_mem=(NULL)
+     #swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+@@ -239,7 +239,7 @@ function swf_actionblock(sd proc,sd arg,
+         #
+         setcall poolid actionpoolid()
+         set poolid# id
+-        return (void)
++        ret
+     elseif proc=(mem_exp_change_back)
+         set id id_back
+         #
+@@ -247,7 +247,7 @@ function swf_actionblock(sd proc,sd arg,
+         setcall root_poolid actionpoolid_root()
+         setcall poolid actionpoolid()
+         set poolid# root_poolid#
+-        return (void)
++        ret
+     elseif proc=(mem_exp_init)
+         set id arg
+         set id_back id
+@@ -255,7 +255,7 @@ function swf_actionblock(sd proc,sd arg,
+         call struct_ids_actionpool((ids_set),id)
+         sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# id
+         sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# id
+-        return (void)
++        ret
+     endelseif
+     sv p_block
+     setcall p_block struct_ids_action((ids_get_pointer),id)
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -397,7 +397,7 @@ endfunction
+ #structure ids
+ 
+ function struct_ids(sd proc,sd id)
+-    vdatax structures#max_structures
++    vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures
+     vdata strct^structures
+     data counter=0
+     sv ac_ptr
+@@ -416,7 +416,7 @@ function struct_ids(sd proc,sd id)
+             setcall ac_ptr struct_ids_action((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+             setcall ac_ptr struct_ids_actionpool((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+         endwhile
+-        return (void)
++        ret
+ 	endelseif
+ 
+     sd ident
+@@ -458,10 +458,11 @@ function struct_ids(sd proc,sd id)
+     elseif proc=(ids_get_pointer)
+         if ident>=counter;call error("Unexistent input id.");endif
+         return pointer
+-    else
+-    #if proc==(ids_free)
+-        call mem_free(pointer)
+-    endelse
++	endelseif
++	#else
++	#if proc==(ids_free)
++	call mem_free(pointer)
++	#endelse
+ endfunction
+ function struct_ids_action(sd proc,sd id)
+     vdatax action_structures#max_structures
