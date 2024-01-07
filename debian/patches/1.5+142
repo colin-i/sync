@@ -1,0 +1,487 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+142) xenial; urgency=medium
+ .
+   * garbage code
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-01-07
+
+--- ocompiler-1.orig/old
++++ ocompiler-1/old
+@@ -1,5 +1,6 @@
+-File ID: 16AJ1l28fkTsCvrfV1-xRdglpff0pU0-M
++File ID: 1y1hyR5Lj9M2p0Yz65U553nCxlbX2NlpS
+ [{'id': 'anyoneWithLink', 'type': 'anyone', 'kind': 'drive#permission', 'role': 'reader', 'allowFileDiscovery': False}, {'id': '04979898612943849512', 'type': 'user', 'kind': 'drive#permission', 'role': 'owner'}]
++Found file: ocompiler-1-5+141.x86_64.rpm, 1y1hyR5Lj9M2p0Yz65U553nCxlbX2NlpS, 2024-01-07T11:47:00.292Z, https://drive.google.com/uc?id=1y1hyR5Lj9M2p0Yz65U553nCxlbX2NlpS&export=download
+ Found file: ocompiler-1-5+140.x86_64.rpm, 16AJ1l28fkTsCvrfV1-xRdglpff0pU0-M, 2023-12-30T05:54:08.472Z, https://drive.google.com/uc?id=16AJ1l28fkTsCvrfV1-xRdglpff0pU0-M&export=download
+ Found file: ocompiler-1-5+139.x86_64.rpm, 1neBDKEBlwpDL-WajhK5bLyonyBuL7hVV, 2023-12-28T13:06:09.194Z, https://drive.google.com/uc?id=1neBDKEBlwpDL-WajhK5bLyonyBuL7hVV&export=download
+ Found file: ocompiler-1-5+138.x86_64.rpm, 1GgN1yYhZSB8YL5EVERaNKtp_r6VIpTvl, 2023-12-24T11:55:41.262Z, https://drive.google.com/uc?id=1GgN1yYhZSB8YL5EVERaNKtp_r6VIpTvl&export=download
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -106,7 +106,12 @@ function comment(sv pbuffer,sd outfile)
+ 	call get_string(pbuffer,#sz,#pointer)
+ 	callret writen(outfile,pointer,sz)
+ end
+-function commentmulti(sv *pbuffer)
++function commentmulti(sv pbuffer,sd outfile)
++	call write(outfile,"/*",2)
++	datax sz#1;valuex pointer#1
++	call get_string(pbuffer,#sz,#pointer)
++	call write(outfile,pointer,sz)
++	callret writen(outfile,"*/",2)
+ end
+ function commentlineend(sv *pbuffer)
+ end
+--- ocompiler-1.orig/src/files/actions/main.oc
++++ ocompiler-1/src/files/actions/main.oc
+@@ -66,10 +66,10 @@ While includesReg!=null
+ 				Data printbuffer#1
+ 
+ 				if totalnewlines=0
+-					setcall printbuffer printbuf("%s File %s, Row %u, Column %u",errormsg,cursorforincludes,2,lineoffile,columnoffile)
++					setcall printbuffer printbuf("%s File %s , Row %u , Column %u",errormsg,cursorforincludes,2,lineoffile,columnoffile)
+ 				else
+ 				#first textlinestart is lost at multilines command
+-					setcall printbuffer printbuf("%s File %s, Row %u",errormsg,cursorforincludes,1,lineoffile)
++					setcall printbuffer printbuf("%s File %s , Row %u",errormsg,cursorforincludes,1,lineoffile)
+ 				endelse
+ 				If printbuffer=null
+ 					Call errexit()
+--- ocompiler-1.orig/src/files/actions/main/index.oc
++++ ocompiler-1/src/files/actions/main/index.oc
+@@ -147,7 +147,7 @@ if errormsg=(noerror)
+ 					endelse
+ 				endif
+ 			else
+-				set endfunction_has_write_marker (TRUE)  #why to loss space and write in every command when can write a default
++				set ret_cont_break_marker (FALSE)  #why to loss space and write in every command when can write a default
+ 			endelse
+ 			if commandset=(cCOMMENT)
+ 				Call advancecursors(pcontent,pcomsize,comsize)
+@@ -243,7 +243,7 @@ if errormsg=(noerror)
+ 
+ 					Set fnavailable zero
+ 				else
+-					set endfunction_has_write endfunction_has_write_marker ##this is relevant only at pass_write
++					set ret_cont_break ret_cont_break_marker ##this is relevant only at pass_write
+ 				Endelse
+ 
+ 				If comsize!=zero
+--- ocompiler-1.orig/src/files/actions/main/index/conditions.oc
++++ ocompiler-1/src/files/actions/main/index/conditions.oc
+@@ -42,4 +42,5 @@ Elseif parses=(pass_write)
+ 			setcall errormsg continue()
+ 		EndIf
+ 	EndElse
++	set ret_cont_break_marker (TRUE)
+ endelseif
+--- ocompiler-1.orig/src/files/actions/main/index/function.oc
++++ ocompiler-1/src/files/actions/main/index/function.oc
+@@ -4,7 +4,7 @@ If innerfunction=true
+ 	Str ptrfinf^finferr
+ 	Set errormsg ptrfinf
+ ElseIf programentrypoint!=codesecReg
+-	Char funcafterentry="Unavailable FUNCTION/ENTRY[...] statement; The start address was at File: %s; Line: %s."
++	Char funcafterentry="Unavailable FUNCTION/ENTRY[...] statement; The start address was at File: %s ; Line: %s." #ending dot is ok here, another text is coming then
+ 	Str fnafteren^funcafterentry
+ 
+ 	call dwtomem(entrylinenumber,uint32s)
+--- ocompiler-1.orig/src/files/functions/argument/argument.oc
++++ ocompiler-1/src/files/functions/argument/argument.oc
+@@ -45,7 +45,7 @@ function argument_return(sd termswitch,s
+ 	call setimm()
+ 	Set pop# (moveatprocthemem)
+ 	Set pregprepare_bool# (TRUE)
+-	set main.endfunction_has_write_marker (FALSE)
++	set main.ret_cont_break_marker (TRUE)
+ 
+ 	if termswitch=(TRUE)
+ 		data ebxregnumber=ebxregnumber
+--- ocompiler-1.orig/src/files/functions/commands/cond.oc
++++ ocompiler-1/src/files/functions/commands/cond.oc
+@@ -1,4 +1,13 @@
+ 
++const condpack_codereg=dwsz
++const condpack_number=dwsz
++const condpack_whilebegin=dwsz    #this is a coderegpart
++const condpack_ifinscribe=dwsz    #this a numberpart
++const condpack_elseinscribe=dwsz      #same
++const condpacksize=condpack_codereg+condpack_number
++const elseinscribe_write=0
++const elseinscribe_skip=1
++
+ #err
+ Function coderegtocondloop()
+ 	Data codesec%%ptr_codesec
+@@ -9,9 +18,8 @@ Function coderegtocondloop()
+ 
+ 	Data err#1
+ 	Data condloopsec%%ptr_conditionsloops
+-	Data dsz=dwsz
+ 
+-	SetCall err addtosec(ptrcodeReg,dsz,condloopsec)
++	SetCall err addtosec(ptrcodeReg,(condpack_codereg),condloopsec)
+ 	Return err
+ EndFunction
+ 
+@@ -26,10 +34,9 @@ Function condbeginwrite(data condnumber)
+ 	EndIf
+ 
+ 	Data condloopsec%%ptr_conditionsloops
+-	Data dsz=dwsz
+ 
+ 	Data ptrcondnumber^condnumber
+-	SetCall err addtosec(ptrcondnumber,dsz,condloopsec)
++	SetCall err addtosec(ptrcondnumber,(condpack_number),condloopsec)
+ 	Return err
+ EndFunction
+ 
+@@ -60,7 +67,7 @@ Function checkcondloopclose()
+ 	Call getcontReg(condloop,ptrregnr)
+ 	Data zero=0
+ 	If regnr!=zero
+-		Char closeerr="All conditions/loops within a scope most be closed."
++		Char closeerr="All conditions/loops within a scope must be closed."
+ 		Str _closeerr^closeerr
+ 		Return _closeerr
+ 	EndIf
+@@ -117,19 +124,26 @@ Function condend(data number)
+ 
+ 	sd err;setcall err condendtest(#structure,number,codeoffset)
+ 	if err=(noerror)
+-		If number=whilenr
++		if number=(elsenumber)
++			sd marker;set marker structure
++			sub structure (condpack_elseinscribe) #to match for ptrcReg
++			if main.parses=(pass_write)
++				if structure#=(elseinscribe_write)
++					call condendwrite(marker,codeoffset)
++				endif
++			endif
++		elseIf number=whilenr
+ 			if main.parses=(pass_write)
+ 				setcall err jumpback(codeoffset,structure)
+ 				If err!=(noerror)
+ 					Return err
+ 				EndIf
++				call condendwrite(structure,codeoffset)
+ 			endif
+-			add reg (dwsz)   #to match for ptrcReg
+-		EndIf
+-
+-		if main.parses=(pass_write)
++			sub structure (condpack_whilebegin)   #to match for ptrcReg
++		elseif main.parses=(pass_write)
+ 			call condendwrite(structure,codeoffset)
+-		endif
++		EndelseIf
+ 
+ 		sub reg structure
+ 		Sub ptrcReg# reg
+@@ -147,9 +161,9 @@ function condendtest(sv p_conds,sd numbe
+ 	while 1=1
+ 		Data lastcondition#1
+ 
+-		sub conds (dwsz)
++		sub conds (condpack_number)
+ 		Set lastcondition conds#
+-		sub conds (dwsz)
++		sub conds (condpack_codereg)
+ 
+ 		if lastcondition=(breaknumber)
+ 			if number=(whilenumber)
+@@ -161,28 +175,36 @@ function condendtest(sv p_conds,sd numbe
+ 			Return _difcloseerr
+ 		else
+ 			if number!=(whilenumber)
+-				sub last (2*dwsz)
+-				if conds!=last
++				sub last (condpacksize)
++				if conds!=last   ##here are breaks
+ 					#move it to last to match the reg set outside
+-					#and move ifinscribe if it is the case
++					#and move ifinscribe/elseinscribe if it is the case
+ 					#ignore type, it will only be removed outside
+ 					#don't increase size to align ifinscribe and just swap
+ 
+ 					sd cursor;set cursor conds
+-					sub cursor (dwsz)
++					sub cursor (condpack_number)
+ 					sd size
++					set size (condpack_codereg)
+ 					if cursor#=(ifinscribe)
+-						set size (2*dwsz)
++						add size (condpack_ifinscribe)
++					elseif number=(elsenumber)
++						add size (condpack_elseinscribe)
++						sd test;set test cursor
++						sub test (condpack_elseinscribe)
++						if test#=(ifinscribe) #need to get also ifinscribe, it will be closed in conditionscondend
++							sub cursor (condpack_ifinscribe)
++							add size (condpack_ifinscribe)
++						endif
+ 					else
+-						set size (dwsz)
+-						add cursor (dwsz)
++						add cursor (condpack_number)
+ 					endelse
+-					sd aux#2
++					sd aux#3
+ 					call memtomem(#aux,cursor,size)
+ 					while conds!=last
+-						add conds (2*dwsz)
+-						call memtomem(cursor,conds,(2*dwsz))
+-						add cursor (2*dwsz)
++						add conds (condpacksize)
++						call memtomem(cursor,conds,(condpacksize))
++						add cursor (condpacksize)
+ 					endwhile
+ 					call memtomem(cursor,#aux,size)
+ 				endif
+@@ -211,7 +233,7 @@ endfunction
+ 
+ #err
+ function jumpback(sd codeoffset,sd condstruct)
+-	sub condstruct (dwsz)
++	sub condstruct (condpack_codereg)
+ 	sub codeoffset condstruct#
+ 	neg codeoffset
+ 	sd err
+@@ -226,20 +248,14 @@ Function conditionscondend(data close1,d
+ 
+ 	setcall err xfile_add_end_ifif()
+ 	if err=(noerror)
+-		Data loop#1
+-		Data loopini=1
+-		Data loopstop=0
+-		Set loop loopini
+-
+ 		Data number#1
+ 		Set number close1
+ 
+ 		Data ifnr=ifnumber
+ 		Data elsenr=elsenumber
+ 		Data structure%%ptr_conditionsloops
+-		Data dsz=dwsz
+ 
+-		While loop=loopini
++		While 1=1
+ 			SetCall err condend(number)
+ 			If err!=noerr
+ 				Return err
+@@ -252,14 +268,14 @@ Function conditionscondend(data close1,d
+ 					if c=(ifinscribe)
+ 						call Message("Warning: ENDELSEIF not matching IF")
+ 					endif
+-				Else
+-					Set loop loopstop
+-				EndElse
++					continue
++				endif
++				break
+ 			EndIf
+ 			If number=elsenr
+ 				setcall c prevcond()
+ 				if c=(ifinscribe)
+-					Set loop loopstop
++					break
+ 				endif
+ 			EndIf
+ 		EndWhile
+@@ -269,7 +285,7 @@ Function conditionscondend(data close1,d
+ 		Call getptrcontReg(structure,ptrptrReg)
+ 		Data Reg#1
+ 		Set Reg ptrReg#
+-		Sub Reg dsz
++		Sub Reg (condpack_ifinscribe)
+ 		Set ptrReg# Reg
+ 	endif
+ 	Return err
+@@ -278,7 +294,7 @@ function prevcond()
+ 	vData cl#1
+ 	vData structure%%ptr_conditionsloops
+ 	Call getcontplusReg(structure,#cl)
+-	Sub cl (dwsz)
++	Sub cl (condpack_number)
+ 	return cl#
+ endfunction
+ 
+@@ -287,11 +303,12 @@ Function closeifopenelse()
+ 	Data noerr=noerror
+ 
+ 	if main.parses=(pass_write)
+-		Data number=0
+-		SetCall err condjump(number)
+-		If err!=noerr
+-			Return err
+-		EndIf
++		if main.ret_cont_break=(FALSE)
++			SetCall err condjump(0)
++			If err!=noerr
++				Return err
++			EndIf
++		endif
+ 	endif
+ 	Data ifnr=ifnumber
+ 	SetCall err condend(ifnr)
+@@ -301,8 +318,21 @@ Function closeifopenelse()
+ 
+ 	setcall err xfile_add_char_ifif((Xfile_else))
+ 	if err=(noerror)
+-		Data elsenr=elsenumber
+-		SetCall err condbeginwrite(elsenr)
++		#this for unreachable else jumps bool
++		vData structure%%ptr_conditionsloops
++		if main.ret_cont_break=(FALSE)
++			data e1=elseinscribe_write
++			setcall err addtosec(#e1,(condpack_elseinscribe),structure)
++			if err=(noerror)
++				Data elsenr=elsenumber
++				SetCall err condbeginwrite(elsenr)
++			endif
++		else
++			data e2=elseinscribe_skip
++			data *ignored codesection index#1
++			data *nr=elsenumber
++			setcall err addtosec(#e2,(condpack_elseinscribe+condpacksize),structure)
++		endelse
+ 	endif
+ 	Return err
+ EndFunction
+@@ -318,10 +348,10 @@ function continue()
+ 		add structure regnr
+ 		while start!=structure
+ 			sd type
+-			sub structure (dwsz)
++			sub structure (condpack_number)
+ 			set type structure#
+ 			if type!=(ifinscribe)
+-				sub structure (dwsz)
++				sub structure (condpack_codereg)
+ 				if type=(whilenumber)
+ 					vdata ptrcodesec%%ptr_codesec
+ 					sd codeoffset
+@@ -330,6 +360,9 @@ function continue()
+ 					sd err;setcall err jumpback(codeoffset,structure)
+ 					return err
+ 				endif
++				if type=(elsenumber)
++					sub structure (condpack_elseinscribe)
++				endif
+ 			endif
+ 		endwhile
+ 	endif
+@@ -347,10 +380,10 @@ function break()
+ 		add structure regnr
+ 		while start!=structure
+ 			sd type
+-			sub structure (dwsz)
++			sub structure (condpack_number)
+ 			set type structure#
+ 			if type!=(ifinscribe)
+-				sub structure (dwsz)
++				sub structure (condpack_codereg)
+ 				if type=(whilenumber)
+ 					sd err
+ 					SetCall err condjump(0)
+@@ -359,6 +392,9 @@ function break()
+ 					endif
+ 					Return err
+ 				endif
++				if type=(elsenumber)
++					sub structure (condpack_elseinscribe)
++				endif
+ 			endif
+ 		endwhile
+ 	endif
+@@ -383,9 +419,9 @@ function prev_cond(sd psecond)
+ 		return (nocondnumber) #function
+ 	endif
+ 	call getcontplusReg(condloop,#structure)
+-	sub structure (dwsz)
++	sub structure (condpack_number)
+ 	while structure#=(breaknumber)
+-		sub structure (2*dwsz)
++		sub structure (condpacksize)
+ 	endwhile
+ 	if structure#=(whilenumber)
+ 		return (whilenumber)
+@@ -394,10 +430,11 @@ function prev_cond(sd psecond)
+ 		set psecond# (nocondnumber)
+ 		return (elsenumber)
+ 	endif
+-	sub structure (2*dwsz)
++	sub structure (condpacksize)
+ 	if structure#=(ifinscribe)
+ 		set psecond# (nocondnumber)
+ 	else
++	#structure#=(elsenumber)
+ 		set psecond# (elsenumber)
+ 	endelse
+ 	return (ifnumber) #if,elseif
+--- ocompiler-1.orig/src/files/functions/commands/ret.oc
++++ ocompiler-1/src/files/functions/commands/ret.oc
+@@ -16,7 +16,7 @@ function writeret()
+ 		setcall continuationsize getreturn(#continuation)
+ 		setcall err addtosec(continuation,continuationsize,ptrcodesec)
+ 	endelse
+-	set main.endfunction_has_write_marker (FALSE)
++	set main.ret_cont_break_marker (TRUE)
+ 	return err
+ endfunction
+ 
+--- ocompiler-1.orig/src/files/functions/global/end.oc
++++ ocompiler-1/src/files/functions/global/end.oc
+@@ -16,7 +16,7 @@ function endfunction(sd parses)
+ 		if err=(noerror)
+ 			setCall err checkcondloopclose()
+ 			If err=(noerror)
+-				if main.endfunction_has_write=(TRUE)
++				if main.ret_cont_break=(FALSE)
+ 					data ptrreturn#1
+ 					data sizereturn#1
+ 					data ptrptrreturn^ptrreturn
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -530,8 +530,8 @@ data xbool#1
+ data xfile#1
+ charx xfile_sharp_comment#1
+ 
+-charx endfunction_has_write#1
+-charx endfunction_has_write_marker#1
++charx ret_cont_break#1
++charx ret_cont_break_marker#1
+ 
+ valuex ac_current_data#1
+ const global_err_notset=0
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -15,9 +15,7 @@ const Xfile_action=7
+ const Xfile_action2=8
+ const Xfile_call=9
+ const Xfile_callex=10
+-#
+-#Const ifinscribe=-1
+-#Const nocondnumber=-1
++#Const ifinscribe=-1; #Const nocondnumber=-1; const elseinscribe_write=0; const elseinscribe_skip=1
+ const Xfile_if=11
+ const Xfile_else=12
+ const Xfile_while=13
