@@ -1,0 +1,247 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-jammy16) jammy; urgency=medium
+ .
+   * resizable
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-01-28
+
+--- torra-1.orig/README.md
++++ torra-1/README.md
+@@ -25,7 +25,7 @@ pip3 install torra
+ 
+ ## From source
+ Using libtorrent (arvidn) with python bindings (example: python3-libtorrent, or unofficial binaries python package python-libtorrent-bin).\
+-libgtk-4.so.1 required.\
++Other requirements are libgtk-4.so.1 and python3-appdirs.\
+ With setup.py or the other python setup script.
+ 
+ ## [Info](https://github.com/colin-i/tora/blob/master/info.md)
+--- torra-1.orig/torra/confs.py
++++ torra-1/torra/confs.py
+@@ -38,7 +38,7 @@ def write_opt(window):
+ 		json.dump(dict, write_file)
+ 
+ def read_opt(window):
+-	global width#used at columns
++	#global width#used at columns
+ 	try:
+ 		with open(configs_filename) as f:
+ 			dict=json.load(f)
+@@ -46,8 +46,11 @@ def read_opt(window):
+ 			k.gtk_test_widget_wait_for_draw(window)  #widget_get_width and maximize without this? no
+ 			if dict['max']:
+ 				k.gtk_window_maximize(window)
+-			width=-2 if dict['min'] else -1
+-			#
++
++			#width=-2 if dict['min'] else -1
++			if dict['min']:
++				k.gtk_window_minimize(window)
++
+ 			a=dict['download_folder'].encode()
+ 			k.gtk_entry_buffer_set_text(sets.fold_bf,a,-1)
+ 			ratio.restore(dict)
+@@ -55,4 +58,5 @@ def read_opt(window):
+ 			log.restore(dict)
+ 			cons.restore(dict)
+ 	except Exception:
+-		width=0
++		pass
++	#	width=0
+--- torra-1.orig/torra/gtk.py
++++ torra-1/torra/gtk.py
+@@ -47,8 +47,8 @@ os.environ['PATH'] = path_to_deps + os.p
+ lib_gtk_name="libgtk-4.so.1"
+ k = cdll.LoadLibrary(lib_gtk_name)
+ 
+-#restype default is C int
+-#argtypes no default. c_void_p is python int. pointers must be announced
++#By default functions are assumed to return the C int type. Other return types can be specified by setting the restype attribute of the function object.
++#argtypes no default. c_void_p is python int. pointers must be announced on ARM.
+ #variadics are troubles
+ 
+ def gtk_tree_model_get(a,b,i1,p1):
+@@ -162,11 +162,13 @@ k.gtk_tree_sortable_set_sort_column_id.a
+ k.gtk_tree_view_get_selection.restype=c_void_p
+ k.gtk_tree_view_get_selection.argtypes = [c_void_p]
+ k.gtk_tree_view_append_column.argtypes = [c_void_p,c_void_p]
++#TVC
+ k.gtk_tree_view_column_new_with_attributes.restype=c_void_p
+ k.gtk_tree_view_column_new_with_attributes.argtypes = [c_void_p,c_void_p,c_void_p,c_int,c_void_p]
+ k.gtk_tree_view_column_set_clickable.argtypes=[c_void_p,c_int]
+-k.gtk_tree_view_column_set_fixed_width.argtypes = [c_void_p,c_int]
++k.gtk_tree_view_column_set_expand.argtypes=[c_void_p,c_int]
+ k.gtk_tree_view_column_set_resizable.argtypes = [c_void_p,c_int]
++#
+ k.gtk_tree_view_new_with_model.restype=c_void_p
+ k.gtk_tree_view_new_with_model.argtypes = [c_void_p]
+ k.gtk_tree_view_set_activate_on_single_click.argtypes = [c_void_p,c_int]
+@@ -191,4 +193,4 @@ k.gtk_window_maximize.argtypes=[c_void_p
+ k.gtk_window_minimize.argtypes=[c_void_p]
+ k.gtk_window_set_child.argtypes = [c_void_p,c_void_p]
+ k.gtk_window_set_default_size.argtypes=[c_void_p,c_int,c_int]
+-k.gtk_window_set_title.argtypes=[c_void_p,c_void_p]
+\ No newline at end of file
++k.gtk_window_set_title.argtypes=[c_void_p,c_void_p]
+--- torra-1.orig/torra/layout.py
++++ torra-1/torra/layout.py
+@@ -34,22 +34,23 @@ def header_click(ix):
+ 		k.gtk_tree_sortable_set_sort_column_id(sort,ix,gtk.GtkSortType.GTK_SORT_ASCENDING)
+ 	else:
+ 		k.gtk_tree_sortable_set_sort_column_id(sort,ix,gtk.GtkSortType.GTK_SORT_DESCENDING)
+-def columns_add(tree,n,i,w):
++def columns_add(tree,n,i):
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(n, renderer, b"text", i, None)
+ 	k.g_signal_connect_data(column,b"clicked",header_click,i,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	k.gtk_tree_view_column_set_clickable(column,True)
+-	k.gtk_tree_view_append_column(tree, column)
+ 	k.gtk_tree_view_column_set_resizable(column,True)
+-	if(w>0):
+-		k.gtk_tree_view_column_set_fixed_width(column,w)
+-def columns(tree,w):#gtk_window_remembered_size is forcing *height=priv->height
+-	w=int(w/COLUMNS.n)      #to shrink window size, it is required to move them manually, then resize
+-	columns_add(tree,b"Name",COLUMNS.NAME,w)
+-	columns_add(tree,b"Path",COLUMNS.PATH,w)
+-	columns_add(tree,b"Uploaded",COLUMNS.UP,w)
+-	columns_add(tree,b"Downloaded",COLUMNS.DOWN,w)
+-	columns_add(tree,b"Ratio",COLUMNS.RATIO,w)
++	k.gtk_tree_view_column_set_expand(column,True)
++	k.gtk_tree_view_append_column(tree, column)
++	#if(w>0):
++	#	k.gtk_tree_view_column_set_fixed_width(column,w)
++def columns(tree):#,w #gtk_window_remembered_size is forcing *height=priv->height
++	#w=int(w/COLUMNS.n)      #to shrink window size, it is required to move them manually, then resize
++	columns_add(tree,b"Name",COLUMNS.NAME)
++	columns_add(tree,b"Path",COLUMNS.PATH)
++	columns_add(tree,b"Uploaded",COLUMNS.UP)
++	columns_add(tree,b"Downloaded",COLUMNS.DOWN)
++	columns_add(tree,b"Ratio",COLUMNS.RATIO)
+ 
+ @gtk.CALLBACK
+ def add(window):
+@@ -85,7 +86,7 @@ def layout(window):
+ 	global treeV
+ 	treeV=k.gtk_tree_view_new_with_model(sort)
+ 	k.g_object_unref(sort)
+-	columns(treeV,confs.width)
++	columns(treeV) #,confs.width
+ 	listtor.read(list,window)
+ 	if k.gtk_tree_model_iter_n_children(list,None)>0:
+ 		next.ini(treeV)
+@@ -97,7 +98,7 @@ def layout(window):
+ 	lst=overall.ini(colsdef())
+ 	tree=k.gtk_tree_view_new_with_model(lst)
+ 	k.g_object_unref(lst)
+-	columns(tree,confs.width)
++	columns(tree) #,confs.width
+ 	#
+ 	box=k.gtk_box_new(gtk.GtkOrientation.GTK_ORIENTATION_VERTICAL,0)
+ 	k.gtk_box_append(box,bx)
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -31,11 +31,13 @@ def activate(app):
+ 	k.g_signal_connect_data (window, b"close-request", closing, None, None, 0)
+ 	k.gtk_widget_show (window)
+ 	confs.read_opt(window)
+-	wd=confs.width
+-	if wd<0:
+-		confs.width=k.gtk_widget_get_width(window)
+-		if wd==-2:
+-			k.gtk_window_minimize(window)
++
++	#wd=confs.width
++	#if wd<0:
++	#	confs.width=k.gtk_widget_get_width(window)
++	#	if wd==-2:
++	#		k.gtk_window_minimize(window)
++
+ 	layout.layout(window)
+ 
+ def main():
+--- torra-1.orig/torra/stats.py
++++ torra-1/torra/stats.py
+@@ -43,18 +43,28 @@ def ini(box):
+ 	k.g_object_unref(list)
+ 	renderer = k.gtk_cell_renderer_progress_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Percentage", renderer, b"value", COLUMNS.progress, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Download kB/s", renderer, b"text", COLUMNS.download_rate, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Upload kB/s", renderer, b"text", COLUMNS.upload_rate, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Peers num", renderer, b"text", COLUMNS.num_peers, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"State", renderer, b"text", COLUMNS.state, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree, column)
+ 	k.gtk_box_append(box,tree)
+ 	#
+@@ -62,18 +72,28 @@ def ini(box):
+ 	k.g_object_unref(list2)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Peers list", renderer, b"text", COLUMNS2.list_peers, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree2, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Seeds", renderer, b"text", COLUMNS2.num_complete, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree2, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Leeches", renderer, b"text", COLUMNS2.num_incomplete, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree2, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Next Announce", renderer, b"text", COLUMNS2.next_announce, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree2, column)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Last Upload", renderer, b"text", COLUMNS2.last_upload, None)
++	k.gtk_tree_view_column_set_resizable(column,True)
++	k.gtk_tree_view_column_set_expand(column,True)
+ 	k.gtk_tree_view_append_column(tree2, column)
+ 	k.gtk_box_append(box,tree2)
+ 
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.35
+\ No newline at end of file
++1.0.36
+\ No newline at end of file
