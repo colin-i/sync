@@ -1,0 +1,186 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ dicopp (1-jammy14) jammy; urgency=medium
+ .
+   * extra code
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-02-08
+
+--- dicopp-1.orig/dicopp/details.py
++++ dicopp-1/dicopp/details.py
+@@ -27,18 +27,19 @@ class COLUMNS(IntEnum):
+ 	FSLOTS=2
+ 	FNAME=3
+ 
+-list=Gtk.ListStore(str,str,str,str)
+-sort=Gtk.TreeModelSort.new_with_model(list)
++list=Gtk.ListStore(str,str,str,str) #TreeModelSort
++#list.append(['test1','2','3','4'])
++#list.append(['test2','2','3','4'])
+ 
+ def show():
+ 	scroll=Gtk.ScrolledWindow()
+ 	scroll.set_vexpand(True)
+-	tree=hubs.TreeView(sort)
++	tree=hubs.TreeView(list)
+ 	hubs.col(tree,'Nick',COLUMNS.NICK,clk)
+ 	hubs.col(tree,'Hub URL',COLUMNS.HUB,clk)
+ 	hubs.col(tree,'Free Slots',COLUMNS.FSLOTS,clk)
+ 	hubs.col(tree,'Name',COLUMNS.FNAME,clk)
+-	tree.connect("row-activated",clkrow,sort)
++	tree.connect("row-activated",clkrow,list)
+ 	tree.set_activate_on_single_click(True)
+ 	scroll.set_child(tree)
+ 	bx=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+@@ -48,7 +49,7 @@ def show():
+ 	bx.append(b)
+ 	return bx
+ def clk(b,ix):
+-	hubs.clk_univ(sort,ix)
++	hubs.clk_univ(list,ix)
+ def clkrow(tree,path,column,model):
+ 	it=model.get_iter(path)
+ 	users.ldload(model.get_value(it,COLUMNS.HUB),model.get_value(it,COLUMNS.NICK))
+--- dicopp-1.orig/dicopp/flist.py
++++ dicopp-1/dicopp/flist.py
+@@ -16,8 +16,9 @@ from . import overrides
+ name=Gtk.Label()
+ folder=Gtk.Label()
+ bx=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+-list=eval("Gtk.ListStore("+listcols+")")
+-sort=Gtk.TreeModelSort.new_with_model(list)
++list=eval("Gtk.ListStore("+listcols+")")  #TreeModelSort
++#list.append(['test1',2,'3'])
++#list.append(['test2',2,'3'])
+ sep="\\"
+ 
+ def cols(tree,act):
+@@ -27,9 +28,9 @@ def cols(tree,act):
+ def show():
+ 	scroll=Gtk.ScrolledWindow()
+ 	scroll.set_vexpand(True)
+-	tree=hubs.TreeView(sort)
++	tree=hubs.TreeView(list)
+ 	cols(tree,clk)
+-	tree.connect("row-activated",clkrow,sort)
++	tree.connect("row-activated",clkrow,list)
+ 	tree.set_activate_on_single_click(True)
+ 	scroll.set_child(tree)
+ 	bx.append(name)
+@@ -40,7 +41,7 @@ def show():
+ 	bx.append(scroll)
+ 	return bx
+ def clk(b,ix):
+-	hubs.clk_univ(sort,ix)
++	hubs.clk_univ(list,ix)
+ def clkrow(tree,path,column,model):
+ 	it=model.get_iter(path)
+ 	fpath=folder.get_text()+model.get_value(it,COLUMNS.NAME)
+--- dicopp-1.orig/dicopp/hubs.py
++++ dicopp-1/dicopp/hubs.py
+@@ -20,8 +20,7 @@ labelA="Searching..."
+ labelB="HubList"
+ label=Gtk.Label()
+ 
+-list=listdef()
+-sort=Gtk.TreeModelSort.new_with_model(list)
++list=listdef() #TreeModelSort
+ 
+ from enum import IntEnum
+ class COLUMNS(IntEnum):
+@@ -93,11 +92,11 @@ def clk_univ(lst,ix):
+ 	else:
+ 		lst.set_sort_column_id(ix,Gtk.SortType.DESCENDING)
+ def clk(b,ix):
+-	clk_univ(sort,ix)
++	clk_univ(list,ix)
+ def show():
+ 	wn=Gtk.ScrolledWindow()
+ 	wn.set_vexpand(True)
+-	tree=treedef(sort,clk,hubscon.add,sort)
++	tree=treedef(list,clk,hubscon.add,list)
+ 	wn.set_child(tree)
+ 	return wn
+ 
+--- dicopp-1.orig/dicopp/hubson.py
++++ dicopp-1/dicopp/hubson.py
+@@ -53,7 +53,7 @@ def restore(d):
+ 		hubscon.addcon(list,r)
+ 
+ def set():
+-	res=reqs.req("hub.listfulldesc")
++	res=reqs.req("hub.listfulldesc") #nowadays, if deleting a hub(hub.del to eiskalt daemon), switch to users tab, switch back, here is "Remote end closed connection without response" from eiskalt daemon
+ 	if res:
+ 		for z in list:
+ 			x=list.get_value(z.iter,hubs.COLUMNS.ADDRESS)
+@@ -62,4 +62,4 @@ def set():
+ 					list.set_value(z.iter,hubs.COLUMNS.USERS,int(res[r]["users"]))
+ 					list.set_value(z.iter,hubs.COLUMNS.SHARED,res[r]["totalshare preformatted"])
+ 					del res[r]
+-					break
+\ No newline at end of file
++					break
+--- dicopp-1.orig/dicopp/users.py
++++ dicopp-1/dicopp/users.py
+@@ -7,14 +7,13 @@ from . import userinfo
+ 
+ listdef=lambda:Gtk.ListStore(str)
+ 
+-list=listdef()
++list=listdef() #TreeModelSort
+ page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+ intro="UserList"
+ 
+ def show(nb,win):
+ 	scroll=Gtk.ScrolledWindow()
+-	sort=Gtk.TreeModelSort.new_with_model(list)
+-	t=show_univ(nb,scroll,sort,clkrow)
++	t=show_univ(nb,scroll,list,clkrow)
+ 	b=Gtk.Button.new_with_label(chr(0x24D8))
+ 	b.connect('clicked', info, [t,nb,win])
+ 	page.append(scroll)
+--- dicopp-1.orig/dicopp/usersloc.py
++++ dicopp-1/dicopp/usersloc.py
+@@ -5,13 +5,14 @@ from . import users
+ from . import flist
+ from . import overrides
+ 
+-list=users.listdef()
++list=users.listdef() #TreeModelSort
++#list.append(['test1'])#test will work without set list.clear()
++#list.append(['test2'])
+ page=Gtk.ScrolledWindow()
+ 
+ def show(nb):
+ 	page.set_vexpand(True)
+-	sort=Gtk.TreeModelSort.new_with_model(list)
+-	users.show_univ(nb,page,sort,clkrow)
++	users.show_univ(nb,page,list,clkrow)
+ 	return page
+ 
+ def clkrow(t,p,c,b):
+--- dicopp-1.orig/v2
++++ dicopp-1/v2
+@@ -1 +1 @@
+-1.0.38
+\ No newline at end of file
++1.0.39
+\ No newline at end of file
