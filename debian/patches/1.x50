@@ -1,0 +1,230 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x50) focal; urgency=medium
+ .
+   * finds total at first find
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-02-08
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -895,21 +895,65 @@ static bool delimiter(size_t y1,size_t x
+ #define quick_get(z) ((WINDOW**)((void*)z))[1]
+ #define find_returner return a==KEY_RESIZE?-2:1;
+ 
++static void finds_total(int number,size_t y1,size_t x1,size_t xr,size_t xc,bool untouched,size_t cursor,WINDOW*w){
++	//set a limit
++	const size_t max=100;
++	size_t n;
++	//only depending on number not on forward
++	int here_sense;bool here_forward;
++	if(number==0){//on delimiter or after a replace at 1/-1
++		here_sense=1;
++		ytext=y1;xtext=x1;
++		n=1;
++		here_forward=true;
++	}else{
++		ytext+=xr;xtext+=xc;
++		if(number>0){
++			here_sense=1;
++			if(untouched/*true*/)n=1;
++			else n=0;
++			here_forward=true;
++		}else{
++			here_sense=-1;
++			if(untouched/*true*/)n=1;
++			else n=0;
++			here_forward=false;
++		}
++	}
++	for(;;){
++		finding(cursor,0,here_forward?cursor:0,here_forward);//is true
++		if(delim_touch(y1,x1,cursor)/*true*/){//ytext==y1&&xtext==x1 is not enough,example qqq and search last 2 q (qq), will loop wrong
++			finds(true,number+(n*here_sense),-n,0);
++			break;//only at number=0: if not delim_touch and that rare case, ytext is y1,xtext is x1
++		}
++		n++;
++		if(n==max){
++			finds(true,number+(n*here_sense),-n,'+');
++			break;
++		}
++	}
++	wmove(w,getcury(w),getcurx(w));//print the result
++}
++
+ //1,0cancel,-2resz
+-static int find_core(WINDOW*w,size_t cursor,size_t xr,size_t xc,int y,size_t pos,size_t sz){
+-	bool forward=true;
++static int find_core(WINDOW*w,size_t cursor,int y,size_t pos,size_t sz){
+ 	size_t y1=ytext;size_t x1=xtext;
++
++	finds_total(0,ytext,xtext,0,0,true,cursor,w);
++	ytext=y1;xtext=x1;
++	int number=0;
++	//number2=0;//is set inside
++	//number3=getmaxx(stdscr);//in case is required at clean. is set inside
++
++	bool forward=true;
+ 	bool phase=false;
+ 	wnoutrefresh(stdscr);
++	size_t xr;size_t xc;
+ 	centering(w,&xr,&xc)
+ 	bool untouched=true;bool delimiter_touched=false;
+ 	char prev_key=' ';
+ 	//bool is_for_forward=true;//last key only at next/prev/replace
+ 
+-	int number=0;
+-	number2=0;
+-	number3=getmaxx(stdscr);//in case is required at clean
+-
+ 	for(;;){
+ 		int a=wgetch(w);
+ 		if(a==Char_Return){
+@@ -926,52 +970,6 @@ static int find_core(WINDOW*w,size_t cur
+ 				if(number>0)number-=1;
+ 			}
+ 			forward=false;
+-		}else if(a==KEY_RIGHT){
+-			if(number2==0){//only when not knowing the total
+-				if(delimiter_touched==false){//to omit last replace return if that can happen at this point
+-					//set a limit
+-					const size_t max=100;
+-					//keep markers
+-					size_t ystart=ytext;size_t xstart=xtext;size_t xrstart=xr;size_t xcstart=xc;
+-					size_t n;
+-					//only depending on number not on forward
+-					int here_sense;bool here_forward;
+-					if(number==0){//on delimiter or after a replace at 1/-1
+-						here_sense=1;
+-						ytext=y1;xtext=x1;xr=0;xc=cursor;
+-						n=1;
+-						here_forward=true;
+-					}else{
+-						ytext+=xr;xr=0;//xtext+=xc;xc=0;
+-						if(number>0){
+-							here_sense=1;
+-							if(untouched/*true*/){
+-								xc+=cursor;
+-								n=1;
+-							}else n=0;
+-							here_forward=true;
+-						}else{
+-							here_sense=-1;
+-							if(untouched/*true*/)n=1;
+-							else n=0;
+-							here_forward=false;
+-						}
+-					}
+-					for(;;){
+-						finding(cursor,xr,xc,here_forward);//is true
+-						if(ytext==y1&&xtext==x1)break;
+-						n++;
+-						if(n==max)break;
+-						//xr=0;//only first was with offset
+-						xc=here_forward?cursor:0;//at backward must stay there
+-					}
+-					finds(true,number+(n*here_sense),-n,n!=max?0:'+');
+-					wmove(w,getcury(w),getcurx(w));//print the result
+-					//restore markers
+-					ytext=ystart;xtext=xstart;xr=xrstart;xc=xcstart;
+-				}
+-			}
+-			continue;
+ 		}else if(a==KEY_LEFT){
+ 			size_t iferrory=ytext;size_t iferrorx=xtext;
+ 			if(number3!=getmaxx(stdscr)){//in second case this can be if total is requested
+@@ -1014,6 +1012,17 @@ static int find_core(WINDOW*w,size_t cur
+ 			int rstart=getcury(w);
+ 			if(replace_text(w,rstart,getcurx(w),rstart,rstart+1)/*true*/)return -2;
+ 			continue;
++		}else if(a=='c'){
++			return 0;
++		}else if(a==KEY_RIGHT){
++			if(number2==0){//only when not knowing the total
++				if(delimiter_touched==false){//to omit last replace return if that can happen at this point
++					size_t storeytext=ytext;size_t storextext=xtext;
++					finds_total(number,y1,x1,xr,xc,untouched,cursor,w);
++					ytext=storeytext;xtext=storextext;
++				}
++			}
++			continue;
+ 		}else if(a=='R'){
+ 			wattrset(w,COLOR_PAIR(2));
+ 			int yb=getcury(w);int xb=getcurx(w);
+@@ -1023,8 +1032,6 @@ static int find_core(WINDOW*w,size_t cur
+ 			}
+ 			if(replace_text(w,yb,xb,rstart,rstop)/*true*/)return -2;
+ 			continue;
+-		}else if(a=='c'){
+-			return 0;
+ 		}else{
+ 			find_returner
+ 		}
+@@ -1055,12 +1062,8 @@ static int find_core(WINDOW*w,size_t cur
+ }
+ //same
+ static int find(char*z,size_t cursor,size_t pos,size_t visib,int y){
+-	/*warning: cast from
+-      'char *' to 'size_t *' (aka
+-      'unsigned int *') increases required
+-      alignment from 1 to 4*/
+-	/*warning: arithmetic on
+-      a pointer to void is a GNU extension*/
++	//warning: cast from 'char *' to 'size_t *' (aka 'unsigned int *') increases required alignment from 1 to 4
++	//warning: arithmetic on a pointer to void is a GNU extension
+ 	//z+=sizeof(void*);
+ 	WINDOW*w=quick_get(z);
+ 	size_t xr=(size_t)getcury(w);
+@@ -1071,7 +1074,7 @@ static int find(char*z,size_t cursor,siz
+ 	colorfind(1,y,pos,sz);
+ 	//
+ 	if(finding(cursor,xr,xc,true)/*true*/){
+-		int r=find_core(w,cursor,xr,xc,y,pos,sz);
++		int r=find_core(w,cursor,y,pos,sz);
+ 		finds_clean();
+ 		return r;
+ 	}
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -21,8 +21,8 @@
+ \n    if found\
+ \n      Enter       = next\
+ \n      Space       = previous\
+-\n      Right Arrow = total\
+ \n      Left Arrow  = [(next/prev)&] replace\
++\n      Right Arrow = total\
+ \n      r           = reset replace text\
+ \n      R           = modify replace text\
+ \n    c = cancel\
+@@ -1269,11 +1269,12 @@ static void hardtime_resolve_returner(WI
+ 	}
+ }
+ #define one_minute 60
++#define one_minute_less one_minute-1
+ //#define one_minute 3
+ static void hardtime_resolve(WINDOW*w){//argument for errors
+ 	if(hardtime!=0){
+ 		//if((time((time_t)nullptr)-hardtime)>=one_minute){//= here is easily tested(set to 3, will wait 6 seconds if not and equal
+-		if((time((time_t)nullptr)-hardtime)>one_minute){//>1
++		if((time((time_t)nullptr)-hardtime)>one_minute_less){
+ 			hardtime_resolve_returner(w);
+ 			easytime();
+ 		}
