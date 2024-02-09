@@ -1,0 +1,187 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ dicopp (1-jammy15) jammy; urgency=medium
+ .
+   * hub list timeout, second hublist address, downloaded users excluding bad '', new hublist.xml.gz
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-02-09
+
+--- dicopp-1.orig/dicopp/hubs.py
++++ dicopp-1/dicopp/hubs.py
+@@ -14,6 +14,8 @@ from . import sets
+ from . import overrides
+ 
+ addr=Gtk.EntryBuffer(text='https://www.te-home.net/?do=hublist&get=hublist.xml')
++addr2=Gtk.EntryBuffer(text='http://dchublist.biz/?do=hublist&get=hublist.xml')
++timeout=Gtk.EntryBuffer()
+ file=Gtk.EntryBuffer()
+ lim=Gtk.EntryBuffer(text='200')
+ labelA="Searching..."
+@@ -61,23 +63,31 @@ def confs():
+ 	g=Gtk.Grid()
+ 	lb=Gtk.Label(halign=Gtk.Align.START,label="File address")
+ 	g.attach(lb,0,0,1,1)
+-	en=sets.entries(addr)
+-	g.attach(en,1,0,1,1)
++	g.attach(sets.entries(addr),1,0,1,1)
++	lb=Gtk.Label(halign=Gtk.Align.START,label="File address 2")
++	g.attach(lb,0,0,1,1)
++	g.attach(sets.entries(addr2),1,0,1,1)
++	lb=Gtk.Label(halign=Gtk.Align.START,label="Timeout in seconds (blank for default)")
++	g.attach(lb,0,2,1,1)
++	g.attach(sets.entries(timeout),1,2,1,1)
+ 	lb=Gtk.Label(halign=Gtk.Align.START,label="File fallback location")
+-	g.attach(lb,0,1,1,1)
+-	g.attach(sets.entries(file),1,1,1,1)
++	g.attach(lb,0,3,1,1)
++	g.attach(sets.entries(file),1,3,1,1)
+ 	lb=Gtk.Label(halign=Gtk.Align.START,label="Maximum number of entries")
+-	g.attach(lb,0,2,1,1)
+-	en=sets.entries(lim)
+-	g.attach(en,1,2,1,1)
++	g.attach(lb,0,4,1,1)
++	g.attach(sets.entries(lim),1,4,1,1)
+ 	f.set_child(g)
+ 	return f
+ def store(d):
+ 	d['hub_file']=addr.get_text()
++	d['hub_file2']=addr2.get_text()
++	d['hub_timeout']=timeout.get_text()
+ 	d['hub_file_fallback']=file.get_text()
+ 	d['hub_limit']=lim.get_text()
+ def restore(d):
+ 	addr.set_text(d['hub_file'],-1)
++	addr2.set_text(d['hub_file2'],-1)
++	timeout.set_text(d['hub_timeout'],-1)
+ 	file.set_text(d['hub_file_fallback'],-1)
+ 	lim.set_text(d['hub_limit'],-1)
+ 
+@@ -102,41 +112,54 @@ def show():
+ 
+ def ini():
+ 	label.set_text(labelA)
+-	global async_th
++	#global async_th
+ 	async_th = threading.Thread(target=ini_async)
+ 	async_th.start()
+ def ini_async():
+ 	try:
+-		urlresult=urllib.request.urlopen(addr.get_text())
++		import socket
++		a=timeout.get_text()
++		if a:
++			a=float(a)
++			socket.setdefaulttimeout(a) #this is working both for https and http
++		else:
++			if socket.getdefaulttimeout()!=None:  #in case we already set it
++				socket.setdefaulttimeout(None) #this will wait like default, ~2 minutes?
++		urlresult=urllib.request.urlopen(addr.get_text()) #,timeout -> this is not working for https and for http is non-blocking at all
+ 	except Exception:
+ 		print("urlopen exception")
+-		urlresult=None
+-	GLib.idle_add(ini_main,(urlresult,threading.current_thread()))
+-def ini_main(mixt):
+-	urlresult,th=mixt
+-	if async_th==th:
+ 		try:
+-			label.set_text(labelB)
+-			if urlresult==None:
+-				raise Exception
+-			tree = ET.ElementTree(file=urlresult)
+-			root = tree.getroot()
++			urlresult=urllib.request.urlopen(addr2.get_text())
+ 		except Exception:
+-			print("hubs list error")
+-			if file.get_text():
+-				tree = ET.parse(file.get_text())
+-				root = tree.getroot()
+-			else:
+-				#if the module has never been imported before (== not present in sys.modules), then it is loaded and added to sys.modules.
+-				import gzip
+-
+-				#https://setuptools.pypa.io/en/latest/userguide/datafiles.html
+-				#import os.path
+-				from importlib.resources import files
+-				#with gzip.open(os.path.join(os.path.dirname(__file__),'hublist.xml.gz'), mode='r') as zipfile:
+-				with gzip.open(files(base.pkname).joinpath('hublist.xml.gz'), mode='r') as zipfile:
+-					root = ET.fromstring(zipfile.read())
+-		ini_result(root)
++			print("urlopen 2 exception")
++			urlresult=None
++	#GLib.idle_add(ini_main,(urlresult,threading.current_thread())) why was needed to compare async_th and th?
++	GLib.idle_add(ini_main,urlresult)
++def ini_main(urlresult):
++	#urlresult,th=mixt
++	#if async_th==th:
++	try:
++		label.set_text(labelB)
++		if urlresult==None:
++			raise Exception
++		tree = ET.ElementTree(file=urlresult)
++		root = tree.getroot()
++	except Exception:
++		print("hubs list error")
++		if file.get_text():
++			tree = ET.parse(file.get_text())
++			root = tree.getroot()
++		else:
++			#if the module has never been imported before (== not present in sys.modules), then it is loaded and added to sys.modules.
++			import gzip
++
++			#https://setuptools.pypa.io/en/latest/userguide/datafiles.html
++			#import os.path
++			from importlib.resources import files
++			#with gzip.open(os.path.join(os.path.dirname(__file__),'hublist.xml.gz'), mode='r') as zipfile:
++			with gzip.open(files(base.pkname).joinpath('hublist.xml.gz'), mode='r') as zipfile:
++				root = ET.fromstring(zipfile.read())
++	ini_result(root)
+ 	return False
+ def ini_result(root):
+ 	try:
+--- dicopp-1.orig/dicopp/hubson.py
++++ dicopp-1/dicopp/hubson.py
+@@ -53,7 +53,7 @@ def restore(d):
+ 		hubscon.addcon(list,r)
+ 
+ def set():
+-	res=reqs.req("hub.listfulldesc") #nowadays, if deleting a hub(hub.del to eiskalt daemon), switch to users tab, switch back, here is "Remote end closed connection without response" from eiskalt daemon
++	res=reqs.req("hub.listfulldesc") #eiskalt (ubuntu universe, tehnick/direct-connect-devel ppa), hub.del, hub.listfulldesc and eiskalt breaks
+ 	if res:
+ 		for z in list:
+ 			x=list.get_value(z.iter,hubs.COLUMNS.ADDRESS)
+--- dicopp-1.orig/dicopp/usersloc.py
++++ dicopp-1/dicopp/usersloc.py
+@@ -27,4 +27,5 @@ def set():
+ 	if r:
+ 		usrs=r.split(s)
+ 		for x in usrs:
+-			overrides.append(list,[x])
+\ No newline at end of file
++			if x: #can be "oneuser...;"
++				overrides.append(list,[x])
+\ No newline at end of file
+--- dicopp-1.orig/v2
++++ dicopp-1/v2
+@@ -1 +1 @@
+-1.0.39
+\ No newline at end of file
++1.0.40
+\ No newline at end of file
