@@ -1,0 +1,141 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ audapa (1-23) mantic; urgency=medium
+ .
+   * gi-cairo
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-02-19
+
+--- audapa-1.orig/.github/workflows/appimage.yml
++++ audapa-1/.github/workflows/appimage.yml
+@@ -5,13 +5,26 @@ on:
+    ppa:
+     description: "ppa sufix"
+ 
++#if not having 24.04 on github or from act, take from ubuntu:noble a minimum image
++#sudo gh act -r -j build workflow_dispatch -W .github/workflows/appimage.yml -P ubuntu-24.04=ubuntu:noble --pull=false --env artifact=x
++#here if artifact!='' is for minimum image and without artifact upload
++#for audapa (not torra,not dicopp) watch https://launchpad.net/ubuntu/+source/python3-defaults , now is 3.11, here and at ./arh/re
++
+ jobs:
+  build:
+-  runs-on: ubuntu-22.04
++  runs-on: ubuntu-24.04
+   steps:
+    - uses: actions/checkout@v3
+    - name: Run a multi-line script
+      run: |
++      if [ -n "${{ env.artifact }}" ]; then
++       apt update
++       #rm /var/lib/dpkg/lock-frontend
++       #rm /var/lib/dpkg/lock
++       #rm /var/cache/apt/archives/lock
++       export DEBIAN_FRONTEND=noninteractive
++       TZ=Etc/UTC apt install -y wget python3-minimal python3-launchpadlib xz-utils squashfs-tools
++      fi
+       name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
+       name2=Audapa
+       sname=auda
+@@ -39,20 +52,14 @@ jobs:
+        version=`cat debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"`
+        if [ ! -e "lp2.py" ]; then
+         wget -q https://raw.githubusercontent.com/colin-i/test/master/lp2.py
+-        #is already sudo apt install python3-launchpadlib
++        #is already apt install python3-launchpadlib
+        fi
+        OUTPUT=$(python3 lp2.py ppa${{ github.event.inputs.ppa }} ${name} ${version} amd64)
+        wget ${OUTPUT}/+files/${name}_${version}_all.deb -O ${name}.deb
+        dpkg -x ${name}.deb AppDir
+        #
+-       mv AppDir/usr/lib/python3.11 AppDir/usr/lib/python3 #it's ok on jammy
+-       pyanm=pyaudio
+-       pya=`wget -q https://raw.githubusercontent.com/colin-i/${pyanm}/master/debian/changelog -O - | head -1 | grep -Poe "[^\(]*(?=\))"`
+-       pyanme=${pyanm}o
+-       OUTPUT=$(python3 lp2.py ppa ${pyanme} ${pya} amd64)
+-       wget ${OUTPUT}/+files/${pyanme}_${pya}_all.deb -O ${pyanm}.deb
+-       dpkg -x ${pyanm}.deb AppDir
+-       #
++       #PYTHONPATH is set to python3 (in this yml) (,and python3-* are going there too), mv was ok from 3.10
++       mv AppDir/usr/lib/python3.11 AppDir/usr/lib/python3
+       fi
+       #dependencies
+       downdeb () {
+@@ -62,7 +69,7 @@ jobs:
+        inter=Packages
+        fullinter=${inter}${repo}
+        if [ ! -e "${fullinter}" ]; then
+-        wget http://${src}/ubuntu/dists/jammy/${repo}/binary-amd64/${inter}.xz -O ${fullinter}.xz
++        wget http://${src}/ubuntu/dists/noble/${repo}/binary-amd64/${inter}.xz -O ${fullinter}.xz
+         xz -d ${fullinter}.xz
+        fi
+        debfilename=`grep "^Filename.*/${pkg}_" ${fullinter}`
+@@ -74,7 +81,8 @@ jobs:
+       }
+       downdeb libportaudio2 universe
+       downdeb python3-appdirs main
+-      #downdeb python3-pyaudio universe
++      downdeb python3-pyaudio universe
++      #python3-gi-cairo is already on live try
+       #
+       apd=AppDir
+       cd ${apd}
+@@ -165,6 +173,7 @@ jobs:
+       #glibc=`readelf -V ${apd}/usr/bin/${name} | grep -Po "(?<= GLIBC_)[^ ]*" | sort -Vr | head -1 | sed "s/\./-/g"`
+       #echo -n ${glibc} > version #"glibc" will not be ok for upload-artifact
+    - name: artifact
++     if: ${{ env.artifact == '' }}
+      uses: actions/upload-artifact@v3
+      with:
+       name: appimage
+--- audapa-1.orig/arh/pub
++++ audapa-1/arh/pub
+@@ -8,13 +8,17 @@ last=$(curl https://api.github.com/repos
+ ~/test/keyring2 && \
+ ~/test/deb && \
+ ~/test/publp && \
++~/test/ai && \
+ ~/test/rpm && \
+-~/test/pub rpm && \
++~/test/pub appimage rpm && \
+ ~/test/rerpm && \
+ ~/test/del && \
+ ~/test/rel && \
+ ~/test/pub rel && \
++~/test/upapp && \
+ ~/test/uprpm && \
++~/test/pub upapp && \
++~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+ ~/test/lp x && \
+--- audapa-1.orig/setup.py
++++ audapa-1/setup.py
+@@ -41,6 +41,10 @@ setup(name=pkname,
+ 	python_requires='>=3.8',   #for :=
+ 	install_requires=[
+ 		"pycairo>=1.20.0","PyGObject>=3.40",
++		#this combination will work from pip, with ubuntu pygobject(python3-gi)+pycairo(python3-cairo) it is also required for python3-gi-cairo there
++		#                                                 if these are on the system pip is saying requirements ok but will not work
++		#to retest this take PyGObject from https://pypi.org/project/PyGObject/#files , install local, and will work
++
+ 		"appdirs>=1.4.3",
+ 		"PyAudio>=0.2.11"],
+ 	description='Audio wave file manipulator',
