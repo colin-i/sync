@@ -1,0 +1,66 @@
+if [ -z "${1}" ]; then is_del=1;
+else
+	is_del=0
+	is_diff=${1}
+	diffs=0
+fi
+e=.expected/
+switch () {
+	test -e ${1}
+	if [ $? = 0 ]; then
+		if [ ${is_del} = 1 ]; then
+			rm ${1}
+		else
+			if [ ${is_diff} = 1 ]; then
+				diff ${1} ${exp}${1} || exit 1
+				diffs=$((diffs+1))
+			else
+				mv ${1} ${exp}${1}
+			fi
+		fi
+	fi
+}
+sw () {
+	n=( `find -maxdepth 1 -name "*${1}"` )
+	for v in "${n[@]}"; do
+		switch ${v:2}
+	done
+}
+del () {
+	sw .o
+	sw .log
+	sw .x
+	sw .exe       #by ocomp
+	switch a.out
+}
+a=( `ls` )
+for var in "${a[@]}"; do
+	if [ -d "${var}" ]; then
+		if [ "${var}" != "${e::-1}" ]; then
+			cd "${var}"
+				exp=../${e}${var}/
+				if [ ${is_del} = 0 ]; then
+					mkdir -p ${exp}
+				fi
+				del
+			cd ..
+		fi
+	fi
+done
+
+exp=${e}
+del
+switch acall/e
+
+if [ ${is_del} = 0 ]; then
+	if [ ${is_diff} = 1 ]; then
+		tests=( `find -name "*.oc"` )
+		n=${#tests[@]}
+		n=$((n*3))   #is .oc .loc and .x
+		if [ ${n} = ${diffs} ]; then
+			echo ${diffs} diffs is ok
+		else
+			exit 1
+		fi
+	fi
+fi
