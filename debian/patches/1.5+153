@@ -1,0 +1,818 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+153) xenial; urgency=medium
+ .
+   * fast solution for relative path tests
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-03-08
+
+--- ocompiler-1.orig/ocompiler.conf
++++ ocompiler-1/ocompiler.conf
+@@ -41,58 +41,62 @@
+ #0 is No; 1 is Yes
+ #includedir=1
+ 
+-#10. Write the function names above the function in code section, useful when debugging asm instructions.
++#10. If active folder is 0 and logfile is 1, log relative path.
++#0 is No; 1 is Yes
++#relative_path=0
++
++#11. Write the function names above the function in code section, useful when debugging asm instructions.
+ #0 is No; 1 is Yes
+ #function_name=0
+ 
+-#11. Ignore elfobj64
++#12. Ignore elfobj64
+ #0 is No,use linux convention if ocompiler was compiled for linux,else use microsoft; 1 is Yes; 2 is No,and cross-compile
+ #conv_64=0
+ 
+-#12. Zeroset reserved data section declarations.
++#13. Zeroset reserved data section declarations.
+ #0 is No, ignore the set; 1 is Yes; 2 is ~0 set
+ #nul_res_pref=0
+ 
+-#13. SD as SV (old programs don't have sv and may be with 64 logic).
++#14. SD as SV (old programs don't have sv and may be with 64 logic).
+ #0 is No; 1 is Yes
+ #sd_as_sv=0
+ 
+-#14. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
++#15. Inplace reloc 0 or the addend for objects? (standard ld wants addend, i686-w64-mingw32-ld wants 0)
+ #0 is Zero; 1 is Addend
+ #inplace_reloc=1
+ 
+-#15. At objects, when on 64 format, relocs are R_X86_64_64.
++#16. At objects, when on 64 format, relocs are R_X86_64_64.
+ #0 is No; 1 is Yes
+ #reloc_64=1
+ 
+-#16. Remove leading underscore at IMPORT?
++#17. Remove leading underscore at IMPORT?
+ #0 is No; 1 is Yes
+ #underscore_pref=0
+ 
+-#17. RETURNs at main scope like EXIT.
++#18. RETURNs at main scope like EXIT.
+ #0 is No; 1 is Yes
+ #exit_end=0
+ 
+-#18. Take second file path at INCLUDE statement.
++#19. Take second file path at INCLUDE statement.
+ #0 is No; 1 is Yes
+ #include_sec=0
+ 
+-#19. Ignore FORMAT ...SO .
++#20. Ignore FORMAT ...SO .
+ #0 is No; 1 is Yes
+ #ignore_format_so=0
+ 
+-#20. At 64, before a 64 call, align stack.
++#21. At 64, before a 64 call, align stack.
+ #0 is No; 1 is Yes; 2 is Yes for pushed arguments only
+ #call_align=1
+ 
+-#21. Virtual data to a SHT_NOBITS at object
++#22. Virtual data to a SHT_NOBITS at object
+ #0 is No; 1 is Yes
+ #nobits_virtual=1
+ 
+-#22. Debug section at object.
++#23. Debug section at object.
+ #0 is No; 1 is Yes
+ #has_debug=0
+ 
+-#23. Make .x file.
++#24. Make .x file.
+ #0 is No; 1 is Yes; 2 is Yes_strict without making exe/elf
+ #x_file=0
+\ No newline at end of file
+--- ocompiler-1.orig/src/files/actions/pathout.oc
++++ ocompiler-1/src/files/actions/pathout.oc
+@@ -1,33 +1,21 @@
+ 
+ 
+ 
+-Str pointofpathout#1
+-Data pathinsize#1
+-Str minpath#1
+-Str cursorpath#1
+-Data unit=1
++vStr pointofpathout#1
+ 
+-Set minpath safecurrentdirloc
+-
+-Set pointofpathout safecurrentdirloc
+-SetCall pathinsize strlen(safecurrentdirloc)
++Set pointofpathout safecurrentdirtopath
+ Add pointofpathout pathinsize
+-
+-Set cursorpath pointofpathout
+-Sub minpath unit
+-Sub cursorpath unit
+-
+-While minpath!=cursorpath
+-	Char teststr#1
+-	Set teststr cursorpath#
+-	If teststr=dot
+-		Set pointofpathout cursorpath
+-		Set cursorpath minpath
+-	EndIf
+-	If minpath!=cursorpath
+-		Sub cursorpath unit
+-	EndIf
+-EndWhile
++while safecurrentdirtopath!=pointofpathout
++	dec pointofpathout
++	if pointofpathout#=dot
++		#inc pointofpathout
++		set pointofpathout# (asciinul)
++		break
++	endif
++endwhile
++if safecurrentdirtopath=pointofpathout
++	add pointofpathout pathinsize
++endif
+ 
+ Data extension#1
+ Set extension null
+--- ocompiler-1.orig/src/files/actions/setdefdir.oc
++++ ocompiler-1/src/files/actions/setdefdir.oc
+@@ -1,8 +1,5 @@
+ 
+ 
+-Char safedirdata="./"
+-Str safedir^safedirdata
+-
+ Str filenameloc#1
+ SetCall filenameloc endoffolders(path_nofree)
+ Char storeachar#1
+@@ -17,18 +14,19 @@ if chdirresult!=chdirok
+ 	Call msgerrexit(errormsg)
+ endif
+ 
+-
+ Set filenameloc# storeachar
+ 
++Data pathinsize#1
++SetCall pathinsize strlen(filenameloc)
+ Data movesize#1
+-SetCall movesize strlen(filenameloc)
++Set movesize pathinsize
+ Inc movesize
+ 
+-setcall errormsg maxpathverif(filenameloc,safedir)
+-if errormsg!=noerr
+-	Call msgerrexit(errormsg)
+-endif
++#Char safedirdata="./"  #it is nonsens
+ 
++if movesize>^flag_max_path
++	Call msgerrexit("max path?")
++endif
+ SetCall safecurrentdirtopath memalloc(flag_max_path)
+ If safecurrentdirtopath=null
+ 	Call errexit()
+@@ -43,29 +41,32 @@ set xfile (openno)
+ set stackalign (NULL)
+ set scopesbag (NULL)
+ 
+-Call memtomem(safecurrentdirtopath,safedir,wordsize)
+-Data safecurrentdirloc#1
+-Set safecurrentdirloc safecurrentdirtopath
+-Add safecurrentdirloc wordsize
+-Call memtomem(safecurrentdirloc,filenameloc,movesize)
+-
++Call memtomem(safecurrentdirtopath,filenameloc,movesize)
+ if logbool=true
+ 	setcall errormsg openfile_write_add_extension(safecurrentdirtopath,".log",ptrlogfile)
+ 	if errormsg=noerr
+-		sd log_main_folder
+-		setcall log_main_folder getcwd((NULL),0)
+-		if log_main_folder=(NULL)
+-			char getcwd_first="first getcwd error"
+-			set errormsg #getcwd_first
++		if relative_path=(FALSE)
++			sd log_root_folder
++			setcall log_root_folder getcwd((NULL),0)
++			if log_root_folder=(NULL)
++				char getcwd_first="first getcwd error"
++				set errormsg #getcwd_first
++			else
++				setcall errormsg addtolog_withchar_parses(log_root_folder,(log_pathfolder),(TRUE))
++				call free(log_root_folder)
++			endelse
+ 		else
+-			setcall errormsg addtolog_withchar_parses(log_main_folder,(log_pathfolder),(TRUE))
+-			call free(log_main_folder)
++			Set filenameloc# (asciinul)
++			setcall errormsg addtolog_withchar_parses(path_nofree,(log_pathfolder),(TRUE))
+ 		endelse
+ 	endif
++	if errormsg!=noerr
++		Call msgerrexit(errormsg)
++	endif
+ endif
+ if xbool!=(No)
+ 	setcall errormsg openfile_mode_add_extension(safecurrentdirtopath,".x",#xfile,(_open_readwrite))
+-endif
+-if errormsg!=noerr
+-	Call msgerrexit(errormsg)
++	if errormsg!=noerr
++		Call msgerrexit(errormsg)
++	endif
+ endif
+--- ocompiler-1.orig/src/files/functions/include.oc
++++ ocompiler-1/src/files/functions/include.oc
+@@ -75,9 +75,6 @@ Function include(ss path,sd both,sd subt
+ 			return getcwderr
+ 		endif
+ 
+-		setcall err addtolog_withchar_parses(pcontentoffl#,(log_pathfolder),both)
+-		If err!=noerr;Return err;EndIf
+-
+ 		char storechar#1
+ 		set storechar folders#
+ 		set folders# 0
+@@ -91,6 +88,14 @@ Function include(ss path,sd both,sd subt
+ 			return chdirerr
+ 		endif
+ 
++		#sd ptr_relativepath%%ptr_relativepath  #it is not ready for relative as is now with p/oldpath n../../newlocation
++		#if ptr_relativepath#=(FALSE)
++		setcall err addtolog_withchar_parses(pcontentoffl#,(log_pathfolder),both)
++		#else
++		#	setcall err addtolog_withchar_parses(path,(log_pathfolder),both)
++		#endelse
++		If err!=noerr;Return err;EndIf
++
+ 		set folders# storechar
+ 	endif
+ 
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.oc
++++ ocompiler-1/src/files/functions/pref/preffuncs.oc
+@@ -192,6 +192,7 @@ function initpreferences()
+ 	sd cb;setcall cb constants_bool((const_warn_get_init))
+ 	sd p_o_w%%p_offset_warn
+ 	sd ptrincludedir%ptrincludedir
++	sd ptr_relativepath%%ptr_relativepath
+ 	sd text_fn_info;setcall text_fn_info fn_text_info()
+ 	sd conv_64;setcall conv_64 p_neg_is_for_64()
+ 	sd p_nul_res_pref%p_nul_res_pref
+@@ -218,6 +219,7 @@ function initpreferences()
+ 	set cb# (log_warn)
+ 	set p_o_w# (log_warn)
+ 	set ptrincludedir# true
++	set ptr_relativepath# false
+ 	set text_fn_info# false
+ 	set conv_64# (direct_convention_input)
+ 	set p_nul_res_pref# false
+@@ -236,9 +238,9 @@ function initpreferences()
+ 	#this is used also at arguments
+ 
+ 	sv q%nr_of_prefs_pointers_p
+-	set q# ptrwarningsbool; incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w;         incst q;set q# #main.xbool
++	set q# ptrwarningsbool; incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# ptr_relativepath; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w;         incst q;set q# #main.xbool
+ 	sv t%nr_of_prefs_strings_p
+-	set t# "orphans";       incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"; incst t;set t# "x_file"
++	set t# "orphans";       incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "relative_path";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"; incst t;set t# "x_file"
+ endfunction
+ 
+ #void
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -357,6 +357,8 @@ const ptrlogfile^logfile
+ data includedir#1
+ const ptrincludedir^includedir
+ char fileendchar#1
++datax relative_path#1
++const ptr_relativepath^relative_path
+ 
+ const ignore_warn=0
+ #const show_warn=1
+@@ -452,10 +454,10 @@ const p_over_pref^over_pref
+ data hidden_pref#1
+ const p_hidden_pref^hidden_pref
+ 
+-Data safecurrentdirtopath#1
++vstr safecurrentdirtopath#1
+ const p_safecurrentdirtopath^safecurrentdirtopath
+ 
+-const nr_of_prefs=23
++const nr_of_prefs=24
+ const nr_of_prefs_jumper=nr_of_prefs*:
+ 
+ vdata nr_of_prefs_pointers#nr_of_prefs;vdata nr_of_prefs_strings#nr_of_prefs
+--- ocompiler-1.orig/tests/.expected/acall/32.oc.log
++++ ocompiler-1/tests/.expected/acall/32.oc.log
+@@ -1,9 +1,7 @@
+-p/<<PKGBUILDDIR>>/tests/acall
+-p/<<PKGBUILDDIR>>/tests/acall
+-n./32.oc
+-p/<<PKGBUILDDIR>>/tests/acall
++p./acall/
++n32.oc
+ na.h
+ o.e
+-e
+-e
++q
++q
+ x00000016
+--- ocompiler-1.orig/tests/.expected/acall/32.w.oc.log
++++ ocompiler-1/tests/.expected/acall/32.w.oc.log
+@@ -1,9 +1,7 @@
+-p/<<PKGBUILDDIR>>/tests/acall
+-p/<<PKGBUILDDIR>>/tests/acall
+-n./32.w.oc
+-p/<<PKGBUILDDIR>>/tests/acall
++p./acall/
++n32.w.oc
+ na.h
+ o.e
+-e
+-e
++q
++q
+ x00000016
+--- ocompiler-1.orig/tests/.expected/acall/64.oc.log
++++ ocompiler-1/tests/.expected/acall/64.oc.log
+@@ -1,9 +1,7 @@
+-p/<<PKGBUILDDIR>>/tests/acall
+-p/<<PKGBUILDDIR>>/tests/acall
+-n./64.oc
+-p/<<PKGBUILDDIR>>/tests/acall
++p./acall/
++n64.oc
+ na.h
+ o.e
+-e
+-e
++q
++q
+ x0000001e
+--- ocompiler-1.orig/tests/.expected/acall/b.oc.log
++++ ocompiler-1/tests/.expected/acall/b.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests/acall
+-p/<<PKGBUILDDIR>>/tests/acall
+-n./b.oc
+-e
++p./acall/
++nb.oc
++q
+ itest #com
+ x00000000
+--- ocompiler-1.orig/tests/.expected/acall/e.oc.log
++++ ocompiler-1/tests/.expected/acall/e.oc.log
+@@ -1,8 +1,6 @@
+-p/<<PKGBUILDDIR>>/tests/acall
+-p/<<PKGBUILDDIR>>/tests/acall
+-n./e.oc
+-p/<<PKGBUILDDIR>>/tests/acall
++p./acall/
++ne.oc
+ na.h
+-e
+-e
++q
++q
+ x00000016
+--- ocompiler-1.orig/tests/.expected/acall/ew.oc.log
++++ ocompiler-1/tests/.expected/acall/ew.oc.log
+@@ -1,8 +1,6 @@
+-p/<<PKGBUILDDIR>>/tests/acall
+-p/<<PKGBUILDDIR>>/tests/acall
+-n./ew.oc
+-p/<<PKGBUILDDIR>>/tests/acall
++p./acall/
++new.oc
+ na.h
+-e
+-e
++q
++q
+ x00000016
+--- ocompiler-1.orig/tests/.expected/call/call-ret.oc.log
++++ ocompiler-1/tests/.expected/call/call-ret.oc.log
+@@ -1,5 +1,4 @@
+-p/<<PKGBUILDDIR>>/tests/call
+-p/<<PKGBUILDDIR>>/tests/call
+-n./call-ret.oc
+-e
++p./call/
++ncall-ret.oc
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/call/call-var.oc.log
++++ ocompiler-1/tests/.expected/call/call-var.oc.log
+@@ -1,8 +1,7 @@
+-p/<<PKGBUILDDIR>>/tests/call
+-p/<<PKGBUILDDIR>>/tests/call
+-n./call-var.oc
++p./call/
++ncall-var.oc
+ o.a
+ o.c
+ o.e
+-e
++q
+ x0000000c
+--- ocompiler-1.orig/tests/.expected/call/call-var64.oc.log
++++ ocompiler-1/tests/.expected/call/call-var64.oc.log
+@@ -1,10 +1,9 @@
+-p/<<PKGBUILDDIR>>/tests/call
+-p/<<PKGBUILDDIR>>/tests/call
+-n./call-var64.oc
++p./call/
++ncall-var64.oc
+ o.a
+ o.c
+ o.e
+-e
++q
+ v.a
+ v.c
+ x00000014
+--- ocompiler-1.orig/tests/.expected/call/callg.oc.log
++++ ocompiler-1/tests/.expected/call/callg.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests/call
+-p/<<PKGBUILDDIR>>/tests/call
+-n./callg.oc
+-e
++p./call/
++ncallg.oc
++q
+ fz
+ x00000001
+--- ocompiler-1.orig/tests/.expected/call/callx.oc.log
++++ ocompiler-1/tests/.expected/call/callx.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests/call
+-p/<<PKGBUILDDIR>>/tests/call
+-n./callx.oc
++p./call/
++ncallx.oc
+ o.a
+-e
++q
+ x00000008
+--- ocompiler-1.orig/tests/.expected/comments.oc.log
++++ ocompiler-1/tests/.expected/comments.oc.log
+@@ -1,8 +1,6 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./comments.oc
+-p/<<PKGBUILDDIR>>/tests
++p./
++ncomments.oc
+ ncomments.h
+-e
+-e
++q
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/cond.oc.log
++++ ocompiler-1/tests/.expected/cond.oc.log
+@@ -1,5 +1,4 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./cond.oc
+-e
++p./
++ncond.oc
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/declare.oc.log
++++ ocompiler-1/tests/.expected/declare.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./declare.oc
++p./
++ndeclare.oc
+ o.a
+ o.b
+ o.c
+@@ -14,7 +13,7 @@ o.k
+ o.l
+ o.w
+ o.ww
+-e
++q
+ v.b
+ v.h
+ v.k
+--- ocompiler-1.orig/tests/.expected/declareN.oc.log
++++ ocompiler-1/tests/.expected/declareN.oc.log
+@@ -1,8 +1,7 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./declareN.oc
++p./
++ndeclareN.oc
+ ob.a
+ ob.aa
+ da
+-e
++q
+ x00000013
+--- ocompiler-1.orig/tests/.expected/decocthex.oc.log
++++ ocompiler-1/tests/.expected/decocthex.oc.log
+@@ -1,5 +1,4 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./decocthex.oc
+-e
++p./
++ndecocthex.oc
++q
+ x00000014
+--- ocompiler-1.orig/tests/.expected/divmul.oc.log
++++ ocompiler-1/tests/.expected/divmul.oc.log
+@@ -1,8 +1,7 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./divmul.oc
++p./
++ndivmul.oc
+ o.a
+ o.b
+ o.c
+-e
++q
+ x0000000d
+--- ocompiler-1.orig/tests/.expected/end.oc.log
++++ ocompiler-1/tests/.expected/end.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./end.oc
+-e
++p./
++nend.oc
++q
+ fa
+ x00000000
+--- ocompiler-1.orig/tests/.expected/function.oc.log
++++ ocompiler-1/tests/.expected/function.oc.log
+@@ -1,7 +1,6 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./function.oc
+-e
++p./
++nfunction.oc
++q
+ vtest.b
+ vtest.d
+ vtest.h
+--- ocompiler-1.orig/tests/.expected/function2.oc.log
++++ ocompiler-1/tests/.expected/function2.oc.log
+@@ -1,5 +1,4 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./function2.oc
+-e
++p./
++nfunction2.oc
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/hex.oc.log
++++ ocompiler-1/tests/.expected/hex.oc.log
+@@ -1,5 +1,4 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./hex.oc
+-e
++p./
++nhex.oc
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/include.oc.log
++++ ocompiler-1/tests/.expected/include.oc.log
+@@ -1,17 +1,12 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./include.oc
+-p/<<PKGBUILDDIR>>/tests
++p./
++ninclude.oc
+ ninclude.h
+-e
+-p/<<PKGBUILDDIR>>/tests
++q
+ ninclude.h
+-e
+-p/<<PKGBUILDDIR>>/tests
++q
+ ninclude.h
+-e
+-p/<<PKGBUILDDIR>>/tests
++q
+ ninclude.h
+-e
+-e
++q
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/offsetofvar.oc.log
++++ ocompiler-1/tests/.expected/offsetofvar.oc.log
+@@ -1,9 +1,8 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./offsetofvar.oc
++p./
++noffsetofvar.oc
+ o.b
+ oa.b
+ oa.c
+ o.info
+-e
++q
+ x0000003c
+--- ocompiler-1.orig/tests/.expected/onearg.oc.log
++++ ocompiler-1/tests/.expected/onearg.oc.log
+@@ -1,7 +1,6 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./onearg.oc
++p./
++nonearg.oc
+ ob.a
+ o.a
+-e
++q
+ x00000016
+--- ocompiler-1.orig/tests/.expected/operations.oc.log
++++ ocompiler-1/tests/.expected/operations.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./operations.oc
++p./
++noperations.oc
+ da
+-e
++q
+ x0000005a
+--- ocompiler-1.orig/tests/.expected/pass_call.oc.log
++++ ocompiler-1/tests/.expected/pass_call.oc.log
+@@ -1,7 +1,6 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./pass_call.oc
+-e
++p./
++npass_call.oc
++q
+ vb.test
+ fa
+ fb
+--- ocompiler-1.orig/tests/.expected/primsec.oc.log
++++ ocompiler-1/tests/.expected/primsec.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./primsec.oc
++p./
++nprimsec.oc
+ o.a
+-e
++q
+ x00000008
+--- ocompiler-1.orig/tests/.expected/ret.oc.log
++++ ocompiler-1/tests/.expected/ret.oc.log
+@@ -1,5 +1,4 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./ret.oc
+-e
++p./
++nret.oc
++q
+ x00000000
+--- ocompiler-1.orig/tests/.expected/sizeoffn.oc.log
++++ ocompiler-1/tests/.expected/sizeoffn.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./sizeoffn.oc
++p./
++nsizeoffn.oc
+ o.p
+-e
++q
+ x00000040
+--- ocompiler-1.orig/tests/.expected/sizeofvar.oc.log
++++ ocompiler-1/tests/.expected/sizeofvar.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./sizeofvar.oc
++p./
++nsizeofvar.oc
+ o.a
+ o.b
+ o.c
+@@ -10,6 +9,6 @@ o.g
+ o.aa
+ o.bb
+ o.cc
+-e
++q
+ v.g
+ x00010294
+--- ocompiler-1.orig/tests/.expected/template.oc.log
++++ ocompiler-1/tests/.expected/template.oc.log
+@@ -1,6 +1,5 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./template.oc
++p./
++ntemplate.oc
+ o.x
+ o.y
+ ofile.path
+@@ -11,7 +10,7 @@ o.test
+ o.test2
+ o.a
+ o.auxdata
+-e
++q
+ v.x
+ v.a
+ x00000024
+--- ocompiler-1.orig/tests/.expected/unref.oc.log
++++ ocompiler-1/tests/.expected/unref.oc.log
+@@ -1,13 +1,11 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./unref.oc
+-p/<<PKGBUILDDIR>>/tests
++p./
++nunref.oc
+ nunref.h
+ db
+ oa.c
+ oa.d
+-e
+-e
++q
++q
+ va.c
+ cb
+ x00000000
+--- ocompiler-1.orig/tests/.expected/unref2.oc.log
++++ ocompiler-1/tests/.expected/unref2.oc.log
+@@ -1,12 +1,10 @@
+-p/<<PKGBUILDDIR>>/tests
+-p/<<PKGBUILDDIR>>/tests
+-n./unref2.oc
+-p/<<PKGBUILDDIR>>/tests
++p./
++nunref2.oc
+ nunref.h
+ db
+ oa.c
+ oa.d
+-e
+-e
++q
++q
+ va.d
+ x00000000
+--- ocompiler-1.orig/tests/tests
++++ ocompiler-1/tests/tests
+@@ -1,12 +1,10 @@
+ 
+-#must be in <<PKGBUILDDIR>> for .log files
+-
+ if [ -z "${OCOMP}" ]; then OCOMP=../src/o; fi
+ 
+ tests=( `find -name "*.oc"` )
+ 
+ for file in "${tests[@]}"; do
+-	OFLAGS="x_file 1 nul_res_pref 1"
++	OFLAGS="x_file 1 nul_res_pref 1 includedir 0 relative_path 1"  #includedir 0 relative_path 1   to test on launchpad at <<PKGBUILDDIR>> that is not the real folder there
+ 	echo ${file} | grep "\.w" > /dev/null
+ 	if [ $? = 0 ]; then OFLAGS+=" inplace_reloc 0 conv_64 2"; fi
+ 	echo ${OCOMP} ${file} ${OFLAGS}
