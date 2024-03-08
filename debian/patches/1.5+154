@@ -1,0 +1,63 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+154) xenial; urgency=medium
+ .
+   * input = output error
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-03-08
+
+--- ocompiler-1.orig/src/files/actions/pathout.oc
++++ ocompiler-1/src/files/actions/pathout.oc
+@@ -43,6 +43,14 @@ If extension!=null
+ 
+ 	Call memtomem(pointofpathout,extension,sz)
+ 	Add pointofpathout sz
++	Set pointofpathout# null
+ EndIf
+ 
+-Set pointofpathout# null
++sub pointofpathout safecurrentdirtopath
++if pointofpathout=pathinsize
++	sd is_same
++	setcall is_same memcmp(filenameloc,safecurrentdirtopath,pathinsize)
++	if is_same=0
++		call msgerrexit("same output file as source file")   # z with format elf, or z.o with format elfobj
++	endif
++endif
+--- ocompiler-1.orig/src/files/actions/setdefdir.oc
++++ ocompiler-1/src/files/actions/setdefdir.oc
+@@ -16,7 +16,7 @@ endif
+ 
+ Set filenameloc# storeachar
+ 
+-Data pathinsize#1
++Data pathinsize#1                         #also used at pathout
+ SetCall pathinsize strlen(filenameloc)
+ Data movesize#1
+ Set movesize pathinsize
+@@ -58,6 +58,7 @@ if logbool=true
+ 		else
+ 			Set filenameloc# (asciinul)
+ 			setcall errormsg addtolog_withchar_parses(path_nofree,(log_pathfolder),(TRUE))
++			Set filenameloc# storeachar  ##required to compare if they are same at pathout
+ 		endelse
+ 	endif
+ 	if errormsg!=noerr
