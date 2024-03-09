@@ -1,0 +1,1132 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-70) bionic; urgency=medium
+ .
+   * more debug data
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-03-09
+
+--- actionswf-1.orig/include/ascii.h
++++ actionswf-1/include/ascii.h
+@@ -47,7 +47,7 @@ Const Comma=0x2C
+ Const Hyphen=0x2D
+ Const Period=0x2E
+ Const Slash=0x2F
+-#Const _0=0x30
++Const _0=0x30
+ #Const _1=0x31
+ #Const _2=0x32
+ #Const _3=0x33
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -19,9 +19,11 @@ const QWORD=8
+ const pointer_rest=:-DWORD
+ 
+ const SEEK_SET=0
+-#const SEEK_CUR=1
++const SEEK_CUR=1
+ const SEEK_END=2
+ 
++const maxuint16=0xffFF
++
+ const block_size=0x1000
+ 
+ const mem_struct__size_off=4
+@@ -33,8 +35,10 @@ const mem_exp_done=2
+ const mem_exp_part_done=3
+ const mem_exp_change=4
+ const mem_exp_change_back=5
+-const mem_exp_get_block=6
+-const mem_exp_free=7
++const mem_exp_change_pool=6
++const mem_exp_change_back_pool=7
++const mem_exp_get_block=8
++const mem_exp_free=9
+ 
+ const NBits_size=5
+ 
+@@ -45,7 +49,7 @@ const ids_get_pointer=3
+ const ids_all_free=4
+ const ids_counter=5
+ 
+-const negative_means_action_sprite_pool=0x80<<8<<8<<8
++#const negative_means_action_sprite_pool=0x80<<8<<8<<8
+ const fd_error=-1
+ const fd_none=fd_error
+ const not_an_id=-1
+@@ -108,6 +112,10 @@ const from_done=1
+ const debug_none=0
+ #const debug_log=0x1
+ const debug_alt=0x2
++const debug_titles=0x4
+ 
+ const max_structures=999
+ const ids_str_len=3 #"999"
++
++const recordheader_long_mark=0x3f
++const recordheader_upperbits=recordheader_long_mark+1
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -4,17 +4,21 @@ The program is a set of objects made wit
+ A swf with actionscript example is in the example folder for static o language.
+ The include/actionswf.h is for c/c++ language. dev/import.h are the imports for o language.
+ The files swf.es and action.es has the main functions that can be used; functions from tool.es can be used in rare situations.
+-When using the debug option, action and action_sprite calls are logged. The syntax is as follow:
++When using a debug flag at swf_new_ex, action,action_sprite,swf_sprite_done calls are logged. The syntax is as follow:
+ 
+ SpriteId
+ TextLinesNumber
+ TextLines
+-{NumberA,NumberB}
++{NumberA,NumberB1...NumberBN}
++
++Or:
+ 
+ SpriteId
+ (here is a blank row)
+ (another one, here is a ShowFrame)
+ 
++Or:
++
+ SpriteId
+ (blank row)
+ FinalSpriteId
+@@ -24,5 +28,5 @@ SpriteId or 0 for root.
+ TextLinesNumber is the number of lines that TextLines has.
+ TextLines is the text like in action[_sprite] call.
+ NumberA lines, then NumberA1+...+NumberAN<=TextLinesNumber, less only when last line(s) is/are blank(s).
+-NumberB is the number of actions encountered in NumberA
++NumberB1...NumberBN: example ,1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+ FinalSpriteId is the if from the swf
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -37,7 +37,7 @@ endif
+ 
+ #this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+ #	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles
+ expitems = action swf tool ../shared/action_dllmain
+ 
+ exte=libexte.a
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -152,6 +152,8 @@ endfunction
+ aftercallimport ebool
+ 
+ import "debug_phase_code" debug_phase_code
++import "debug_definefunction" debug_definefunction
++import "debug_concludefunction" debug_concludefunction
+ 
+ function action_code_values_init()
+     import "memalloc" memalloc
+@@ -804,7 +806,9 @@ function action_definefunction(sd codepo
+         return codepointer
+     endif
+     add codepointer (DWORD)
+-    setcall codepointer action_deffunction(codepointer)
++
++	sd debug_related#3  #for debug file offset and codeSize pointer and line offset, must be recursive too
++    setcall codepointer action_deffunction(codepointer,#debug_related)
+ 
+ 	#all previous codes must pe catched at this phase, this place for this function is tested, example: "function(){" on one row
+ 	call debug_phase_code(codepointer)
+@@ -827,11 +831,13 @@ function action_definefunction(sd codepo
+     #close function marker for return and for..in case
+     import "brace_blocks_counter_dec" brace_blocks_counter_dec
+     call brace_blocks_counter_dec()
+-    #
++	#for debug log codeSize
++	call debug_concludefunction(#debug_related)
++	#
+     return codepointer
+ endfunction
+ #codepointer
+-function action_deffunction(sv codepointer)
++function action_deffunction(sv codepointer,sv debug_related)
+     ss fn_name
+     set fn_name codepointer#
+     add codepointer :  #to pass the pointer
+@@ -867,9 +873,11 @@ function action_deffunction(sv codepoint
+         call swf_actionblock_add(args#,wr_size)
+         add args :  #to pass the pointer
+     endwhile
+-    #
++	#get reg, not depending on brace blocks because } is closed in the loop there, for debug
++	call debug_definefunction(debug_related)
++	#
+     data dummyoffset=0
+-    call swf_actionblock_add(#dummyoffset,(WORD))
++    call swf_actionblock_add(#dummyoffset,(WORD))  #codeSize
+     #
+     return codepointer
+ endfunction
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -1055,8 +1055,8 @@ function write_forward_offset(sd offset)
+         call error("offset>(signed word size) error")
+     endif
+     #
+-    import "dword_to_word_arg" dword_to_word_arg
+-    call dword_to_word_arg(size,mem)
++    import "stack_to_word_arg" stack_to_word_arg
++    call stack_to_word_arg(size,mem)
+ endfunction
+ #offset
+ function brace_blocks_remove_write_offset()
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -31,34 +31,43 @@ endfunction
+ 
+ import "block_get_mem" block_get_mem
+ import "block_get_size" block_get_size
+-import "dword_to_word_arg" dword_to_word_arg
+-import "word_arg_to_dword" word_arg_to_dword
++import "stack_to_word_arg" stack_to_word_arg
++import "word_arg_to_stack" word_arg_to_stack
+ 
+ import "swf_mem" swf_mem
+ 
+ 
+ 
+-
+ aftercallimport ebool
+ 
+ 
+ 
+-
+-
+ #pool id
+ function actionpool_value(ss value)
++	sd id
++	set id actionpool_value_ex(value,(FALSE))
++	return id
++end
++#pool id
++function actionpool_value_ex(ss value,sd force)
+     sd poolid
+     setcall poolid actionpoolid_get()
+-    or poolid (negative_means_action_sprite_pool)
+     sd nr
+-    call swf_mem((mem_exp_change),poolid)
+-    setcall nr actionpool_getvalue(value)
+-    call swf_mem((mem_exp_change_back))
++    call swf_mem((mem_exp_change_pool),poolid)
++    setcall nr actionpool_getvalue_ex(value,force)
++    call swf_mem((mem_exp_change_back_pool))
+     return nr
+ endfunction
+-import "swf_mem_add" swf_mem_add
+ #pool id
+ function actionpool_getvalue(ss value)
++	sd id
++	set id actionpool_getvalue_ex(value,(FALSE))
++	return id
++end
++import "swf_mem_add" swf_mem_add
++import "error" error
++#pool id
++function actionpool_getvalue_ex(ss value,sd force)
+     sd block
+     setcall block actionpool_currentblock()
+     sd size
+@@ -67,7 +76,7 @@ function actionpool_getvalue(ss value)
+     sd newlen
+     setcall newlen strlen(value)
+     if size=0
+-    #add the pools header and count=1, later add value for count=1
++	#is first value, add the pools header and count=1 , the pool mem is already selected when it comes from the second actionpool_getvalue at push
+         sd onevalue=1
+         call swf_mem_add(#onevalue,2)
+         set nr 0
+@@ -75,9 +84,10 @@ function actionpool_getvalue(ss value)
+         sd mem
+         sd count
+         setcall mem block_get_mem(block)
+-        setcall count word_arg_to_dword(mem)
+-        add mem (WORD)
++        setcall count word_arg_to_stack(mem)
+         set nr count
++	if force=(FALSE)
++		add mem (WORD)
+         while count!=0
+             sd len
+             setcall len strlen(mem)
+@@ -93,10 +103,14 @@ function actionpool_getvalue(ss value)
+             add mem len
+             dec count
+         endwhile
+-        setcall mem block_get_mem(block)
++		setcall mem block_get_mem(block)
++	end
++	if nr=(maxuint16)
++		call error("max uint16 at action pool") #Count  UI16  Number of constants to follow
++	end
+         set count nr
+         inc count
+-        call dword_to_word_arg(count,mem)
++        call stack_to_word_arg(count,mem)
+     endelse
+     inc newlen
+     call swf_mem_add(value,newlen)
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -301,7 +301,7 @@ endfunction
+ function action_one(sd tag)
+     call swf_actionblock_add(#tag,1)
+       import "debug_phase_code_add" debug_phase_code_add
+-      call debug_phase_code_add()
++      call debug_phase_code_add((FALSE))
+ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -15,7 +15,7 @@ importx "rmdir" rmdir
+ 
+ import "swf_frames_pointer" swf_frames_pointer
+ import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+-import "word_arg_to_dword" word_arg_to_dword
++import "word_arg_to_stack" word_arg_to_stack
+ import "mem_free" mem_free
+ 
+ function alt_join(vstr concat_point)
+@@ -70,7 +70,7 @@ function alt_action_base(sd orig_action,
+ 			else
+ 				set p swf_frames_pointer()
+ 			end
+-			sd f;set f word_arg_to_dword(p)
++			sd f;set f word_arg_to_stack(p)
+ 			inc f  ##index 0 is frame 1 at ffdec
+ 			call sprintf(alt_join.concat_point,"%u_%u",preid,f)
+ 		else
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -2,8 +2,7 @@ Format ElfObj64
+ 
+ include "../include/prog.h"
+ 
+-import "identifiers_get" identifiers_get
+-import "dword_to_word_arg" dword_to_word_arg
++import "stack_to_word_arg" stack_to_word_arg
+ 
+ #value
+ function args_advance(sv p_args)
+@@ -357,6 +356,7 @@ endfunction
+ 
+ #button
+ 
++import "identifiers_get" identifiers_get
+ import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+ import "swf_mem_add" swf_mem_add
+ #id
+@@ -422,8 +422,8 @@ function buttonrecord(sd writeflag,sd x,
+ 
+     if writeflag=1
+         set bits states
+-        call dword_to_word_arg(id,#CharacterID)
+-        call dword_to_word_arg(depth,#PlaceDepth)
++        call stack_to_word_arg(id,#CharacterID)
++        call stack_to_word_arg(depth,#PlaceDepth)
+         call swf_mem_add(#bits,size)
+     endif
+ 
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -35,8 +35,13 @@ function debug_end()
+ 	return #a
+ endfunction
+ function debug_actions()
+-	datax a#1  #65535
+-	return #a
++	#now is a string #datax a#1  #65535
++	value mem=NULL
++	#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
++	#but all_size is growing +0x1000 from that limit, and the error is catched there, valuex?
++	#there is a limit on actions and on constant pool, so don't worry here
++	datax size#1
++	datax all_size#1
+ endfunction
+ 
+ import "mem_free" mem_free
+@@ -49,6 +54,7 @@ function debug_free()
+ 		value file=NULL
+ 		const p_debug_file^file
+ 		call f_close(#file)
++		call mem_free(#debug_actions.mem)
+ 	endif
+ endfunction
+ 
+@@ -92,13 +98,6 @@ function debug_phase_parse(ss pointer)
+ 		set target# (NULL)
+ 	endif
+ endfunction
+-function debug_phase_code_add()
+-	sv of%p_offsets
+-	if of#!=(NULL)
+-		sd acts;setcall acts debug_actions()
+-		inc acts#
+-	endif
+-endfunction
+ 
+ function debug_action_phase()
+ 	sv of%p_offsets
+@@ -107,11 +106,26 @@ function debug_action_phase()
+ 	endif
+ endfunction
+ 
++importx "sprintf" sprintf
++importx "memcpy" memcpy
++
++function md_printf(sd c,sd format,sd val) #to not write null on unknown
++	char mem#5
++	sd n;set n sprintf(#mem,format,val)
++	call memcpy(c,#mem,n)
++	return n
++end
++
+ import "row_termination" row_termination
++import "brace_blocks_get_memblock" brace_blocks_get_memblock
++import "block_get_size" block_get_size
++import "block_get_mem" block_get_mem
++import "word_arg_to_stack" word_arg_to_stack
+ 
+ importx "strlen" strlen
+-importx "sprintf" sprintf
+-importx "fwrite" fwrite
++importx "fseek" fseek
++importx "fread" fread
++importx "fprintf" fprintf
+ 
+ 
+ 
+@@ -119,25 +133,32 @@ aftercallimport ebool
+ 
+ import "memalloc" memalloc
+ import "f_open_mem" f_open_mem
+-import "error" error
+ import "alt_init" alt_init
++import "dtitles_init" dtitles_init
+ 
+ function debug_init(sd flags,sd path)
+ 	sv of%p_offsets
+-	if flags!=(debug_none)
+-		setcall of# memalloc(0)
++	if flags!=(debug_none)  #then at alt also log (used at debugger), same for titles
++		setcall of# memalloc(1)  #0 on some systems can be NULL return
+ 
+ 		sd s;setcall s strlen(path)
+ 		sd a=5;add a s
+ 		sd b;setcall b memalloc(a)
+ 		call sprintf(b,"%s.log",path)
+ 		sv file%p_debug_file
+-		setcall file# f_open_mem(b,"wb")
++		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for comma character
++
++		setcall debug_actions.mem memalloc(1)
++		#this is later #set debug_actions.size 0
++		set debug_actions.all_size 1
+ 	endif
+ 	call alt_init(flags,path,s) #is here because need to set a default value inside
++	call dtitles_init(flags)    #same
+ endfunction
+ 
+ import "f_printf" f_printf
++import "f_write" f_write
++import "f_tell" f_tell
+ 
+ function debug_action_init(ss ac)
+ 	sv of%p_offsets
+@@ -168,9 +189,8 @@ function debug_action_init(ss ac)
+ 		add row of#
+ 		sv end;setcall end debug_end()   #at third iteration
+ 		set end# row
+-		#
+-		sd acts;setcall acts debug_actions()
+-		set acts# 0
++
++		set debug_actions.size 0
+ 	endif
+ endfunction
+ 
+@@ -179,24 +199,26 @@ function debug_phase_code(sd codepointer
+ 	if of#!=(NULL)
+ 		sv a;setcall a debug_mark_get()
+ 		if codepointer=a#   #can also be smaller
+-			sv b;set b a
+-			sv end;setcall end debug_end()
+-			while codepointer=b#
+-				call debug_mark_add()
+-				setcall b debug_mark_get()
+-				if b=end#
+-					break
+-				endif
+-			endwhile
+-			sub b a
+-			div b :
+-
+-			#out rows,actions\n
+-			sd acts;setcall acts debug_actions()
+-			sv file%p_debug_file
+-			char f={Percent,l,u,Comma,Percent,u,LineFeed,Nullchar}   #must escape \n or something
+-			call f_printf((fprintf_min+2),file#,#f,b,acts#)
+-			set acts# 0
++			if debug_actions.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
++				sv b;set b a
++				sv end;setcall end debug_end()
++				while codepointer=b#
++					call debug_mark_add()
++					setcall b debug_mark_get()
++					if b=end#
++						break
++					endif
++				endwhile
++				sub b a
++				div b :
++
++				#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
++				sv file%p_debug_file
++				call f_printf((fprintf_min+1),file#,"%lu",b)
++				call f_write(file#,debug_actions.mem,debug_actions.size)
++				call f_write(file#,"\n",1)
++				set debug_actions.size 0
++			end
+ 		endif
+ 	endif
+ endfunction
+@@ -220,10 +242,7 @@ function debug_show(sd id)
+ end
+ function debug_write(ss s,sd d)
+ 	sv file%p_debug_file
+-	sd items;set items fwrite(s,d,1,file#) #...size,items...
+-	if items!=1
+-		call error("fwrite error")
+-	end
++	call f_write(file#,s,d)
+ end
+ function debug_spritedone(sd p,sd i)
+ 	sv of%p_offsets
+@@ -233,3 +252,102 @@ function debug_spritedone(sd p,sd i)
+ 		call debug_base_core(i)
+ 	end
+ end
++
++function debug_phase_code_add(sd is_long,ss plength)
++	sv of%p_offsets
++	if of#!=(NULL)
++		sd sz;set sz debug_actions.size
++		if is_long=(TRUE)
++			add sz (1+2+2)
++		else
++			add sz 1
++		end
++		if sz>^debug_actions.all_size
++			set debug_actions.all_size sz
++			add debug_actions.all_size 0x1000
++			set debug_actions.mem memrealloc(debug_actions.mem,debug_actions.all_size)
++		end
++		ss m;set m debug_actions.mem
++		add m debug_actions.size
++
++		set m# (Comma) #even if is only 1 action is lines,a1,a2...an
++
++		if is_long=(TRUE)
++			inc m
++			sd here_sz
++			ss second=1
++			add second plength
++			if second#!=0
++				set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
++				add m here_sz
++				sub here_sz 2
++				call md_printf(m,"%02X",plength#)
++			else
++				set here_sz md_printf(m,"%X",plength#)  #only 0 is also printed
++				sub here_sz 2+2
++			end
++			add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
++		end
++		set debug_actions.size sz
++	endif
++endfunction
++
++function debug_definefunction(sv pointers)
++	sv of%p_offsets
++	if of#!=(NULL)
++		set pointers# f_tell(debug_free.file)
++		incst pointers
++
++		sd memblock;setcall memblock brace_blocks_get_memblock()
++		set pointers#d^ block_get_size(memblock)
++		incst pointers
++
++		sd offset
++		set offset debug_actions.size  ##same size as debug_actions.size
++		char dummy={0xff,0xff} #0,0 is not ok inside
++		call debug_phase_code_add((TRUE),#dummy)
++		#inc offset ##to skip Comma  #but at fseek is not needed because fread is already skipping that
++		set pointers#d^ offset
++	endif
++end
++import "error" error
++function debug_concludefunction(sv pointers)
++	sv of%p_offsets
++	if of#!=(NULL)
++		sd prev_fileoffset;set prev_fileoffset pointers#
++		sd now;set now f_tell(debug_free.file)
++		incst pointers
++
++		sd block;setcall block brace_blocks_get_memblock()
++		sd blockmem;set blockmem block_get_mem(block)
++		add blockmem pointers#d^
++		sd size;set size word_arg_to_stack(blockmem)
++		incst pointers
++
++		sd offset;set offset pointers#d^
++
++		vstr format="%04X"
++		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
++			call fseek(debug_free.file,prev_fileoffset,(SEEK_SET))
++			#now need to skip first number that is the number of rows
++			while 0=0
++				char a#1
++				sd ret
++				set ret fread(#a,1,1,debug_free.file)
++				if a=(Comma)  #there is a comma from here
++					break
++				elseif ret!=1
++					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
++				end
++			end
++			call fseek(debug_free.file,offset,(SEEK_CUR))
++			call fprintf(debug_free.file,format,size)    #overwrite the dummy write
++			call fseek(debug_free.file,0,(SEEK_END))
++		else #on mem
++			sd c;set c debug_actions.mem
++			inc offset ##to skip Comma
++			add c offset
++			call md_printf(c,format,size)
++		end
++	endif
++end
+--- /dev/null
++++ actionswf-1/src/dtitles.oc
+@@ -0,0 +1,85 @@
++
++format elfobj64
++
++include "../include/prog.h"
++
++importx "sprintf" sprintf
++importx "memcpy" memcpy
++
++import "word_arg_to_stack" word_arg_to_stack
++
++#here iterates swf tags in the sprite, enters DoAction tags, first tag is the pool with the format from dtitles_frame, goes at last string, overwrites 0000 with the final id
++function dtitles_conclude(sd finalid,sd mem)
++	char bool#1
++	if bool=(TRUE)
++		#finalid is u16
++		char store#5
++		call sprintf(#store,"%04X",finalid)
++
++		add mem (WORD+WORD) #id field, frame count
++		while 0=0
++			sd RECORDHEADER
++			set RECORDHEADER word_arg_to_stack(mem)
++			add mem (WORD)
++			sd length=recordheader_long_mark
++			and length RECORDHEADER
++			divu RECORDHEADER (recordheader_upperbits)
++			if RECORDHEADER=(End)
++				break
++			end
++			if length=(recordheader_long_mark)
++				set length mem#
++				add mem (DWORD)
++			end
++			ss cursor
++			if RECORDHEADER=(DoAction)
++				set cursor mem
++				inc cursor           ##ACTIONRECORDHEADER ActionCode
++				sd Length
++				set Length word_arg_to_stack(cursor)
++				add cursor (WORD)
++				sd Count
++				set Count word_arg_to_stack(cursor)
++				add cursor (WORD)
++				if Count!=1
++					add cursor Length     ##now is +2 in offset [Count is u16]
++					sub cursor (1+   4+   1+   1+   2)
++					#           here 0000 X    null
++					#  previous str0       XXX
++					while cursor#!=(Nullchar)  #there are 3 more possible digits
++						dec cursor
++					end
++					inc cursor
++				end
++				call memcpy(cursor,#store,4)
++			end
++			add mem length
++		end
++	end
++end
++
++function dtitles_init(sd flags)
++	and flags (debug_titles)
++	if flags!=0
++		set dtitles_conclude.bool (TRUE)
++		ret
++	end
++	set dtitles_conclude.bool (FALSE)
++end
++
++
++
++aftercallimport ebool
++
++
++
++#here adds 0000X[X[X[X]]], if is root 0000 will be final, else is dummy now and will be sprite final id at conclude function
++function dtitles_frame(sd index)
++	if dtitles_conclude.bool=(TRUE)
++		char format={_0,_0,_0,_0} #id
++		char frame_index#4+1      #index is uword here, is checked
++		call sprintf(#frame_index,"%X",index)
++		import "actionpool_value_ex" actionpool_value_ex
++		call actionpool_value_ex(#format,(TRUE))  #force the write because debugger will look at the last pool constant there
++	end
++end
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -64,6 +64,6 @@ function action_base(ss ac)
+ 		setcall p_values action__code_row(p_values)
+ 	endwhile
+ 
+-    #free mem ok,another free can be at errors
++    #free mem ok,another free is at errors
+     call action_debug_free()
+ endfunction
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -48,6 +48,8 @@ importx "free" free
+ 
+ importx "fopen" fopen
+ importx "fprintf" fprintf
++importx "fwrite" fwrite
++importx "ftell" ftell
+ 
+ function f_printf_in(sd p,sd nr)
+ 	callex fprintf p nr ##callexret
+@@ -161,3 +163,18 @@ function f_printf(sd nr,sd file,sd forma
+ 		call error("fprintf error")
+ 	endif
+ endfunction
++
++function f_write(sd f,sd buf,sd sz)
++	sd r;set r fwrite(buf,sz,1,f)
++	if r!=1
++		call error("fwrite error")
++	end
++endfunction
++
++function f_tell(sd f)
++	sd r;set r ftell(f)
++	if r=-1
++		call error("ftell error")
++	end
++	return r
++endfunction
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -19,16 +19,6 @@ function identifiers_set(sd value)
+     setcall id identifiers()
+     set id# value
+ endfunction
+-#id
+-function identifiers_get()
+-    sd id
+-    setcall id identifiers()
+-    sd value
+-    set value id#
+-    inc id#
+-    call identifiers_set(id#)
+-    return value
+-endfunction
+ 
+ #p
+ function exportsId()
+@@ -76,8 +66,8 @@ import "actionpoolid" actionpoolid;impor
+ import "actionpool_currentblock" actionpool_currentblock
+ 
+ import "action_size" action_size
+-import "dword_to_word_arg" dword_to_word_arg
+-import "word_arg_to_dword" word_arg_to_dword
++import "stack_to_word_arg" stack_to_word_arg
++import "word_arg_to_stack" word_arg_to_stack
+ 
+ 
+ 
+@@ -85,6 +75,19 @@ aftercallimport ebool
+ 
+ 
+ 
++import "dtitles_frame" dtitles_frame
++
++#id
++function identifiers_get()
++	sd id
++	setcall id identifiers()
++	if id#=(maxuint16) #from swf specitifactions, example, id field for a DefineSprite
++		call error("max uint16 at identifiers")
++	end
++	inc id#
++	return id#
++endfunction
++
+ function free_sprite_id(sd id,sd finalId_or_containerId) #containerId for buttons
+     call struct_ids((ids_free),id)
+ #these two are ok throwless
+@@ -113,10 +116,21 @@ function swf_mem(sd proc,sd arg,sd len)
+ 	#data main_id#1 #was moved to a throwless location
+     value call_struct#1;vdata c_main^struct_ids;vdata c_pool^struct_ids_actionpool
+ 
++    data id_stack#1
++
+     if proc=(mem_exp_change_back)
+         set id swf_frames_reg.main_id
+         set call_struct c_main
+         ret
++	elseif proc=(mem_exp_change_pool)  #this can be stackable, at debug titles, at normal usage is back at the main id
++	#is after action_code_values_init
++		set id_stack id
++		set id arg
++		set call_struct c_pool
++	elseif proc=(mem_exp_change_back_pool)
++		set id id_stack
++		set call_struct c_main
++		ret
+     elseif proc=(mem_exp_init)
+     #arg is file
+     #len is filelength offset
+@@ -171,10 +185,8 @@ function swf_mem(sd proc,sd arg,sd len)
+         setcall p_block call_struct((ids_get_pointer),id)
+         call mem_block_add(p_block,arg,len)
+     elseif proc=(mem_exp_change)
+-        if arg<0;set call_struct c_pool
+-            xor arg (negative_means_action_sprite_pool)
+-        else;set call_struct c_main;endelse
+-        set id arg
++		set id arg
++		set call_struct c_main
+     else
+     #if proc==(mem_exp_done)
+         call swf_tag_end()
+@@ -200,7 +212,6 @@ endfunction
+ function swf_tag_end()
+     call swf_tag_recordheader_entry((End),0)
+ endfunction
+-const recordheader_long_mark=0x3f
+ function swf_tag_recordheader_entry(sd tag,sd size)
+     if size<(recordheader_long_mark)
+         sd tag_plus_size
+@@ -226,6 +237,14 @@ function swf_tag(ss dest,sd tag,sd size)
+     call swf_mem((mem_exp_add),dest,size)
+ endfunction
+ 
++function swf_frames_inc(sd frames,sw pointer)
++	if frames=(maxuint16)  #example, frame count at DefineSprite
++		call error("max uint16 at frames")
++	end
++	inc frames      ##even if is not a ShowFrame in the swf, is action that resides in a frame, ffdec is saying same
++	call stack_to_word_arg(frames,pointer)
++end
++
+ #
+ function swf_actionblock(sd proc,sd arg,sd arg2)
+     data id#1
+@@ -263,18 +282,21 @@ function swf_actionblock(sd proc,sd arg,
+         call mem_block_add(p_block,arg,arg2)
+     elseif proc=(mem_exp_part_done)
+ 		sd frames
+-		setcall frames word_arg_to_dword(arg2)
++		setcall frames word_arg_to_stack(arg2)
+ 
+ 		sd block
+ 		set block p_block#
+ 		sd size
+ 		setcall size block_get_size(block)
+ 		if size!=0  #here is an ending from show or done with size
+-			if arg=(from_show) #example: too action() and one show here
++			if arg=(from_show) #example: two action() and one show here
+ 				call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
+ 			end
+-			inc frames      ##even if is not a ShowFrame in the swf, is action that resides in a frame, ffdec is saying same
+-			call dword_to_word_arg(frames,arg2)
++
++			#more at dtitles
++			call dtitles_frame(frames)
++
++			call swf_frames_inc(frames,arg2)
+ 
+ 			import "write_action" write_action
+ 			sd tagsz
+@@ -287,11 +309,9 @@ function swf_actionblock(sd proc,sd arg,
+ 			call block_reset_size(block)
+ 		elseif arg=(from_show)  #here is an ending from show with no size
+ 			call debug_show(id) #to keep the count of frames at debugger
+-			inc frames
+-			call dword_to_word_arg(frames,arg2)
++			call swf_frames_inc(frames,arg2)
+ 		elseif frames=0    #here is an ending from done with no size and no previous show
+-			inc frames  ##a default frame, how was before at root, and at sprite is ok
+-			call dword_to_word_arg(frames,arg2)
++			call swf_frames_inc(frames,arg2) #a default frame, how was before at root, and at sprite is ok
+ 		endelseif
+     else
+     #if proc==(mem_exp_get_block)
+@@ -306,16 +326,16 @@ function actionrecordheader(sd tag,sd si
+     char t#1
+     char length#2
+     set t tag
+-    call dword_to_word_arg(size,#length)
++    call stack_to_word_arg(size,#length)
+     call swf_actionblock_add(#t,3)
+ 	import "debug_phase_code_add" debug_phase_code_add
+-	call debug_phase_code_add()
++	call debug_phase_code_add((TRUE),#length)
+ endfunction
+ function swf_actionrecordheader(sd tag,sd size)
+     char t#1
+     char length#2
+     set t tag
+-    call dword_to_word_arg(size,#length)
++    call stack_to_word_arg(size,#length)
+     call swf_mem_add(#t,3)
+ endfunction
+ 
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -8,7 +8,6 @@ importx "strlen" strlen
+ importx "memcmp" memcmp
+ 
+ import "identifiers_set" identifiers_set
+-import "identifiers_get" identifiers_get
+ import "swf_frames_reg" swf_frames_reg
+ import "swf_frames_pointer" swf_frames_pointer
+ import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+@@ -17,13 +16,13 @@ import "printEr" printEr
+ import "rect_prepare" rect_prepare
+ import "button_mem" button_mem
+ 
+-import "dword_to_word_arg" dword_to_word_arg
++import "stack_to_word_arg" stack_to_word_arg
+ import "dword_swap" dword_swap
+ import "args_advance" args_advance
+ import "bits_packs" bits_packs
+ import "NumFill_NumLin" NFill_NLin
+ import "shapewithstyle_records" shapewithstyle_records
+-import "word_arg_to_dword" word_arg_to_dword
++import "word_arg_to_stack" word_arg_to_stack
+ import "file_get_content__resources_free" file_get_content__resources_free
+ import "file_resources_set" file_resources_set
+ import "file_resources_free" file_resources_free
+@@ -34,7 +33,7 @@ import "block_get_mem" block_get_mem
+ import "free_sprite_id" free_sprite_id
+ import "block_reset_size" block_reset_size
+ import "freereset" freereset   #..x with no args
+-
++import "dtitles_conclude" dtitles_conclude
+ 
+ 
+ 
+@@ -48,6 +47,7 @@ import "rect_add" rect_add
+ import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+ import "error" error
+ import "swf_shape_simple" swf_shape_simple
++import "identifiers_get" identifiers_get
+ 
+ import "swf_button_base" swf_button_base
+ import "swf_text_initial_font_centered" swf_text_initial_font_centered
+@@ -198,7 +198,7 @@ functionX swf_font(ss fontname,sd font_f
+ 
+     sd fontid
+     setcall fontid identifiers_get()
+-    call dword_to_word_arg(fontid,#id)
++    call stack_to_word_arg(fontid,#id)
+ 
+     set Flags font_flags
+ 
+@@ -371,10 +371,10 @@ functionX swf_text(sd bound_width,sd bou
+         char l_indent#2
+         char l_leading#2
+         set l_align layout_align
+-        call dword_to_word_arg(layout_leftmargin,#l_leftmargin)
+-        call dword_to_word_arg(layout_rightmargin,#l_rightmargin)
+-        call dword_to_word_arg(layout_indent,#l_indent)
+-        call dword_to_word_arg(layout_leading,#l_leading)
++        call stack_to_word_arg(layout_leftmargin,#l_leftmargin)
++        call stack_to_word_arg(layout_rightmargin,#l_rightmargin)
++        call stack_to_word_arg(layout_indent,#l_indent)
++        call stack_to_word_arg(layout_leading,#l_leading)
+         call swf_mem_add(#l_align,layout_size)
+     endif
+     call swf_mem_add(variablename,vlen)
+@@ -440,7 +440,7 @@ functionX swf_shape(sd width,sd height,s
+         else
+         #if fillstyle==(repeating_bitmap_fill)
+         #clipped bitmap fill,non-smoothed repeating bitmap or non-smoothed clipped bitmap
+-            call dword_to_word_arg(fillarg,#data)
++            call stack_to_word_arg(fillarg,#data)
+             sd fill_pointer^data
+             add fill_pointer (WORD)
+             #matrix,scaleX=20,scaleY=20,translateX=0,translateY=0
+@@ -469,7 +469,7 @@ functionX swf_shape(sd width,sd height,s
+     if linewidth!=0
+         set LineStyleCount 1
+         mult linewidth 20
+-        call dword_to_word_arg(linewidth,#line_points)
++        call stack_to_word_arg(linewidth,#line_points)
+         setcall color dword_swap(linecolor)
+         add linestyles_size (WORD+DWORD)
+     endif
+@@ -669,10 +669,10 @@ functionX swf_dbl_ex(ss imagepath,sd p_w
+         sd pointer
+         set pointer cursor
+         add pointer (BYTE)
+-        setcall p_wh# word_arg_to_dword(pointer)
++        setcall p_wh# word_arg_to_stack(pointer)
+         add pointer (WORD)
+         add p_wh (DWORD)
+-        setcall p_wh# word_arg_to_dword(pointer)
++        setcall p_wh# word_arg_to_stack(pointer)
+     endif
+     call swf_mem_add(cursor,image_size)
+     call file_get_content__resources_free()
+@@ -763,7 +763,7 @@ vdata hd_pack2%hd2
+     call swf_mem((mem_exp_init),path,(file_sz_off-hd_start))
+ 
+     #identifiers for swf
+-    call identifiers_set(1);#font with id 0 isn't visible in the placements
++    call identifiers_set(0);#font with id 0 isn't visible in the placements
+ 
+     call swf_mem_add(hd_pack,size)
+     call rect_add(width,height)
+@@ -841,28 +841,32 @@ endfunction
+ functionX swf_sprite_done(sd spriteid)
+ #sd spriteid        pre-id created with swf_sprite_new
+     call swf_mem((mem_exp_change),spriteid)
+-    call swf_actionblock((mem_exp_change),spriteid)
+ 
++    call swf_actionblock((mem_exp_change),spriteid)
+ 	sd p;setcall p swf_sprite_frames_pointer(spriteid)
+ 	call swf_actionblock((mem_exp_part_done),(from_done),p);#in case there are remaining actions
+-
+     call swf_actionblock((mem_exp_change_back))
++
+     import "swf_tag_end" swf_tag_end
+     call swf_tag_end()
+     call swf_mem((mem_exp_change_back))
+ 
++	sd id
++	setcall id identifiers_get()
++
+     sd sprite
+     setcall sprite struct_ids((ids_get),spriteid)
+     sd mem
+     setcall mem block_get_mem(sprite)
++
++	#more at dtitles
++	call dtitles_conclude(id,mem)
++
+     sd size
+     setcall size block_get_size(sprite)
+     #
+     call swf_tag_recordheader_entry((DefineSprite),size)
+-    sd id
+-    setcall id identifiers_get()
+-    call dword_to_word_arg(id,mem)
+-    #
++    call stack_to_word_arg(id,mem)
+ 
+     call swf_mem_add(mem,size)
+ 
+@@ -938,9 +942,9 @@ functionX swf_exports_add(sd id,ss name)
+     else
+         sd mem
+         setcall mem block_get_mem(block)
+-        setcall counter word_arg_to_dword(mem)
++        setcall counter word_arg_to_stack(mem)
+         inc counter
+-        call dword_to_word_arg(counter,mem)
++        call stack_to_word_arg(counter,mem)
+     endelse
+     #
+     call swf_mem_add(#id,(WORD))
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -35,13 +35,13 @@ function word_swap_arg(ss word)
+     set dest# word#
+     set word# aux#
+ endfunction
+-function dword_to_word_arg(sd int,ss arg)
++function stack_to_word_arg(sd int,ss arg)
+     set arg# int
+     inc arg
+-    div int 0x100
++    divu int 0x100
+     set arg# int
+ endfunction
+-function word_arg_to_dword(ss arg)
++function word_arg_to_stack(ss arg)
+     inc arg
+     sd value
+     set value arg#
+@@ -331,10 +331,9 @@ endfunction
+ #
+ function memrealloc(sd mem,sd size)
+ #unele fisiere pot da eroare de la realocare; fara functia asta aftercall poate fi degeaba
+-    sd ptr;sd n=NULL
++    sd ptr
+     setcall ptr realloc(mem,size)
+-    sd comp;setcall comp memcmp(#ptr,#n,:)
+-    if comp=0
++    if ptr=(NULL)
+         call error("realloc failed")
+     endif
+     return ptr
+@@ -375,9 +374,14 @@ function mem_block_add(sv p_block,ss new
+     set allsize block#
+     set sz_test size
+     add sz_test newblock_size
+-    if sz_test>allsize
++
++	if sz_test>^0x7fFFffFF
++		call error("size error") #easy to test, call multiple action(...)
++	end
++
++    if sz_test>^allsize
+     #was >= but when >?, here and in another 2 places
+-        div sz_test (block_size)
++        divu sz_test (block_size)
+         mult sz_test (block_size)
+         add sz_test (block_size)
+     #    set allsize sz_test
