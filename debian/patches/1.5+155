@@ -1,0 +1,241 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+155) xenial; urgency=medium
+ .
+   * cast sign not mandatory
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-03-29
+
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -663,7 +663,7 @@
+         set a# 8</p>
+ 	</a>
+ 
+-	More can be done with the cast notations:
++	More can be done with the cast notations [the cast sign (^) is not mandatory]:
+ 
+ 	<table class="code">
+ 	<tr><td>format elfobj64</td></tr>
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1zPU9BqaKrMs8EHk5zBdnefZxhTxNiQ6w
++File ID: 19rIc3RSuaYS1VXQhvYLlho4cv9ZpsQ3j
++<p>Found file: ./ocompiler-1-5+154.x86_64.rpm, 19rIc3RSuaYS1VXQhvYLlho4cv9ZpsQ3j, 2024-03-29T12:11:08.735Z, 69945, https://drive.google.com/uc?id=19rIc3RSuaYS1VXQhvYLlho4cv9ZpsQ3j&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+145.x86_64.rpm, 1zPU9BqaKrMs8EHk5zBdnefZxhTxNiQ6w, 2024-03-08T05:47:37.878Z, 69772, https://drive.google.com/uc?id=1zPU9BqaKrMs8EHk5zBdnefZxhTxNiQ6w&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+144.x86_64.rpm, 12wMt7Pby5CEE9gb8poK7tGtnruTDvHpC, 2024-02-19T08:16:05.783Z, 69641, https://drive.google.com/uc?id=12wMt7Pby5CEE9gb8poK7tGtnruTDvHpC&export=download
+--- ocompiler-1.orig/ostrip/file.oc
++++ ocompiler-1/ostrip/file.oc
+@@ -145,8 +145,8 @@ endfunction
+ function seek(sd file,sd offset,sd whence)
+ 	sd return;SetCall return fseek(file,offset,whence)
+ 	#at lseek:
+-	#	beyond seekable device limit is not our concerne, error check at seekc can go if seeks was not
+-	#	at section headers offset, error can be demonstrated (bad offset)
++	#	tested again with same truncate -s ... . fseek with a decent offset is not error, at ftell will be
++	#	with a negative offset if ftell is also wrong then fseek will error, if will overflow and ftell will end again in a good offset, then even with a negative offset, fseek will be ok
+ 	if return!=0
+ 		call erMessage("fseek error")
+ 	endif
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -22,11 +22,16 @@ FULLOBJS = ${FULLOBJ}.oc
+ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+ 
++#OFLAGS=
++
++#problems at box64 and CC
+ ifeq (${conv_64},0)
+-ATCCCOM = $(CC) ${linkerflags} -o ${prog}
++#ATCCCOM = $(CC) ${linkerflags} -o ${prog}
++ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o ${prog}
+ else
+-ATCCCOM = $(CC) -m32 ${linkerflags} -o ${prog}
+-OFLAGS=conv_64 1
++#ATCCCOM = $(CC) -m32 ${linkerflags} -o ${prog}
++ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${L} -lc -entry main -o ${prog}
++OFLAGS+=conv_64 1
+ endif
+ 
+ OFLAGS+=${OFLAGSEXTRA}
+@@ -41,7 +46,8 @@ OFLAGS+=${OFLAGSEXTRA}
+ ${prog}: ${OBJ}
+ 	${OLINK} ${FULLOBJLOG}
+ 	@echo
+-	${ATCCCOM} ${FULLOBJO}
++	#${ATCCCOM} ${FULLOBJO}
++	${ATLDCOM} ${FULLOBJO}
+ 
+ install: all
+ 	install -D ${prog} \
+--- ocompiler-1.orig/otoc/md
++++ ocompiler-1/otoc/md
+@@ -1,3 +1,4 @@
+ 
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+-OCOMP=${OCOMP} OLINK=ounused OFLAGSEXTRA="function_name 1 nul_res_pref 1" make linkerflags= $@
++OFLAGSEXTRA+=" function_name 1 nul_res_pref 1"
++OCOMP=${OCOMP} OLINK=ounused OFLAGSEXTRA="${OFLAGSEXTRA}" make linkerflags= $@
+--- /dev/null
++++ ocompiler-1/otoc/mrd
+@@ -0,0 +1,6 @@
++
++# sudo ln -snf ~/before /usr/x86_64-linux-gnu && \
++#           n if is already there to not follow there and f is force
++#ln, with -L is not enough
++
++LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd OFLAGSEXTRA="inplace_reloc 0" ./md
+--- ocompiler-1.orig/otoc/otoc.oc
++++ ocompiler-1/otoc/otoc.oc
+@@ -13,6 +13,7 @@ importx "puts" puts
+ importx "fopen" fopen
+ importx "fclose" fclose
+ importx "strrchr" strrchr
++importx "exit" exit  #only for problems at box64
+ 
+ function out_file(sd in)
+ 	ss p;set p strrchr(in,(asciidot))
+@@ -39,25 +40,30 @@ include "loop.oc"
+ 
+ #aftercalli
+ 
+-entry main(sd argc,sv argv)
+-	if argc=2
+-		incst argv
+-		sd s;set s argv#
+-		sd f;setcall f fopen(s,"rb")
+-		if f!=(NULL)
+-			sd out;set out out_file(s)
+-			sd exit=EXIT_SUCCESS
+-			if out!=(NULL)
+-				set exit loop(f,out)
+-				call fclose(out)
+-			else
+-				set exit (EXIT_FAILURE)
+-			end
+-			call fclose(f)
+-			return exit
++function mainfn(sv s)
++	#sd s;incst argv;set s argv#
++	sd f;setcall f fopen(s,"rb")
++	if f!=(NULL)
++		sd out;set out out_file(s)
++		sd exitval=EXIT_SUCCESS
++		if out!=(NULL)
++			set exitval loop(f,out)
++			call fclose(out)
++		else
++			set exitval (EXIT_FAILURE)
+ 		end
+-		call puts("Cannot open input file")
+-		return (EXIT_FAILURE)
++		call fclose(f)
++		return exitval
+ 	end
+-	call puts("Usage: otoc filePath")
++	call puts("Cannot open input file")
+ 	return (EXIT_FAILURE)
++end
++
++entryraw main(sd argc,sv s)
++#entry main(sd argc,sv argv)
++	if argc=2
++		sd a;set a mainfn(argc,s)
++		call exit(a)
++	end
++	call puts("Usage: otoc filePath")
++	call exit((EXIT_FAILURE))
+--- ocompiler-1.orig/src/files/functions/commons/vars.oc
++++ ocompiler-1/src/files/functions/commons/vars.oc
+@@ -397,11 +397,10 @@ function sufix_test(ss content,sd p_size
+ 	add content p_size#
+ 	dec content
+ 	if content#!=(pointerascii)
+-		if content#=(castascii)
+-			setcall p_cast# cast_test(content,p_size)
++		setcall p_cast# cast_test(content,p_size)
++		if p_cast#!=(no_cast)
+ 			return (sufix_true)
+ 		endif
+-		set p_cast# (no_cast)
+ 		return (sufix_false)
+ 	endif
+ 	dec p_size#
+@@ -413,8 +412,21 @@ endfunction
+ 
+ #cast
+ function cast_test(ss content,sd p_size)
+-	if p_size#>=3 #test only the cast
+-		dec content
++	if p_size#>=3 #test only the minimum cast
++		sd cast_size
++		if content#!=(castascii)
++		#the cast sign is not mandatory
++			dec content
++			if content#=(pointerascii)
++				inc content
++				set cast_size 2
++			else
++				return (no_cast)
++			endelse
++		else
++			dec content
++			set cast_size 3
++		endelse
+ 		sd c
+ 		set c content#
+ 		if c>=(a_from_az)
+@@ -429,7 +441,7 @@ function cast_test(ss content,sd p_size)
+ 		if c!=(no_cast)
+ 			dec content
+ 			if content#=(pointerascii)
+-				sub p_size# 3
++				sub p_size# cast_size
+ 				call extend_sufix_test(content,p_size)
+ 				return c
+ 			endif
+--- /dev/null
++++ ocompiler-1/src/mrcd
+@@ -0,0 +1,2 @@
++
++make clean && ./mrd
+--- /dev/null
++++ ocompiler-1/src/mrd
+@@ -0,0 +1,2 @@
++
++LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd ./md
+--- ocompiler-1.orig/tests/tests
++++ ocompiler-1/tests/tests
+@@ -4,7 +4,9 @@ if [ -z "${OCOMP}" ]; then OCOMP=../src/
+ tests=( `find -name "*.oc"` )
+ 
+ for file in "${tests[@]}"; do
+-	OFLAGS="x_file 1 nul_res_pref 1 includedir 0 relative_path 1"  #includedir 0 relative_path 1   to test on launchpad at <<PKGBUILDDIR>> that is not the real folder there
++	OFLAGS="x_file 1 nul_res_pref 1 includedir 0 relative_path 1"
++	#includedir 0 relative_path 1   to test on launchpad at <<PKGBUILDDIR>> that is not the real folder there. and ounused is also working with this
++
+ 	echo ${file} | grep "\.w" > /dev/null
+ 	if [ $? = 0 ]; then OFLAGS+=" inplace_reloc 0 conv_64 2"; fi
+ 	echo ${OCOMP} ${file} ${OFLAGS}
