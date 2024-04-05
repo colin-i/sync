@@ -1,0 +1,56 @@
+
+
+
+vStr pointofpathout#1
+
+Set pointofpathout safecurrentdirtopath
+Add pointofpathout pathinsize
+while safecurrentdirtopath!=pointofpathout
+	dec pointofpathout
+	if pointofpathout#=dot
+		#inc pointofpathout
+		set pointofpathout# (asciinul)
+		break
+	endif
+endwhile
+if safecurrentdirtopath=pointofpathout
+	add pointofpathout pathinsize
+endif
+
+Data extension#1
+Set extension null
+
+If fileformat=pe_exec
+	Char exe=".exe"
+	Str pexe^exe
+	Set extension pexe
+Else
+	If object=true
+		Char obj=".o"
+		Str pobj^obj
+		Set extension pobj
+	EndIf
+EndElse
+
+If extension!=null
+	Data sz#1
+	SetCall sz strlen(extension)
+
+	setcall errormsg maxpathverif(safecurrentdirtopath,extension)
+	if errormsg!=noerr
+		Call msgerrexit(errormsg)
+	endif
+
+	Call memtomem(pointofpathout,extension,sz)
+	Add pointofpathout sz
+	Set pointofpathout# null
+EndIf
+
+sub pointofpathout safecurrentdirtopath
+if pointofpathout=pathinsize
+	sd is_same
+	setcall is_same memcmp(filenameloc,safecurrentdirtopath,pathinsize)
+	if is_same=0
+		call msgerrexit("same output file as source file")   # z with format elf, or z.o with format elfobj
+	endif
+endif

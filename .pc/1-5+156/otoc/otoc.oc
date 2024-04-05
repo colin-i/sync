@@ -1,0 +1,69 @@
+
+format elfobj64
+
+const EXIT_SUCCESS=0
+const EXIT_FAILURE=1
+const NULL=0
+
+Const asciinul=0x0
+Const asciidot=0x2E
+Const asciic=0x63
+
+importx "puts" puts
+importx "fopen" fopen
+importx "fclose" fclose
+importx "strrchr" strrchr
+importx "exit" exit  #only for problems at box64
+
+function out_file(sd in)
+	ss p;set p strrchr(in,(asciidot))
+	if p!=(NULL)
+		set p# 0
+		set p strrchr(in,(asciidot))
+		if p!=(NULL)
+			#here we know there at at least two dots and of course the term null char
+			inc p
+			set p# (asciic)
+			inc p
+			set p# (asciinul)
+			sd f;set f fopen(in,"wb")
+			if f!=(NULL)
+				return f
+			end
+			call puts("Cannot open output file")
+		end
+	end
+	return (NULL)
+end
+
+include "loop.oc"
+
+#aftercalli
+
+function mainfn(sv s)
+	#sd s;incst argv;set s argv#
+	sd f;setcall f fopen(s,"rb")
+	if f!=(NULL)
+		sd out;set out out_file(s)
+		sd exitval=EXIT_SUCCESS
+		if out!=(NULL)
+			set exitval loop(f,out)
+			call fclose(out)
+		else
+			set exitval (EXIT_FAILURE)
+		end
+		call fclose(f)
+		return exitval
+	end
+	call puts("Cannot open input file")
+	return (EXIT_FAILURE)
+end
+
+entryraw main(sd argc,sv s)
+#entry main(sd argc,sv argv)
+	if argc=2
+		sd a;set a mainfn(argc,s)
+		call exit(a)
+	end
+	call puts("Usage: otoc filePath")
+	call exit((EXIT_FAILURE))
