@@ -1,0 +1,261 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+160) xenial; urgency=medium
+ .
+   * optimizations at otoc
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-04-10
+
+--- ocompiler-1.orig/Makefile
++++ ocompiler-1/Makefile
+@@ -13,8 +13,12 @@ $(SUBDIRS):
+ 	conv_64=${conv_64} $(MAKE) -C $@ $(MAKECMDGOALS)
+ .PHONY: $(TOPTARGETS) $(SUBDIRS)
+ 
++ver=version.h
+ 
+-all:
++${ver}:
++	./versionscript
++
++all: ${ver}
+ 	#if ! [ -s ./src/obj.txt ];then
+ 	cd ./src; ../ounused/ounused ./linux/obj.oc.log
+ 	#; fi
+@@ -23,4 +27,7 @@ all:
+ test:
+ 	cd tests; /bin/bash ./tests
+ 
++clean:
++	-rm -f ${ver}
++
+ .NOTPARALLEL:
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -6,7 +6,8 @@ last=`curl https://api.github.com/repos/
+ ~/test/arh2 ${last} && \
+ ~/test/arhpub ${last} && \
+ #here must arh fast to push changelog + old file same time
+-versionscript=./versionscript ~/test/debinit2 "${1}" && \
++#versionscript=./versionscript
++~/test/debinit2 "${1}" && \
+ ~/test/deb && \
+ ~/test/publp && \
+ ./makewin32 && \
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -27,27 +27,30 @@ FULLOBJLOG = ${FULLOBJS}.log
+ #problems at box64 and CC
+ ifeq (${conv_64},0)
+ #ATCCCOM = $(CC) ${linkerflags} -o ${prog}
+-ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o ${prog}
++ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o
+ else
+ #ATCCCOM = $(CC) -m32 ${linkerflags} -o ${prog}
+-ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${L} -lc -entry main -o ${prog}
++ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${L} -lc -entry main -o
+ OFLAGS+=conv_64 1
+ endif
+ 
+ OFLAGS+=${OFLAGSEXTRA}
+ 
+-#uncomment this to not see ->     make: Circular otoc.oc.o <- otoc.oc dependency dropped.
+-#${FULLOBJS}:
+-#	echo something or will not work
+-
+-%.o: ${FULLOBJS}
+-	${OCOMP} $< ${OFLAGS}
++number=number.h
+ 
++number.pre.o:
++	o number.pre.oc ${OFLAGS}
++number.pre: number.pre.o
++	${ATLDCOM} $@ $^
++${number}: number.pre
++	./number.pre
++${OBJ}: ${number}
++	${OCOMP} ${FULLOBJS} ${OFLAGS}
+ ${prog}: ${OBJ}
+ 	${OLINK} ${FULLOBJLOG}
+ 	@echo
+ 	#${ATCCCOM} ${FULLOBJO}
+-	${ATLDCOM} ${FULLOBJO}
++	${ATLDCOM} ${prog} ${FULLOBJO}
+ 
+ install: all
+ 	install -D ${prog} \
+@@ -57,6 +60,10 @@ clean:
+ 	-rm -f ${FULLOBJO}
+ 	-rm -f ${FULLOBJLOG}
+ 	-rm -f ${prog}
++	-rm -f ${number}
++	-rm -f number.pre
++	-rm -f number.pre.o
++	-rm -f number.pre.oc.log
+ distclean: clean
+ 
+ uninstall:
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -5,13 +5,11 @@ importx "rewind" rewind
+ importx "malloc" malloc
+ importx "fread" fread
+ importx "free" free
+-importx "memset" memset
+ 
+ const SEEK_CUR=1
+ const SEEK_END=2
+ 
+-einclude "../src/files/headers/xfile.h" "/usr/include/ocompiler/xfile.h"
+-#einclude? will use all constants in the header. yes, but some are used without touching them, like in this next function
++include "xfile.h"
+ const Xfile_last=Xfile_line
+ 
+ datax result#1
+@@ -32,9 +30,6 @@ function loop(sd input,sd output)
+ 				add delim buffer
+ 				set main.result (EXIT_SUCCESS)
+ 
+-				#more inits
+-				call number_data()
+-
+ 				while pointer!=delim
+ 					charx command#1;call get_char(#pointer,#command)
+ 					if command>(Xfile_last)
+--- ocompiler-1.orig/otoc/number.oc
++++ ocompiler-1/otoc/number.oc
+@@ -1,34 +1,16 @@
+ 
+ #aftercalli
+ 
+-const Xfile_numbers_last=Xfile_numbers_operation_shr
+-const Xfile_numbers_notmapped=0xff
+-function number_data()
+-	sd n=0
+-	charx c#Xfile_numbers_last
+-	call memset(#c,(Xfile_numbers_notmapped),(Xfile_numbers_last))
+-	const numbers_start=\
+-		char chars={Xfile_numbers_prefix_none,Xfile_numbers_prefix_neg,Xfile_numbers_prefix_not,Xfile_numbers_prefix_notneg,Xfile_numbers_parenthesis_open,Xfile_numbers_parenthesis_close,Xfile_numbers_operation_add,Xfile_numbers_operation_sub,Xfile_numbers_operation_mul,Xfile_numbers_operation_div,Xfile_numbers_operation_divu,Xfile_numbers_operation_and,Xfile_numbers_operation_or,Xfile_numbers_operation_xor,Xfile_numbers_operation_pow,Xfile_numbers_operation_rem,Xfile_numbers_operation_remu,Xfile_numbers_operation_shl,Xfile_numbers_operation_sar,Xfile_numbers_operation_shr,Xfile_numbers_operation_equal,Xfile_numbers_operation_inequal,Xfile_numbers_operation_less,Xfile_numbers_operation_greater,Xfile_numbers_operation_lessequal,Xfile_numbers_operation_greaterequal,Xfile_numbers_operation_logicaland,Xfile_numbers_operation_logicalor,Xfile_numbers_operation_unsignedless,Xfile_numbers_operation_unsignedgreater,Xfile_numbers_operation_unsignedlessequal,Xfile_numbers_operation_unsignedgreaterequal,Xfile_numbers_operation_parity,Xfile_numbers_operation_odd}
+-	ss pos^chars
+-	while n<(\-numbers_start)
+-		ss m;set m pos#
+-		add m #c
+-		set m# n
+-		inc pos
+-		inc n
+-	end
+-end
+-
+-const Xfile_numbers_prefix_notneg=Xfile_numbers_prefix_not|Xfile_numbers_prefix_neg
+ #N structure
+ function number(sv pbuffer)
++include "number.h"
+ 	charx item#1;call get_char(pbuffer,#item)
+ 	while item!=(Xfile_numbers_done)
+ 		value functions^normal;               value  *^neg;            value  *^not;            value  *^notneg;            value  *^open;                 value  *^close;                 value *^add;                value *^sub;                value *^mul;                value *^div;                value *^divu;                value *^and;                value *^or;                value *^xor;                value *^pow;                value *^rem;                value *^remu;                value *^shl;                value *^sar;                value *^shr;                value *^equal;                value *^inequal;                value *^less;                value *^greater;                value *^lessequal;                value *^greaterequal;                value *^logicaland;                value *^logicalor;                value *^unsignedless;                value *^unsignedgreater;                value *^unsignedlessequal;                value *^unsignedgreaterequal;                value *^parity;                value *^odd;
+ 		if item>^(Xfile_numbers_last)
+ 			callret aftercallenable()
+ 		end
+-		ss n;set n #number_data.c
++		ss n;set n #data
+ 		add n item
+ 		sv &f;set f n#
+ 		if f=(Xfile_numbers_notmapped)
+--- /dev/null
++++ ocompiler-1/otoc/number.pre.oc
+@@ -0,0 +1,48 @@
++
++format elfobj64
++
++importx "fopen" fopen
++importx "fclose" fclose
++importx "fwrite" fwrite
++importx "strlen" strlen
++importx "fprintf" fprintf
++importx "exit" exit
++
++include "xfile.h"
++const Xfile_numbers_prefix_notneg=Xfile_numbers_prefix_not|Xfile_numbers_prefix_neg
++
++function nr(sd i,sd f)
++const numbers_start=\
++	char chars={Xfile_numbers_prefix_none,Xfile_numbers_prefix_neg,Xfile_numbers_prefix_not,Xfile_numbers_prefix_notneg,Xfile_numbers_parenthesis_open,Xfile_numbers_parenthesis_close,Xfile_numbers_operation_add,Xfile_numbers_operation_sub,Xfile_numbers_operation_mul,Xfile_numbers_operation_div,Xfile_numbers_operation_divu,Xfile_numbers_operation_and,Xfile_numbers_operation_or,Xfile_numbers_operation_xor,Xfile_numbers_operation_pow,Xfile_numbers_operation_rem,Xfile_numbers_operation_remu,Xfile_numbers_operation_shl,Xfile_numbers_operation_sar,Xfile_numbers_operation_shr,Xfile_numbers_operation_equal,Xfile_numbers_operation_inequal,Xfile_numbers_operation_less,Xfile_numbers_operation_greater,Xfile_numbers_operation_lessequal,Xfile_numbers_operation_greaterequal,Xfile_numbers_operation_logicaland,Xfile_numbers_operation_logicalor,Xfile_numbers_operation_unsignedless,Xfile_numbers_operation_unsignedgreater,Xfile_numbers_operation_unsignedlessequal,Xfile_numbers_operation_unsignedgreaterequal,Xfile_numbers_operation_parity,Xfile_numbers_operation_odd}
++const numbers_size=\-numbers_start
++	ss pos^chars
++	sd n=0
++	while n<(numbers_size)
++		if i=pos#
++			call fprintf(f,"%u",n)
++			ret
++		end
++		inc pos
++		inc n
++	end
++	call fprintf(f,"%u",(Xfile_numbers_notmapped))
++end
++
++entry main()
++
++sd f;set f fopen("number.h","wb")
++vstr a="char data={";sd b;set b strlen(a)
++call fwrite(a,b,1,f)
++
++sd i=0
++while i<=(Xfile_numbers_last)
++	if i!=0
++		call fwrite(",",1,1,f)
++	end
++	call nr(i,f)
++	inc i
++end
++
++call fwrite("}",1,1,f)
++call fclose(f)
++call exit(0)
+--- /dev/null
++++ ocompiler-1/otoc/xfile.h
+@@ -0,0 +1,4 @@
++einclude "../src/files/headers/xfile.h" "/usr/include/ocompiler/xfile.h"
++#einclude? will use all constants in the header. yes, but some are used without touching them, like in loop()
++const Xfile_numbers_last=Xfile_numbers_operation_shr
++const Xfile_numbers_notmapped=0xff
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -51,17 +51,14 @@ etcinclude=etcinclude.oc
+ 
+ #OFLAGS=
+ 
+-${FULLOBJS}: ${etcinclude}
+-	echo something or is not working
+-
+-%.o: ${FULLOBJS}
++${OBJ}: ${etcinclude}
+ 	if [ -s ${OBT} ];then \
+ 		echo text; \
+ 		base64 -d ${OBT} > $@; \
+ 		${_ATLDCOM} o $@; \
+ 		./o ${FULLOBJS}; \
+ 	else \
+-		${OCOMP} $< ${OFLAGS}; \
++		${OCOMP} ${FULLOBJS} ${OFLAGS}; \
+ 	fi; \
+ 	mv ${FULLOBJO} . \
+ 
