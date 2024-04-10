@@ -1,0 +1,56 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+163) xenial; urgency=medium
+ .
+   * fix
+Author: bc <bc@bc-Type1ProductConfigId>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-04-10
+
+--- ocompiler-1.orig/src/files/functions/values/operations.oc
++++ ocompiler-1/src/files/functions/values/operations.oc
+@@ -55,11 +55,12 @@ endfunction
+ #err
+ function shift_right(sd a,sd n)
+ 	#at 64? 1 shl 63 is last one
+-	if n>^31
+-		if a<0
++	if n>=^31
++	#case 31: at neg is exactly -1, at 0x4.. is exactly 0
++		if a#<0
+ 			set a# -1
+ 		else
+-			set a# 0   #here is clear that 30 is maximum but will be hardcoded
++			set a# 0
+ 		endelse
+ 	else
+ 		while n>0
+--- ocompiler-1.orig/tests/.expected/operations.o.txt
++++ ocompiler-1/tests/.expected/operations.o.txt
+@@ -16,7 +16,7 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAUC
+-GQMPAg8JAgcF/wgBfwEAAQABAQABAQAAAQEB/wAAAIAAAAAAAAAAAAAAAIAAAAAAAAAAAP////8A
+-AAAAAAAAAAEAAAAAAAAA/////wAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAA
++GQMPAg8JAgcF/wgBfwEAAQABAQABAQAAAQEB/wAAAIAAAAAAAAAAAAAAAIAAAAAAAAAAAP//////
++////AAAAAAEAAAAAAAAA/////wAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAA
+ AAADAAEABwAAAAAAAAAAAAAAAwACAA0AAAAAAAAAAAAAAAMAAwAALmRhdGEALnRleHQALmR0bmIA
+ LnN5bXRhYgAucmVsYS5kYXRhAC5yZWxhLnRleHQALnN0cnRhYgA=
