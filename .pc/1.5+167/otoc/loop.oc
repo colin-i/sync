@@ -1,0 +1,255 @@
+
+importx "fseek" fseek
+importx "ftell" ftell
+importx "rewind" rewind
+importx "malloc" malloc
+importx "fread" fread
+importx "free" free
+
+const SEEK_CUR=1
+const SEEK_END=2
+
+include "xfile.h"
+#const Xfile_last=Xfile_line
+
+datax result#1
+
+#exit
+function loop(sd input,sd output)
+	set main.result (EXIT_FAILURE)
+	sd a;set a fseek(input,0,(SEEK_END)) #on 32 can be -1 return error
+	if a=0
+		sd delim;set delim ftell(input) #is still same place if file deleted in parallel
+		#if delim!=-1  #lseek and same result (remark fileno)
+		call rewind(input)
+		sd buffer;set buffer malloc(delim)
+		if buffer!=(NULL)
+			sd r;set r fread(buffer,delim,1,input)
+			if r=1
+				ss pointer;set pointer buffer
+				add delim buffer
+				set main.result (EXIT_SUCCESS)
+
+				while pointer!=delim
+					charx command#1;call get_char(#pointer,#command)
+					#if command>(Xfile_last);call puts("Error");break;end
+					value Xfile_comment^comment
+					value *Xfile_commentmulti^commentmulti
+					value *Xfile_commentlineend^commentlineend
+					value *Xfile_format^format
+					value *Xfile_include^include
+					value *Xfile_functiondef^functiondef
+					value *Xfile_declare^declare
+					value *Xfile_action^action
+					value *Xfile_action2^action2
+					value *Xfile_call^call
+					value *Xfile_callex^callex
+					value *Xfile_if^if
+					value *Xfile_else^else
+					value *Xfile_while^while
+					value *Xfile_break^break
+					value *Xfile_continue^continue
+					value *Xfile_end^end
+					value *Xfile_ret^ret
+					value *Xfile_library^library
+					value *Xfile_import^import
+					value *Xfile_aftercall^aftercall
+					value *Xfile_hex^hex
+					value *Xfile_override^override
+					value *Xfile_orphan^orphan
+					value *Xfile_interrupt^interrupt
+					value *Xfile_line^line
+					mult command :
+					sv dest^Xfile_comment;add dest command
+					set dest dest#
+					call dest(#pointer,output)
+					if main.result=(EXIT_FAILURE);break;end
+				end
+				if main.result=(EXIT_SUCCESS)
+					callg writen(output,"}",1)
+				end
+			end
+			call free(buffer)
+		end
+	end
+	return main.result
+end
+
+function get_char(sv pbuffer,ss pchar)
+	ss buffer;set buffer pbuffer#
+	set pchar# buffer#
+	add pbuffer# (Xfile_sz_char)
+end
+
+function get_data(sv pbuffer,sd pdata)
+	sd buffer;set buffer pbuffer#
+	set pdata# buffer#
+	add pbuffer# (Xfile_sz_int)
+end
+
+function get_string(sv pbuffer,sd psize,sv ppointer)
+	call get_data(pbuffer,psize)
+	set ppointer# pbuffer#
+	add pbuffer# psize#
+end
+
+importx "fwrite" fwrite
+
+include "decl.oc"
+include "number.oc"
+include "var.oc"
+include "action.oc"
+
+aftercall *
+function aftercallenable()
+	set main.result (EXIT_FAILURE)
+	aftercallenable
+end
+
+function comment(sv pbuffer,sd outfile)
+	call write(outfile,"//",2)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	callret writen(outfile,pointer,sz)
+end
+function commentmulti(sv pbuffer,sd outfile)
+	call write(outfile,"/*",2)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	call write(outfile,pointer,sz)
+	callret writen(outfile,"*/",2)
+end
+function commentlineend(sv pbuffer,sd outfile)
+	call fseek(outfile,-1,(SEEK_CUR)) #this one and line command
+	callret comment(pbuffer,outfile)
+end
+function format(sv pbuffer) #will do nothing at the moment
+	charx fmt#1;call get_char(pbuffer,#fmt)
+end
+function end(sv *pbuffer,sd outfile)
+	callret writen(outfile,"}",1)
+end
+function line(sv *pbuffer,sd outfile)
+	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
+	callret write(outfile,";",1)
+end
+
+#need write
+function include(sv pbuffer,sd output)
+	charx type#1;call get_char(pbuffer,#type)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	charx alternative#1;call get_char(pbuffer,#alternative)
+	if alternative=(Xfile_include_alternative_yes)
+		call get_string(pbuffer,#sz,#pointer)
+	end
+end
+function functiondef(sv pbuffer,sd outfile)
+#at least arguments write
+	call write(outfile,"void ",5)
+
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	call write(outfile,pointer,sz)
+
+	call write(outfile,"(",1)
+
+	value intern^functiondef_intern
+	value *raw^functiondef_intern       #functiondef_raw
+	value *extern^functiondef_extern
+	value *entry^functiondef_extern     #functiondef_entry
+	charx type#1;call get_char(pbuffer,#type)
+	mult type :
+	sv dest^intern;add dest type
+	set dest dest#
+	call dest(pbuffer)
+
+	callret writen(outfile,"){",2)
+end
+function declare(sv pbuffer)
+	call decl(pbuffer)
+	datax sz#1;valuex pointer#1
+	charx sign#1;call get_char(pbuffer,#sign)
+	if sign=(Xfile_declsign_reserve)
+		call number(pbuffer)
+	elseif sign=(Xfile_declsign_pointer)
+		call get_string(pbuffer,#sz,#pointer)
+	else #Xfile_declsign_e*
+		charx mode#1;call get_char(pbuffer,#mode)
+		if mode=(Xfile_declmode_value)
+			call number(pbuffer)
+		elseif mode=(Xfile_declmode_group)
+			datax args#1;call get_data(pbuffer,#args)
+			sd n=0;while n!=args
+				call number(pbuffer)
+				inc n
+			end
+		else #Xfile_declmode_string
+			call get_string(pbuffer,#sz,#pointer)
+		end
+	endelse
+end
+function action(sv pbuffer)
+	charx act#1;call get_char(pbuffer,#act)
+	call action1(act)
+end
+function action2(sv pbuffer)
+	call varfunc(pbuffer)
+	charx a2#1;call get_char(pbuffer,#a2)
+	call arg(pbuffer)
+end
+function call(sv pbuffer)
+	char c#1;call get_char(pbuffer,#c)
+	call cll(pbuffer)
+end
+function if(sv pbuffer,sd output)
+	call cond(pbuffer,output)
+end
+function hex(sv pbuffer)
+	datax args#1;call get_data(pbuffer,#args)
+	sd n=0;while n!=args
+		call number(pbuffer)
+		inc n
+	end
+end
+
+function callex(sv *pbuffer)
+end
+function else(sv *pbuffer)
+end
+function while(sv *pbuffer)
+end
+function break(sv *pbuffer)
+end
+function continue(sv *pbuffer)
+end
+function ret(sv *pbuffer)
+end
+function library(sv *pbuffer)
+end
+function import(sv *pbuffer)
+end
+function aftercall(sv *pbuffer)
+end
+function override(sv *pbuffer)
+end
+function orphan(sv *pbuffer)
+end
+function interrupt(sv *pbuffer)
+end
+
+function writen(sd outfile,ss buf,sd sz)
+	call write(outfile,buf,sz)
+
+	sd items;set items fwrite("\n",1,1,outfile)
+	if items!=1
+		set main.result (EXIT_FAILURE)
+	end
+end
+
+function write(sd outfile,ss buf,sd sz)
+	sd items;set items fwrite(buf,sz,1,outfile)
+	if items!=1
+		callret aftercallenable()
+	end
+end

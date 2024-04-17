@@ -1,0 +1,105 @@
+
+if [ -z "${1}" ]; then is_del=1;
+else
+	is_del=0
+	is_diff=${1}   # ./c 0 is to populate .expected
+	diffs=0
+fi
+e=.expected/
+switch () {
+	test -e ${1}
+	if [ $? = 0 ]; then
+		if [ ${is_del} = 1 ]; then
+			rm ${1}
+		else
+			is_log=`echo ${1} | grep ".log$"`
+			if [ ${is_diff} = 1 ]; then
+				if [ -z "${is_log}" ]; then
+					btxt=${exp}${1}.txt
+					base64 -d ${btxt} > ${exp}${1}
+				fi
+				echo diff ${1} ${exp}${1}
+				diff ${1} ${exp}${1}
+				if [ $? != 0 ]; then
+					if [ -z "${continue_on_diff}" ]; then
+						if [ -z "${is_log}" ]; then
+							base64 ${1}
+							cat ${btxt}
+						fi
+						exit 1
+					fi
+				else
+					diffs=$((diffs+1))
+				fi
+				#if [ -z "${is_log}" ]; then  #remove them later
+				#	rm ${exp}${1}
+				#fi
+			else
+				if [ -z "${is_log}" ]; then
+					base64 ${1} > ${exp}${1}.txt
+				else
+					mv ${1} ${exp}${1}
+					#chmod -x ${exp}${1}    #else, will be warning at dpkg-source
+				fi
+			fi
+		fi
+	fi
+}
+sw () {
+	n=( `find -maxdepth 1 -name "*${1}"` )
+	for v in "${n[@]}"; do
+		switch ${v:2}
+	done
+}
+del () {
+	sw .o
+	sw .log
+	sw .x
+	sw .exe       #by ocomp
+	switch a.out
+}
+a=( `ls` )
+for var in "${a[@]}"; do
+	if [ -d "${var}" ]; then
+		if [ "${var}" != "${e::-1}" ]; then
+			cd "${var}"
+				exp=../${e}${var}/
+				if [ ${is_del} = 0 ]; then
+					mkdir -p ${exp}
+				fi
+				del
+			cd ..
+		fi
+	fi
+done
+
+exp=${e}
+del
+switch acall/e
+
+if [ ${is_del} = 0 ]; then
+	if [ ${is_diff} = 1 ]; then
+		tests=( `find -name "*.oc"` )
+		n=${#tests[@]}
+		n=$((n*3))   #is .oc .log and .x
+		echo ${n} ${diffs}
+		if [ ${n} = ${diffs} ]; then
+			echo diffs is ok
+		else
+			exit 1
+		fi
+	fi
+else
+	#remove otoc files
+	a=( `find -name "*.c"` )
+	for var in "${a[@]}"; do
+		rm ${var}
+	done
+
+	#remove base64 troubles #or remove them after diff
+	cd ${e}
+	a=( `find . -type f ! -name "*.txt" ! -name "*.log"` )
+	for var in "${a[@]}"; do
+		rm ${var}
+	done
+fi
