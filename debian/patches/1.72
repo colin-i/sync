@@ -1,0 +1,81 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-72) bionic; urgency=medium
+ .
+   * fix example at amd64
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-04-19
+
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -23,8 +23,9 @@ ifeq (${platform},win)
+ else
+ 	libname=${linkname}.so
+ 	OFLAGS += underscore_pref 1
+-	#ifeq (${conv_64},1)
+-	OFLAGS += include_sec 1
++	ifdef ldprefer
++		OFLAGS += include_sec 1
++	endif
+ 	#exit_end 1 #same problem as ocompiler, even at qemu-amd64
+ 	#endif
+ endif
+@@ -49,6 +50,8 @@ link:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		if [ "${conv_64}" = "1" ]; then \
+ 			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${libname}; \
++		elif [ -z "${ldprefer}" ]; then \
++			$(CC) ${linkerflags} ${name}.o -o ${name} -L../src -l:${libname}; \
+ 		else \
+                   $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${libname}; \
+ 		fi \
+@@ -59,7 +62,7 @@ link:
+ 			x86_64-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
+ 		fi \
+ 	fi
+-#same as src #$(CC) ${linkerflags} ${name}.o -o ${name} -L../src -l:${libname};
++#launchpad amd64 is segmentation with ld instead of cc
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+@@ -82,9 +85,11 @@ clean:
+ 
+ distclean: clean
+ 
+-install: test
++install:
++	echo "No install"
+ 
+-uninstall: test
++uninstall:
++	echo "No uninstall"
+ 
+ test:
+ 	diff ${sfile} expected.swf
+--- actionswf-1.orig/example/mrd
++++ actionswf-1/example/mrd
+@@ -1,5 +1,5 @@
+ 
+-launcher="qq" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd OFLAGSEXTRA+=" inplace_reloc 0" ./m64d
++launcher="qq" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1
+ 
+ ##!/bin/bash
+ #LD_LIBRARY_PATH+=:/home/bc/before/lib
