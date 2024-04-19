@@ -1,0 +1,548 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-71) bionic; urgency=medium
+ .
+   * fix without ret there
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-04-19
+
+--- actionswf-1.orig/clear.bat
++++ /dev/null
+@@ -1,5 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-call dev\clear.bat
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/clear.bat.old
+@@ -0,0 +1,5 @@
++
++::use Makefile
++exit
++
++call dev\clear.bat
+\ No newline at end of file
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -13,6 +13,7 @@ conv_64=0
+ endif
+ 
+ name=example
++sfile=${name}.swf
+ OFLAGS=conv_64 ${conv_64}
+ linkname=actionswf
+ linkfile=${linkname}.lib
+@@ -22,9 +23,10 @@ ifeq (${platform},win)
+ else
+ 	libname=${linkname}.so
+ 	OFLAGS += underscore_pref 1
+-	ifeq (${conv_64},1)
+-		OFLAGS += exit_end 1 include_sec 1
+-	endif
++	#ifeq (${conv_64},1)
++	OFLAGS += include_sec 1
++	#exit_end 1 #same problem as ocompiler, even at qemu-amd64
++	#endif
+ endif
+ 
+ all: build exe
+@@ -48,7 +50,7 @@ link:
+ 		if [ "${conv_64}" = "1" ]; then \
+ 			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${libname}; \
+ 		else \
+-			$(CC) ${linkerflags} ${name}.o -o ${name} -L../src -l:${libname}; \
++                  $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${libname}; \
+ 		fi \
+ 	else \
+ 		if [ "${conv_64}" = "1" ]; then \
+@@ -57,15 +59,16 @@ link:
+ 			x86_64-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
+ 		fi \
+ 	fi
+-#$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:actionswf.so; \
++#same as src #$(CC) ${linkerflags} ${name}.o -o ${name} -L../src -l:${libname};
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+-		export LD_LIBRARY_PATH=../src; ./${name} 1; \
++		LD_LIBRARY_PATH=../src ${launcher} ./${name} =; \
+ 	fi
++#\? is 0x3f, inside -0x30, 0 is 0x30, \; to 0xb, = is 0xd
+ 
+ %: %.oc
+-	${OCOMP} $< ${OFLAGS}
++	${OCOMP} $< ${OFLAGS} ${OFLAGSEXTRA}
+ 
+ clean:
+ 	-rm -f ${name}.oc.log
+@@ -73,7 +76,9 @@ clean:
+ 	-rm -f ${name}
+ 	-rm -f ${name}.exe
+ 	-rm -f ${linkfile}
+-	-rm -f ${name}.swf.log
++	-rm -f ${sfile}.log
++	-rm -f ${sfile}.x
++	-rm -f ${sfile}
+ 
+ distclean: clean
+ 
+@@ -82,7 +87,7 @@ install: test
+ uninstall: test
+ 
+ test:
+-	echo "Nothing"
++	diff ${sfile} expected.swf
+ 
+ .PHONY: all install clean distclean uninstall test
+ 
+--- /dev/null
++++ actionswf-1/example/entry.oc
+@@ -0,0 +1,4 @@
++
++entryraw main(sd argc,sd argv0,ss argv1)
++
++sub argv1# 0x30
+--- actionswf-1.orig/example/entry32.oc
++++ /dev/null
+@@ -1,4 +0,0 @@
+-
+-entryraw main(sd argc,sd argv0,ss argv1)
+-
+-sub argv1# 0x30
+--- actionswf-1.orig/example/entry64.oc
++++ /dev/null
+@@ -1,4 +0,0 @@
+-
+-entry main(sd argc,sv argv)
+-
+-incst argv;ss argv1;set argv1 argv#;sub argv1# 0x30
+--- /dev/null
++++ actionswf-1/example/entry_arg.oc
+@@ -0,0 +1,4 @@
++
++entry main(sd argc,sv argv)
++
++incst argv;ss argv1;set argv1 argv#;sub argv1# 0x30
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -3,6 +3,7 @@ format elfobj64
+ #a simple shape moving on the stage example
+ 
+ importx "_sprintf" sprintf
++importx "_exit" exit
+ 
+ einclude "../dev/import.h"
+ 
+@@ -14,7 +15,7 @@ const shape_lat=40
+ 
+ ####################
+ 
+-include "entry64.oc" "entry32.oc"
++include "entry_arg.oc" "entry.oc"
+ 
+ call swf_new_ex("example.swf",(width),(height),0x001100,24,argv1#)
+ 
+@@ -61,4 +62,5 @@ _movie._y=100;
+ call swf_showframe()
+ call swf_done()
+ 
+-return 0
++call exit(0)
++#return 0
+--- /dev/null
++++ actionswf-1/example/mrd
+@@ -0,0 +1,6 @@
++
++launcher="qq" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd OFLAGSEXTRA+=" inplace_reloc 0" ./m64d
++
++##!/bin/bash
++#LD_LIBRARY_PATH+=:/home/bc/before/lib
++#qemu-amd64 /home/bc/before/lib/ld-linux-x86-64.so.2 "$@"
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -113,9 +113,12 @@ const debug_none=0
+ #const debug_log=0x1
+ const debug_alt=0x2
+ const debug_titles=0x4
++const debug_x=0x8
+ 
+ const max_structures=999
+ const ids_str_len=3 #"999"
+ 
++const action_code_values_unit=DWORD
++
+ const recordheader_long_mark=0x3f
+ const recordheader_upperbits=recordheader_long_mark+1
+--- actionswf-1.orig/object.bat
++++ /dev/null
+@@ -1,7 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-call dev\lib.bat
+-call dev\build.bat
+-call 64\build.bat
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/object.bat.old
+@@ -0,0 +1,7 @@
++
++::use Makefile
++exit
++
++call dev\lib.bat
++call dev\build.bat
++call 64\build.bat
+\ No newline at end of file
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -28,5 +28,5 @@ SpriteId or 0 for root.
+ TextLinesNumber is the number of lines that TextLines has.
+ TextLines is the text like in action[_sprite] call.
+ NumberA lines, then NumberA1+...+NumberAN<=TextLinesNumber, less only when last line(s) is/are blank(s).
+-NumberB1...NumberBN: example ,1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
++NumberB1...NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+ FinalSpriteId is the if from the swf
+--- actionswf-1.orig/shared.bat
++++ /dev/null
+@@ -1,7 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-call object.bat
+-call dev\shared.bat
+-call clear.bat
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/shared.bat.old
+@@ -0,0 +1,7 @@
++
++::use Makefile
++exit
++
++call object.bat
++call dev\shared.bat
++call clear.bat
+\ No newline at end of file
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -83,7 +83,8 @@ ${libname}: ${name}
+ 	cp ${name} ${libname}
+ 
+ else
+-ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
++#same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} --exclude-libs ${exte}
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+ 	cp ${name} ${libname}
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -159,13 +159,13 @@ function action_code_values_init()
+     import "memalloc" memalloc
+     sv m
+     setcall m action_code_values_container()
+-    setcall m# memalloc((totalvalues*DWORD))
++    setcall m# memalloc((totalvalues*action_code_values_unit))
+ endfunction
+ function action_code_set(sd value)
+ 	call action_code_set_ex(value,1)
+ endfunction
+ function action_code_set_pointer(sd value)
+-	call action_code_set_ex(value,(:/DWORD))
++	call action_code_set_ex(value,(:/DWORD))  #pointers are referencing static ac, not reallocable actionpool
+ endfunction
+ function action_code_set_ex(sd value,sd size)
+ 	sd nr
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -47,14 +47,22 @@ endfunction
+ import "mem_free" mem_free
+ import "f_close" f_close
+ 
+-function debug_free()
++function debug_data()
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+ 		call mem_free(of)
+ 		value file=NULL
+ 		const p_debug_file^file
+-		call f_close(#file)
+-		call mem_free(#debug_actions.mem)
++		if file!=(NULL)
++			call f_close(#file)
++			value x=NULL
++			if x!=(NULL)
++				call f_close(#x)
++				if debug_actions.mem!=(NULL)
++					call mem_free(#debug_actions.mem)
++				end
++			end
++		end
+ 	endif
+ endfunction
+ 
+@@ -122,6 +130,8 @@ import "block_get_size" block_get_size
+ import "block_get_mem" block_get_mem
+ import "word_arg_to_stack" word_arg_to_stack
+ 
++importx "fopen" fopen
++importx "free" free
+ importx "strlen" strlen
+ importx "fseek" fseek
+ importx "fread" fread
+@@ -132,7 +142,6 @@ importx "fprintf" fprintf
+ aftercallimport ebool
+ 
+ import "memalloc" memalloc
+-import "f_open_mem" f_open_mem
+ import "alt_init" alt_init
+ import "dtitles_init" dtitles_init
+ 
+@@ -142,16 +151,37 @@ function debug_init(sd flags,sd path)
+ 		setcall of# memalloc(1)  #0 on some systems can be NULL return
+ 
+ 		sd s;setcall s strlen(path)
+-		sd a=5;add a s
++		sd a=4+1   # .x is 2 plus 1
++		add a s
+ 		sd b;setcall b memalloc(a)
+ 		call sprintf(b,"%s.log",path)
++		vstr ferr="fopen error"
++
+ 		sv file%p_debug_file
+-		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for comma character
++		setcall file# fopen(b,"w+b")  #+ is because at definefunction it is reading back for comma character
++		if file#=(NULL)
++			call free(b)
++			call error(ferr)
++		end
++
++		sd x=debug_x
++		and x flags
++		if x!=0
++			call sprintf(b,"%s.x",path)
++			set debug_data.x fopen(b,"wb") #'b' on windows is not 't' that can change line ends and is working more there
++			call free(b)
++			if debug_data.x=(NULL)
++				call error(ferr)
++			end
++		else
++			call free(b)
++		end
+ 
+ 		setcall debug_actions.mem memalloc(1)
+ 		#this is later #set debug_actions.size 0
+ 		set debug_actions.all_size 1
+ 	endif
++
+ 	call alt_init(flags,path,s) #is here because need to set a default value inside
+ 	call dtitles_init(flags)    #same
+ endfunction
+@@ -295,7 +325,7 @@ endfunction
+ function debug_definefunction(sv pointers)
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+-		set pointers# f_tell(debug_free.file)
++		set pointers# f_tell(debug_data.file)
+ 		incst pointers
+ 
+ 		sd memblock;setcall memblock brace_blocks_get_memblock()
+@@ -315,7 +345,7 @@ function debug_concludefunction(sv point
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+ 		sd prev_fileoffset;set prev_fileoffset pointers#
+-		sd now;set now f_tell(debug_free.file)
++		sd now;set now f_tell(debug_data.file)
+ 		incst pointers
+ 
+ 		sd block;setcall block brace_blocks_get_memblock()
+@@ -328,21 +358,21 @@ function debug_concludefunction(sv point
+ 
+ 		vstr format="%04X"
+ 		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
+-			call fseek(debug_free.file,prev_fileoffset,(SEEK_SET))
++			call fseek(debug_data.file,prev_fileoffset,(SEEK_SET))
+ 			#now need to skip first number that is the number of rows
+ 			while 0=0
+ 				char a#1
+ 				sd ret
+-				set ret fread(#a,1,1,debug_free.file)
++				set ret fread(#a,1,1,debug_data.file)
+ 				if a=(Comma)  #there is a comma from here
+ 					break
+ 				elseif ret!=1
+ 					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
+ 				end
+ 			end
+-			call fseek(debug_free.file,offset,(SEEK_CUR))
+-			call fprintf(debug_free.file,format,size)    #overwrite the dummy write
+-			call fseek(debug_free.file,0,(SEEK_END))
++			call fseek(debug_data.file,offset,(SEEK_CUR))
++			call fprintf(debug_data.file,format,size)    #overwrite the dummy write
++			call fseek(debug_data.file,0,(SEEK_END))
+ 		else #on mem
+ 			sd c;set c debug_actions.mem
+ 			inc offset ##to skip Comma
+@@ -351,3 +381,10 @@ function debug_concludefunction(sv point
+ 		end
+ 	endif
+ end
++
++function debug_x(sd mem,sd size)
++	if debug_data.x!=(NULL)
++		mult size (action_code_values_unit)
++		call f_write(debug_data.x,mem,size)
++	end
++end
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -34,10 +34,6 @@ function action_base(ss ac)
+     #
+     ss mem
+     setcall mem dupreserve_string(ac)
+-    sd p_action_errors
+-    setcall p_action_errors action_debug((TRUE))
+-    set p_action_errors# (TRUE)
+-	sv cursor;set cursor p_action_errors;add cursor (DWORD);set cursor# ac;add cursor :;set cursor# mem
+ 
+ 	import "debug_action_init" debug_action_init
+ 	call debug_action_init(ac)
+@@ -47,11 +43,14 @@ function action_base(ss ac)
+ 	import "debug_action_phase" debug_action_phase
+ 	call debug_action_phase()
+ 
++	sd p_action_errors
++	setcall p_action_errors action_debug((TRUE))
++	set p_action_errors# (TRUE)  #this also requires debug_code to be set, and is set at first action_code_row_ex, that is from here without any aftercall
++	sv cursor;set cursor p_action_errors;add cursor (DWORD);set cursor# ac;add cursor :;set cursor# mem
+     while mem#!=0
+         setcall mem action_code_row(mem,(FALSE))
+     endwhile
+     call action_code_set((math_end))
+-
+     #set false to stop adding row nr at errors
+     set p_action_errors# (FALSE)
+ 
+@@ -59,10 +58,13 @@ function action_base(ss ac)
+ 
+ 	call debug_action_phase()
+ 
++	sv stored;set stored p_values
+ 	#                 code_values are not reallocated
+ 	while p_values#!=(math_end)
+ 		setcall p_values action__code_row(p_values)
+ 	endwhile
++	import "debug_x" debug_x
++	call debug_x(stored,nr#) #need to be after, to modify pointers inside
+ 
+     #free mem ok,another free is at errors
+     call action_debug_free()
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -44,17 +44,14 @@ function f_close(sv p_file)
+ 	set p_file# (NULL)
+ endfunction
+ 
+-importx "free" free
+-
+-importx "fopen" fopen
+ importx "fprintf" fprintf
+-importx "fwrite" fwrite
+-importx "ftell" ftell
+ 
+ function f_printf_in(sd p,sd nr)
+ 	callex fprintf p nr ##callexret
+ end
+ 
++importx "fwrite" fwrite
++importx "ftell" ftell
+ 
+ 
+ aftercallimport ebool
+@@ -147,16 +144,6 @@ function file_write(sd file,sd buffer,sd
+ endfunction
+ 
+ 
+-function f_open_mem(sd path,sd format)
+-	sd f;setcall f fopen(path,format)
+-	if f=(NULL)
+-		call free(path)
+-		call error("fopen error")
+-	endif
+-	call free(path)
+-	return f
+-endfunction
+-
+ function f_printf(sd nr,sd file,sd format) #...
+ 	sd r;set r f_printf_in(#file,nr)
+ 	if r=-1
+--- actionswf-1.orig/src/m64d
++++ actionswf-1/src/m64d
+@@ -1,4 +1,4 @@
+ 
+-make linkerflags= OFLAGSEXTRA="function_name 1 nul_res_pref 1" $@
++make linkerflags= OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" $@
+ 
+ #make strippy="python /home/bc/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" OFLAGSEXTRA="function_name 1 nul_res_pref 1" $@
+--- /dev/null
++++ actionswf-1/src/mrd
+@@ -0,0 +1,2 @@
++
++LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd OFLAGSEXTRA+=" inplace_reloc 0" ./m64d
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -127,6 +127,7 @@ function swf_mem(sd proc,sd arg,sd len)
+ 		set id_stack id
+ 		set id arg
+ 		set call_struct c_pool
++		ret
+ 	elseif proc=(mem_exp_change_back_pool)
+ 		set id id_stack
+ 		set call_struct c_main
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -732,7 +732,7 @@ functionX swf_done()
+ endfunction
+ 
+ functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
+-	call swf_new_ex(path,width,height,backgroundcolor,fps,(debug_none))
++	callret swf_new_ex(path,width,height,backgroundcolor,fps,(debug_none))
+ endfunction
+ functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd add_debug)
+ #ss path             file out pathname
+--- actionswf-1.orig/src/tool.e.oc
++++ actionswf-1/src/tool.e.oc
+@@ -16,8 +16,8 @@ include "../include/prog.h"
+ functionx freereset()
+ #this is called by user only if want to abort after some calls
+ #               and at some frees
+-	import "debug_free" debug_free
+-	call debug_free()
++	import "debug_data" debug_data
++	call debug_data()
+ 	import "alt_free" alt_free
+ 	call alt_free()
+ 	#free and set initial null/-1.....
