@@ -1,0 +1,75 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-73) bionic; urgency=medium
+ .
+   * fix again i386
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-04-19
+
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -25,6 +25,10 @@ else
+ 	OFLAGS += underscore_pref 1
+ 	ifdef ldprefer
+ 		OFLAGS += include_sec 1
++	else
++		ifeq (${conv_64},1)
++			OFLAGS += include_sec 1
++		endif
+ 	endif
+ 	#exit_end 1 #same problem as ocompiler, even at qemu-amd64
+ 	#endif
+@@ -63,6 +67,7 @@ link:
+ 		fi \
+ 	fi
+ #launchpad amd64 is segmentation with ld instead of cc
++#				$(CC) ${linkerflags} -m32 ${name}.o -o ${name} -L../src -l:${libname}; \
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+--- actionswf-1.orig/fix/makedef
++++ actionswf-1/fix/makedef
+@@ -1,8 +1,14 @@
+ #!/usr/bin/bash
+ 
++a=`locale | grep LANG=`;a=${a#*=};a=${a%_*}
++if [ "${a}" = "ro" ]; then
++	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Nume Pointer\] Tabel" -n` || exit 1
++else
++	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Name Pointer\] Table" -n` || exit 1
++fi
++
+ echo "LIBRARY actionswf.dll" > $1
+ echo "EXPORTS" >> $1
+-b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Name Pointer\] Table" -n`
+ b=${b%%:*}
+ b=`echo $b+1 | bc`
+ c=`x86_64-w64-mingw32-objdump -p actionswf.dll | tail -n +$b`
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -70,6 +70,7 @@ link:
+ 	else \
+ 		x86_64-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+ 	fi
++#on 64 is mingw-w64-x86-64-dev
+ 
+ else
+ OFLAGS += underscore_pref 1
