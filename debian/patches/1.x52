@@ -1,0 +1,116 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x52) focal; urgency=medium
+ .
+   * rn to n
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-04-22
+
+--- edor-1.orig/md
++++ edor-1/md
+@@ -1,2 +1,2 @@
+ 
+-autoreconf -i && ./configure CFLAGS=-g && cd s && ./headless
++autoreconf -i && ./configure CFLAGS=-g --disable-cpp && cd s && ./headless
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -1189,7 +1189,7 @@ int command(char*comnrp){
+ 				}
+ 			}else{//com_nr_ext
+ 				//                                              will not call on 8bits char*, can call on long* but long is not a pointer on all platform, better to define
+-				(*reinterpret_cast<void(*)(char*,unsigned long int)>(  ((comnrp_define*)comnrp)[1]  ))(input,cursor);
++				((void(*)(char*,unsigned long int))(((comnrp_define*)comnrp)[1]))(input,cursor);
+ 				r=1;
+ 			}
+ 			break;
+--- edor-1.orig/s/headless
++++ edor-1/s/headless
+@@ -1,10 +1,35 @@
+ 
+-#1 remove
++#1 0/nothing=64,1=32  2 remove
++
+ cp Makefile mk
+-a="\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1 \-DSTDC_HEADERS=1 \-DHAVE_DIRENT_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_POLL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1 \-DUSE_FS=1"
++
++#replace common headers that are coming from a script
++a="\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1 \-DSTDC_HEADERS=1"
++grep --color "${a}" mk
++sed -i "s/${a}//g" mk
++grep --color "${a}" mk
++
++#input headers
++a="\-DHAVE_DIRENT_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_POLL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1"
++#at cpp += \-DUSE_FS=1
+ grep --color "${a}" mk
+ sed -i "s/${a}//g" mk
+ grep --color "${a}" mk
++
++#c only headers
++a="\-DHAVE_STDBOOL_H=1 \-DHAVE_STDDEF_H=1"
++grep --color "${a}" mk
++sed -i "s/${a}//g" mk
++grep --color "${a}" mk
++
++if [ "${1}" = "1" ]; then
++a="\-DPLATFORM64=1"
++grep --color "${a}" mk
++sed -i "s/${a}//g" mk
++grep --color "${a}" mk
++#and  if wanting 32
++fi
++
+ make -f mk
+ 
+-if [ -n "${1}" ]; then rm mk; fi
++if [ -n "${2}" ]; then rm mk; fi
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -1209,7 +1209,7 @@ static void mod_set(bool flag,chtype ch)
+ }
+ #define modif_visual '*'
+ void mod_set_off(){
+-	hardtime=time((time_t)nullptr);//cast only at non-header
++	hardtime=time(nullptr);//(time_t*)
+ 	//cannot delete mod_flag, it has meanings at undo type/bk/del sum and quit without save
+ 	mod_set(false,modif_visual);
+ }
+@@ -1274,7 +1274,7 @@ static void hardtime_resolve_returner(WI
+ static void hardtime_resolve(WINDOW*w){//argument for errors
+ 	if(hardtime!=0){
+ 		//if((time((time_t)nullptr)-hardtime)>=one_minute){//= here is easily tested(set to 3, will wait 6 seconds if not and equal
+-		if((time((time_t)nullptr)-hardtime)>one_minute_less){
++		if((time(nullptr)-hardtime)>one_minute_less){//(time_t*)
+ 			hardtime_resolve_returner(w);
+ 			easytime();
+ 		}
+@@ -2228,7 +2228,10 @@ static int normalize(char**c,size_t*size
+ 						a='\n';}
+ 					else{norm[j]=a;j++;a='\n';ok=-1;}
+ 				}
+-				else if(ln_term[0]=='\n'){a='\n';ok=-1;}
++				else if(ln_term[0]=='\n'){
++					if(((i+1)<sz)&&text_w[i+1]=='\n')i++;
++					a='\n';ok=-1;
++				}
+ 			}
+ 			norm[j]=a;j++;
+ 		}
