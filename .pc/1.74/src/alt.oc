@@ -1,0 +1,89 @@
+
+format elfobj64
+
+const R_OK=4
+
+include "../include/prog.h"
+
+importx "strrchr" strrchr
+importx "strcpy" strcpy
+importx "memcpy" memcpy
+importx "sprintf" sprintf
+importx "access" access
+importx "unlink" unlink
+importx "rmdir" rmdir
+
+import "swf_frames_pointer" swf_frames_pointer
+import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+import "word_arg_to_stack" word_arg_to_stack
+import "mem_free" mem_free
+
+function alt_join(vstr concat_point)
+	value folder=NULL
+	add concat_point folder
+	call strcpy(concat_point,".dbg")
+	add concat_point 4;set concat_point# (path_separator)
+	inc concat_point
+end
+function alt_free()
+	if alt_join.folder!=(NULL)
+		set alt_join.concat_point# (Nullchar)
+		call rmdir(alt_join.folder)
+		call mem_free(#alt_join.folder)
+	end
+end
+
+aftercallimport ebool
+
+import "memalloc" memalloc
+
+function alt_init(sd flags,sd path,sd size)
+	and flags (debug_alt)
+	if flags=(debug_alt)
+		sd r;set r strrchr(path,(Period))
+		if r!=(NULL)
+			sub r path
+			set size r
+		end
+		sd finalsize=4+1+ids_str_len+1+5+1  #ext separator ids _ word_str_len ... null
+		add finalsize size
+
+		setcall alt_join.folder memalloc(finalsize)
+		call memcpy(alt_join.folder,path,size)
+		call alt_join(size)
+		ret
+	end
+	set alt_join.folder (NULL)
+end
+
+import "file_get_content" file_get_content
+
+function alt_action(sd orig_action,sd preid)
+	call alt_action_base(orig_action,preid,(TRUE))
+end
+function alt_action_base(sd orig_action,sd preid,sd has_frames)
+	if alt_join.folder!=(NULL)
+		if has_frames=(TRUE)
+			sw p
+			if preid!=0
+				set p swf_sprite_frames_pointer(preid)
+			else
+				set p swf_frames_pointer()
+			end
+			sd f;set f word_arg_to_stack(p)
+			inc f  ##index 0 is frame 1 at ffdec
+			call sprintf(alt_join.concat_point,"%u_%u",preid,f)
+		else
+			call sprintf(alt_join.concat_point,"%u",preid)
+		end
+		sd read;set read access(alt_join.folder,(R_OK))
+		if read=0
+			sd mem
+			set mem file_get_content(alt_join.folder,(NULL))
+			call unlink(alt_join.folder) #if there are two action() at one frame, the second one must not see this
+			return mem
+		end
+		return (NULL)
+	end
+	return orig_action
+end
