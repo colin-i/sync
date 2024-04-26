@@ -1,0 +1,32 @@
+
+smart_diff () {
+	diff ${1} ${2}
+	if [ $? = 0 ]; then return 0; fi
+	a=`stat --printf="%s" ${1}`
+	b=`stat --printf="%s" ${2}`
+	base64 ${1}
+	base64 ${2}
+	if [ ${a} = ${b} ]; then
+		echo size equal ${a}
+		xxd ${1} > 1
+		xxd ${2} > 2
+		diff 1 2
+		rm 1 2
+	fi
+	return 1
+}
+if [ -z "${1}" ]; then
+	rm -f a.o a.out a.swf a.swf.log a.swf.x
+	if [ -e .expected/a.swf ]; then rm .expected/a.swf; fi
+	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+elif [ ${1} = 0 ]; then
+	base64 a.swf > .expected/a.swf.txt && \
+	mv a.swf.log .expected && \
+	base64 a.swf.x > .expected/a.swf.x.txt
+else
+	base64 -d .expected/a.swf.txt > .expected/a.swf && \
+	base64 -d .expected/a.swf.x.txt > .expected/a.swf.x && \
+	smart_diff .expected/a.swf a.swf && \
+	diff .expected/a.swf.log a.swf.log && \
+	smart_diff .expected/a.swf.x a.swf.x
+fi
