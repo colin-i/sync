@@ -1,0 +1,189 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+171) xenial; urgency=medium
+ .
+   * unused else at ounused/ostrip
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-04
+
+--- ocompiler-1.orig/ostrip/Makefile
++++ ocompiler-1/ostrip/Makefile
+@@ -32,15 +32,16 @@ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+ OLINK=../ounused/ounused
+ 
+-%.o: ${FULLOBJS}
+-	${OCOMP} $< ${OFLAGS}
++${OBJ}: ${FULLOBJS}
++	${launcher} ${OCOMP} $< ${OFLAGS}
+ 
+-ATCCCOM = $(CC) ${linkerflags} -o ${OB}
++#ATCCCOM = $(CC) ${linkerflags} -o ${OB}
++ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o ${OB}
+ 
+ ${OB}: ${OBJ}
+-	${OLINK} ${FULLOBJLOG}
++	${launcher} ${OLINK} ${FULLOBJLOG}
+ 	@echo
+-	${ATCCCOM} ${FULLOBJO}
++	${ATLDCOM} ${FULLOBJO}
+ 	if [ "${nobits_virtual}" != "1" ]; then \
+ 		${FULLOBJ} ${FULLOBJ} ${FULLOBJLOG} ${FULLOBJO}; \
+ 		if [ "$$?" = "0" ]; then \
+@@ -80,7 +81,7 @@ uninstall:
+ 
+ test:
+ 	if [ "${nobits_virtual}" != "1" ]; then \
+-		${ATCCCOM} ${FULLOBJO} -o z; \
++		${ATLDCOM} ${FULLOBJO} -o z; \
+ 		if [ "$$?" = "0" ]; then \
+ 			${FULLOBJ} ./z ${FULLOBJLOG} ${FULLOBJO}; \
+ 			if [ "$$?" = "0" ]; then \
+--- ocompiler-1.orig/ostrip/after.oc
++++ ocompiler-1/ostrip/after.oc
+@@ -38,9 +38,8 @@ const sym__to_shndx=datasize+charize+cha
+ 					add poffset# doffset
+ 
+ 					return mem
+-				else
+-					add sym (sym_size-datasize)
+-				endelse
++				endif
++				add sym (sym_size-datasize)
+ 			else
+ 				add sym (sym_size-sym__to_shndx)
+ 			endelse
+--- ocompiler-1.orig/ostrip/header.h
++++ ocompiler-1/ostrip/header.h
+@@ -34,6 +34,7 @@ Importx "memcmp" memcmp
+ importx "malloc" malloc
+ importx "free" free
+ Importx "memcpy" memcpy
++importx "exit" exit  #only for problems at box64/qemu-amd64
+ 
+ importx "strcmp" strcmp
+ importx "strlen" strlen
+--- /dev/null
++++ ocompiler-1/ostrip/mrd
+@@ -0,0 +1,2 @@
++
++launcher=q LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA="inplace_reloc 0" ./md
+--- ocompiler-1.orig/ostrip/ostrip.oc
++++ ocompiler-1/ostrip/ostrip.oc
+@@ -75,9 +75,11 @@ include "obj.oc"
+ include "after.oc"
+ include "reldyn.oc"
+ 
+-entry main(sd argc,sv argv) #0,ss exec,ss log1,ss *obj1)   #... logN objN
+-
++entryraw main(sd argc,ss a0) #0,ss exec,ss log1,ss *obj1)   #... logN objN
+ if argc>=(1+3)  #0 is all the time
++	sv argv
++	set argv #a0
++
+ 	sd verb%%ptrverbose
+ 	setcall verb# access(".debug",(F_OK))
+ 
+@@ -170,6 +172,6 @@ if argc>=(1+3)  #0 is all the time
+ 	call write_sec(".rela.dyn",frees.execreladyn,frees.execreladynsize)
+ 
+ 	call frees()
+-	return (EXIT_SUCCESS)
++	call exit((EXIT_SUCCESS))
+ endif
+-return (EXIT_FAILURE)
++call exit((EXIT_FAILURE))
+--- ocompiler-1.orig/ounused/loop.oc
++++ ocompiler-1/ounused/loop.oc
+@@ -58,29 +58,34 @@ function log_line(ss s,sd sz,sd plink)
+ 				call constant_add(s,sz) #same as with const, except it has a dot
+ 			endif
+ 			ret
+-		elseif type=(log_declare)
++		endif
++		if type=(log_declare)
+ 			setcall skip skip_test() #skip same included file
+ 			if skip=(FALSE)
+ 				call constant_add(s,sz)
+ 			endif
+ 			ret
+-		elseif type=(log_import)
++		endif
++		if type=(log_import)
+ 			setcall skip skip_test()
+ 			if skip=(FALSE)
+ 				call import_add(s,sz)
+ 			endif
+ 			ret
+-		elseif type=(log_constant)
++		endif
++		if type=(log_constant)
+ 			call uconst_add(s,sz)
+ 			ret
+-		elseif type=(log_function)
++		endif
++		if type=(log_function)
+ 			sv fns%fn_mem_p
+ 			call addtocont(fns,s,sz)
+ 			ret
+-		elseif type=(log_variable)
++		endif
++		if type=(log_variable)
+ 			call uconst_add(s,sz)
+ 			ret
+-		endelseif
++		endif
+ 	endif
+ 	if type=(log_pathname)
+ 		call filesplus()
+--- ocompiler-1.orig/ounused/skip.oc
++++ ocompiler-1/ounused/skip.oc
+@@ -26,9 +26,10 @@ function filesminus()
+ 	if nr=s#
+ 		call skip_reset()
+ 		return 0
+-	elseif nr<s#
++	endif
++	if nr<s#
+ 		return -1
+-	endelseif
++	endif
+ 	return 1
+ endfunction
+ 
+--- ocompiler-1.orig/ounused/throwless.oc
++++ ocompiler-1/ounused/throwless.oc
+@@ -43,12 +43,13 @@ function ralloc_throwless(sv p,sd sz)
+ 			return (NULL)
+ 		end
+ 		return "realloc error"
+-	elseif sz=0  #equal 0 discovered at decrementfiles, since C23 the behaviour is undefined
++	endif
++	if sz=0  #equal 0 discovered at decrementfiles, since C23 the behaviour is undefined
+ 	#using this quirk, lvs[0] will be used at constants at end, when size is 0
+ 		#set p# 0
+ 		set cursor# 0
+ 		return (NULL)
+-	endelseif
++	endif
+ 	return "realloc must stay in 31 bits"
+ endfunction
+ 
