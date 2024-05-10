@@ -1,0 +1,141 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+172) xenial; urgency=medium
+ .
+   * whiletrue
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-10
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1n_siMLq2V5krLIJ4jmQp5J48j0bb-2ii
++File ID: 1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy
++<p>Found file: ./ocompiler-1-5+171.x86_64.rpm, 1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy, 2024-05-10T05:33:03.198Z, 69010, https://drive.google.com/uc?id=1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+169.x86_64.rpm, 1n_siMLq2V5krLIJ4jmQp5J48j0bb-2ii, 2024-05-04T11:17:26.109Z, 70754, https://drive.google.com/uc?id=1n_siMLq2V5krLIJ4jmQp5J48j0bb-2ii&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+168.x86_64.rpm, 1jKp5gDFiln3uuU_CLEdIyxwYdNF9SY_v, 2024-04-23T12:34:56.174Z, 70720, https://drive.google.com/uc?id=1jKp5gDFiln3uuU_CLEdIyxwYdNF9SY_v&export=download
+--- ocompiler-1.orig/otoc/decl.oc
++++ ocompiler-1/otoc/decl.oc
+@@ -33,7 +33,7 @@ function cond(sv pbuffer,sd output)
+ 	call arg(pbuffer)
+ 	charx cnd#1;call get_char(pbuffer,#cnd)
+ 	call arg(pbuffer)
+-	callret writen(output,"{",1)
++	callg writen(output,"{",1)
+ end
+ 
+ #D structure
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -116,34 +116,34 @@ function comment(sd outfile,sv pbuffer)
+ 	call write(outfile,"//",2)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+-	callret writen(outfile,pointer,sz)
++	callg writen(outfile,pointer,sz)
+ end
+ function commentmulti(sd outfile,sv pbuffer)
+ 	call write(outfile,"/*",2)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+ 	call write(outfile,pointer,sz)
+-	callret writen(outfile,"*/",2)
++	callg writen(outfile,"*/",2)
+ end
+ function commentlineend(sd outfile,sv pbuffer)
+ 	call fseek(outfile,-1,(SEEK_CUR)) #this one and line command
+-	callret comment(outfile,pbuffer)
++	callg comment(outfile,pbuffer)
+ end
+ function format(sd *outfile,sv pbuffer) #will do nothing at the moment
+ 	charx fmt#1;call get_char(pbuffer,#fmt)
+ end
+ function end(sd outfile)
+-	callret writen(outfile,"}",1)
++	callg writen(outfile,"}",1)
+ end
+ function interrupt(sd outfile)
+ 	#this is not arm #char a="__asm__(\"int $3\");"
+ 	#this is no x86 #__asm__("BKPT");
+ 	char a="__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+-	callret writen(outfile,#a,\interrupt.a-1)
++	callg writen(outfile,#a,\interrupt.a-1)
+ end
+ function line(sd outfile)
+ 	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
+-	callret write(outfile,";",1)
++	callg write(outfile,";",1)
+ end
+ 
+ #need write
+@@ -176,7 +176,7 @@ function functiondef(sd outfile,sv pbuff
+ 	set dest dest#
+ 	call dest(pbuffer)
+ 
+-	callret writen(outfile,"){",2)
++	callg writen(outfile,"){",2)
+ end
+ function declare(sd *outfile,sv pbuffer)
+ 	call decl(pbuffer)
+--- ocompiler-1.orig/src/files/functions/commands/cond.oc
++++ ocompiler-1/src/files/functions/commands/cond.oc
+@@ -179,7 +179,7 @@ function condendtest(sv p_conds,sd numbe
+ 	#for breaks inside conditions
+ 	sd last;set last conds
+ 
+-	while 1=1
++	whiletrue
+ 		Data lastcondition#1
+ 
+ 		sub conds (condpack_number)
+@@ -278,7 +278,7 @@ Function conditionscondend(data close1,d
+ 		Data elsenr=elsenumber
+ 		Data structure%%ptr_conditionsloops
+ 
+-		While 1=1
++		Whiletrue
+ 			SetCall err condend(number)
+ 			If err!=noerr
+ 				Return err
+--- ocompiler-1.orig/src/files/functions/commons/strcommons.oc
++++ ocompiler-1/src/files/functions/commons/strcommons.oc
+@@ -296,7 +296,7 @@ function quotinmem_err(ss content,sd pqu
+ 	sd aux;set aux content
+ 	Set pescapes# 0
+ 	#quotes_forward was called already, the string has a good end, and nulls are not ok at include/import/library but tolerated at decl/arg
+-	While 0=0
++	Whiletrue
+ 		if content#=bs
+ 			inc pescapes#
+ 			add content 2
+--- ocompiler-1.orig/src/windows/files/platform.oc
++++ ocompiler-1/src/windows/files/platform.oc
+@@ -24,7 +24,7 @@ function wide_to_ansi(ss in)
+ 	set out in
+ 	dec out
+ 	char n=0;char x#1
+-	while 0=0
++	whiletrue
+ 		inc out
+ 		set x in#
+ 		set out# x
