@@ -1,0 +1,1164 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-77) bionic; urgency=medium
+ .
+   * debug_x_pad fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-12
+
+--- actionswf-1.orig/include/action.h
++++ actionswf-1/include/action.h
+@@ -1,26 +1,35 @@
+ 
+ const no_pointer=0  #NULL
+ 
+-const function_action=0xf3033030
+-const call_action_left=0xf1011010
+-const ActionDefineLocal=0x3C
+-const ActionSetMember=0x4F
+-const math_end=0xffFFffFF
++const function_action=0xf3033030   #1
++const call_action_left=0xf1011010  #1
++const ActionSetVariable=0x1D       #1
++const ActionDelete=0x3A            #1
++const ActionDelete2=0x3B           #1
++const ActionDefineLocal=0x3C       #1
++const ActionDefineLocal2=0x41      #1
++const ActionSetMember=0x4F         #1
+ 
+ const block_end=0xfbBBbbBB
+-
+ const args_end=0xfeEEeeEE
++const math_end=0xffFFffFF          #1
+ 
+-#M structure
+-const square_bracket_start=0xf5055050
+-const member_end=0xff0FF0f0
+-
+-#RG structure
+-    const ap_double=6
+-    const ap_Integer=7
+-const ActionGetVariable=0x1C
+-const ActionGetMember=0x4E
+-
++const square_bracket_start=0xf5055050  #M
++const parenthesis_start=0xf8088080     #RG
++const member_end=0xff0FF0f0            #M
++
++const ap_double=6              #RG
++const ap_Integer=7             #RG
++const ActionSubtract=0x0B      #O
++const ActionMultiply=0x0C      #O
++const ActionDivide=0x0D        #O
++const ActionGetVariable=0x1C   #RG
++const ActionModulo=0x3F        #O
++const ActionAdd2=0x47          #O
++const ActionGetMember=0x4E     #RG
++const ActionBitAnd=0x60        #O
++const ActionBitOr=0x61         #O
++const ActionBitXor=0x62        #O
+ 
+ 
+ const ActionEndFlag=0
+@@ -29,29 +38,20 @@ const ActionPreviousFrame=0x05
+ const ActionPlay=0x06
+ const ActionStop=0x07
+ #const ActionAdd=0x0A
+-const ActionSubtract=0x0B
+-const ActionMultiply=0x0C
+-const ActionDivide=0x0D
+ const ActionAnd=0x10
+ const ActionOr=0x11
+ const ActionNot=0x12
+ const ActionPop=0x17
+ const ActionToInteger=0x18
+-const ActionSetVariable=0x1D
+ const ActionTrace=0x26
+ const ActionRandomNumber=0x30
+ const ActionCharToAscii=0x32
+ const ActionAsciiToChar=0x33
+-const ActionDelete=0x3A
+-const ActionDelete2=0x3B
+ const ActionCallFunction=0x3D
+ const ActionReturn=0x3E
+-const ActionModulo=0x3F
+ const ActionNewObject=0x40
+-const ActionDefineLocal2=0x41
+ const ActionTypeOf=0x44
+ const ActionEnumerate=0x46
+-const ActionAdd2=0x47
+ const ActionLess2=0x48
+ const ActionEquals2=0x49
+ const ActionPushDuplicate=0x4C
+@@ -59,9 +59,6 @@ const ActionIncrement=0x50
+ const ActionDecrement=0x51
+ const ActionCallMethod=0x52
+ const ActionNewMethod=0x53
+-const ActionBitAnd=0x60
+-const ActionBitOr=0x61
+-const ActionBitXor=0x62
+ const ActionBitLShift=0x63
+ const ActionBitRShift=0x64
+ const ActionBitURShift=0x65
+@@ -85,7 +82,6 @@ const call_action_right=0xf2022020
+ const new_action=0xf4044040
+ const mixt_equal=0xf6066060
+ const compare_action=0xf7077070
+-const parenthesis_start=0xf8088080
+ const break_flag=0xf9099090
+ const continue_flag=0xfa0AA0a0
+ #
+--- actionswf-1.orig/include/debug.h
++++ actionswf-1/include/debug.h
+@@ -4,3 +4,5 @@ const debug_log=0x1
+ const debug_alt=0x2
+ const debug_titles=0x4
+ const debug_x=0x8
++const debug_x_pad=0x10
++const debug_xx=debug_x|debug_x_pad
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -15,8 +15,6 @@ const WORD=2
+ const DWORD=4
+ const QWORD=8
+ 
+-const pointer_rest=:-DWORD
+-
+ const SEEK_SET=0
+ const SEEK_CUR=1
+ const SEEK_END=2
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -54,11 +54,12 @@ function get_nr_of_forIn_statements()
+     while counter>0
+         dec counter
+         sub block (DWORD)
+-        if block#=(brace_blocks_function)
++	if block#=(brace_blocks_function)
+             return nr
+-        elseif block#=(for_marker)
++	endif
++	if block#=(for_marker)
+             inc nr
+-        endelseif
++	endif
+     endwhile
+     return nr
+ endfunction
+@@ -169,10 +170,10 @@ function action_code_values_init()
+     setcall m# memalloc((totalvalues*action_code_values_unit))
+ endfunction
+ function action_code_set(sd value)
+-	callret action_code_set_ex(value,1)
++	callg action_code_set_ex(value,1)
+ endfunction
+ function action_code_set_pointer(sd value)
+-	callret action_code_set_ex(value,(:/DWORD))  #pointers are referencing static mem, not reallocable actionpool
++	callg action_code_set_ex(value,(:/DWORD))  #pointers are referencing static mem, not reallocable actionpool
+ endfunction
+ function action_code_set_ex(sd value,sd size)
+ 	sd nr
+@@ -240,13 +241,14 @@ function action__code_row_ex(sd codepoin
+     endif
+     sd attrib
+     set attrib codepointer#
+-    if attrib=(ActionReturn)
++	if attrib=(ActionReturn)
+         add codepointer (DWORD)
+         call close_scope_forIn_statements()
+         setcall codepointer action_code_right_util(codepointer)
+         call action_one((ActionReturn))
+         return codepointer
+-    elseif attrib=(block_end)
++	endif
++	if attrib=(block_end)
+         add codepointer (DWORD)
+         if codepointer#=(else_flag)
+             call action_code_else_add()
+@@ -255,21 +257,25 @@ function action__code_row_ex(sd codepoin
+             call brace_blocks_remove_write()
+         endelse
+         return codepointer
+-    elseif attrib=(block_else_end)
++	endif
++	if attrib=(block_else_end)
+         setcall codepointer action_code_conditions_end(codepointer)
+         return codepointer
+-    elseif attrib=(whileblock_end)
++	endif
++	if attrib=(whileblock_end)
+         import "brace_blocks_remove_write_jump" brace_blocks_remove_write_jump
+         call brace_blocks_remove_write_jump()
+         add codepointer (DWORD)
+         return codepointer
+-    elseif attrib=(break_flag)
++	endif
++	if attrib=(break_flag)
+         call action_code_break()
+         add codepointer (DWORD);return codepointer
+-    elseif attrib=(continue_flag)
++	endif
++	if attrib=(continue_flag)
+         call action_code_continue()
+         add codepointer (DWORD);return codepointer
+-    endelseif
++	endif
+     setcall codepointer action_code_pack(codepointer)
+     return codepointer
+ endfunction
+@@ -293,9 +299,10 @@ function action_code_pack(sd codepointer
+         set need_right (FALSE)
+         set need_pop (TRUE)
+     endelseif
++	#else is ActionDefineLocal/ActionSetVariable
+     #
+     if is_member=(TRUE)
+-        setcall codepointer action_member_loop(codepointer,(get_member_pointer))   #to pass the pointer
++        setcall codepointer action_member_loop(codepointer,(get_member_pointer))
+     else
+     #definelocal or setvariable or delete2
+ 	sd name;set name action_code_get_pointer(#codepointer)
+@@ -383,7 +390,7 @@ function action_code_write_conditions(sd
+             sd attr2;set attr2 codepointer#;add codepointer (DWORD)
+             #
+             if attr2=(ActionSetMember)
+-                setcall codepointer action_member_loop(codepointer,(get_member_pointer))  #to pass the pointer
++                setcall codepointer action_member_loop(codepointer,(get_member_pointer))
+             else
+                 #var or set variable
+                 call action_push((ap_Constant8),codepointer#v^,-1)
+@@ -752,14 +759,14 @@ function action_code_right_number(sd cod
+         setcall codepointer action_code_write_function_call(codepointer,#want_return)
+         return codepointer
+     endif
+-    sd attrib
++    sd attrib;sd var
+     set attrib codepointer#
+     add codepointer (DWORD)
+     if attrib=(ActionGetMember)
+         setcall codepointer action_member_loop(codepointer,(get_member))
+     else
+         if attrib=(ActionGetVariable)
+-		sd var;set var action_code_get_pointer(#codepointer)
++		set var action_code_get_pointer(#codepointer)
+             call action_one_command(var)
+         elseif attrib=(ap_double)
+ 		sd low;set low codepointer#;add codepointer (DWORD)
+@@ -770,9 +777,8 @@ function action_code_right_number(sd cod
+ 		add codepointer (DWORD)
+         else
+         #ap_Constant8
+-		call action_push(attrib,codepointer#v^,-1)
+-		add codepointer (pointer_rest)
+-		add codepointer (DWORD)
++		set var action_code_get_pointer(#codepointer)
++		call action_push(attrib,var,-1)
+         endelse
+     endelse
+     return codepointer
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -170,11 +170,11 @@ function action_parse_conditions(ss ac,s
+     endif
+     #while
+     setcall pointer str_expression_at_start(ac,"while")
+-    if pointer!=ac
++	if pointer!=ac
+         call action_code_set((while_marker))
+         set p_flags# (while_marker)
+         return pointer
+-    else
++	endif
+     #for
+         setcall pointer str_expression_at_start(ac,"for")
+         if pointer=ac;return pointer;endif
+@@ -254,24 +254,24 @@ function action_parse_conditions(ss ac,s
+         endelse
+         inc cursor
+         return cursor
+-    endelse
+ endfunction
+ #pointer
+ function action_code_row_parse(ss ac,sd a_block_detected,sd else_index)
+-    if ac#=(Openingbrace)
++	if ac#=(Openingbrace)
+         if a_block_detected=(FALSE)
+             call brace_blocks_add_parse((normal_marker))
+         endif
+         inc ac
+         return ac
+-    elseif ac#=(Closingbrace)
++	endif
++	if ac#=(Closingbrace)
+         if a_block_detected=(TRUE)
+             call error("unexpected closing brace sign after code block opened")
+         endif
+         inc ac
+         setcall ac else_verify(ac,else_index)
+         return ac
+-    endelseif
++	endif
+     setcall ac action_code_row_parse_instrument(ac)
+     if a_block_detected=(TRUE)
+     #ex: if(a==b)x=3;
+@@ -572,7 +572,7 @@ function action_parse_loop(ss ac,sv p_op
+     #
+     vstr op_set^oprs
+     ss ops;setcall ops get_operations();call memcpy(op_set,ops,(operations_size))
+-    while 1=1
++    whiletrue
+         sd op
+         sd was_parenthesis=0
+         if ac#=(Openparenthesis)
+@@ -603,15 +603,14 @@ function action_parse_loop(ss ac,sv p_op
+         if is_compare_ptr#=(TRUE)
+             set is_compare_ptr# (FALSE)
+         else
+-            if op=0
++		if op=0
+                 if p_op!=0
+                     set p_op# op
+                 endif
+                 return ac
+-            else
++		endif
+                 setcall bool action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
+                 if bool=(TRUE);return ac;endif
+-            endelse
+             sd x;setcall x action_parse_take_action(op,ac)
+             call action_code_set(x)
+         endelse
+@@ -752,11 +751,10 @@ function action_code_str(ss ac)
+     char stringdelim2="'"
+     set delim stringdelim
+     if ac#!=stringdelim
+-        if ac#!=stringdelim2
++	if ac#!=stringdelim2
+             return 0
+-        else
++	endif
+             set delim stringdelim2
+-        endelse
+     endif
+     ss next
+     ss dest
+@@ -864,8 +862,8 @@ function action_compare(sd value,sd firs
+     if compares#=value
+         if firstcompare!=(NULL)
+                                            #is shl
+-            if firstcompare=(ActionLess2);return 2
+-            else;call error("not expeting < here");endelse
++		if firstcompare=(ActionLess2);return 2;endif
++		call error("not expeting < here")
+         endif
+         return (ActionLess2)
+     endif
+@@ -874,8 +872,8 @@ function action_compare(sd value,sd firs
+     if compares#=value
+         if firstcompare!=(NULL)
+                                              #is sar_shr
+-            if firstcompare=(ActionGreater);return 2
+-            else;call error("not expeting > here");endelse
++		if firstcompare=(ActionGreater);return 2;endif
++		call error("not expeting > here")
+         endif
+         return (ActionGreater)
+     endif
+@@ -886,23 +884,26 @@ function action_compare(sd value,sd firs
+     #=
+     inc compares
+     if compares#=value
+-        if firstcompare=(ActionLess2)
++	if firstcompare=(ActionLess2)
+             call action_code_set((ActionGreater))
+             call action_code_set((ActionNot))
+             return 1
+-        elseif firstcompare=(ActionGreater)
++	endif
++	if firstcompare=(ActionGreater)
+             call action_code_set((ActionLess2))
+             call action_code_set((ActionNot))
+             return 1
+-        elseif firstcompare=(ActionEquals2)
++	endif
++	if firstcompare=(ActionEquals2)
+             call action_code_set((ActionEquals2))
+             call action_code_set(0)
+             return 1
+-        elseif firstcompare=(ActionNot)
++	endif
++	if firstcompare=(ActionNot)
+             call action_code_set((ActionEquals2))
+             call action_code_set((ActionNot))
+             return 1
+-        endelseif
++	endif
+         return (ActionEquals2)
+     endif
+     # !
+@@ -914,14 +915,15 @@ function action_compare(sd value,sd firs
+         return (ActionNot)
+     endif
+     #another char
+-    if firstcompare=(NULL)
++	if firstcompare=(NULL)
+         #call error("expecting a comparison")
+         return (NULL)
+-    elseif firstcompare=(ActionEquals2)
++	endif
++	if firstcompare=(ActionEquals2)
+         call error("expecting a == comparison")
+-    elseif firstcompare=(ActionNot)
++	elseif firstcompare=(ActionNot)
+         call error("expecting a != comparison")
+-    endelseif
++	endelseif
+     if firstcompare=(ActionLess2)
+         call action_code_set((ActionLess2))
+         call action_code_set(0)
+@@ -1103,7 +1105,7 @@ function resolve_dummy_jump(sd jumpoffse
+     inc mem;set mem# byte
+ endfunction
+ function brace_blocks_remove_write_loopIfJumps_at_current_offset()
+-    while 1=1
++    whiletrue
+         sd ifoffset
+         setcall ifoffset brace_blocks_remove_write_offset()
+         if ifoffset=0
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -16,11 +16,12 @@ function row_termination(sv p_ac,sv p_ro
+ 	if ac#=(LineFeed)
+ 		inc p_row#
+ 		return 0
+-	elseif ac#=(CarriageReturn)
++	endif
++	if ac#=(CarriageReturn)
+ 		inc ac;if ac#=0xa;set p_ac# ac;endif
+ 		inc p_row#
+ 		return 0
+-	endelseif
++	endif
+ 	return 1
+ endfunction
+ #error_row
+@@ -34,7 +35,7 @@ function escape_action(ss ac,ss pointer,
+     const line_comment=1
+     const multiLine_comment=2
+     #
+-    while 0=0
++    whiletrue
+         sd loop2=1
+         setcall ac spaces(ac)
+         #
+@@ -64,20 +65,19 @@ function escape_action(ss ac,ss pointer,
+ 				set pointer# 0
+ 				call debug_phase_init(pointer)
+ 				return pointer
+-			else
+-				if comments=0
+-				    if pointer=stop_pointer
+-				        set error_row row
+-				    else
+-				        set pointer# ac#
+-				    endelse
+-				    inc pointer
+-				elseif comments=(multiLine_comment)
+-				    if ac#=lines_com_c1
+-				        set test ac;inc test;if test#=lines_com_c2;set comments 0;inc ac;endif
+-				    endif
+-				endelseif
+-			endelse
++			endif
++			if comments=0
++			    if pointer=stop_pointer
++			        set error_row row
++			    else
++			        set pointer# ac#
++			    endelse
++			    inc pointer
++			elseif comments=(multiLine_comment)
++			    if ac#=lines_com_c1
++			        set test ac;inc test;if test#=lines_com_c2;set comments 0;inc ac;endif
++			    endif
++			endelseif
+ 		elseif stop_pointer=(NULL)
+ 			call debug_phase_init(pointer)
+ 		endelseif
+@@ -88,7 +88,7 @@ function escape_action(ss ac,ss pointer,
+ 		return error_row
+ 	endif
+     endwhile
+-endfunction  #if ret is here is dead
++end
+ #nr
+ function escape_count(ss string,sd escape)
+     sd nr=0
+@@ -124,7 +124,8 @@ function action_debug(sd type)
+ 	vstr m=NULL
+ 	if type=(action_debug_get_mem)
+ 		return m
+-	elseif type=(action_debug_get)
++	endif
++	if type=(action_debug_get)
+ 		return #orig
+ 	end
+ 	# action_debug_free
+@@ -333,7 +334,7 @@ function action_member_loop(sv mathpoint
+ 	sd name
+ 	set name action_code_get_pointer(#mathpointer)
+     call action_get_one(name)
+-    while 1=1
++    whiletrue
+ 	while mathpointer#=(no_pointer)
+ 	#multi-dim arrays
+ 		add mathpointer :  #to pass the pointer
+@@ -357,7 +358,7 @@ function action_member_loop(sv mathpoint
+         endwhile
+         sv endtest
+         set endtest mathpointer
+-        add endtest endoffset
++        add endtest endoffset         ##to pass the pointer #or is zero
+         #
+         if endtest#=(no_pointer)
+ 		if endoffset=(get_member_pointer)
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -35,14 +35,14 @@ function NumFill_NumLin(sd set_get,sd fi
+     if set_get=0
+         set NFill_NLin lin;mult fill 0x10;or NFill_NLin fill
+     else
+-        if fill=(FALSE);set lin NFill_NLin;and lin 0x0F;return lin
+-        else;set fill NFill_NLin;div fill 0x10;return fill;endelse
++	if fill=(FALSE);set lin NFill_NLin;and lin 0x0F;return lin;endif
++	set fill NFill_NLin;div fill 0x10;return fill
+     endelse
+ endfunction
+ 
+ #edittext
+ 
+-const sim64pointerSize=pointer_rest
++const sim64pointerSize=:-DWORD
+ #struct
+ function edittext_struct()
+     data fontid#1
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -365,13 +365,14 @@ function debug_concludefunction(sv point
+ 		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
+ 			call fseek(debug_data.file,prev_fileoffset,(SEEK_SET))
+ 			#now need to skip first number that is the number of rows
+-			while 0=0
++			whiletrue
+ 				char a#1
+ 				sd ret
+ 				set ret fread(#a,1,1,debug_data.file)
+ 				if a=(Comma)  #there is a comma from here
+ 					break
+-				elseif ret!=1
++				endif
++				if ret!=1
+ 					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
+ 				end
+ 			end
+@@ -387,12 +388,12 @@ function debug_concludefunction(sv point
+ 	endif
+ end
+ 
+-function x_init(sd flags,sd path)
++function x_init(datax flag,sd path)
+ 	if x_data.f!=(NULL)
+ 		call error("swf started, x not closed")
+ 	end
+-	and flags (debug_x)
+-	if flags=(debug_x)
++	and flag (debug_xx)
++	if flag!=0
+ 		sd s;setcall s strlen(path)
+ 		sd a=2+1
+ 		add a s
+@@ -400,6 +401,8 @@ function x_init(sd flags,sd path)
+ 		call sprintf(b,"%s.x",path)
+ 
+ 		set x_data.f f_open_mem(b,"wb") #'b' on windows is not 't' that can change line ends and is working more there
++
++		and flag (debug_x_pad)
+ 	end
+ end
+ 
+@@ -410,9 +413,28 @@ function debug_x_pointers(valuex start,v
+ 
+ 		inc size  ##is on last \0
+ 		sub size start
+-		call f_write(x_data.f,#size,:)
++		if x_init.flag=(debug_x_pad)
++			set mark f_tell(x_data.f) #long
++			add mark :
++			add mark size    ##overflow is same
++
++			sd pad=0xf
++			xor pad mark
++			inc pad
++			and pad 0xf
++			sd all;set all size; add all pad
++			call f_write(x_data.f,#all,:)
++		else
++			call f_write(x_data.f,#size,:)
++		end
+ 		set mark f_tell(x_data.f)
+ 		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
++		if x_init.flag=(debug_x_pad)
++			if pad!=0
++				char zero={0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0}
++				call f_write(x_data.f,#zero,pad)
++			end
++		end
+ 	end
+ end
+ 
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -17,7 +17,7 @@ function dtitles_conclude(sd finalid,sd
+ 		call sprintf(#store,"%04X",finalid)
+ 
+ 		add mem (WORD+WORD) #id field, frame count
+-		while 0=0
++		whiletrue
+ 			sd RECORDHEADER
+ 			set RECORDHEADER word_arg_to_stack(mem)
+ 			add mem (WORD)
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -98,7 +98,7 @@ function file_seek(sd file,sd off,sd met
+ endfunction
+ #offset
+ function file__seek(sd file,sd method)
+-	callret file_seek(file,0,method) #here return is what file_seek is returning
++	callg file_seek(file,0,method) #here return is what file_seek is returning
+ endfunction
+ #size
+ function filesize(sd file)
+--- /dev/null
++++ actionswf-1/src/mr32d
+@@ -0,0 +1,2 @@
++
++LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -118,21 +118,24 @@ function swf_mem(sd proc,sd arg,sd len)
+ 
+     data id_stack#1
+ 
+-    if proc=(mem_exp_change_back)
++	if proc=(mem_exp_change_back)
+         set id swf_frames_reg.main_id
+         set call_struct c_main
+         ret
+-	elseif proc=(mem_exp_change_pool)  #this can be stackable, at debug titles, at normal usage is back at the main id
++	endif
++	if proc=(mem_exp_change_pool)  #this can be stackable, at debug titles, at normal usage is back at the main id
+ 	#is after action_code_values_init
+ 		set id_stack id
+ 		set id arg
+ 		set call_struct c_pool
+ 		ret
+-	elseif proc=(mem_exp_change_back_pool)
++	endif
++	if proc=(mem_exp_change_back_pool)
+ 		set id id_stack
+ 		set call_struct c_main
+ 		ret
+-    elseif proc=(mem_exp_init)
++	endif
++	if proc=(mem_exp_init)
+     #arg is file
+     #len is filelength offset
+         if path_mem!=(NULL)
+@@ -157,7 +160,8 @@ function swf_mem(sd proc,sd arg,sd len)
+         set filelength_offset len
+         #
+         ret
+-    elseif proc=(mem_exp_free)
++	endif
++	if proc=(mem_exp_free)
+         if path_mem!=(NULL)
+             #0
+             call mem_free(#path_mem)
+@@ -175,7 +179,7 @@ function swf_mem(sd proc,sd arg,sd len)
+             endif
+         endif
+         ret
+-    endelseif
++	endif
+     if path_mem=(NULL)
+     #swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+         call error("there isn't a swf started")
+@@ -251,7 +255,7 @@ function swf_actionblock(sd proc,sd arg,
+     data id#1
+     data id_back#1
+     sd poolid
+-    if proc=(mem_exp_change)
++	if proc=(mem_exp_change)
+         #must verify to be a valid user input id
+         call struct_ids_actionpool((ids_get_pointer),id)
+         #
+@@ -260,7 +264,8 @@ function swf_actionblock(sd proc,sd arg,
+         setcall poolid actionpoolid()
+         set poolid# id
+         ret
+-    elseif proc=(mem_exp_change_back)
++	endif
++	if proc=(mem_exp_change_back)
+         set id id_back
+         #
+         sd root_poolid
+@@ -268,7 +273,8 @@ function swf_actionblock(sd proc,sd arg,
+         setcall poolid actionpoolid()
+         set poolid# root_poolid#
+         ret
+-    elseif proc=(mem_exp_init)
++	endif
++	if proc=(mem_exp_init)
+         set id arg
+         set id_back id
+         call struct_ids_action((ids_set),id)
+@@ -276,7 +282,7 @@ function swf_actionblock(sd proc,sd arg,
+         sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# id
+         sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# id
+         ret
+-    endelseif
++	endif
+     sv p_block
+     setcall p_block struct_ids_action((ids_get_pointer),id)
+     if proc=(mem_exp_add)
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -732,7 +732,7 @@ functionX swf_done()
+ endfunction
+ 
+ functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
+-	callret swf_new_ex(path,width,height,backgroundcolor,fps,(debug_none))
++	callg swf_new_ex(path,width,height,backgroundcolor,fps,(debug_none))
+ endfunction
+ functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd add_debug)
+ #ss path             file out pathname
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -150,11 +150,12 @@ endfunction
+ function is_numeric(sd char)
+     char min="0"
+     char max="9"
+-    if char<min
++	if char<min
+         return (FALSE)
+-    elseif char<=max
++	endif
++	if char<=max
+         return (TRUE)
+-    endelseif
++	endif
+     return (FALSE)
+ endfunction
+ #bool
+@@ -169,17 +170,21 @@ function part_of_variable(sd value)
+ endfunction
+ #bool
+ function is_letter(sd value)
+-    if value<(A)
++	if value<(A)
+         return (FALSE)
+-    elseif value<=(Z)
++	endif
++	if value<=(Z)
+         return (TRUE)
+-    elseif value=(_)
++	endif
++	if value=(_)
+         return (TRUE)
+-    elseif value<(a)
++	endif
++	if value<(a)
+         return (FALSE)
+-    elseif value<=(z)
++	endif
++	if value<=(z)
+         return (TRUE)
+-    endelseif
++	endif
+     return (FALSE)
+ endfunction
+ 
+@@ -250,7 +255,7 @@ endfunction
+ 
+ #str
+ function spaces(ss str)
+-    while 1=1
++    whiletrue
+         if str#!=(Space)
+             if str#!=(HorizontalTab)
+                 return str
+@@ -408,7 +413,8 @@ function struct_ids(sd proc,sd id)
+     sv pointer
+ 	if proc=(ids_counter)
+ 		return counter
+-	elseif proc=(ids_all_free)
++	endif
++	if proc=(ids_all_free)
+         #starting with ids_all_free:
+         #                #counter increment#, then null at ac,pools
+         #   mem_free at struct_ids_action_expand
+@@ -421,7 +427,7 @@ function struct_ids(sd proc,sd id)
+             setcall ac_ptr struct_ids_actionpool((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+         endwhile
+         ret
+-	endelseif
++	endif
+ 
+     sd ident
+ 	if proc!=(ids_set)
+@@ -432,7 +438,8 @@ function struct_ids(sd proc,sd id)
+     setcall pointer move_to_n_pointer(strct,ident)
+ 	if proc=(ids_get)
+ 		return pointer#
+-	elseif proc=(ids_set)
++	endif
++	if proc=(ids_set)
+ 	#id
+         if counter=(max_structures)
+             call error("too many objects")
+@@ -459,10 +466,11 @@ function struct_ids(sd proc,sd id)
+         setcall ac_ptr struct_ids_actionpool((ids_get_pointer),c);set ac_ptr# (NULL)
+         #counter increment#
+         return ident
+-    elseif proc=(ids_get_pointer)
++	endif
++	if proc=(ids_get_pointer)
+         if ident>=counter;call error("Unexistent input id.");endif
+         return pointer
+-	endelseif
++	endif
+ 	#else
+ 	#if proc==(ids_free)
+ 	call mem_free(pointer)
+@@ -482,18 +490,19 @@ function struct_ids_expand(sd proc,sd id
+     sv pointer;setcall pointer move_to_n_pointer(p_action_structures,id)
+ 	if proc=(ids_get)
+ 		return pointer#
+-	elseif proc=(ids_set)
++	endif
++	if proc=(ids_set)
+         setcall pointer# def_data()
+-    elseif proc=(ids_get_pointer)
++	elseif proc=(ids_get_pointer)
+         #call to verify if the user input has a wrong id
+         sd c;setcall c struct_ids((ids_counter))
+         if id>=c;call error("Unregistered input id.");endif
+         #
+         return pointer
+-    else
++	else
+     #if proc==(ids_free)
+         call mem_free(pointer)
+-    endelse
++	endelse
+ endfunction
+ 
+ 
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,17 +1,18 @@
+ 0
+-14
++15
+ 
+ /*
+ debug_x
+ */
+-function a(b){
++function fn(b){
+ }
+ this.this.getVersion();
+ 
+ this.this.this=this;
+-//this.this... as a whole
+ 
+ //note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+-var b=1;var c=1.2;var d=b[0];
++var b=(-2+0x2-2*2/2%2&2|2^2);
++var c=1.2;var d=b[0];var e='q';
++f=2;var g;delete f;delete this.g
+ 
+-5,8,0000
++5,9,0000
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,4 +1,6 @@
+-RldTCLAAAABoABQAAAUAAAACAQBDAgARAD8DjwAAAIgYAAUAdGhpcwBnZXRWZXJzaW9uAGIAYwBk
+-AJsIAGEAAQBiAAAAlgUABwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIACABOlgIACACW
+-AgAIABxPlgIACAKWBQAHAQAAADyWAgAIA5YJAAYzM/M/MzMzMzyWAgAIBJYCAAgCHJYFAAcAAAAA
+-TjwAAAA=
++RldTCDQBAABoABQAAAUAAAACAQBDAgARAD8DEwEAAIggAAkAdGhpcwBnZXRWZXJzaW9uAGIAYwBk
++AGUAcQBmAGcAmwkAZm4AAQBiAAAAlgUABwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIA
++CABOlgIACACWAgAIABxPlgIACAKWBQAH/v///5YFAAcCAAAAR5YFAAcCAAAAC5YFAAcCAAAADJYF
++AAcCAAAADZYFAAcCAAAAP5YFAAcCAAAAYJYFAAcCAAAAYZYFAAcCAAAAYjyWAgAIA5YJAAYzM/M/
++MzMzMzyWAgAIBJYCAAgCHJYFAAcAAAAATjyWAgAIBZYCAAgGPJYCAAgHlgUABwIAAAAdlgIACAhB
++lgIACAc7F5YCAAgAHJYCAAgIOhcAAAA=
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,7 +1,11 @@
+-WAAAAAAAAABmdW5jdGlvbiBhAGIAe310aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMAdGhpcwB0
+-aGlzAHRoaXMAdmFyIGIAMQB2YXIgYwAxLjIAdmFyIGQAYgAwAAAAMDAD8woAAAAAAAAADAAAAAAA
+-AAAAAAAAAAAAALu7u/sQEAHxEAAAAAAAAAAVAAAAAAAAAAAAAAAAAAAA8PAP/xoAAAAAAAAA7u7u
+-/k8AAAAnAAAAAAAAACwAAAAAAAAAMQAAAAAAAAAAAAAAAAAAAPDwD/8cAAAANgAAAAAAAAD/////
+-PAAAAD8AAAAAAAAABwAAAAEAAAD/////PAAAAEcAAAAAAAAABgAAADMz8z8zMzMz/////zwAAABR
+-AAAAAAAAAE4AAABTAAAAAAAAAAAAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAAAAAAAA8PAP////
+-////////
++mAAAAAAAAABmdW5jdGlvbiBmbgBiAHt9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0aGlzAHRoaXMA
++dGhpcwB0aGlzAHZhciBiACgtMgAweDIAMgAyADIAMgAyADIAMgAAdmFyIGMAMS4yAHZhciBkAGIA
++MAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZgBkZWxldGUgdGhpcwBnADAwA/MKAAAAAAAA
++AA0AAAAAAAAAAAAAAAAAAAC7u7v7EBAB8REAAAAAAAAAFgAAAAAAAAAAAAAAAAAAAPDwD/8bAAAA
++AAAAAO7u7v5PAAAAKAAAAAAAAAAtAAAAAAAAADIAAAAAAAAAAAAAAAAAAADw8A//HAAAADcAAAAA
++AAAA/////zwAAABAAAAAAAAAAICACPgHAAAA/v///0cAAAAHAAAAAgAAAAsAAAAHAAAAAgAAAAwA
++AAAHAAAAAgAAAA0AAAAHAAAAAgAAAD8AAAAHAAAAAgAAAGAAAAAHAAAAAgAAAGEAAAAHAAAAAgAA
++AGIAAAAHAAAAAgAAAP//////////PAAAAF0AAAAAAAAABgAAADMz8z8zMzMz/////zwAAABnAAAA
++AAAAAE4AAABpAAAAAAAAAAAAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAAAAAAAA8PAP//////88
++AAAAcgAAAAAAAAAIAAAAdQAAAAAAAAD/////HQAAAHgAAAAAAAAABwAAAAIAAAD/////QQAAAIAA
++AAAAAAAAOwAAAIkAAAAAAAAAOgAAAJIAAAAAAAAAlwAAAAAAAAAAAAAAAAAAAPDwD///////
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,5 +1,10 @@
+-WAAAAGZ1bmN0aW9uIGEAYgB7fXRoaXMAdGhpcwBnZXRWZXJzaW9uACk7dGhpcwB0aGlzAHRoaXMA
+-dGhpcwB2YXIgYgAxAHZhciBjADEuMgB2YXIgZABiADAAAAAwMAPzCgAAAAwAAAAAAAAAu7u7+xAQ
+-AfEQAAAAFQAAAAAAAADw8A//GgAAAO7u7v5PAAAAJwAAACwAAAAxAAAAAAAAAPDwD/8cAAAANgAA
+-AP////88AAAAPwAAAAcAAAABAAAA/////zwAAABHAAAABgAAADMz8z8zMzMz/////zwAAABRAAAA
+-TgAAAFMAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAADw8A////////////8=
++nAAAAGZ1bmN0aW9uIGZuAGIAe310aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMAdGhpcwB0aGlz
++AHRoaXMAdmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAyAAB2YXIgYwAxLjIAdmFyIGQAYgAwAAB2
++YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBmAGRlbGV0ZSB0aGlzAGcAAAAAADAwA/MKAAAADQAA
++AAAAAAC7u7v7EBAB8REAAAAWAAAAAAAAAPDwD/8bAAAA7u7u/k8AAAAoAAAALQAAADIAAAAAAAAA
++8PAP/xwAAAA3AAAA/////zwAAABAAAAAgIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAAC
++AAAADAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcA
++AAACAAAAYgAAAAcAAAACAAAA//////////88AAAAXQAAAAYAAAAzM/M/MzMzM/////88AAAAZwAA
++AE4AAABpAAAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAA8PAP//////88AAAAcgAAAAgAAAB1AAAA
++/////x0AAAB4AAAABwAAAAIAAAD/////QQAAAIAAAAA7AAAAiQAAADoAAACSAAAAlwAAAAAAAADw
++8A///////w==
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -1,8 +1,19 @@
+ 
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
++if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ 
+-o a.oc inplace_reloc 0 logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc \
+-	-L${LD_LIBRARY_PATH} -lactionswf -e main && \
++if [ -z "${conv_64}" ] || [ ${conv_64} = 0 ]; then
++	OFLAGS="inplace_reloc 0"
++	LD=x86_64-linux-gnu-ld.bfd
++	linker=--dynamic-linker=/lib64/ld-linux-x86-64.so.2
++	launcher=qq
++else
++	OFLAGS="conv_64 ${conv_64}"
++	LD=i686-linux-gnu-ld.bfd
++	linker=--dynamic-linker=/lib/ld-linux.so.2
++	launcher=q
++fi
++${OCOMP} a.oc ${OFLAGS} logfile 0 && \
++LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -7,21 +7,22 @@ einclude "../dev/import.h"
+ 
+ entryraw main()
+ 
+-call swf_new_ex("a.swf",0x80,0x80,0x001100,2,(debug_log|debug_x))
++call swf_new_ex("a.swf",0x80,0x80,0x001100,2,(debug_log|debug_x_pad))
+ 
+ call action("
+ /*
+ debug_x
+ */
+-function a(b){
++function fn(b){
+ }
+ this.this.getVersion();
+ 
+ this.this.this=this;
+-//this.this... as a whole
+ 
+ //note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+-var b=1;var c=1.2;var d=b[0];
++var b=(-2+0x2-2*2/2%2&2|2^2);
++var c=1.2;var d=b[0];var e='q';
++f=2;var g;delete f;delete this.g
+ ")
+ 
+ call swf_done()
+--- /dev/null
++++ actionswf-1/tests/a32
+@@ -0,0 +1 @@
++conv_64=1 ./a
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -1,7 +1,19 @@
+ 
++# 0 is diff and move, without ${1} is clean
++
++if [ -z "${1}" ]; then
++	rm -f a.o a.out a.swf a.swf.x a.swf.log
++	if [ -e .expected/a.swf ]; then rm .expected/a.swf; fi
++	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
++	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
++else
+ smart_diff () {
+ 	diff ${1} ${2}
+-	if [ $? = 0 ]; then return 0; fi
++	if [ $? = 0 ]; then
++		ok+=" + `du -b ${1}`"
++		return 0
++	fi
++	if [ -n "${3}" ]; then return 1; fi
+ 	a=`stat --printf="%s" ${1}`
+ 	b=`stat --printf="%s" ${2}`
+ 	base64 ${1}
+@@ -15,26 +27,34 @@ smart_diff () {
+ 	fi
+ 	return 1
+ }
+-if [ -z "${1}" ]; then
+-	rm -f a.o a.out a.swf a.swf.log a.swf.x
+-	if [ -e .expected/a.swf ]; then rm .expected/a.swf; fi
+-	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+-elif [ ${1} = 0 ]; then
+-	base64 a.swf > .expected/a.swf.txt && \
+-	mv a.swf.log .expected && \
+-	if [ "${conv_64}" = 1 ]; then
+-		base64 a.swf.x > .expected/a.swf.x32.txt
+-	else
+-		base64 a.swf.x > .expected/a.swf.x.txt
++	base64 -d .expected/a.swf.txt > .expected/a.swf || { echo not ok; exit 1; }
++	smart_diff .expected/a.swf a.swf
++	if [ $? != 0 ]; then
++		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++		echo y \?; read -n1 -t $((60*60*24)) ans
++		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++		base64 a.swf > .expected/a.swf.txt
+ 	fi
+-else
+-	base64 -d .expected/a.swf.txt > .expected/a.swf && \
++
+ 	if [ "${conv_64}" = 1 ]; then
+-		base64 -d .expected/a.swf.x32.txt > .expected/a.swf.x
+-	else
+-		base64 -d .expected/a.swf.x.txt > .expected/a.swf.x
+-	fi && \
+-	smart_diff .expected/a.swf a.swf && \
+-	diff .expected/a.swf.log a.swf.log && \
+-	smart_diff .expected/a.swf.x a.swf.x
++		v=32
++	fi
++	base64 -d .expected/a.swf.x${v}.txt > .expected/a.swf.x${v} || { echo not ok; exit 1; }
++	smart_diff .expected/a.swf.x${v} a.swf.x
++	if [ $? != 0 ]; then
++		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++		echo y \?; read -n1 -t $((60*60*24)) ans
++		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++		base64 a.swf.x > .expected/a.swf.x${v}.txt
++	fi
++
++	smart_diff .expected/a.swf.log a.swf.log x
++	if [ $? != 0 ]; then
++		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++		echo y \?; read -n1 -t $((60*60*24)) ans
++		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++		mv a.swf.log .expected
++	fi
++
++	echo ${ok}
+ fi
+--- /dev/null
++++ actionswf-1/tests/c32
+@@ -0,0 +1 @@
++conv_64=1 ./c $@
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -21,16 +21,20 @@
+ <table id="selection_table">
+ 	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}/null</td><td>block_end</td></tr>
+ 	<tr><td>call_action_left</td><td><span class="blue">null</span>/<span class="green">M</span></td><td class="blue">function</td><td>args_end</td></tr>
+-	<tr><td>ActionDefineLocal</td><td class="blue">name</td><td class="green">R</td></td></tr>
++	<tr><td>ActionSetVariable</td><td class="blue">name</td><td class="green">R</td></tr>
++	<tr><td>ActionDelete</td><td class="blue">M</td></tr>
++	<tr><td>ActionDelete2</td><td class="blue">name</td></tr>
++	<tr><td>ActionDefineLocal</td><td class="blue">name</td><td class="green">R</td></tr>
++	<tr><td>ActionDefineLocal2</td><td class="blue">name</td></tr>
+ 	<tr><td>ActionSetMember</td><td class="green">M</td><td class="green">R</td></tr>
+ 	<tr><td>math_end</td></tr>
+ </table>
+ 
+-<br>Table M: <!-- action_code_member<>action_member_loop -->
++<br>Table {M}: <!-- action_code_member<>action_member_loop -->
+ <table id="selection_table">
+ 	<tr><td class="blue">owner</td><td class="blue">member</td></tr>
+ 	<tr>                           <td class="blue">no_pointer</td> <td>square_bracket_start</td><td class="green">RI</td></tr>
+-	<tr>                           <td class="blue">no_pointer></td><td>member_end</td></tr>
++	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
+ </table>
+ 
+ <br>Table R: <!-- action_parse_right<>action_code_right -->
+@@ -42,15 +46,31 @@
+ <br>Table RI: <!-- action_code_row_parse_tool<>action_code_right_util -->
+ <table id="selection_table">
+ 	<tr><td><!-- new var/memb --></td></tr>
+-	<tr><td class="green">RG</td></tr>
++	<tr><td class="green" rowspan=3>RG</td><td>{<span class="green">O</span>+<span class="green">RG</span>}</td><td rowspan=2>math_end</td></tr>
++	<tr>                                   <td class="green"><!-- {compare+RG} --></td></tr>
++	<tr>                                   <td colspan=2><!-- ifelse RI RI --></td></tr>
+ </table>
+ 
+-<br>Table RG: <!-- action_parse_loop<>action_code_right_util[while] -->
++<br>Table RG: <!-- action_parse_loop,action_code_take_main<>action_code_right_number -->
+ <table id="selection_table">
+ 	<tr><td>ap_Integer</td><td>number</td></tr>
+ 	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
+ 	<tr><td>ActionGetVariable</td><td class="blue">name</td></tr>
+ 	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
++	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
++	<tr><td>parenthesis_start</td><td class="green">RI</td><td>math_end</td></tr>
+ </table>
+ 
+-<br><div class="green">Members Right RIght RiGht</div>
++<br>Table O: <!-- get_operations<>in RI loop -->
++<table id="selection_table">
++	<tr><td>ActionSubtract</td></tr>
++	<tr><td>ActionMultiply</td></tr>
++	<tr><td>ActionDivide</td></tr>
++	<tr><td>ActionModulo</td></tr>
++	<tr><td>ActionAdd2</td></tr>
++	<tr><td>ActionBitAnd</tr></td>
++	<tr><td>ActionBitOr</tr></td>
++	<tr><td>ActionBitXor</tr></td>
++</table>
++
++<br><div class="green">Members Operation Right RIght RiGht</div>
