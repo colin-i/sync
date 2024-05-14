@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+
+<style>
+	#selection_table td {
+		border: 1px solid black;
+	}
+	.blue
+	{
+		color:blue;
+	}
+	.green
+	{
+		color:green;
+	}
+</style>
+
+<h3>X Syntax</h3>
+
+<p>Black = 4 bytes. <span class="blue">Pointer = 4/8 bytes.</span> <span class="green">Green = replacement.</span></p>
+
+<table id="selection_table">
+	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}/null</td><td>block_end</td></tr>
+	<tr><td>call_action_left</td><td><span class="blue">null</span>/<span class="green">M</span></td><td class="blue">function</td><td>args_end</td></tr>
+	<tr><td>ActionSetVariable</td><td class="blue">name</td><td class="green">R</td></tr>
+	<tr><td>ActionDelete</td><td class="blue">M</td></tr>
+	<tr><td>ActionDelete2</td><td class="blue">name</td></tr>
+	<tr><td>ActionDefineLocal</td><td class="blue">name</td><td class="green">R</td></tr>
+	<tr><td>ActionDefineLocal2</td><td class="blue">name</td></tr>
+	<tr><td>ActionSetMember</td><td class="green">M</td><td class="green">R</td></tr>
+	<tr><td>math_end</td></tr>
+</table>
+
+<br>Table {M}: <!-- action_code_member<>action_member_loop -->
+<table id="selection_table">
+	<tr><td class="blue">owner</td><td class="blue">member</td></tr>
+	<tr>                           <td class="blue">no_pointer</td> <td>square_bracket_start</td><td class="green">RI</td></tr>
+	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
+</table>
+
+<br>Table R: <!-- action_parse_right<>action_code_right -->
+<table id="selection_table">
+	<tr><td><!-- definefunction --></td></tr>
+	<tr><td class="green">RI</td></tr>
+</table>
+
+<br>Table RI: <!-- action_code_row_parse_tool<>action_code_right_util -->
+<table id="selection_table">
+	<tr><td><!-- new var/memb --></td></tr>
+	<tr><td class="green" rowspan=3>RG</td><td>{<span class="green">O</span>+<span class="green">RG</span>}</td><td rowspan=2>math_end</td></tr>
+	<tr>                                   <td class="green"><!-- {compare+RG} --></td></tr>
+	<tr>                                   <td colspan=2><!-- ifelse RI RI --></td></tr>
+</table>
+
+<br>Table RG: <!-- action_parse_loop,action_code_take_main<>action_code_right_number -->
+<table id="selection_table">
+	<tr><td>ap_Integer</td><td>number</td></tr>
+	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
+	<tr><td>ActionGetVariable</td><td class="blue">name</td></tr>
+	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
+	<tr><td>parenthesis_start</td><td class="green">RI</td><td>math_end</td></tr>
+</table>
+
+<br>Table O: <!-- get_operations<>in RI loop -->
+<table id="selection_table">
+	<tr><td>ActionSubtract</td></tr>
+	<tr><td>ActionMultiply</td></tr>
+	<tr><td>ActionDivide</td></tr>
+	<tr><td>ActionModulo</td></tr>
+	<tr><td>ActionAdd2</td></tr>
+	<tr><td>ActionBitAnd</tr></td>
+	<tr><td>ActionBitOr</tr></td>
+	<tr><td>ActionBitXor</tr></td>
+</table>
+
+<br><div class="green">Members Operation Right RIght RiGht</div>

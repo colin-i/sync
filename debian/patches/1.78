@@ -1,0 +1,817 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-78) bionic; urgency=medium
+ .
+   * for-in x fix, member_loop crash, rest of x
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-14
+
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -18,6 +18,11 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp x && \
+ ~/test/arh2 ${last} 1
+ 
+-#plans:
++#is
++#"a=1; //dsfdsffsd
++#b=2"
+ 
+-#if builtin more than one param then is not a builtin (is only for gotoAnd...)
++#isn't
++#"a=function(){}+1"
++#"new Array()"
++#"a"
+--- actionswf-1.orig/include/action.h
++++ actionswf-1/include/action.h
+@@ -1,105 +1,103 @@
+ 
+ const no_pointer=0  #NULL
+ 
+-const function_action=0xf3033030   #1
+-const call_action_left=0xf1011010  #1
+-const ActionSetVariable=0x1D       #1
+-const ActionDelete=0x3A            #1
+-const ActionDelete2=0x3B           #1
+-const ActionDefineLocal=0x3C       #1
+-const ActionDefineLocal2=0x41      #1
+-const ActionSetMember=0x4F         #1
+-
+-const block_end=0xfbBBbbBB
+-const args_end=0xfeEEeeEE
+-const math_end=0xffFFffFF          #1
+-
+-const square_bracket_start=0xf5055050  #M
+-const parenthesis_start=0xf8088080     #RG
+-const member_end=0xff0FF0f0            #M
++const ActionReturn=0x3E            #1
++const ActionIf=0x9D                #1
++
++const ActionSetVariable=0x1D       #2
++const ActionDelete=0x3A            #2
++const ActionDelete2=0x3B           #2
++const ActionDefineLocal=0x3C       #2
++const ActionDefineLocal2=0x41      #2
++const ActionSetMember=0x4F         #2
++
++const block_end=0xfbBBbbBB            #1 F
++const block_else_end=0xfcCCccCC       #1
++const whileblock_end=0xfdDDddDD       #1
++const args_end=0xfeEEeeEE             #C
++const math_end=0xffFFffFF             #0 RG RT
++
++const call_action_left=0xf1011010     #1
++const call_action_right=0xf2022020    #RT
++const function_action=0xf3033030      #1
++const new_action=0xf4044040           #RG
++const square_bracket_start=0xf5055050 #M
++const mixt_equal=0xf6066060           #R
++const compare_action=0xf7077070       #OC
++const parenthesis_start=0xf8088080    #RT
++const break_flag=0xf9099090           #1
++const continue_flag=0xfa0AA0a0        #1
++const for_marker=0xfb0BB0b0           #1
++const for_three=0xfc0CC0c0            #FR
++const inter_for=0xfd0DD0d0            #FR
++const ifElse_start=0xfe0EE0e0         #RG
++const member_end=0xff0FF0f0           #M
++
++const normal_marker=0x01010202
++const if_marker=0x03030404
++const while_marker=0x05050606         #1
++const function_marker=0x07070808
++#const for_in=
++
++const else_flag=0x40<<24              #1
++const consecutive_flag=0x80<<24
++#const all_flags=consecutive_flag|else_flag
++const brace_blocks_function=0x7fFFffFF
+ 
+-const ap_double=6              #RG
+-const ap_Integer=7             #RG
+ const ActionSubtract=0x0B      #O
+ const ActionMultiply=0x0C      #O
+ const ActionDivide=0x0D        #O
+-const ActionGetVariable=0x1C   #RG
++const ActionAnd=0x10           #O
++const ActionOr=0x11            #O
++const ActionNot=0x12           #OC
++const ActionGetVariable=0x1C   #RT
+ const ActionModulo=0x3F        #O
+ const ActionAdd2=0x47          #O
+-const ActionGetMember=0x4E     #RG
++const ActionLess2=0x48         #OC
++const ActionEquals2=0x49       #OC
++const ActionGetMember=0x4E     #RT
++const ActionIncrement=0x50     #R
++const ActionDecrement=0x51     #R
+ const ActionBitAnd=0x60        #O
+ const ActionBitOr=0x61         #O
+ const ActionBitXor=0x62        #O
+-
+-
+-const ActionEndFlag=0
+-const ActionNextFrame=0x04
+-const ActionPreviousFrame=0x05
+-const ActionPlay=0x06
+-const ActionStop=0x07
++const ActionBitLShift=0x63     #O
++const ActionBitRShift=0x64     #O
++const ActionBitURShift=0x65    #O
++const ActionGreater=0x67       #OC
++const ActionPush=0x96
++	const ap_Null=2
++	const ap_Undefined=3
++	const ap_RegisterNumber=4
++	const ap_Boolean=5
++	const ap_double=6        #RT
++	const ap_Integer=7       #RT
++	const ap_Constant8=8     #RT
++	const ap_Constant16=9
++
++const ActionEndFlag=0           #at builtin case only to test(not to write)
++const ActionNextFrame=0x04      #builtin
++const ActionPreviousFrame=0x05  #builtin
++const ActionPlay=0x06           #builtin
++const ActionStop=0x07           #builtin
+ #const ActionAdd=0x0A
+-const ActionAnd=0x10
+-const ActionOr=0x11
+-const ActionNot=0x12
+ const ActionPop=0x17
+-const ActionToInteger=0x18
+-const ActionTrace=0x26
+-const ActionRandomNumber=0x30
+-const ActionCharToAscii=0x32
+-const ActionAsciiToChar=0x33
++const ActionToInteger=0x18      #builtin
++const ActionTrace=0x26          #builtin
++const ActionRandomNumber=0x30   #builtin
++const ActionCharToAscii=0x32    #builtin
++const ActionAsciiToChar=0x33    #builtin
+ const ActionCallFunction=0x3D
+-const ActionReturn=0x3E
+ const ActionNewObject=0x40
+-const ActionTypeOf=0x44
+-const ActionEnumerate=0x46
+-const ActionLess2=0x48
+-const ActionEquals2=0x49
++const ActionTypeOf=0x44         #builtin
++#const ActionEnumerate=0x46
+ const ActionPushDuplicate=0x4C
+-const ActionIncrement=0x50
+-const ActionDecrement=0x51
+ const ActionCallMethod=0x52
+ const ActionNewMethod=0x53
+-const ActionBitLShift=0x63
+-const ActionBitRShift=0x64
+-const ActionBitURShift=0x65
+-const ActionGreater=0x67
+-const ActionGotoFrame=0x81
++const ActionEnumerate2=0x55
++const ActionGotoFrame=0x81      #builtin
+ const ActionStoreRegister=0x87
+ const ActionConstantPool=0x88
+-const ActionPush=0x96
+-    const ap_Null=2
+-    const ap_Undefined=3
+-    const ap_RegisterNumber=4
+-    const ap_Boolean=5
+-    const ap_Constant8=8
+-    const ap_Constant16=9
+ const ActionJump=0x99
+ const ActionDefineFunction=0x9B
+-const ActionIf=0x9D
+ #const ActionGotoFrame2=0x9F
+-
+-const call_action_right=0xf2022020
+-const new_action=0xf4044040
+-const mixt_equal=0xf6066060
+-const compare_action=0xf7077070
+-const break_flag=0xf9099090
+-const continue_flag=0xfa0AA0a0
+-#
+-const for_marker=0xfb0BB0b0
+-const for_three=0xfc0CC0c0
+-const inter_for=0xfd0DD0d0
+-#
+-const ifElse_start=0xfe0EE0e0
+-
+-const brace_blocks_function=0x7fFFffFF
+-
+-const consecutive_flag=0x80<<24
+-const else_flag=0x40<<24
+-#const all_flags=consecutive_flag|else_flag
+-const normal_marker=0x01010202
+-const if_marker=0x03030404
+-const while_marker=0x05050606
+-const function_marker=0x07070808
+-
+-const block_else_end=0xfcCCccCC
+-const whileblock_end=0xfdDDddDD
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -71,8 +71,6 @@ const DefineFont2=48
+ const ExportAssets=56
+ 
+ include "action.h"
+-const get_member=0
+-const get_member_pointer=:
+ 
+ const ButtonStateUp=1
+ const ButtonStateOver=2*ButtonStateUp
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -153,7 +153,7 @@ function action_code_get_pointer(sv p_co
+ 	sd a;set a p#
+ 	import "debug_x_pointer" debug_x_pointer
+ 	call debug_x_pointer(a,p)
+-	incst p_codepointer#  #to pass the pointer   #get_member_pointer
++	incst p_codepointer#  #to pass the pointer
+ 	return a
+ end
+ 
+@@ -218,7 +218,8 @@ endfunction
+ 
+ import "action_push" action_push
+ import "action_one" action_one
+-import "action_member_loop" action_member_loop
++import "action_member_loop_left" action_member_loop_left
++import "action_member_loop_right" action_member_loop_right
+ import "brace_blocks_add_write" brace_blocks_add_write
+ import "brace_blocks_remove_write" brace_blocks_remove_write
+ #position
+@@ -302,7 +303,7 @@ function action_code_pack(sd codepointer
+ 	#else is ActionDefineLocal/ActionSetVariable
+     #
+     if is_member=(TRUE)
+-        setcall codepointer action_member_loop(codepointer,(get_member_pointer))
++        setcall codepointer action_member_loop_left(codepointer)
+     else
+     #definelocal or setvariable or delete2
+ 	sd name;set name action_code_get_pointer(#codepointer)
+@@ -373,8 +374,15 @@ function action_code_write_conditions(sd
+     if cond=(for_marker)
+         add codepointer (DWORD)
+         if codepointer#!=(for_three)
+-            call action_push((ap_Constant8),codepointer#v^,-1);add codepointer :   #to pass the pointer
+-            call action_one((ActionEnumerate))
++			sd type;set type codepointer#
++			add codepointer (DWORD)
++			if type=(ActionGetVariable)
++				sd name;set name action_code_get_pointer(#codepointer)
++				call action_get_one(name)
++			else #ActionGetMember
++				set codepointer action_member_loop_right(codepointer)
++			end
++			call action_one((ActionEnumerate2))
+             #
+             call add_while_top_off((for_marker))
+             #
+@@ -390,11 +398,11 @@ function action_code_write_conditions(sd
+             sd attr2;set attr2 codepointer#;add codepointer (DWORD)
+             #
+             if attr2=(ActionSetMember)
+-                setcall codepointer action_member_loop(codepointer,(get_member_pointer))
++                setcall codepointer action_member_loop_left(codepointer)
+             else
+                 #var or set variable
+-                call action_push((ap_Constant8),codepointer#v^,-1)
+-                add codepointer :   #to pass the pointer
++			sd newname;set newname action_code_get_pointer(#codepointer)
++			call action_push((ap_Constant8),newname,-1)
+             endelse
+             #
+             call action_push((ap_RegisterNumber),first_reg,-1)
+@@ -763,7 +771,7 @@ function action_code_right_number(sd cod
+     set attrib codepointer#
+     add codepointer (DWORD)
+     if attrib=(ActionGetMember)
+-        setcall codepointer action_member_loop(codepointer,(get_member))
++        setcall codepointer action_member_loop_right(codepointer)
+     else
+         if attrib=(ActionGetVariable)
+ 		set var action_code_get_pointer(#codepointer)
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -243,8 +243,11 @@ function action_parse_conditions(ss ac,s
+         endif
+         set cursor# 0
+         #
+-        #enum can take ActionEnumerate(x.x[z])
+-        call action_code_set_pointer(marker)
++	#enum can take ActionEnumerate(x.x[z]), x.x ... is a pattern that ActionEnumerate will recognize, do not use action_code_take_pointer
++	#call action_code_set((for_in)) getvar/member is not overlapping for_three
++	#call action_code_set_pointer(marker)
++	#ActionEnumerate2 will use an object
++	call action_code_take_pointer(marker)
+         #
+         if pointer!=ac
+             call action_code_set((ActionDefineLocal))
+@@ -770,6 +773,9 @@ function action_code_take(ss ac)
+     if b=(TRUE)
+         ret
+     endif
++	call action_code_take_pointer(ac)
++endfunction
++function action_code_take_pointer(sd ac)
+     ss test
+     setcall test action_code_membersplit(ac)
+     if test=0
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -330,50 +330,60 @@ endfunction
+ 
+ import "action_get_one" action_get_one
+ #the position where the mathpointer reachs
+-function action_member_loop(sv mathpointer,sd endoffset)
++function action_member_loop_left(sv mathpointer)  #set, ex get_member_pointer, let the string
+ 	sd name
+ 	set name action_code_get_pointer(#mathpointer)
+-    call action_get_one(name)
+-    whiletrue
+-	while mathpointer#=(no_pointer)
+-	#multi-dim arrays
+-		add mathpointer :  #to pass the pointer
+-		if mathpointer#d=(member_end)
+-			sub mathpointer :  #to pass the pointer
+-			break
+-		end
+-		#else is square_bracket_start , a complication to not recognize square brackets on pointers
+-            add mathpointer (DWORD)
+-            setcall mathpointer action_code_right_util(mathpointer)
+-            if endoffset=(get_member)
+-                call action_one((ActionGetMember))
+-            else
+-                if mathpointer#!=(no_pointer)
+-                    call action_one((ActionGetMember))
+-                else
+-                    add mathpointer :+DWORD  #to pass the pointer # member_end
+-                    return mathpointer
+-                endelse
+-            endelse
+-        endwhile
+-        sv endtest
+-        set endtest mathpointer
+-        add endtest endoffset         ##to pass the pointer #or is zero
+-        #
+-        if endtest#=(no_pointer)
+-		if endoffset=(get_member_pointer)
+-                #push to set later
++	call action_get_one(name)
++
++	#at first is something
++	if mathpointer#!=(no_pointer)
++		set name action_code_get_pointer(#mathpointer)
++		call action_push((ap_Constant8),name,-1)
++	else
++		add mathpointer :+DWORD  #to pass the pointer   + square_bracket_start
++		setcall mathpointer action_code_right_util(mathpointer)
++	end
++
++	whiletrue
++		if mathpointer#=(no_pointer)
++			add mathpointer :  #to pass the pointer
++			if mathpointer#d=(member_end)
++				add mathpointer (DWORD)
++				return mathpointer
++			end
++			#square_bracket_start
++			call action_one((ActionGetMember))
++			add mathpointer (DWORD)
++			setcall mathpointer action_code_right_util(mathpointer)
++		else
++			call action_one((ActionGetMember))
+ 			set name action_code_get_pointer(#mathpointer)
+-                call action_push((ap_Constant8),name,-1)
+-		endif
+-		add mathpointer :+DWORD  #to pass the pointer # member_end
+-		return mathpointer
+-        endif
++			call action_push((ap_Constant8),name,-1)
++		end
++	end
++end
++function action_member_loop_right(sv mathpointer) #get, ex get_member, get the object
++	sd name
+ 	set name action_code_get_pointer(#mathpointer)
+-        call action_push((ap_Constant8),name,-1)
+-        call action_one((ActionGetMember))
+-    endwhile
+-endfunction
++	call action_get_one(name)
++	whiletrue
++		if mathpointer#!=(no_pointer)
++			set name action_code_get_pointer(#mathpointer)
++			call action_push((ap_Constant8),name,-1)
++		else
++			add mathpointer :  #to pass the pointer
++			if mathpointer#d=(square_bracket_start)
++				add mathpointer (DWORD)
++				setcall mathpointer action_code_right_util(mathpointer)
++			else #member_end
++				add mathpointer (DWORD)
++				return mathpointer
++			end
++		end
++		call action_one((ActionGetMember))
++	end
++end
++
+ import "action_code_member" action_code_member
+ #import "error" error
+ #function action_member_write(ss member)
+@@ -391,7 +401,7 @@ import "action_code_member" action_code_
+ #endfunction
+ function action_member_write_tool(sd values,ss names)
+     call action_code_member(names)
+-    call action_member_loop(values,(get_member))
++    call action_member_loop_right(values)
+ endfunction
+ 
+ #action
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,18 +1,28 @@
+ 0
+-15
++24
+ 
+ /*
+ debug_x
+ */
+-function fn(b){
++function fn(a){
++	return 2;
+ }
+ this.this.getVersion();
+ 
+ this.this.this=this;
+ 
+ //note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+-var b=(-2+0x2-2*2/2%2&2|2^2);
+-var c=1.2;var d=b[0];var e='q';
+-f=2;var g;delete f;delete this.g
++a=new Array(1);
++var b=(-2+0x2-2*2/2%2&2|2^2<2>2==2!=2<=2>=2<<2>>2>>>2&&2||2?2:3);
++var c=1.2;var d=a[0];var e='q';
++f=2;var g;delete g;delete this.f;
++h=function(){var a;}var i=h();
++if(2==2){var j;}else if(2==2){var k;}else{var l;}
++while(2==2){var m;}
++f++;f--;f+=2;
++for(var n=2;n<3;n++){break;}
++for(var o in a){continue;}
++for(a[0] in a[0]){}
+ 
+-5,9,0000
++5,9,0009
++1,5,
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,6 +1,15 @@
+-RldTCDQBAABoABQAAAUAAAACAQBDAgARAD8DEwEAAIggAAkAdGhpcwBnZXRWZXJzaW9uAGIAYwBk
+-AGUAcQBmAGcAmwkAZm4AAQBiAAAAlgUABwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIA
+-CABOlgIACACWAgAIABxPlgIACAKWBQAH/v///5YFAAcCAAAAR5YFAAcCAAAAC5YFAAcCAAAADJYF
+-AAcCAAAADZYFAAcCAAAAP5YFAAcCAAAAYJYFAAcCAAAAYZYFAAcCAAAAYjyWAgAIA5YJAAYzM/M/
+-MzMzMzyWAgAIBJYCAAgCHJYFAAcAAAAATjyWAgAIBZYCAAgGPJYCAAgHlgUABwIAAAAdlgIACAhB
+-lgIACAc7F5YCAAgAHJYCAAgIOhcAAAA=
++RldTCEUDAABoABQAAAUAAAACAQBDAgARAD8DJAMAAIg4ABMAdGhpcwBnZXRWZXJzaW9uAGEAQXJy
++YXkAYgBjAGQAZQBxAGYAZwBoAGkAagBrAGwAbQBuAG8AmwkAZm4AAQBhAAkAlgUABwIAAAA+lgUA
++BwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIACABOlgIACACWAgAIABxPlgIACAKWBQAH
++AQAAAJYFAAcBAAAAlgIACANAHZYCAAgElgUAB/7///+WBQAHAgAAAEeWBQAHAgAAAAuWBQAHAgAA
++AAyWBQAHAgAAAA2WBQAHAgAAAD+WBQAHAgAAAGCWBQAHAgAAAGGWBQAHAgAAAGKWBQAHAgAAAEiW
++BQAHAgAAAGeWBQAHAgAAAEmWBQAHAgAAAEkSlgUABwIAAABnEpYFAAcCAAAASBKWBQAHAgAAAGOW
++BQAHAgAAAGSWBQAHAgAAAGWWBQAHAgAAABCWBQAHAgAAABESnQIADQCWBQAHAgAAAJkCAAgAlgUA
++BwMAAAA8lgIACAWWCQAGMzPzPzMzMzM8lgIACAaWAgAIAhyWBQAHAAAAAE48lgIACAeWAgAICDyW
++AgAICZYFAAcCAAAAHZYCAAgKQZYCAAgKOxeWAgAIAByWAgAICToXlgIACAubBQAAAAAGAJYCAAgC
++QR2WAgAIDJYFAAcAAAAAlgIACAs9PJYFAAcCAAAAlgUABwIAAABJEp0CAAsAlgIACA1BmQIAKACW
++BQAHAgAAAJYFAAcCAAAASRKdAgALAJYCAAgOQZkCAAYAlgIACA9BlgUABwIAAACWBQAHAgAAAEkS
++nQIACwCWAgAIEEGZAgDe/5YCAAgJTBxQHZYCAAgJTBxRHZYCAAgJTByWBQAHAgAAAEcdlgIACBGW
++BQAHAgAAADyZAgAJAJYCAAgRTBxQHZYCAAgRHJYFAAcDAAAASBKdAgAKAJkCAAUAmQIA2P+WAgAI
++AhxVhwEAAJYBAAJJnQIAFQCWAgAIEpYCAAQAPJkCAOL/mQIA3f+WAgAIAhyWBQAHAAAAAE5VhwEA
++AJYBAAJJnQIAGQCWAgAIAhyWBQAHAAAAAJYCAAQAT5kCANn/AAAA
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,11 +1,31 @@
+-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
++AADw8A//3d3d/f////8=
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,10 +1,27 @@
+-nAAAAGZ1bmN0aW9uIGZuAGIAe310aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMAdGhpcwB0aGlz
+-AHRoaXMAdmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAyAAB2YXIgYwAxLjIAdmFyIGQAYgAwAAB2
+-YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBmAGRlbGV0ZSB0aGlzAGcAAAAAADAwA/MKAAAADQAA
+-AAAAAAC7u7v7EBAB8REAAAAWAAAAAAAAAPDwD/8bAAAA7u7u/k8AAAAoAAAALQAAADIAAAAAAAAA
+-8PAP/xwAAAA3AAAA/////zwAAABAAAAAgIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAAC
+-AAAADAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcA
+-AAACAAAAYgAAAAcAAAACAAAA//////////88AAAAXQAAAAYAAAAzM/M/MzMzM/////88AAAAZwAA
+-AE4AAABpAAAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAA8PAP//////88AAAAcgAAAAgAAAB1AAAA
+-/////x0AAAB4AAAABwAAAAIAAAD/////QQAAAIAAAAA7AAAAiQAAADoAAACSAAAAlwAAAAAAAADw
+-8A///////w==
++nAEAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
++dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
++ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
++AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
++e3ZhciBhAH12YXIgaQBoACkAaWYoMgA9MgB7dmFyIGoAfWVsc2UgaWYoMgA9MgB7dmFyIGsAfWVs
++c2V7dmFyIGwAfXdoaWxlKDIAPTIAe3ZhciBtAH1mACsAZgAtAGYAADIAZm9yKHZhciBuADIAbgAz
++AG4AKwB7YnJlYWs7fWZvcih2YXIgbwBpbiBhAHtjb250aW51ZTt9Zm9yKGEAMAAAaW4gYQAwAAB7
++fQAAAAAAAAAAAAAAAAAAAAAwMAPzCgAAAA0AAAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQEAHx
++GgAAAB8AAAAAAAAA8PAP/yQAAADu7u7+TwAAADEAAAA2AAAAOwAAAAAAAADw8A//HAAAAEAAAAD/
++////HQAAAEUAAABAQAT0AAAAAEsAAAAHAAAAAQAAAP/////u7u7+PAAAAFgAAACAgAj4BwAAAP7/
++//9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAA
++AAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAA
++AgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAH
++AAAAAgAAAHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIA
++AABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAABwAAAAIAAAARAAAABwAAAAIAAADg4A7+BwAA
++AAIAAAD/////BwAAAAMAAAD//////////zwAAACZAAAABgAAADMz8z8zMzMz/////zwAAACjAAAA
++TgAAAKUAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAADw8A///////zwAAACuAAAACAAAALEAAAD/
++////HQAAALQAAAAHAAAAAgAAAP////9BAAAAvAAAADsAAADFAAAAOgAAAM4AAADTAAAAAAAAAPDw
++D/8dAAAA1QAAADAwA/PfAAAAAAAAAEEAAADmAAAAu7u7+zwAAADtAAAAICAC8gAAAADvAAAA7u7u
++/v////+dAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAAAAEAALu7u/sAAABA
++nQAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAABUBAAC7u7v7AAAAQEEAAAAh
++AQAAzMzM/AIAAAAGBgUFBwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAANAEAAN3d
++3f0dAAAANwEAAFAAAAAdAAAAOwEAAFEAAAAdAAAAPwEAAGBgBvZHAAAABwAAAAIAAAD/////sLAL
+++8DADPw8AAAATAEAAAcAAAACAAAA/////9DQDf0dAAAAVAEAAFAAAADQ0A39HAAAAFABAABwcAf3
++SAAAAAAAAAAHAAAAAwAAAP////+QkAn53d3d/bCwC/scAAAAbQEAADwAAABoAQAAoKAK+t3d3f2w
++sAv7TgAAAIYBAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAADw8A//TwAAAH4BAAAAAAAAUFAF9QcA
++AAAAAAAA/////wAAAADw8A//3d3d/f////8=
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -13,16 +13,25 @@ call action("
+ /*
+ debug_x
+ */
+-function fn(b){
++function fn(a){
++	return 2;
+ }
+ this.this.getVersion();
+ 
+ this.this.this=this;
+ 
+ //note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+-var b=(-2+0x2-2*2/2%2&2|2^2);
+-var c=1.2;var d=b[0];var e='q';
+-f=2;var g;delete f;delete this.g
++a=new Array(1);
++var b=(-2+0x2-2*2/2%2&2|2^2<2>2==2!=2<=2>=2<<2>>2>>>2&&2||2?2:3);
++var c=1.2;var d=a[0];var e='q';
++f=2;var g;delete g;delete this.f;
++h=function(){var a;}var i=h();
++if(2==2){var j;}else if(2==2){var k;}else{var l;}
++while(2==2){var m;}
++f++;f--;f+=2;
++for(var n=2;n<3;n++){break;}
++for(var o in a){continue;}
++for(a[0] in a[0]){}
+ ")
+ 
+ call swf_done()
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -17,6 +17,7 @@ smart_diff () {
+ 	a=`stat --printf="%s" ${1}`
+ 	b=`stat --printf="%s" ${2}`
+ 	base64 ${1}
++	echo
+ 	base64 ${2}
+ 	if [ ${a} = ${b} ]; then
+ 		echo size equal ${a}
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -12,56 +12,91 @@
+ 	{
+ 		color:green;
+ 	}
++	.red
++	{
++		color:red;
++	}
++	sup-r{
++		vertical-align: super;
++		font-size: small;
++		color:green;
++	}
+ </style>
+ 
+ <h3>X Syntax</h3>
+ 
+-<p>Black = 4 bytes. <span class="blue">Pointer = 4/8 bytes.</span> <span class="green">Green = replacement.</span></p>
++<p>Black = 4 bytes. <span class="blue">Pointer = 4/8 bytes.</span> <span class="green">Green = replacement.</span> <span class="red">Red.</span></p>
+ 
+ <table id="selection_table">
+-	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}/null</td><td>block_end</td></tr>
+-	<tr><td>call_action_left</td><td><span class="blue">null</span>/<span class="green">M</span></td><td class="blue">function</td><td>args_end</td></tr>
+-	<tr><td>ActionSetVariable</td><td class="blue">name</td><td class="green">R</td></tr>
+-	<tr><td>ActionDelete</td><td class="blue">M</td></tr>
+-	<tr><td>ActionDelete2</td><td class="blue">name</td></tr>
+-	<tr><td>ActionDefineLocal</td><td class="blue">name</td><td class="green">R</td></tr>
+-	<tr><td>ActionDefineLocal2</td><td class="blue">name</td></tr>
+-	<tr><td>ActionSetMember</td><td class="green">M</td><td class="green">R</td></tr>
++	<tr><td class="green">1</td></tr>
+ 	<tr><td>math_end</td></tr>
+ </table>
+ 
+-<br>Table {M}: <!-- action_code_member<>action_member_loop -->
++<br>Table 1: <!-- action_code_row<>action__code_row -->
+ <table id="selection_table">
+-	<tr><td class="blue">owner</td><td class="blue">member</td></tr>
+-	<tr>                           <td class="blue">no_pointer</td> <td>square_bracket_start</td><td class="green">RI</td></tr>
+-	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
++	<tr><td class="green">2</td></tr>
++	<tr><td class="green">F</td></tr>
++	<tr><td>call_action_left</td><td class="green">C</td></tr>
++	<tr><td class="green" rowspan=2>I</td><td class="red" rowspan=2>{</td><td rowspan=2>else_flag</td><td class="green" colspan=2>I</td>                         <td class="red">}</td></tr>
++	<tr>                                                                                              <td class="green">{1}</td><td colspan=2>block_else_end</td></tr>
++	<tr><td>while_marker</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>whileblock_end</td></tr>
++	<tr><td class="green">FR</td></tr>
++	<tr><td>break_flag</td></tr>
++	<tr><td>continue_flag</td></tr>
++	<tr><td>ActionReturn</td><td class="green">RG</td></tr>
+ </table>
+ 
+-<br>Table R: <!-- action_parse_right<>action_code_right -->
++<br>Table 2: <!-- action_parse_pack<>action_code_pack -->
+ <table id="selection_table">
+-	<tr><td><!-- definefunction --></td></tr>
+-	<tr><td class="green">RI</td></tr>
++	<tr><td class="green">L</td><td class="green">R</td></tr>
++	<tr><td>ActionDefineLocal2</td><td class="blue">name</td></tr>
++	<tr><td>ActionDelete</td><td class="green">M</td></tr>
++	<tr><td>ActionDelete2</td><td class="blue">name</td></tr>
+ </table>
+ 
+-<br>Table RI: <!-- action_code_row_parse_tool<>action_code_right_util -->
++<br>Table L: <!-- in packs, at for-in -->
+ <table id="selection_table">
+-	<tr><td><!-- new var/memb --></td></tr>
+-	<tr><td class="green" rowspan=3>RG</td><td>{<span class="green">O</span>+<span class="green">RG</span>}</td><td rowspan=2>math_end</td></tr>
+-	<tr>                                   <td class="green"><!-- {compare+RG} --></td></tr>
+-	<tr>                                   <td colspan=2><!-- ifelse RI RI --></td></tr>
++	<tr><td>ActionDefineLocal</td><td class="blue">name</td></tr>
++	<tr><td>ActionSetVariable</td><td class="blue">name</td></tr>
++	<tr><td>ActionSetMember</td><td class="green">M</td></tr>
+ </table>
+ 
+-<br>Table RG: <!-- action_parse_loop,action_code_take_main<>action_code_right_number -->
++<br>Table C: <!-- action_code_parse_new_or_call<>action_code_new_or_call -->
+ <table id="selection_table">
+-	<tr><td>ap_Integer</td><td>number</td></tr>
+-	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
+-	<tr><td>ActionGetVariable</td><td class="blue">name</td></tr>
+-	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+-	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
+-	<tr><td>parenthesis_start</td><td class="green">RI</td><td>math_end</td></tr>
++	<td><span class="blue">null</span>/<span class="green">M</span></td><td class="blue">function</td><td class="green">{RG}</td><td>args_end</td>
++</table>
++
++<br>Table F: <!-- action_code_parse_deffunction<>action_definefunction -->
++<table id="selection_table">
++	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}/null</td><td class="green">{1}</td><td>block_end</td></tr>
++</table>
++
++<br>Table FR: <!--  action_parse_conditions<>action_code_write_conditions -->
++<table id="selection_table">
++	<tr><td rowspan=2>for_marker</td><td>for_three</td><td class="green">[2]</td><td>inter_for</td><td class="green">[2]</td><td>inter_for</td><td class="green">RG<sup-r>c</sup-r></td><td class="green" rowspan=2>{1}</td><td rowspan=2>whileblock_end</td></tr>
++	<tr>                             <td class="green">RT</td> <td class="green" colspan=5>L</td></tr>
+ </table>
+ 
+-<br>Table O: <!-- get_operations<>in RI loop -->
++<br>Table If: <!-- at action_parse_conditions<>at action_code_write_conditions -->
++<table id="selection_table">
++	<td>ActionIf</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>block_end</td>
++</table>
++
++<br>Table {M}: <!-- action_code_member<>action_member_loop -->
++<table id="selection_table">
++	<tr><td class="blue">owner</td><td class="blue">member</td></tr>
++	<tr>                           <td class="blue">no_pointer</td> <td>square_bracket_start</td><td class="green">RG</td></tr>
++	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
++</table>
++
++<br>Table O: <!-- get_operations<>in RG loop -->
++<table id="selection_table">
++	<tr><td class="green">OP</td></tr>
++	<tr><td>ActionAnd</td></tr>
++	<tr><td>ActionOr</td></tr>
++</table>
++
++<br>Table OP: <!-- get_operations<>in RG loop/in ...pack -->
+ <table id="selection_table">
+ 	<tr><td>ActionSubtract</td></tr>
+ 	<tr><td>ActionMultiply</td></tr>
+@@ -71,6 +106,54 @@
+ 	<tr><td>ActionBitAnd</tr></td>
+ 	<tr><td>ActionBitOr</tr></td>
+ 	<tr><td>ActionBitXor</tr></td>
++	<tr><td>ActionBitLShift</td></tr>
++	<tr><td>ActionBitRShift</td></tr>
++	<tr><td>ActionBitURShift</td></tr>
++</table>
++
++<br>Table OC: <!-- get_operations<>in RG loop -->
++<table id="selection_table">
++	<tr><td rowspan=3>compare_action</td><td>ActionLess2</td><td>0/ActionNot</td></tr>
++	<tr>                                 <td>ActionGreater</td><td>0/ActionNot</td></tr>
++	<tr>                                 <td>ActionEquals2</td><td>0/ActionNot</td></tr>
++</table>
++
++<br>Table R: <!-- in ...pack<>in ...pack -->
++<table id="selection_table">
++	<tr><td class="green">RI</td></tr>
++	<tr><td>ActionIncrement</td></tr>
++	<tr><td>ActionDecrement</td></tr>
++	<tr><td>mixt_equal</td><td class="green">OP</td><td class="green">RI</td></tr>
++</table>
++
++<br>Table RI: <!-- action_parse_right<>action_code_right -->
++<table id="selection_table">
++	<tr><td class="green">F</td></tr>
++	<tr><td class="green">RG</td></tr>
++</table>
++
++<br>Table RG: <!-- action_code_row_parse_tool<>action_code_right_util -->
++<table id="selection_table">
++	<tr><td>new_action</td><td class="green">C</td></tr>
++	<tr><td class="green" rowspan=3>RH</td><td class="red" rowspan=3>{</td><td rowspan=3>[math_end]</td><td class="green">O+RH</td><td class="red" rowspan=2>}</td></tr>
++	<tr>                                                                                                <td class="green">OC+RH</td></tr>
++	<tr>                                                                                                <td colspan=3>ifElse_start+<span class="green">RG</span>+<span class="green">RG</span></td></tr>
++</table>
++
++<br>Table RH: <!-- in action_code_take_main<>action_code_right_number -->
++<table id="selection_table">
++	<tr><td class="green" colspan=2>RT</td></tr>
++	<tr><td>ap_Integer</td><td>number</td></tr>
++	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
++	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
++	<tr><td>call_action_right</td><td class="green">C</td></tr>
++	<tr><td>parenthesis_start</td><td class="green">RG</td><td>math_end</td></tr>
++</table>
++
++<br>Table RT: <!-- action_code_take_pointer<>at for-in or ...right_number -->
++<table id="selection_table">
++	<tr><td>ActionGetVariable</td><td class="blue">name</td></tr>
++	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+ </table>
+ 
+-<br><div class="green">Members Operation Right RIght RiGht</div>
++<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members Operation OPeration OperationCompare Right RIght RiGht RigHt RighT</div>

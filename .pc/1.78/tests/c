@@ -1,0 +1,60 @@
+
+# 0 is diff and move, without ${1} is clean
+
+if [ -z "${1}" ]; then
+	rm -f a.o a.out a.swf a.swf.x a.swf.log
+	if [ -e .expected/a.swf ]; then rm .expected/a.swf; fi
+	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
+else
+smart_diff () {
+	diff ${1} ${2}
+	if [ $? = 0 ]; then
+		ok+=" + `du -b ${1}`"
+		return 0
+	fi
+	if [ -n "${3}" ]; then return 1; fi
+	a=`stat --printf="%s" ${1}`
+	b=`stat --printf="%s" ${2}`
+	base64 ${1}
+	base64 ${2}
+	if [ ${a} = ${b} ]; then
+		echo size equal ${a}
+		xxd ${1} > 1
+		xxd ${2} > 2
+		diff 1 2
+		rm 1 2
+	fi
+	return 1
+}
+	base64 -d .expected/a.swf.txt > .expected/a.swf || { echo not ok; exit 1; }
+	smart_diff .expected/a.swf a.swf
+	if [ $? != 0 ]; then
+		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
+		echo y \?; read -n1 -t $((60*60*24)) ans
+		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+		base64 a.swf > .expected/a.swf.txt
+	fi
+
+	if [ "${conv_64}" = 1 ]; then
+		v=32
+	fi
+	base64 -d .expected/a.swf.x${v}.txt > .expected/a.swf.x${v} || { echo not ok; exit 1; }
+	smart_diff .expected/a.swf.x${v} a.swf.x
+	if [ $? != 0 ]; then
+		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
+		echo y \?; read -n1 -t $((60*60*24)) ans
+		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+		base64 a.swf.x > .expected/a.swf.x${v}.txt
+	fi
+
+	smart_diff .expected/a.swf.log a.swf.log x
+	if [ $? != 0 ]; then
+		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
+		echo y \?; read -n1 -t $((60*60*24)) ans
+		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+		mv a.swf.log .expected
+	fi
+
+	echo ${ok}
+fi

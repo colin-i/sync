@@ -1,0 +1,30 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+einclude "../dev/import.h"
+
+entryraw main()
+
+call swf_new_ex("a.swf",0x80,0x80,0x001100,2,(debug_log|debug_x_pad))
+
+call action("
+/*
+debug_x
+*/
+function fn(b){
+}
+this.this.getVersion();
+
+this.this.this=this;
+
+//note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+var b=(-2+0x2-2*2/2%2&2|2^2);
+var c=1.2;var d=b[0];var e='q';
+f=2;var g;delete f;delete this.g
+")
+
+call swf_done()
+
+call exit(0)
