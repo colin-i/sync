@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+
+<style>
+	#selection_table td {
+		border: 1px solid black;
+	}
+	.blue
+	{
+		color:blue;
+	}
+	.green
+	{
+		color:green;
+	}
+	.red
+	{
+		color:red;
+	}
+	sup-r{
+		vertical-align: super;
+		font-size: small;
+		color:green;
+	}
+</style>
+
+<h3>X Syntax</h3>
+
+<p>Black = 4 bytes. <span class="blue">Pointer = 4/8 bytes.</span> <span class="green">Green = replacement.</span> <span class="red">Red.</span></p>
+
+<table id="selection_table">
+	<tr><td class="green">1</td></tr>
+	<tr><td>math_end</td></tr>
+</table>
+
+<br>Table 1: <!-- action_code_row<>action__code_row -->
+<table id="selection_table">
+	<tr><td class="green">2</td></tr>
+	<tr><td class="green">F</td></tr>
+	<tr><td>call_action_left</td><td class="green">C</td></tr>
+	<tr><td class="green" rowspan=2>I</td><td class="red" rowspan=2>{</td><td rowspan=2>else_flag</td><td class="green" colspan=2>I</td>                         <td class="red">}</td></tr>
+	<tr>                                                                                              <td class="green">{1}</td><td colspan=2>block_else_end</td></tr>
+	<tr><td>while_marker</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>whileblock_end</td></tr>
+	<tr><td class="green">FR</td></tr>
+	<tr><td>break_flag</td></tr>
+	<tr><td>continue_flag</td></tr>
+	<tr><td>ActionReturn</td><td class="green">RG</td></tr>
+</table>
+
+<br>Table 2: <!-- action_parse_pack<>action_code_pack -->
+<table id="selection_table">
+	<tr><td class="green">L</td><td class="green">R</td></tr>
+	<tr><td>ActionDefineLocal2</td><td class="blue">name</td></tr>
+	<tr><td>ActionDelete</td><td class="green">M</td></tr>
+	<tr><td>ActionDelete2</td><td class="blue">name</td></tr>
+</table>
+
+<br>Table L: <!-- in packs, at for-in -->
+<table id="selection_table">
+	<tr><td>ActionDefineLocal</td><td class="blue">name</td></tr>
+	<tr><td>ActionSetVariable</td><td class="blue">name</td></tr>
+	<tr><td>ActionSetMember</td><td class="green">M</td></tr>
+</table>
+
+<br>Table C: <!-- action_code_parse_new_or_call<>action_code_new_or_call -->
+<table id="selection_table">
+	<td><span class="blue">null</span>/<span class="green">M</span></td><td class="blue">function</td><td class="green">{RG}</td><td>args_end</td>
+</table>
+
+<br>Table F: <!-- action_code_parse_deffunction<>action_definefunction -->
+<table id="selection_table">
+	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}/null</td><td class="green">{1}</td><td>block_end</td></tr>
+</table>
+
+<br>Table FR: <!--  action_parse_conditions<>action_code_write_conditions -->
+<table id="selection_table">
+	<tr><td rowspan=2>for_marker</td><td>for_three</td><td class="green">[2]</td><td>inter_for</td><td class="green">[2]</td><td>inter_for</td><td class="green">RG<sup-r>c</sup-r></td><td class="green" rowspan=2>{1}</td><td rowspan=2>whileblock_end</td></tr>
+	<tr>                             <td class="green">RT</td> <td class="green" colspan=5>L</td></tr>
+</table>
+
+<br>Table If: <!-- at action_parse_conditions<>at action_code_write_conditions -->
+<table id="selection_table">
+	<td>ActionIf</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>block_end</td>
+</table>
+
+<br>Table {M}: <!-- action_code_member<>action_member_loop -->
+<table id="selection_table">
+	<tr><td class="blue">owner</td><td class="blue">member</td></tr>
+	<tr>                           <td class="blue">no_pointer</td> <td>square_bracket_start</td><td class="green">RG</td></tr>
+	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
+</table>
+
+<br>Table O: <!-- get_operations<>in RG loop -->
+<table id="selection_table">
+	<tr><td class="green">OP</td></tr>
+	<tr><td>ActionAnd</td></tr>
+	<tr><td>ActionOr</td></tr>
+</table>
+
+<br>Table OP: <!-- get_operations<>in RG loop/in ...pack -->
+<table id="selection_table">
+	<tr><td>ActionSubtract</td></tr>
+	<tr><td>ActionMultiply</td></tr>
+	<tr><td>ActionDivide</td></tr>
+	<tr><td>ActionModulo</td></tr>
+	<tr><td>ActionAdd2</td></tr>
+	<tr><td>ActionBitAnd</tr></td>
+	<tr><td>ActionBitOr</tr></td>
+	<tr><td>ActionBitXor</tr></td>
+	<tr><td>ActionBitLShift</td></tr>
+	<tr><td>ActionBitRShift</td></tr>
+	<tr><td>ActionBitURShift</td></tr>
+</table>
+
+<br>Table OC: <!-- get_operations<>in RG loop -->
+<table id="selection_table">
+	<tr><td rowspan=3>compare_action</td><td>ActionLess2</td><td>0/ActionNot</td></tr>
+	<tr>                                 <td>ActionGreater</td><td>0/ActionNot</td></tr>
+	<tr>                                 <td>ActionEquals2</td><td>0/ActionNot</td></tr>
+</table>
+
+<br>Table R: <!-- in ...pack<>in ...pack -->
+<table id="selection_table">
+	<tr><td class="green">RI</td></tr>
+	<tr><td>ActionIncrement</td></tr>
+	<tr><td>ActionDecrement</td></tr>
+	<tr><td>mixt_equal</td><td class="green">OP</td><td class="green">RI</td></tr>
+</table>
+
+<br>Table RI: <!-- action_parse_right<>action_code_right -->
+<table id="selection_table">
+	<tr><td class="green">F</td></tr>
+	<tr><td class="green">RG</td></tr>
+</table>
+
+<br>Table RG: <!-- action_code_row_parse_tool<>action_code_right_util -->
+<table id="selection_table">
+	<tr><td>new_action</td><td class="green">C</td></tr>
+	<tr><td class="green" rowspan=3>RH</td><td class="red" rowspan=3>{</td><td rowspan=3>[math_end]</td><td class="green">O+RH</td><td class="red" rowspan=2>}</td></tr>
+	<tr>                                                                                                <td class="green">OC+RH</td></tr>
+	<tr>                                                                                                <td colspan=3>ifElse_start+<span class="green">RG</span>+<span class="green">RG</span></td></tr>
+</table>
+
+<br>Table RH: <!-- in action_code_take_main<>action_code_right_number -->
+<table id="selection_table">
+	<tr><td class="green" colspan=2>RT</td></tr>
+	<tr><td>ap_Integer</td><td>number</td></tr>
+	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
+	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
+	<tr><td>call_action_right</td><td class="green">C</td></tr>
+	<tr><td>parenthesis_start</td><td class="green">RG</td><td>math_end</td></tr>
+</table>
+
+<br>Table RT: <!-- action_code_take_pointer<>at for-in or ...right_number -->
+<table id="selection_table">
+	<tr><td>ActionGetVariable</td><td class="blue">name</td></tr>
+	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+</table>
+
+<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members Operation OPeration OperationCompare Right RIght RiGht RigHt RighT</div>

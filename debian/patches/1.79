@@ -1,0 +1,538 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-79) bionic; urgency=medium
+ .
+   * flags for enumerate and FrameCount
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-17
+
+--- actionswf-1.orig/dev/import.h
++++ actionswf-1/dev/import.h
+@@ -1,73 +1,3 @@
+ 
+-include "../include/debug.h"
+-
+-#swf
+-
+-#id
+-importX "swf_button" swf_button
+-#id
+-importX "swf_button_last" swf_button_last
+-#id
+-importX "swf_font" swf_font
+-#id
+-importX "swf_font_basic" swf_font_basic
+-#id
+-importX "swf_text" swf_text
+-#id
+-importX "swf_shape" swf_shape
+-#id
+-importX "swf_shape_basic" swf_shape_basic
+-#id
+-importX "swf_shape_bitmap" swf_shape_bitmap
+-#id
+-importX "swf_shape_border" swf_shape_border
+-#id
+-importX "swf_image" swf_image
+-#id
+-importX "swf_image_ex" swf_image_ex
+-#dbl
+-#id
+-importX "swf_dbl" swf_dbl
+-#id
+-importX "swf_dbl_ex" swf_dbl_ex
+-#width
+-importX "swf_dbl_width" swf_dbl_width
+-#height
+-importX "swf_dbl_height" swf_dbl_height
+-#utils
+-importX "swf_done" swf_done
+-importX "swf_new" swf_new
+-importX "swf_new_ex" swf_new_ex
+-importX "swf_placeobject" swf_placeobject
+-importX "swf_placeobject_coords" swf_placeobject_coords
+-importX "swf_removeobject" swf_removeobject
+-importX "swf_showframe" swf_showframe
+-
+-#sprite
+-
+-#id
+-importX "swf_sprite_done" swf_sprite_done
+-#preid
+-importX "swf_sprite_new" swf_sprite_new
+-importX "swf_sprite_placeobject" swf_sprite_placeobject
+-importX "swf_sprite_placeobject_coords" swf_sprite_placeobject_coords
+-importX "swf_sprite_removeobject" swf_sprite_removeobject
+-importX "swf_sprite_showframe" swf_sprite_showframe
+-
+-#swf exports
+-
+-importX "swf_exports_add" swf_exports_add
+-importX "swf_exports_done" swf_exports_done
+-
+-#actionscript
+-
+-importX "action" action
+-importX "actionf" actionf
+-importX "action_sprite" action_sprite
+-importX "actionf_sprite" actionf_sprite
+-
+-#tool
+-
+-importx "erbool_get" erbool_get
+-importx "erbool_reset" erbool_reset
+-importx "freereset" freereset
++include "../include/flags.h"
++include "importf.h"
+--- /dev/null
++++ actionswf-1/dev/importf.h
+@@ -0,0 +1,71 @@
++
++#swf
++
++#id
++importX "swf_button" swf_button
++#id
++importX "swf_button_last" swf_button_last
++#id
++importX "swf_font" swf_font
++#id
++importX "swf_font_basic" swf_font_basic
++#id
++importX "swf_text" swf_text
++#id
++importX "swf_shape" swf_shape
++#id
++importX "swf_shape_basic" swf_shape_basic
++#id
++importX "swf_shape_bitmap" swf_shape_bitmap
++#id
++importX "swf_shape_border" swf_shape_border
++#id
++importX "swf_image" swf_image
++#id
++importX "swf_image_ex" swf_image_ex
++#dbl
++#id
++importX "swf_dbl" swf_dbl
++#id
++importX "swf_dbl_ex" swf_dbl_ex
++#width
++importX "swf_dbl_width" swf_dbl_width
++#height
++importX "swf_dbl_height" swf_dbl_height
++#utils
++importX "swf_done" swf_done
++importX "swf_new" swf_new
++importX "swf_new_ex" swf_new_ex
++importX "swf_placeobject" swf_placeobject
++importX "swf_placeobject_coords" swf_placeobject_coords
++importX "swf_removeobject" swf_removeobject
++importX "swf_showframe" swf_showframe
++
++#sprite
++
++#id
++importX "swf_sprite_done" swf_sprite_done
++#preid
++importX "swf_sprite_new" swf_sprite_new
++importX "swf_sprite_placeobject" swf_sprite_placeobject
++importX "swf_sprite_placeobject_coords" swf_sprite_placeobject_coords
++importX "swf_sprite_removeobject" swf_sprite_removeobject
++importX "swf_sprite_showframe" swf_sprite_showframe
++
++#swf exports
++
++importX "swf_exports_add" swf_exports_add
++importX "swf_exports_done" swf_exports_done
++
++#actionscript
++
++importX "action" action
++importX "actionf" actionf
++importX "action_sprite" action_sprite
++importX "actionf_sprite" actionf_sprite
++
++#tool
++
++importx "erbool_get" erbool_get
++importx "erbool_reset" erbool_reset
++importx "freereset" freereset
+--- actionswf-1.orig/fix/makedef
++++ actionswf-1/fix/makedef
+@@ -2,8 +2,9 @@
+ 
+ a=`locale | grep LANG=`;a=${a#*=};a=${a%_*}
+ if [ "${a}" = "ro" ]; then
+-	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Nume Pointer\] Tabel" -n` || exit 1
+-else
++	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Nume Pointer\] Tabel" -n`
++fi
++if [ -z "${b}" ]; then
+ 	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Name Pointer\] Table" -n` || exit 1
+ fi
+ 
+--- actionswf-1.orig/include/action.h
++++ actionswf-1/include/action.h
+@@ -4,75 +4,76 @@ const no_pointer=0  #NULL
+ const ActionReturn=0x3E            #1
+ const ActionIf=0x9D                #1
+ 
+-const ActionSetVariable=0x1D       #2
+ const ActionDelete=0x3A            #2
+ const ActionDelete2=0x3B           #2
+-const ActionDefineLocal=0x3C       #2
+ const ActionDefineLocal2=0x41      #2
+-const ActionSetMember=0x4F         #2
+ 
+-const block_end=0xfbBBbbBB            #1 F
+-const block_else_end=0xfcCCccCC       #1
+-const whileblock_end=0xfdDDddDD       #1
++const ActionSetVariable=0x1D       #L
++const ActionDefineLocal=0x3C       #L
++const ActionSetMember=0x4F         #L
++
++const math_end=0xffFFffFF             #0 RG RH
+ const args_end=0xfeEEeeEE             #C
+-const math_end=0xffFFffFF             #0 RG RT
++const whileblock_end=0xfdDDddDD       #1 FR
++const block_else_end=0xfcCCccCC       #1
++const block_end=0xfbBBbbBB            #F IF
++const member_end=0xfaAAaaAA           #M
+ 
+ const call_action_left=0xf1011010     #1
+-const call_action_right=0xf2022020    #RT
++const call_action_right=0xf2022020    #RH
+ const function_action=0xf3033030      #1
+ const new_action=0xf4044040           #RG
+ const square_bracket_start=0xf5055050 #M
+ const mixt_equal=0xf6066060           #R
+ const compare_action=0xf7077070       #OC
+-const parenthesis_start=0xf8088080    #RT
++const parenthesis_start=0xf8088080    #RH
+ const break_flag=0xf9099090           #1
+ const continue_flag=0xfa0AA0a0        #1
+-const for_marker=0xfb0BB0b0           #1
+-const for_three=0xfc0CC0c0            #FR
+-const inter_for=0xfd0DD0d0            #FR
+-const ifElse_start=0xfe0EE0e0         #RG
+-const member_end=0xff0FF0f0           #M
+-
+-const normal_marker=0x01010202
+-const if_marker=0x03030404
+-const while_marker=0x05050606         #1
+-const function_marker=0x07070808
++const for_three=0xfb0BB0b0            #FR
++const inter_for=0xfc0CC0c0            #FR
++const ifElse_start=0xfd0DD0d0         #RG
+ #const for_in=
+ 
+-const else_flag=0x40<<24              #1
++const else_flag=0x40<<24                   #1
+ const consecutive_flag=0x80<<24
+ #const all_flags=consecutive_flag|else_flag
+ const brace_blocks_function=0x7fFFffFF
+ 
+-const ActionSubtract=0x0B      #O
+-const ActionMultiply=0x0C      #O
+-const ActionDivide=0x0D        #O
++const normal_marker=0x01010202
++const if_marker=0x03030404
++const while_marker=0x05050606         #1
++const function_marker=0x07070808
++const for_marker=0x09090a0a           #1
++
++const ActionSubtract=0x0B      #OP
++const ActionMultiply=0x0C      #OP
++const ActionDivide=0x0D        #OP
+ const ActionAnd=0x10           #O
+ const ActionOr=0x11            #O
+ const ActionNot=0x12           #OC
+ const ActionGetVariable=0x1C   #RT
+-const ActionModulo=0x3F        #O
+-const ActionAdd2=0x47          #O
++const ActionModulo=0x3F        #OP
++const ActionAdd2=0x47          #OP
+ const ActionLess2=0x48         #OC
+ const ActionEquals2=0x49       #OC
+ const ActionGetMember=0x4E     #RT
+ const ActionIncrement=0x50     #R
+ const ActionDecrement=0x51     #R
+-const ActionBitAnd=0x60        #O
+-const ActionBitOr=0x61         #O
+-const ActionBitXor=0x62        #O
+-const ActionBitLShift=0x63     #O
+-const ActionBitRShift=0x64     #O
+-const ActionBitURShift=0x65    #O
++const ActionBitAnd=0x60        #OP
++const ActionBitOr=0x61         #OP
++const ActionBitXor=0x62        #OP
++const ActionBitLShift=0x63     #OP
++const ActionBitRShift=0x64     #OP
++const ActionBitURShift=0x65    #OP
+ const ActionGreater=0x67       #OC
+ const ActionPush=0x96
+ 	const ap_Null=2
+ 	const ap_Undefined=3
+ 	const ap_RegisterNumber=4
+ 	const ap_Boolean=5
+-	const ap_double=6        #RT
+-	const ap_Integer=7       #RT
+-	const ap_Constant8=8     #RT
++	const ap_double=6        #RH
++	const ap_Integer=7       #RH
++	const ap_Constant8=8     #RH
+ 	const ap_Constant16=9
+ 
+ const ActionEndFlag=0           #at builtin case only to test(not to write)
+@@ -90,7 +91,7 @@ const ActionAsciiToChar=0x33    #builtin
+ const ActionCallFunction=0x3D
+ const ActionNewObject=0x40
+ const ActionTypeOf=0x44         #builtin
+-#const ActionEnumerate=0x46
++const ActionEnumerate=0x46
+ const ActionPushDuplicate=0x4C
+ const ActionCallMethod=0x52
+ const ActionNewMethod=0x53
+--- actionswf-1.orig/include/actionswf.h
++++ actionswf-1/include/actionswf.h
+@@ -1,4 +1,7 @@
+ 
++#define flags_forin1 0x20
++#define flags_framesAsShows 0x40
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+--- actionswf-1.orig/include/debug.h
++++ /dev/null
+@@ -1,8 +0,0 @@
+-
+-const debug_none=0
+-const debug_log=0x1
+-const debug_alt=0x2
+-const debug_titles=0x4
+-const debug_x=0x8
+-const debug_x_pad=0x10
+-const debug_xx=debug_x|debug_x_pad
+--- /dev/null
++++ actionswf-1/include/flags.h
+@@ -0,0 +1,11 @@
++
++const debug_none=0
++const debug_log=0x1
++const debug_alt=0x2
++const debug_titles=0x4
++const debug_x=0x8
++const debug_x_pad=0x10
++const debug_xx=debug_x|debug_x_pad
++
++const flags_forin1=0x20
++const flags_framesAsShows=0x40
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -95,7 +95,7 @@ const FontFlagsHasLayout=0x80
+ #const FontFlagsBold=1
+ 
+ include "lin.h" "win.h"
+-include "debug.h"
++include "flags.h"
+ 
+ Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
+ Const _open_read=_O_RDONLY|flag_O_BINARY
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -376,13 +376,19 @@ function action_code_write_conditions(sd
+         if codepointer#!=(for_three)
+ 			sd type;set type codepointer#
+ 			add codepointer (DWORD)
++			sd name
+ 			if type=(ActionGetVariable)
+-				sd name;set name action_code_get_pointer(#codepointer)
++				set name action_code_get_pointer(#codepointer)
+ 				call action_get_one(name)
+-			else #ActionGetMember
++				call action_one((ActionEnumerate2))
++			elseif type=(ActionGetMember)
+ 				set codepointer action_member_loop_right(codepointer)
++				call action_one((ActionEnumerate2))
++			else #deprecated ActionEnumerate
++				set name action_code_get_pointer(#codepointer)
++				call action_push((ap_Constant8),name,-1)
++				call action_one((ActionEnumerate))
+ 			end
+-			call action_one((ActionEnumerate2))
+             #
+             call add_while_top_off((for_marker))
+             #
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -243,11 +243,8 @@ function action_parse_conditions(ss ac,s
+         endif
+         set cursor# 0
+         #
+-	#enum can take ActionEnumerate(x.x[z]), x.x ... is a pattern that ActionEnumerate will recognize, do not use action_code_take_pointer
+-	#call action_code_set((for_in)) getvar/member is not overlapping for_three
+-	#call action_code_set_pointer(marker)
+-	#ActionEnumerate2 will use an object
+-	call action_code_take_pointer(marker)
++	import "forin" forin
++	call forin(marker)
+         #
+         if pointer!=ac
+             call action_code_set((ActionDefineLocal))
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -139,12 +139,17 @@ function debug_x_pointer(sd value,sv poi
+ 	end
+ end
+ 
++function for_in(datax flag)
++	and flag (flags_forin1)
++end
++
+ import "row_termination" row_termination
+ import "brace_blocks_get_memblock" brace_blocks_get_memblock
+ import "block_get_size" block_get_size
+ import "block_get_mem" block_get_mem
+ import "word_arg_to_stack" word_arg_to_stack
+ import "action_code_values" action_code_values
++import "frames_as_shows" frames_as_shows
+ 
+ importx "strlen" strlen
+ importx "fseek" fseek
+@@ -166,6 +171,9 @@ function debug_init(sd flags,sd path)
+ 	call alt_init(flags,path)
+ 	call dtitles_init(flags)
+ 	call x_init(flags,path)
++
++	call frames_as_shows(flags)
++	call for_in(flags)
+ endfunction
+ 
+ function log_init(sd flags,sd path)
+@@ -478,3 +486,18 @@ function debug_x_expand(sd values)
+ 		call f_write(x_data.f,values,size)
+ 	end
+ end
++
++import "action_code_set" action_code_set
++import "action_code_take_pointer" action_code_take_pointer
++import "action_code_set_pointer" action_code_set_pointer
++function forin(sd pointer)
++	#getvar/member/enumerate is not overlapping for_three
++	if for_in.flag!=(flags_forin1)
++		#ActionEnumerate2 will use an object
++		call action_code_take_pointer(pointer)
++	else
++		#enum can take ActionEnumerate(x.x[z]), x.x ... is a pattern that ActionEnumerate will recognize
++		call action_code_set((ActionEnumerate))
++		call action_code_set_pointer(pointer)
++	end
++end
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -52,6 +52,10 @@ function swf_sprite_frames_pointer(sd sp
+ 	return block
+ end
+ 
++function frames_as_shows(datax flag)
++	and flag (flags_framesAsShows)
++end
++
+ import "mem_free" mem_free
+ import "action_code_values_free" action_code_values_free
+ import "file_close" file_close
+@@ -303,7 +307,11 @@ function swf_actionblock(sd proc,sd arg,
+ 			#more at dtitles
+ 			call dtitles_frame(frames)
+ 
+-			call swf_frames_inc(frames,arg2)
++			if frames_as_shows.flag=0
++				call swf_frames_inc(frames,arg2)
++			elseif arg=(from_show)
++				call swf_frames_inc(frames,arg2)
++			end
+ 
+ 			import "write_action" write_action
+ 			sd tagsz
+@@ -318,7 +326,9 @@ function swf_actionblock(sd proc,sd arg,
+ 			call debug_show(id) #to keep the count of frames at debugger
+ 			call swf_frames_inc(frames,arg2)
+ 		elseif frames=0    #here is an ending from done with no size and no previous show
+-			call swf_frames_inc(frames,arg2) #a default frame, how was before at root, and at sprite is ok
++			if frames_as_shows.flag=0
++				call swf_frames_inc(frames,arg2) #a default frame, how was before at root, and at sprite is ok
++			end
+ 		endelseif
+     else
+     #if proc==(mem_exp_get_block)
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -68,13 +68,14 @@
+ 
+ <br>Table F: <!-- action_code_parse_deffunction<>action_definefunction -->
+ <table id="selection_table">
+-	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}/null</td><td class="green">{1}</td><td>block_end</td></tr>
++	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}</td><td class="blue">null</td><td class="green">{1}</td><td>block_end</td></tr>
+ </table>
+ 
+ <br>Table FR: <!--  action_parse_conditions<>action_code_write_conditions -->
+ <table id="selection_table">
+-	<tr><td rowspan=2>for_marker</td><td>for_three</td><td class="green">[2]</td><td>inter_for</td><td class="green">[2]</td><td>inter_for</td><td class="green">RG<sup-r>c</sup-r></td><td class="green" rowspan=2>{1}</td><td rowspan=2>whileblock_end</td></tr>
+-	<tr>                             <td class="green">RT</td> <td class="green" colspan=5>L</td></tr>
++	<tr><td rowspan=3>for_marker</td><td>for_three</td>                 <td class="green">[2]</td>   <td>inter_for</td><td class="green">[2]</td><td>inter_for</td><td class="green">RG<sup-r>c</sup-r></td><td class="green" rowspan=3>{1}</td><td rowspan=3>whileblock_end</td></tr>
++	<tr>                             <td class="green" colspan=2>RT</td>                             <td class="green" colspan=4 rowspan=2>L</td></tr>
++	<tr>                             <td>ActionEnumerate</td>           <td class="blue">pattern</td></tr>
+ </table>
+ 
+ <br>Table If: <!-- at action_parse_conditions<>at action_code_write_conditions -->
+@@ -82,11 +83,12 @@
+ 	<td>ActionIf</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>block_end</td>
+ </table>
+ 
+-<br>Table {M}: <!-- action_code_member<>action_member_loop -->
++<br>Table M: <!-- action_code_member<>action_member_loop -->
+ <table id="selection_table">
+-	<tr><td class="blue">owner</td><td class="blue">member</td></tr>
+-	<tr>                           <td class="blue">no_pointer</td> <td>square_bracket_start</td><td class="green">RG</td></tr>
+-	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
++	<tr><td class="blue" rowspan=4>owner</td><td class="red" rowspan=4>{</td><td class="blue" colspan=3>member</td>                                                      <td class="red" rowspan=2>}</td></tr>
++	<tr>                                                                     <td class="blue">no_pointer</td>      <td>square_bracket_start</td><td class="green">RG</td></tr>
++	<tr>                                                                     <td colspan=4><!-- end is not at first iteration --></td></tr>
++	<tr>                                                                     <td class="blue">no_pointer</td>      <td colspan=3>member_end</td></tr>
+ </table>
+ 
+ <br>Table O: <!-- get_operations<>in RG loop -->
+@@ -135,9 +137,10 @@
+ <br>Table RG: <!-- action_code_row_parse_tool<>action_code_right_util -->
+ <table id="selection_table">
+ 	<tr><td>new_action</td><td class="green">C</td></tr>
+-	<tr><td class="green" rowspan=3>RH</td><td class="red" rowspan=3>{</td><td rowspan=3>[math_end]</td><td class="green">O+RH</td><td class="red" rowspan=2>}</td></tr>
+-	<tr>                                                                                                <td class="green">OC+RH</td></tr>
+-	<tr>                                                                                                <td colspan=3>ifElse_start+<span class="green">RG</span>+<span class="green">RG</span></td></tr>
++	<tr><td class="green" rowspan=4>RH</td><td class="red" rowspan=4>{</td><td class="green">O+RH</td><td class="red" rowspan=2>}</td></tr>
++	<tr>                                                                   <td class="green">OC+RH</td></tr>
++	<tr>                                                                   <td colspan=2>ifElse_start+<span class="green">RG</span>+<span class="green">RG</span></td></tr>
++	<tr>                                                                   <td colspan=2>math_end</td></tr>
+ </table>
+ 
+ <br>Table RH: <!-- in action_code_take_main<>action_code_right_number -->

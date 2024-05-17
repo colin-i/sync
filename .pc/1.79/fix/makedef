@@ -1,0 +1,26 @@
+#!/usr/bin/bash
+
+a=`locale | grep LANG=`;a=${a#*=};a=${a%_*}
+if [ "${a}" = "ro" ]; then
+	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Nume Pointer\] Tabel" -n` || exit 1
+else
+	b=`x86_64-w64-mingw32-objdump -p actionswf.dll | grep "\[Ordinal\/Name Pointer\] Table" -n` || exit 1
+fi
+
+echo "LIBRARY actionswf.dll" > $1
+echo "EXPORTS" >> $1
+b=${b%%:*}
+b=`echo $b+1 | bc`
+c=`x86_64-w64-mingw32-objdump -p actionswf.dll | tail -n +$b`
+for (( ; ; ))
+do
+	c=${c#*]}
+	d=${c%%[*}
+	d=`echo $d | sed 's/^ //'`
+	e=${d%% *}
+	echo $e >> $1
+	if [[ $d =~ " " ]]
+	then
+		break
+	fi
+done
