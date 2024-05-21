@@ -1,0 +1,19 @@
+
+if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
+if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+
+if [ -z "${conv_64}" ] || [ ${conv_64} = 0 ]; then
+	OFLAGS="inplace_reloc 0"
+	LD=x86_64-linux-gnu-ld.bfd
+	linker=--dynamic-linker=/lib64/ld-linux-x86-64.so.2
+	launcher=qq
+else
+	OFLAGS="conv_64 ${conv_64}"
+	LD=i686-linux-gnu-ld.bfd
+	linker=--dynamic-linker=/lib/ld-linux.so.2
+	launcher=q
+fi
+${OCOMP} a.oc ${OFLAGS} logfile 0 && \
+LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+# attention at launchpad and ldprefer (like in ./example)
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out

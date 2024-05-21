@@ -1,0 +1,1113 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-81) bionic; urgency=medium
+ .
+   * x save and restore
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-21
+
+--- actionswf-1.orig/include/flags.h
++++ actionswf-1/include/flags.h
+@@ -5,7 +5,9 @@ const debug_alt=0x2
+ const debug_titles=0x4
+ const debug_x=0x8
+ const debug_x_pad=0x10
+-const debug_xx=debug_x|debug_x_pad
+ 
+-const flags_forin1=0x20
+-const flags_framesAsShows=0x40
++const flag_forin1=0x20
++const flag_framesAsShows=0x40
++const flag_x=0x80
++
++const flags_x=debug_x|debug_x_pad|flag_x
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -37,7 +37,7 @@ endif
+ 
+ #this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+ #	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x
+ expitems = action swf tool ../shared/action_dllmain
+ 
+ exte=libexte.a
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -149,14 +149,19 @@ function action_code_write_builtin_names
+ endfunction
+ 
+ function action_code_get_pointer(sv p_codepointer)
+-	sv p;set p p_codepointer#
+-	sd a;set a p#
+-	import "debug_x_pointer" debug_x_pointer
+-	call debug_x_pointer(a,p)
++	import "x_pointer" x_pointer
++	sd a;set a x_pointer(p_codepointer#)
++	incst p_codepointer#  #to pass the pointer
++	return a
++end
++function action_code_get_pointer_touchless(sv p_codepointer)
++	import "x_pointer_touchless" x_pointer_touchless
++	sd a;set a x_pointer_touchless(p_codepointer#)
+ 	incst p_codepointer#  #to pass the pointer
+ 	return a
+ end
+ 
++
+ aftercallimport ebool
+ 
+ import "debug_phase_code" debug_phase_code
+@@ -197,20 +202,6 @@ function action_code_set_ex(sd value,sd
+ 	endelse
+ 	set nr# x
+ endfunction
+-function forward_values_expand(sv forward,sd data)
+-    sd currentnr
+-    sd p_currentnr
+-    setcall p_currentnr action_code_values_index()
+-    set currentnr p_currentnr#
+-    sv values
+-    setcall values action_code_get()
+-    #
+-    call forward(values,data)
+-	import "debug_x_expand" debug_x_expand
+-	call debug_x_expand(values)
+-    #
+-    set p_currentnr# currentnr
+-endfunction
+ 
+ 
+ 
+@@ -600,9 +591,8 @@ function action_code_write_function_call
+         return pointer
+     endif
+     sd member
+-    set member codepointer#
+-    setcall codepointer action_code_new_or_call(codepointer)
+-    if member=0
++    setcall codepointer action_code_new_or_call(codepointer,#member)
++    if member=(no_pointer)
+         call action_one((ActionCallFunction))
+     else
+         call action_one((ActionCallMethod))
+@@ -696,14 +686,19 @@ function action_code_write_builtin_set(s
+ 	return codepointer
+ endfunction
+ #codepointer
+-function action_code_new_or_call(sv codepointer)
+-    sd member
+-	import "debug_x_preexpand" debug_x_preexpand
+-	set member debug_x_preexpand(#codepointer)
+-	sd fname; set fname action_code_get_pointer(#codepointer)
+-    import "action_caller" action_caller
+-    setcall codepointer action_caller(member,fname,codepointer)
+-    return codepointer
++function action_code_new_or_call(sv codepointer,sv pmember)
++	sd fname
++	sd mathpointer;set mathpointer codepointer
++	import "x_call" x_call
++	set codepointer x_call(pmember,#fname,codepointer)
++	if codepointer=mathpointer
++		import "debug_x_preexpand" debug_x_preexpand
++		set pmember# debug_x_preexpand(#codepointer)
++		import "action_caller" action_caller
++		setcall codepointer action_caller(pmember#,#fname,codepointer)
++	end
++	call action_push((ap_Constant8),fname,-1)
++	return codepointer
+ endfunction
+ #codepointer
+ function action_code_right(sd codepointer)
+@@ -720,9 +715,8 @@ function action_code_right_util(sd codep
+     if codepointer#=(new_action)
+         add codepointer (DWORD)
+         sd member
+-        set member codepointer#v^
+-        setcall codepointer action_code_new_or_call(codepointer)
+-        if member=0
++        setcall codepointer action_code_new_or_call(codepointer,#member)
++        if member=(no_pointer)
+             call action_one((ActionNewObject))
+         else
+             call action_one((ActionNewMethod))
+@@ -881,12 +875,13 @@ function action_deffunction(sv codepoint
+     sd NumParams=0
+     sv args
+     set args codepointer
+-    while codepointer#!=(no_pointer)
+-        addcall fn_size strlen(codepointer#)
+-        inc fn_size
+-        inc NumParams
+-        add codepointer :  #to pass the pointer
+-    endwhile
++	sd arg
++	while codepointer#!=(no_pointer)  #first time get for ACTIONRECORDHEADER.Length and NumParams
++		set arg action_code_get_pointer_touchless(#codepointer)
++		addcall fn_size strlen(arg)
++		inc fn_size
++		inc NumParams
++	endwhile
+     add codepointer :  #to pass the pointer
+     #
+     call actionrecordheader((ActionDefineFunction),fn_size)
+@@ -894,12 +889,12 @@ function action_deffunction(sv codepoint
+     call swf_actionblock_add(#NumParams,(NumParams_size))
+     #
+     sd wr_size
+-    while args#!=(no_pointer)
+-        setcall wr_size strlen(args#)
+-        inc wr_size
+-	sd arg;set arg action_code_get_pointer(#args)
+-        call swf_actionblock_add(arg,wr_size)
+-     endwhile
++	while args#!=(no_pointer)  #second time write to swf
++		set arg action_code_get_pointer(#args)
++		setcall wr_size strlen(arg)
++		inc wr_size
++		call swf_actionblock_add(arg,wr_size)
++	endwhile
+ 	#get reg, not depending on brace blocks because } is closed in the loop there, for debug
+ 	call debug_definefunction(debug_related)
+ 	#
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -92,6 +92,10 @@ function brace_blocks_get_memblock()
+     return memblock
+ endfunction
+ 
++function for_in(datax flag)
++	and flag (flag_forin1)
++end
++
+ import "action_code_get" action_code_get
+ import "action_code_values_index" action_code_values_index
+ 
+@@ -158,6 +162,20 @@ function action_code_row_ex(ss ac,sd a_b
+ 	call debug_phase_parse(ac)
+     return ac
+ endfunction
++
++function forin(sd pointer)
++	#getvar/member/enumerate is not overlapping for_three
++	if for_in.flag!=(flag_forin1)
++		#ActionEnumerate2 will use an object
++		call action_code_take_pointer(pointer)
++	else
++		#enum can take ActionEnumerate(x.x[z]), x.x ... is a pattern that ActionEnumerate will recognize
++		call action_code_set((ActionEnumerate))
++		call action_code_set_pointer(pointer)
++	end
++end
++
++
+ #pointer
+ function action_parse_conditions(ss ac,sd p_flags,sd p_for_detected)
+     #if
+@@ -243,7 +261,6 @@ function action_parse_conditions(ss ac,s
+         endif
+         set cursor# 0
+         #
+-	import "forin" forin
+ 	call forin(marker)
+         #
+         if pointer!=ac
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -204,12 +204,12 @@ import "swf_actionblock" swf_actionblock
+ import "file_get_content__resources_free" file_get_content__resources_free
+ 
+ import "action_code_get_pointer" action_code_get_pointer
++import "action_code_values_index" action_code_values_index
++import "action_code_get" action_code_get
+ 
+ 
+ aftercallimport ebool
+ 
+-import "action_base" action_base
+-
+ import "swf_actionblock_add" swf_actionblock_add
+ import "actionrecordheader" actionrecordheader
+ import "actionpool_value" actionpool_value
+@@ -308,23 +308,43 @@ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
+ #codepointer
+-function action_caller(ss member,ss name,sd args_pointer)
+-    sd nrargs=0
+-    while args_pointer#!=(args_end)
+-        setcall args_pointer action_code_right_util(args_pointer)
+-        inc nrargs
+-    endwhile
+-    add args_pointer (DWORD)
+-    call action_push((ap_Integer),nrargs,-1)
+-    #
+-    if member!=0
+-	#call action_member_write(member)
+-	import "forward_values_expand" forward_values_expand
+-	call forward_values_expand(action_member_write_tool,member)
+-    endif
+-    call action_push((ap_Constant8),name,-1)
+-    return args_pointer
++function action_caller(ss member,sv pfname,sd codepointer)
++	set codepointer action_caller_right(pfname,codepointer)
++
++	import "debug_x_preexpand_inter" debug_x_preexpand_inter
++	call debug_x_preexpand_inter(codepointer)
++	if member!=0
++		sd currentnr
++		sd p_currentnr
++		setcall p_currentnr action_code_values_index()
++		set currentnr p_currentnr#
++		sv values
++		setcall values action_code_get()
++
++		call action_code_member(member)
++		call action_member_loop_right(values)
++
++		import "debug_x_expand" debug_x_expand
++		call debug_x_expand(values)
++
++		set p_currentnr# currentnr
++	else
++		call debug_x_expand((NULL))
++	end
++	return codepointer
+ endfunction
++#codepointer
++function action_caller_right(sv pfname,sd codepointer)
++	set pfname# action_code_get_pointer(#codepointer)
++	sd nrargs=0
++	while codepointer#!=(args_end)
++		setcall codepointer action_code_right_util(codepointer)
++		inc nrargs
++	endwhile
++	add codepointer (DWORD)
++	call action_push((ap_Integer),nrargs,-1)
++	return codepointer
++end
+ 
+ #member
+ 
+@@ -399,10 +419,6 @@ import "action_code_member" action_code_
+ #    call memcpy(code,member,len)
+ #    call forward_values_expand(action_member_write_tool,code)
+ #endfunction
+-function action_member_write_tool(sd values,ss names)
+-    call action_code_member(names)
+-    call action_member_loop_right(values)
+-endfunction
+ 
+ #action
+ 
+@@ -435,7 +451,9 @@ function pool_wr(sd id)
+     call swf_mem_add(poolmem,poolsize)
+ endfunction
+ 
+-#format
++#format and alt
++
++import "action_base" action_base
+ 
+ function action_format(sv args)
+     sd args_nr=2
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -48,6 +48,8 @@ import "mem_free" mem_free
+ import "f_close" f_close
+ 
+ function debug_data()
++	import "x_data" x_data
++	call x_data()
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+ 		call mem_free(of)
+@@ -62,15 +64,7 @@ function debug_data()
+ 	endif
+ 	import "alt_free" alt_free
+ 	call alt_free()
+-	call x_data()
+ endfunction
+-function x_data()
+-	value f=NULL
+-	datax size#1
+-	if f!=(NULL)
+-		call f_close(#f)
+-	end
+-end
+ 
+ function debug_phase_init(ss pointer)
+ 	sv of%p_offsets
+@@ -130,32 +124,18 @@ function md_printf(sd c,sd format,sd val
+ 	return n
+ end
+ 
+-function debug_x_pointer(sd value,sv pointer)
+-	if x_data.f!=(NULL)
+-		import "action_debug" action_debug
+-		sub value action_debug((action_debug_get_mem))
+-		inc value  ##only to not be comparable with (no_pointer)
+-		set pointer# value
+-	end
+-end
+-
+-function for_in(datax flag)
+-	and flag (flags_forin1)
+-end
+-
+ import "row_termination" row_termination
+ import "brace_blocks_get_memblock" brace_blocks_get_memblock
+ import "block_get_size" block_get_size
+ import "block_get_mem" block_get_mem
+ import "word_arg_to_stack" word_arg_to_stack
+-import "action_code_values" action_code_values
++import "for_in" for_in
+ import "frames_as_shows" frames_as_shows
+ 
+ importx "strlen" strlen
+ importx "fseek" fseek
+ importx "fread" fread
+ importx "fprintf" fprintf
+-importx "fwrite" fwrite
+ 
+ 
+ 
+@@ -164,13 +144,14 @@ aftercallimport ebool
+ import "memalloc" memalloc
+ import "alt_init" alt_init
+ import "dtitles_init" dtitles_init
++import "x_init" x_init
+ import "f_open_mem" f_open_mem
+ 
+-function debug_init(sd flags,sd path)
++function flags_init(sd flags,sd path)
++	set flags x_init(flags,path)
+ 	call log_init(flags,path)
+ 	call alt_init(flags,path)
+ 	call dtitles_init(flags)
+-	call x_init(flags,path)
+ 
+ 	call frames_as_shows(flags)
+ 	call for_in(flags)
+@@ -231,6 +212,7 @@ function debug_action_init(ss ac)
+ 
+ 		add row of#
+ 		sv end;setcall end debug_end()   #at third iteration
++		decst row   ##must be last entry not after
+ 		set end# row
+ 
+ 		set debug_actions.size 0
+@@ -241,11 +223,11 @@ function debug_phase_code(sd codepointer
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+ 		sv a;setcall a debug_mark_get()
+-		if codepointer=a#   #can also be smaller
++		if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+ 			if debug_actions.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+ 				sv b;set b a
+ 				sv end;setcall end debug_end()
+-				while codepointer=b#
++				while codepointer>=^b#   # > ? same as above
+ 					call debug_mark_add()
+ 					setcall b debug_mark_get()
+ 					if b=end#
+@@ -395,109 +377,3 @@ function debug_concludefunction(sv point
+ 		end
+ 	endif
+ end
+-
+-function x_init(datax flag,sd path)
+-	if x_data.f!=(NULL)
+-		call error("swf started, x not closed")
+-	end
+-	and flag (debug_xx)
+-	if flag!=0
+-		sd s;setcall s strlen(path)
+-		sd a=2+1
+-		add a s
+-		sd b;setcall b memalloc(a)
+-		call sprintf(b,"%s.x",path)
+-
+-		set x_data.f f_open_mem(b,"wb") #'b' on windows is not 't' that can change line ends and is working more there
+-
+-		and flag (debug_x_pad)
+-	end
+-end
+-
+-function debug_x_pointers(valuex start,valuex size)
+-	valuex mark#1
+-	if x_data.f!=(NULL)
+-		set x_data.size 0
+-
+-		inc size  ##is on last \0
+-		sub size start
+-		if x_init.flag=(debug_x_pad)
+-			set mark f_tell(x_data.f) #long
+-			add mark :
+-			add mark size    ##overflow is same
+-
+-			sd pad=0xf
+-			xor pad mark
+-			inc pad
+-			and pad 0xf
+-			sd all;set all size; add all pad
+-			call f_write(x_data.f,#all,:)
+-		else
+-			call f_write(x_data.f,#size,:)
+-		end
+-		set mark f_tell(x_data.f)
+-		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
+-		if x_init.flag=(debug_x_pad)
+-			if pad!=0
+-				char zero={0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0}
+-				call f_write(x_data.f,#zero,pad)
+-			end
+-		end
+-	end
+-end
+-
+-function debug_x_base(sd mem,sd size)
+-	#already wrote
+-	sub size x_data.size
+-	add mem x_data.size
+-
+-	call f_write(x_data.f,mem,size)
+-	add x_data.size size
+-end
+-function debug_x(sd mem,sd nr)
+-	if x_data.f!=(NULL)
+-		mult nr (action_code_values_unit)
+-		call debug_x_base(mem,nr)
+-
+-		call fseek(x_data.f,debug_x_pointers.mark,(SEEK_SET))
+-		call fwrite(debug_x_pointers.start,debug_x_pointers.size,1,x_data.f)
+-		call fseek(x_data.f,0,(SEEK_END))
+-	end
+-end
+-
+-function debug_x_preexpand(sv p_codepointer)
+-	sv codepointer;set codepointer p_codepointer#
+-	sd value;set value codepointer#
+-	if x_data.f!=(NULL)
+-		if value!=(no_pointer)
+-			sd values;set values action_code_values()
+-			sub codepointer values
+-			call debug_x_base(values,codepointer)
+-			incst x_data.size  ##the string will be expanded and written
+-		end
+-	end
+-	incst p_codepointer#
+-	return value
+-end
+-function debug_x_expand(sd values)
+-	if x_data.f!=(NULL)
+-		sd size;set size action_code_get()
+-		sub size values
+-		call f_write(x_data.f,values,size)
+-	end
+-end
+-
+-import "action_code_set" action_code_set
+-import "action_code_take_pointer" action_code_take_pointer
+-import "action_code_set_pointer" action_code_set_pointer
+-function forin(sd pointer)
+-	#getvar/member/enumerate is not overlapping for_three
+-	if for_in.flag!=(flags_forin1)
+-		#ActionEnumerate2 will use an object
+-		call action_code_take_pointer(pointer)
+-	else
+-		#enum can take ActionEnumerate(x.x[z]), x.x ... is a pattern that ActionEnumerate will recognize
+-		call action_code_set((ActionEnumerate))
+-		call action_code_set_pointer(pointer)
+-	end
+-end
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -22,52 +22,53 @@ import "dupreserve_string" dupreserve_st
+ import "brace_blocks_end" brace_blocks_end
+ function action_base(ss ac)
+ #ss ac       actionscript string to be parsed
+-    sd p_values
+-    setcall p_values action_code_values()
+-    import "error" error
+-    if p_values=(NULL);call error("Don't call the action now.");endif
+-    #
+-    sd nr
+-    setcall nr action_code_values_index()
+-    set nr# 0
+-    call brace_blocks_counter_init()
+-    #
+-    ss mem
+-    setcall mem dupreserve_string(ac)
+-
+-	import "debug_action_init" debug_action_init
+-	call debug_action_init(ac)
+-
+-	sd last;set last escape_action(ac,mem,0)
+-	import "debug_x_pointers" debug_x_pointers
+-	call debug_x_pointers(mem,last)
+-
+-	import "debug_action_phase" debug_action_phase
+-	call debug_action_phase()
+-
+-	sv p_action_errors
+-	setcall p_action_errors action_debug((action_debug_get))
+-	set p_action_errors# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
+-	sv cursor;set cursor p_action_errors;incst cursor;set cursor# mem
+-    while mem#!=0
+-        setcall mem action_code_row(mem,(FALSE))
+-    endwhile
+-    call action_code_set((math_end))
+-	#reset to stop adding row nr at errors
+-	set p_action_errors# (NULL)
+-
+-    call brace_blocks_end()
+-
+-	call debug_action_phase()
+-
+-	sv stored;set stored p_values
+-	#                 code_values are not reallocated
+-	while p_values#!=(math_end)
+-		setcall p_values action__code_row(p_values)
+-	endwhile
+-	import "debug_x" debug_x
+-	call debug_x(stored,nr#) #need to be after, to modify pointers inside
+-
+-    #free mem ok,another free is at errors
+-    call action_debug_free()
++	sd p_values
++	setcall p_values action_code_values()
++	import "error" error
++	if p_values=(NULL);call error("Don't call the action now.");endif
++	#
++	sd nr
++	setcall nr action_code_values_index()
++	set nr# 0
++	call brace_blocks_counter_init()
++
++	import "actionx" actionx
++	sd x;set x actionx()
++	if x=(FALSE) #if true, only action__code_row loop
++		ss mem
++		setcall mem dupreserve_string(ac)
++
++		import "debug_action_init" debug_action_init
++		call debug_action_init(ac)
++		sd last;set last escape_action(ac,mem,0)
++		import "debug_x_pointers" debug_x_pointers
++		call debug_x_pointers(mem,last)
++		import "debug_action_phase" debug_action_phase
++		call debug_action_phase()
++
++		sv p_action_errors
++		setcall p_action_errors action_debug((action_debug_get))
++		set p_action_errors# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
++		sv cursor;set cursor p_action_errors;incst cursor;set cursor# mem
++		while mem#!=0
++			setcall mem action_code_row(mem,(FALSE))
++		endwhile
++		call action_code_set((math_end))
++		#reset to stop adding row nr at errors
++		set p_action_errors# (NULL)
++		call brace_blocks_end()
++
++		call debug_action_phase()
++
++		sv stored;set stored p_values
++		#                 code_values are not reallocated
++		while p_values#!=(math_end)
++			setcall p_values action__code_row(p_values)  #also at actionx
++		endwhile
++		import "debug_x" debug_x
++		call debug_x(stored,nr#) #need to be after, to modify pointers inside
++
++		#free mem ok,another free is at errors
++		call action_debug_free()
++	end
+ endfunction
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -174,7 +174,16 @@ endfunction
+ function f_tell(sd f)
+ 	sd r;set r ftell(f)
+ 	if r=-1
+-		call error("ftell error")
++		vstr er="ftell error"
++		call error(er)
+ 	end
+ 	return r
+ endfunction
++function f_tell_errors(sd f)
++	sd r;set r ftell(f)
++	if r!=-1
++		return r
++	end
++	call fclose(f)
++	call error(f_tell.er)
++endfunction
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -53,7 +53,7 @@ function swf_sprite_frames_pointer(sd sp
+ end
+ 
+ function frames_as_shows(datax flag)
+-	and flag (flags_framesAsShows)
++	and flag (flag_framesAsShows)
+ end
+ 
+ import "mem_free" mem_free
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -758,8 +758,8 @@ const hd2=\
+ data size2=\-hd2
+ vdata hd_pack2%hd2
+ 
+-	import "debug_init" debug_init
+-	call debug_init(add_debug,path)
++	import "flags_init" flags_init
++	call flags_init(add_debug,path)
+     call swf_mem((mem_exp_init),path,(file_sz_off-hd_start))
+ 
+     #identifiers for swf
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -297,20 +297,16 @@ function freelater()
+     call file_resources_free()
+ endfunction
+ 
+-import "action_error" action_error
++importx "malloc" malloc
++importx "fclose" fclose
+ 
++import "action_error" action_error
+ import "freereset" freereset   #..x with no args
+-
+ import "action_debug_free" action_debug_free
+ import "file_get_content__resources_free" file_get_content__resources_free
+ 
+ 
+ 
+-
+-
+-
+-
+-
+ function erbool()
+     aftercall ebool
+     return #ebool
+@@ -318,11 +314,6 @@ endfunction
+ 
+ 
+ 
+-
+-
+-
+-
+-
+ function error(ss msg)
+     call string_nl_print(msg)
+     call action_error()
+@@ -335,7 +326,6 @@ endfunction
+ 
+ #
+ function memrealloc(sd mem,sd size)
+-#unele fisiere pot da eroare de la realocare; fara functia asta aftercall poate fi degeaba
+     sd ptr
+     setcall ptr realloc(mem,size)
+     if ptr=(NULL)
+@@ -348,6 +338,15 @@ function memalloc(sd size)
+     setcall mem memrealloc(0,size)
+     return mem
+ endfunction
++function memalloc_errors(sd size,sd file)
++	sd mem
++	set mem malloc(size)
++	if mem!=(NULL)
++		return mem
++	end
++	call fclose(file)
++	return (NULL)
++endfunction
+ 
+ #inits
+ 
+--- /dev/null
++++ actionswf-1/src/x.oc
+@@ -0,0 +1,226 @@
++
++format elfobj64
++
++include "../include/prog.h"
++
++import "f_close" f_close
++import "mem_free" mem_free
++
++function x_data()
++	value f=NULL
++	datax size#1
++	value mem=NULL
++	if f!=(NULL)
++		call f_close(#f)
++	elseif mem!=(NULL)
++		call mem_free(#mem)
++	end
++end
++
++function x_pointer(sv pointer)
++	sd value
++	set value pointer#
++	if x_data.f!=(NULL)
++		import "action_debug" action_debug
++		sub pointer# action_debug((action_debug_get_mem))
++		inc pointer#  ##only to not be comparable with (no_pointer)
++	elseif x_data.mem!=(NULL) #flag_x
++		vstrx base#1
++		add value base ##reverse
++		dec value      ##same
++	end
++	return value
++end
++function x_pointer_touchless(sv pointer)
++	sd value
++	set value pointer#
++	if x_data.mem!=(NULL)
++		add value x_pointer.base
++		dec value
++	end
++	return value
++end
++
++import "action_code_values" action_code_values
++import "action_code_get" action_code_get
++
++importx "fwrite" fwrite
++importx "strlen" strlen
++importx "sprintf" sprintf
++importx "fseek" fseek
++importx "fread" fread
++importx "fclose" fclose
++
++
++aftercallimport ebool
++
++
++import "action__code_row" action__code_row
++
++#is not x or x?
++function actionx()
++	vdatax pointer#1
++	valuex end#1
++	if x_data.mem!=(NULL)
++		if end<=^pointer
++			call error("error at x") #log, oaalternative, alt|debug_x, flag_x . and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
++		end
++		sd size
++		set size pointer#v         ;#size of escaped block that was at parse + pad if debug_x_pad flag
++		incst pointer              ##here at parse was the escaped mem
++		set x_pointer.base pointer ##for x_pointer function
++		add pointer size           ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
++		while pointer#!=(math_end)
++			set pointer action__code_row(pointer)
++		endwhile
++		add pointer (DWORD)
++		return (TRUE)
++	end
++	return (FALSE)
++end
++
++
++import "error" error
++import "memalloc" memalloc
++import "f_open_mem" f_open_mem
++import "f_tell" f_tell
++import "f_write" f_write
++import "f_tell_errors" f_tell_errors
++import "memalloc_errors" memalloc_errors
++
++function x_init(sd flags,sd path)
++	vstr err="swf started, x not closed"
++	if x_data.f!=(NULL)
++		call error(err)
++	elseif x_data.mem!=(NULL)
++		call error(err)
++	end
++	datax flag#1
++	set flag flags  ##log is on current x, here is another x, no parse, no log
++	and flag (flags_x)
++	if flag!=0
++		sd s;setcall s strlen(path)
++		sd a=2+1
++		add a s
++		sd b;setcall b memalloc(a)
++		call sprintf(b,"%s.x",path)
++
++		sd x=flag_x
++		and x flag
++		if x=0 #save
++			set x_data.f f_open_mem(b,"wb") #'b' on windows is not 't' that can change line ends and is working more there
++			and flag (debug_x_pad)
++		else #restore
++			sd file;set file f_open_mem(b,"rb")
++			call fseek(file,0,(SEEK_END))
++			set actionx.end f_tell_errors(file)
++			call fseek(file,0,(SEEK_SET))
++			set x_data.mem memalloc_errors(actionx.end,file)
++			call fread(x_data.mem,actionx.end,1,file)
++			call fclose(file)
++			set actionx.pointer x_data.mem
++			add actionx.end actionx.pointer
++			and flags (~debug_log)
++		end
++	end
++	return flags
++end
++
++function debug_x_pointers(valuex start,valuex size)
++	valuex mark#1
++	if x_data.f!=(NULL)
++		set x_data.size 0
++
++		inc size  ##is on last \0
++		sub size start
++		if x_init.flag=(debug_x_pad)
++			set mark f_tell(x_data.f) #long
++			add mark :
++			add mark size    ##overflow is same
++
++			sd pad=0xf
++			xor pad mark
++			inc pad
++			and pad 0xf
++			sd all;set all size; add all pad
++			call f_write(x_data.f,#all,:)
++		else
++			call f_write(x_data.f,#size,:)
++		end
++		set mark f_tell(x_data.f)
++		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
++		if x_init.flag=(debug_x_pad)
++			if pad!=0
++				char zero={0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0}
++				call f_write(x_data.f,#zero,pad)
++			end
++		end
++	end
++end
++
++function debug_x_base(sd mem,sd size)
++	#already wrote
++	sub size x_data.size
++	add mem x_data.size
++
++	call f_write(x_data.f,mem,size)
++	add x_data.size size
++end
++function debug_x(sd mem,sd nr)
++	if x_data.f!=(NULL)
++		mult nr (action_code_values_unit)
++		call debug_x_base(mem,nr)
++
++		call fseek(x_data.f,debug_x_pointers.mark,(SEEK_SET))
++		call fwrite(debug_x_pointers.start,debug_x_pointers.size,1,x_data.f)
++		call fseek(x_data.f,0,(SEEK_END))
++	end
++end
++
++function debug_x_preexpand(sv p_codepointer)
++	sv codepointer;set codepointer p_codepointer#
++	sd value;set value codepointer#
++	if x_data.f!=(NULL)
++		sd values;set values action_code_values()
++		sub codepointer values
++		call debug_x_base(values,codepointer)
++		incst x_data.size  ##will skip unexpanded member string at next write
++	end
++	incst p_codepointer#
++	return value
++end
++function debug_x_preexpand_inter(sd codepointer)
++	if x_data.f!=(NULL)
++		sd values;set values action_code_values()
++		sub codepointer values
++		call debug_x_base(values,codepointer)
++	end
++end
++function debug_x_expand(sd values)
++	if x_data.f!=(NULL)
++		if values!=(NULL)
++			sd size;set size action_code_get()
++			sub size values
++			call f_write(x_data.f,values,size)
++		else
++			value n=NULL
++			call f_write(x_data.f,#n,:)
++		end
++	end
++end
++
++#codepointer
++function x_call(sv pmember,sv pfname,sv codepointer)
++	if x_data.mem!=(NULL)
++		import "action_caller_right" action_caller_right
++		import "action_member_loop_right" action_member_loop_right
++		set codepointer action_caller_right(pfname,codepointer)
++		set pmember# codepointer#
++		if pmember#=(no_pointer)
++			incst codepointer ##to pass the pointer
++		else
++			set codepointer action_member_loop_right(codepointer)
++		end
++	end
++	return codepointer
++end
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -26,3 +26,16 @@ for(a[0] in a[0]){}
+ 
+ 5,9,0009
+ 1,5,
++2,5,2,,2,,2,,
++2,2,,2,,2,2,,
++3,2,5,5,2,,
++1,2,5,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2,5,2,5,
++1,2,9,,2,2,,5,,,2,2,
++1,2,5,,2,,2,,,2,,2,,
++1,2,5,0006,2,,,2,5,2,,
++1,5,5,,,2,2,,2,5,5,,,2,2,,2,2,
++1,5,5,,,2,2,,2
++1,2,,,,,2,,,,,2,,,5,,
++1,2,5,,2,2,,,,,2,,5,,,2,2,2
++1,2,,,1,1,,2,2,2,,2,2
++1,2,,5,,,1,1,,2,2,,5,2,,2
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -6,9 +6,9 @@ b24AKXt2YXIgYQB9dmFyIGkAaAApAGlmKDIAPTIA
+ AH1lbHNle3ZhciBsAH13aGlsZSgyAD0yAHt2YXIgbQB9ZgArAGYALQBmAAAyAGZvcih2YXIgbgAy
+ AG4AMwBuACsAe2JyZWFrO31mb3IodmFyIG8AaW4gYQB7Y29udGludWU7fWZvcihhADAAAGluIGEA
+ MAAAe30AAAAAAAAAAAAAAAAwMAPzCgAAAAAAAAANAAAAAAAAAAAAAAAAAAAAPgAAAAcAAAACAAAA
+-/////7u7u/sQEAHxGgAAAAAAAAAfAAAAAAAAAAAAAAAAAAAAqqqq+iQAAAAAAAAA7u7u/k8AAAAx
++/////7u7u/sQEAHxJAAAAAAAAADu7u7+GgAAAAAAAAAfAAAAAAAAAAAAAAAAAAAAqqqq+k8AAAAx
+ AAAAAAAAADYAAAAAAAAAOwAAAAAAAAAAAAAAAAAAAKqqqvocAAAAQAAAAAAAAAD/////HQAAAEUA
+-AAAAAAAAQEAE9AAAAAAAAAAASwAAAAAAAAAHAAAAAQAAAP/////u7u7+PAAAAFgAAAAAAAAAgIAI
++AAAAAAAAQEAE9EsAAAAAAAAABwAAAAEAAAD/////7u7u/gAAAAAAAAAAPAAAAFgAAAAAAAAAgIAI
+ +AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAACAAAADAAAAAcAAAACAAAADQAAAAcAAAACAAAA
+ PwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAACAAAAYgAAAAcAAAACAAAAcHAH90gAAAAA
+ AAAABwAAAAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAAcHAH90kA
+@@ -19,7 +19,7 @@ AAcAAAACAAAAZAAAAAcAAAACAAAAZQAAAAcAAAAC
+ AACqqqr6/////zwAAACuAAAAAAAAAAgAAACxAAAAAAAAAP////8dAAAAtAAAAAAAAAAHAAAAAgAA
+ AP////9BAAAAvAAAAAAAAAA7AAAAxQAAAAAAAAA6AAAAzgAAAAAAAADTAAAAAAAAAAAAAAAAAAAA
+ qqqq+h0AAADVAAAAAAAAADAwA/PfAAAAAAAAAAAAAAAAAAAAQQAAAOYAAAAAAAAAu7u7+zwAAADt
+-AAAAAAAAACAgAvIAAAAAAAAAAO8AAAAAAAAA7u7u/v////+dAAAABwAAAAIAAABwcAf3SQAAAAAA
++AAAAAAAAACAgAvLvAAAAAAAAAO7u7v4AAAAAAAAAAP////+dAAAABwAAAAIAAABwcAf3SQAAAAAA
+ AAAHAAAAAgAAAP////9BAAAAAAEAAAAAAAC7u7v7AAAAQJ0AAAAHAAAAAgAAAHBwB/dJAAAAAAAA
+ AAcAAAACAAAA/////0EAAAAVAQAAAAAAALu7u/sAAABAQQAAACEBAAAAAAAAzMzM/AIAAAAGBgUF
+ BwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAANAEAAAAAAADd3d39HQAAADcBAAAA
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -6,8 +6,8 @@ e3ZhciBhAH12YXIgaQBoACkAaWYoMgA9MgB7dmFy
+ c2V7dmFyIGwAfXdoaWxlKDIAPTIAe3ZhciBtAH1mACsAZgAtAGYAADIAZm9yKHZhciBuADIAbgAz
+ AG4AKwB7YnJlYWs7fWZvcih2YXIgbwBpbiBhAHtjb250aW51ZTt9Zm9yKGEAMAAAaW4gYQAwAAB7
+ fQAAAAAAAAAAAAAAAAAAAAAwMAPzCgAAAA0AAAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQEAHx
+-GgAAAB8AAAAAAAAAqqqq+iQAAADu7u7+TwAAADEAAAA2AAAAOwAAAAAAAACqqqr6HAAAAEAAAAD/
+-////HQAAAEUAAABAQAT0AAAAAEsAAAAHAAAAAQAAAP/////u7u7+PAAAAFgAAACAgAj4BwAAAP7/
++JAAAAO7u7v4aAAAAHwAAAAAAAACqqqr6TwAAADEAAAA2AAAAOwAAAAAAAACqqqr6HAAAAEAAAAD/
++////HQAAAEUAAABAQAT0SwAAAAcAAAABAAAA/////+7u7v4AAAAAPAAAAFgAAACAgAj4BwAAAP7/
+ //9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAA
+ AAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAA
+ AgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAH
+@@ -16,8 +16,8 @@ AABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAA
+ AAIAAAD/////BwAAAAMAAAD//////////zwAAACZAAAABgAAADMz8z8zMzMz/////zwAAACjAAAA
+ TgAAAKUAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAACqqqr6/////zwAAACuAAAACAAAALEAAAD/
+ ////HQAAALQAAAAHAAAAAgAAAP////9BAAAAvAAAADsAAADFAAAAOgAAAM4AAADTAAAAAAAAAKqq
+-qvodAAAA1QAAADAwA/PfAAAAAAAAAEEAAADmAAAAu7u7+zwAAADtAAAAICAC8gAAAADvAAAA7u7u
+-/v////+dAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAAAAEAALu7u/sAAABA
++qvodAAAA1QAAADAwA/PfAAAAAAAAAEEAAADmAAAAu7u7+zwAAADtAAAAICAC8u8AAADu7u7+AAAA
++AP////+dAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAAAAEAALu7u/sAAABA
+ nQAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAABUBAAC7u7v7AAAAQEEAAAAh
+ AQAAzMzM/AIAAAAGBgUFBwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAANAEAAN3d
+ 3f0dAAAANwEAAFAAAAAdAAAAOwEAAFEAAAAdAAAAPwEAAGBgBvZHAAAABwAAAAIAAAD/////CgoJ
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -16,4 +16,5 @@ fi
+ ${OCOMP} a.oc ${OFLAGS} logfile 0 && \
+ LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out && \
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out x
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -5,9 +5,13 @@ importx "_exit" exit
+ 
+ einclude "../dev/import.h"
+ 
+-entryraw main()
++entryraw main(sd argc)
+ 
+-call swf_new_ex("a.swf",0x80,0x80,0x001100,2,(debug_log|debug_x_pad))
++sd f=debug_log|debug_x_pad
++if argc=2
++	or f (flag_x)
++end
++call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+ 
+ call action("
+ /*
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -63,7 +63,7 @@
+ 
+ <br>Table C: <!-- action_code_parse_new_or_call<>action_code_new_or_call -->
+ <table id="selection_table">
+-	<td><span class="blue">null</span>/<span class="green">M</span></td><td class="blue">function</td><td class="green">{RG}</td><td>args_end</td>
++	<tr><td class="blue">function</td><td class="green">{RG}</td><td>args_end</td><td><span class="blue">null</span>/<span class="green">MC</span></td></tr>
+ </table>
+ 
+ <br>Table F: <!-- action_code_parse_deffunction<>action_definefunction -->
+@@ -85,10 +85,18 @@
+ 
+ <br>Table M: <!-- action_code_member<>action_member_loop -->
+ <table id="selection_table">
+-	<tr><td class="blue" rowspan=4>owner</td><td class="red" rowspan=4>{</td><td class="blue" colspan=3>member</td>                                                      <td class="red" rowspan=2>}</td></tr>
+-	<tr>                                                                     <td class="blue">no_pointer</td>      <td>square_bracket_start</td><td class="green">RG</td></tr>
+-	<tr>                                                                     <td colspan=4><!-- end is not at first iteration --></td></tr>
+-	<tr>                                                                     <td class="blue">no_pointer</td>      <td colspan=3>member_end</td></tr>
++	<tr><td class="blue" rowspan=2>owner</td><td class="green" rowspan=2>MS</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
++	<tr>                                                                                                        <td class="blue">no_pointer</td><td>member_end</td></tr>
++</table>
++<br>Table MS: <!-- same -->
++<table id="selection_table">
++	<tr><td class="blue" colspan=3>member</td></td></tr>
++	<tr><td class="blue">no_pointer</td><td>square_bracket_start</td><td class="green">RG</td></tr>
++</table>
++<br>Table MC: <!-- same -->
++<table id="selection_table">
++	<tr><td class="blue" rowspan=2>owner</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
++	<tr>                                                                     <td class="blue">no_pointer</td><td>member_end</td></tr>
+ </table>
+ 
+ <br>Table O: <!-- get_operations<>in RG loop -->
+@@ -159,4 +167,4 @@
+ 	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+ </table>
+ 
+-<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members Operation OPeration OperationCompare Right RIght RiGht RigHt RighT</div>
++<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members MemberS MembersCall Operation OPeration OperationCompare Right RIght RiGht RigHt RighT</div>
