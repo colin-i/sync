@@ -1,0 +1,1560 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+173) xenial; urgency=medium
+ .
+   * fix \\
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-25
+
+--- ocompiler-1.orig/Makefile
++++ ocompiler-1/Makefile
+@@ -1,10 +1,12 @@
+ TOPTARGETS := all install clean distclean uninstall test
+ 
++#NOOCONV ? is at debian/ocompiler.install , will install here but not in the final deb
++
+ ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), amd64)
+-SUBDIRS := src ounused ostrip
++SUBDIRS := src ounused ostrip otoc
+ conv_64=0
+ else
+-SUBDIRS := src ounused
++SUBDIRS := src ounused otoc
+ conv_64=1
+ endif
+ 
+@@ -18,12 +20,15 @@ ver=version.h
+ ${ver}:
+ 	/bin/bash ./versionscript
+ 
+-all: ${ver}
+-	#if ! [ -s ./src/obj.txt ];then
++#if ! [ -s ./src/obj.txt ];then
++verify_comp_with_link:
+ 	cd ./src; ${launcher} ../ounused/ounused ./linux/obj.oc.log
+-	#; fi
+ 	@echo
+ 
++#if only after ':' is after; if after ':' and below, one is at start the other one at end
++all: ${ver}
++	$(MAKE) verify_comp_with_link
++
+ test:
+ 	cd tests; /bin/bash ./tests
+ 
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -26,12 +26,6 @@ last=`curl https://api.github.com/repos/
+ ~/test/lp && \
+ ~/test/lp x
+ 
+-# && \
+-#sed -i '1s/jammy/bionic/' debian/changelog && \
+-#sed -i '1s/)/b)/' debian/changelog && \
+-#sed -i '1s/jammy/xenial/' debian/changelog && \
+-#sed -i '1s/)/x)/' debian/changelog && \
+-
+ #is something wrong with copy package and rebuild (maybe same with copy-package without -b)
+ #the xenial ostrip is not working, but was ok on edb testing here on jammy
+ 
+@@ -45,7 +39,6 @@ last=`curl https://api.github.com/repos/
+ #SizeofStackReserve against growramp?
+ #at write when there is at 0x80.... or at exes it is a fixed virtual
+ #there is 0x66 prefix for words and some movsw/movzw
+-#rbx at stack init (is imm32, can be 32,8 or none) but need to know the number of args
+ 
+ #info:
+ #ocompiler.conf is not overwritten if modifying it locally, "any files under the /etc directory as conffile, so if your program only has conffiles there you do not need to specify them in debian/{package}.conffiles"
+--- ocompiler-1.orig/mrd
++++ ocompiler-1/mrd
+@@ -1,6 +1,3 @@
+ 
+-if [ -n "${1}" ]; then
+-	s=SUBDIRS=src
+-	shift
+-fi
+-launcher=q LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd OFLAGS+=" function_name 1 nul_res_pref 1" make $@ linkerflags= ${s}
++make version.h && cd src && ./mrd && cd ../ounused && ./mrd && cd ../otoc && ./mrd && cd .. && launcher=q make verify_comp_with_link
++#launcher=q LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd OFLAGS+=" function_name 1 nul_res_pref 1" make $@ linkerflags= SUBDIRS="src ounused"
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -1055,14 +1055,14 @@ format elfobj64<br>
+ <table id="selection_table">
+ 	<tr><td>Xfile_arg_call_*</td><td class="red">var/fn</td></tr>
+ </table>
+-<br>Table CD:
+-<table id="selection_table">
+-	<tr><td class="green">A</td><td>Xfile_cond_*</td><td class="green">A</td></tr>
+-</table>
+ <br>Table CL:
+ <table id="selection_table">
+ 	<tr><td class="green">C</td><td class="blue">nr_of_args</td><td class="green">{A}</td></tr>
+ </table>
++<br>Table CD:
++<table id="selection_table">
++	<tr><td class="green">A</td><td>Xfile_cond_*</td><td class="green">A</td></tr>
++</table>
+ <br>Table D:
+ <table id="selection_table">
+ 	<tr><td>Xfile_declfield_const</td><td colspan=3></td>                                                                                     <td class="red" rowspan=3>name</td></tr>
+@@ -1096,7 +1096,7 @@ format elfobj64<br>
+ 	<tr>                                           <td rowspan=2>Xfile_arg_varfn_colon_yes</td><td colspan=2>Xfile_arg_varfn_dot_no</td>                                         <td class="red" rowspan=2>var</td><td rowspan=2>Xfile_suffix_*</td>
+ 	<tr>                                                                                       <td>Xfile_arg_varfn_dot_yes</td>         <td class="red">func<sup-r>f</sup-r></td></tr>
+ </table>
+-<br><div class="green">Arg Cal ConD CaLl Decl DoT <sup-r>f</sup-r> Nr <sup-r>s</sup-r> Var VarFunc</div>
++<br><div class="green">Arg Call CaLl ConD Decl DoT <sup-r>f</sup-r> Nr <sup-r>s</sup-r> Var VarFunc</div>
+ <h3><a name="otheroperations">XVI. Other operations</a></h3>
+ <p>
+ 	Other commands that comes with the language.
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy
++File ID: 1dawVCY6Eu6pnFhJfCDoVRqEv13FJ8Sn0
++<p>Found file: ./ocompiler-1-5+172.x86_64.rpm, 1dawVCY6Eu6pnFhJfCDoVRqEv13FJ8Sn0, 2024-05-25T07:14:34.777Z, 69021, https://drive.google.com/uc?id=1dawVCY6Eu6pnFhJfCDoVRqEv13FJ8Sn0&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+171.x86_64.rpm, 1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy, 2024-05-10T05:33:03.198Z, 69010, https://drive.google.com/uc?id=1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+169.x86_64.rpm, 1n_siMLq2V5krLIJ4jmQp5J48j0bb-2ii, 2024-05-04T11:17:26.109Z, 70754, https://drive.google.com/uc?id=1n_siMLq2V5krLIJ4jmQp5J48j0bb-2ii&export=download
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -39,7 +39,7 @@ OFLAGS+=${OFLAGSEXTRA}
+ number=number.h
+ 
+ number.pre.o: number.pre.oc
+-	o $< ${OFLAGS}
++	${OCOMP} $< ${OFLAGS}
+ number.pre: number.pre.o
+ 	${ATLDCOM} $@ $^
+ ${number}: number.pre
+@@ -54,8 +54,9 @@ ${prog}: ${OBJ}
+ 	${ATLDCOM} ${prog} ${FULLOBJO}
+ 
+ install: all
+-	install -D ${prog} \
+-		$(DESTDIR)$(prefix)/bin/${prog}
++	install -D ${prog} $(DESTDIR)$(prefix)/bin/${prog}
++	#if [ "${NOOCONV}" != "1" ]; then install -D ${prog} $(DESTDIR)$(prefix)/bin/${prog} && echo ${prog} is installed; else echo ${prog} is not installed; fi
++	#is at debian/ocompiler.install , will install here but not in the final deb
+ 
+ clean:
+ 	-rm -f ${FULLOBJO}
+--- ocompiler-1.orig/otoc/action.oc
++++ ocompiler-1/otoc/action.oc
+@@ -1,5 +1,7 @@
+ 
+-function action1(sv act,sv pbuffer)
++#aftercalli
++
++function action1(sv act,sv pbuffer,sd outfile)
+ 	#a from any, t from type
+ 	value functions^action_areturn
+ 	value         *^action_aexit
+@@ -14,39 +16,39 @@ function action1(sv act,sv pbuffer)
+ 	value         *^action_tsar1
+ 	mult act :
+ 	add act #functions
+-	call act(pbuffer)
++	callg act(pbuffer,outfile)
+ end
+ 
+-function action_areturn(sv pbuffer)
+-	call arg(pbuffer)
++function action_areturn(sv pbuffer,sd outfile)
++	callg arg(pbuffer,outfile)
+ end
+-function action_aexit(sv pbuffer)
+-	call arg(pbuffer)
++function action_aexit(sv pbuffer,sd outfile)
++	callg arg(pbuffer,outfile)
+ end
+-function action_tinc(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tinc(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tincst(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tincst(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tdec(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tdec(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tdecst(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tdecst(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tneg(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tneg(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tnot(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tnot(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tshl1(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tshl1(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tshr1(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tshr1(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+-function action_tsar1(sv pbuffer)
+-	call varfunc(pbuffer)
++function action_tsar1(sv pbuffer,sd outfile)
++	callg varfunc(pbuffer,outfile)
+ end
+--- /dev/null
++++ ocompiler-1/otoc/ascii.h
+@@ -0,0 +1,29 @@
++
++const asciinul=0x0
++const asciinewline=0xa
++const asciispace=0x20
++const asciidquote=0x22
++const asciiasterisk=0x2a
++const asciiparenthesisleft=0x28
++const asciiparenthesisright=0x29
++const asciicomma=0x2c
++const asciidot=0x2e
++const asciislash=0x2f
++const asciisemicolon=0x3b
++const asciiequal=0x3d
++const asciiunderscore=0x5f
++const asciia=0x61
++const asciib=0x62
++const asciic=0x63
++const asciid=0x64
++const asciii=0x69
++const asciil=0x6c
++const asciin=0x6e
++const asciio=0x6f
++const asciip=0x70
++const asciir=0x72
++const asciit=0x74
++const asciiu=0x75
++const asciiv=0x76
++const asciicurlyleft=0x7b
++const asciicurlyright=0x7d
+--- ocompiler-1.orig/otoc/decl.oc
++++ ocompiler-1/otoc/decl.oc
+@@ -1,43 +1,26 @@
+ 
+-function functiondef_intern(sv pbuffer)
++#aftercalli
++
++function functiondef_intern(sv pbuffer,sd outfile)
+ 	datax args#1;call get_data(pbuffer,#args)
+-	sd n=0;while n!=args
+-		call decl(pbuffer)
+-		inc n
++	if args>=^1
++		call decl(pbuffer,outfile)
++		sd n=1;while n!=args
++			call writec(outfile)
++			call decl(pbuffer,outfile)
++			inc n
++		end
+ 	end
+ end
+ #function functiondef_raw(sv pbuffer)
+-function functiondef_extern(sv pbuffer)
++function functiondef_extern(sv pbuffer,sd outfile)
+ 	charx e#1;call get_char(pbuffer,#e)
+-	call functiondef_intern(pbuffer)
++	callg functiondef_intern(pbuffer,outfile)
+ end
+ #function functiondef_entry(sv pbuffer)
+ 
+-#A structure
+-function arg(sv pbuffer)
+-	charx a#1;call get_char(pbuffer,#a)
+-	if a=(Xfile_arg_number)
+-		call number(pbuffer)
+-	elseif a=(Xfile_arg_varfn)
+-		call varfunc(pbuffer)
+-	elseif a=(Xfile_arg_string)
+-		datax sz#1;valuex pointer#1
+-		call get_string(pbuffer,#sz,#pointer)
+-	else #Xfile_arg_call
+-		call cll(pbuffer)
+-	end
+-end
+-
+-#CD structure
+-function cond(sv pbuffer,sd output)
+-	call arg(pbuffer)
+-	charx cnd#1;call get_char(pbuffer,#cnd)
+-	call arg(pbuffer)
+-	callg writen(output,"{",1)
+-end
+-
+ #D structure
+-function decl(sv pbuffer)
++function decl(sv pbuffer,sd outfile)
+ 	charx field#1;call get_char(pbuffer,#field)
+ 	if field!=(Xfile_declfield_const)
+ 		if field=(Xfile_declfield_data)
+@@ -48,11 +31,7 @@ function decl(sv pbuffer)
+ 	end
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+-end
+-
+-#DoT
+-function dot(sv pbuffer)
+-	datax sz#1;valuex pointer#1
+-	call get_string(pbuffer,#sz,#pointer)
+-	call var(pbuffer)
++	char d={asciii,asciin,asciit,asciispace}
++	call write(outfile,#d,4)
++	callg write(outfile,pointer,sz)
+ end
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -9,15 +9,25 @@ importx "free" free
+ const SEEK_CUR=1
+ const SEEK_END=2
+ 
++const FALSE=0
++const TRUE=1
++
+ include "xfile.h"
+ #const Xfile_last=Xfile_line
+ const Xfile_aftercall_declarative=Xfile_aftercall_import # less or equal
++include "ascii.h"
+ 
+ datax result#1
+ 
+ function loop(sd pointer,sd delim,sd output)
+ 	valuex bp#1
+ 	base bp
++
++	charx allowwrite#1
++	set allowwrite (TRUE)
++	charx directwrite#1
++	set directwrite (TRUE)
++
+ 	add delim pointer
+ 	while pointer!=delim
+ 		charx command#1;call get_char(#pointer,#command)
+@@ -68,10 +78,15 @@ function preloop(sd input,sd output)
+ 		if buffer!=(NULL)
+ 			sd r;set r fread(buffer,size,1,input)
+ 			if r=1
+-				set main.result (EXIT_SUCCESS)
+-				call loop(buffer,size,output)
+-				if main.result=(EXIT_SUCCESS)
+-					callg writen(output,"}",1)
++				set r mems()
++				if r=(TRUE)
++					set main.result (EXIT_SUCCESS)
++					call loop(buffer,size,output)
++					if main.result=(EXIT_SUCCESS)
++						char d=asciicurlyright
++						callg writen(output,#d,1)
++					end
++					call memfree()
+ 				end
+ 			end
+ 			call free(buffer)
+@@ -100,30 +115,36 @@ end
+ 
+ importx "fwrite" fwrite
+ 
+-include "decl.oc"
+-include "number.oc"
+-include "var.oc"
+-include "action.oc"
+-
+-#aftercalli *
+ function aftercallenable()
+ 	set main.result (EXIT_FAILURE)
+ 	leave loop.bp
+ 	#aftercallenable
+ end
+ 
++include "mem.oc"
++
++#aftercalli *
++
++include "action.oc"
++include "decl.oc"
++include "number.oc"
++include "var.oc"
++
+ function comment(sd outfile,sv pbuffer)
+-	call write(outfile,"//",2)
++	char a={asciislash,asciislash}
++	call write(outfile,#a,2)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+ 	callg writen(outfile,pointer,sz)
+ end
+ function commentmulti(sd outfile,sv pbuffer)
+-	call write(outfile,"/*",2)
++	char b=asciiasterisk
++	char a={asciislash,asciiasterisk}
++	call write(outfile,#a,2)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+ 	call write(outfile,pointer,sz)
+-	callg writen(outfile,"*/",2)
++	callg writen(outfile,#b,2)
+ end
+ function commentlineend(sd outfile,sv pbuffer)
+ 	call fseek(outfile,-1,(SEEK_CUR)) #this one and line command
+@@ -133,17 +154,20 @@ function format(sd *outfile,sv pbuffer)
+ 	charx fmt#1;call get_char(pbuffer,#fmt)
+ end
+ function end(sd outfile)
+-	callg writen(outfile,"}",1)
++	char a=asciicurlyright
++	callg writen(outfile,#a,1)
+ end
+ function interrupt(sd outfile)
+ 	#this is not arm #char a="__asm__(\"int $3\");"
+ 	#this is no x86 #__asm__("BKPT");
+-	char a="__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+-	callg writen(outfile,#a,\interrupt.a-1)
++	char a={asciiunderscore,asciiunderscore,asciib,asciiu,asciii,asciil,asciit,asciii,asciin,asciiunderscore,asciit,asciir,asciia,asciip,asciiparenthesisleft,asciiparenthesisright,asciisemicolon}
++	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
++	callg writen(outfile,#a,\interrupt.a)
+ end
+ function line(sd outfile)
+ 	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
+-	callg write(outfile,";",1)
++	char a=asciisemicolon
++	callg write(outfile,#a,1)
+ end
+ 
+ #need write
+@@ -158,13 +182,12 @@ function include(sd output,sv pbuffer)
+ end
+ function functiondef(sd outfile,sv pbuffer)
+ #at least arguments write
+-	call write(outfile,"void ",5)
+-
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+-	call write(outfile,pointer,sz)
++	call write_void(outfile,pointer,sz)
+ 
+-	call write(outfile,"(",1)
++	char b=asciiparenthesisleft
++	call write(outfile,#b,1)
+ 
+ 	value intern^functiondef_intern
+ 	value *raw^functiondef_intern       #functiondef_raw
+@@ -174,61 +197,81 @@ function functiondef(sd outfile,sv pbuff
+ 	mult type :
+ 	sv dest^intern;add dest type
+ 	set dest dest#
+-	call dest(pbuffer)
++	call dest(pbuffer,outfile)
+ 
+-	callg writen(outfile,"){",2)
++	char c={asciiparenthesisright,asciicurlyleft}
++	callg writen(outfile,#c,2)
+ end
+-function declare(sd *outfile,sv pbuffer)
+-	call decl(pbuffer)
++function declare(sd outfile,sv pbuffer)
++	call decl(pbuffer,outfile)
+ 	datax sz#1;valuex pointer#1
+ 	charx sign#1;call get_char(pbuffer,#sign)
+ 	if sign=(Xfile_declsign_reserve)
+-		call number(pbuffer)
++		call number(pbuffer,outfile)
+ 	elseif sign=(Xfile_declsign_pointer)
+ 		call get_string(pbuffer,#sz,#pointer)
+ 	else #Xfile_declsign_e*
+ 		charx mode#1;call get_char(pbuffer,#mode)
+ 		if mode=(Xfile_declmode_value)
+-			call number(pbuffer)
++			call number(pbuffer,outfile)
+ 		elseif mode=(Xfile_declmode_group)
+ 			datax args#1;call get_data(pbuffer,#args)
+ 			sd n=0;while n!=args
+-				call number(pbuffer)
++				call number(pbuffer,outfile)
+ 				inc n
+ 			end
+ 		else #Xfile_declmode_string
+ 			call get_string(pbuffer,#sz,#pointer)
+ 		end
+ 	endelse
++	callg writetn(outfile)
+ end
+-function action(sd *outfile,sv pbuffer)
++function action(sd outfile,sv pbuffer)
+ 	charx act#1;call get_char(pbuffer,#act)
+-	call action1(act)
++	callg action1(act,outfile)
+ end
+-function action2(sd *outfile,sv pbuffer)
+-	call varfunc(pbuffer)
++function action2(sd outfile,sv pbuffer)
++	call varfunc(pbuffer,outfile)
+ 	charx a2#1;call get_char(pbuffer,#a2)
+-	call arg(pbuffer)
++
++	if a2!=(Xfile_action2_set)
++		if a2=(Xfile_action2_divu)
++			set a2 (Xfile_action2_div)
++		elseif a2=(Xfile_action2_remu)
++			set a2 (Xfile_action2_rem)
++		end
++		call write(outfile,#a2,1)
++	end
++	char a=asciiequal
++	call write(outfile,#a,1)
++
++	call arg(pbuffer,outfile)
++	callg writetn(outfile)
+ end
+-function call(sd *outfile,sv pbuffer)
++function call(sd outfile,sv pbuffer)
+ 	char c#1;call get_char(pbuffer,#c)
+-	call cll(pbuffer)
++	call cll(pbuffer,outfile)
++	callg writetn(outfile)
+ end
+-function callex(sd *outfile,sv pbuffer)
++function callex(sd outfile,sv pbuffer)
++	set loop.allowwrite (FALSE)  #at some structures is complicated
+ 	char c#1;call get_char(pbuffer,#c)
+-	call cal(pbuffer)
+-	call varfunc(pbuffer)
+-	call arg(pbuffer)
++	call cal(pbuffer,outfile)
++	call varfunc(pbuffer,outfile)
++	call arg(pbuffer,outfile)
++	call writetn(outfile)
++	set loop.allowwrite (TRUE)
+ end
+ function if(sd outfile,sv pbuffer)
+-	call cond(pbuffer,outfile)
++	callg cond(pbuffer,outfile)
+ end
+ function else()
+ end
+ function while(sd outfile,sv pbuffer)
+-	call cond(pbuffer,outfile)
++	callg cond(pbuffer,outfile)
+ end
+-function whiletrue()
++function whiletrue(sd outfile)
++	callg writen(outfile,"{",1)
+ end
+ function break()
+ end
+@@ -240,12 +283,17 @@ function library(sd *outfile,sv pbuffer)
+ 	datax sz#1;valuex lib#1
+ 	call get_string(pbuffer,#sz,#lib)
+ end
+-function import(sd *outfile,sv pbuffer)
++function import(sd outfile,sv pbuffer)
+ 	charx imp#1;call get_char(pbuffer,#imp)
+ 	datax sz#1;valuex name#1
+ 	call get_string(pbuffer,#sz,#name)
+ 	datax sza#1;valuex alias#1
+ 	call get_string(pbuffer,#sza,#alias)
++
++	call write_void(outfile,alias,sza)
++	char a={asciiparenthesisleft,asciiparenthesisright}
++	call write(outfile,#a,2)
++	callg writetn(outfile)
+ end
+ function aftercall(sd *outfile,sv pbuffer)
+ 	charx acall#1;call get_char(pbuffer,#acall)
+@@ -257,10 +305,10 @@ function aftercall(sd *outfile,sv pbuffe
+ 		end
+ 	end
+ end
+-function hex(sd *outfile,sv pbuffer)
++function hex(sd outfile,sv pbuffer)
+ 	datax args#1;call get_data(pbuffer,#args)
+ 	sd n=0;while n!=args
+-		call number(pbuffer)
++		call number(pbuffer,outfile)
+ 		inc n
+ 	end
+ end
+@@ -273,18 +321,38 @@ function orphan(sd *outfile,sv pbuffer)
+ 	charx orph#1;call get_char(pbuffer,#orph)
+ end
+ 
++function write(sd outfile,ss buf,sd sz)
++	if loop.allowwrite=(TRUE)
++		sd items
++		if loop.directwrite=(TRUE)
++			set items fwrite(buf,sz,1,outfile)
++		else
++			set items mwrite(buf,sz,outfile)
++		end
++		if items!=1
++			call aftercallenable()
++		end
++	end
++end
+ function writen(sd outfile,ss buf,sd sz)
+ 	call write(outfile,buf,sz)
+-
+-	sd items;set items fwrite("\n",1,1,outfile)
+-	if items!=1
+-		call aftercallenable() #at aftercall was without enable because was no more code to follow
+-	end
++	char n=asciinewline
++	callg write(outfile,#n,1)
+ end
+-
+-function write(sd outfile,ss buf,sd sz)
+-	sd items;set items fwrite(buf,sz,1,outfile)
+-	if items!=1
+-		callret aftercallenable()
+-	end
++function writetn(sd outfile) #terminator newline
++	char sc=asciisemicolon
++	callg writen(outfile,#sc,1)
++end
++function writec(sd outfile)
++	char c=asciicomma
++	callg write(outfile,#c,1)
++end
++function writeq(sd outfile)
++	char q=asciidquote
++	callg write(outfile,#q,1)
++end
++function write_void(sd outfile,sd pointer,sd size)
++	char a={asciiv,asciio,asciii,asciid,asciispace}
++	call write(outfile,#a,5)
++	callg write(outfile,pointer,size)
+ end
+--- /dev/null
++++ ocompiler-1/otoc/mem.oc
+@@ -0,0 +1,64 @@
++
++importx "realloc" realloc
++importx "memcpy" memcpy
++
++function mems()
++const _mem_allocs=\\
++	valuex carg#1      #call arg
++	valuex *#1
++	valuex carg_size#1
++	valuex cargx#1     #call arg index
++	valuex *#1
++	valuex cargx_size#1
++const mem_allocs=\\-_mem_allocs
++	valuex ender#1
++	set ender (NULL)
++
++	sv p%%_mem_allocs
++	sd e=mem_allocs;add e p
++	while p!=e
++		set p# (NULL)
++		set p# malloc(1) #malloc(0) can be NULL, or another fault can be if is not unique
++		if p#=(NULL)
++			return (FALSE)
++		end
++		incst p;set p# 1
++		add p :*2
++	end
++	return (TRUE)
++end
++
++function memfree()
++	sv p%%_mem_allocs
++	while p#!=(NULL)
++		call free(p#)
++		add p :*3
++	end
++end
++
++function mwrite(sd buf,sd bufsize,sv pcont)
++	sd mem;set mem pcont#
++	incst pcont
++	sd allsize;set allsize pcont#
++	incst pcont
++	sd size;set size pcont#
++
++	add size bufsize
++	if size>^allsize
++		set allsize size
++		add allsize 0x100
++		set mem realloc(mem,allsize)
++		if mem=(NULL)
++			return 0
++		end
++		decst pcont
++		set pcont# allsize
++		decst pcont
++		set pcont# mem
++		add pcont :+:
++	end
++	add mem pcont#
++	call memcpy(mem,buf,bufsize)
++	set pcont# size
++	return 1
++end
+--- ocompiler-1.orig/otoc/number.oc
++++ ocompiler-1/otoc/number.oc
+@@ -1,7 +1,9 @@
+ 
++#aftercalli
++
+ #N structure
+ 
+-function number(sv pbuffer)
++function number(sv pbuffer,sd outfile)
+ include "number.h"
+ 	charx item#1;call get_char(pbuffer,#item)
+ 	while item!=(Xfile_numbers_done)
+@@ -15,12 +17,12 @@ include "number.h"
+ 		mult f :
+ 		add f #functions
+ 		set f f#
+-		call f(pbuffer)
++		call f(pbuffer,outfile)
+ 		call get_char(pbuffer,#item)
+ 	end
+ end
+ 
+-function numbertype(sv pbuffer)
++function numbertype(sv pbuffer,sd outfile)
+ 	value functions^number_int_long
+ 	value         *^number_int_data
+ 	value         *^number_int_datax
+@@ -37,15 +39,16 @@ function numbertype(sv pbuffer)
+ 	sv f^functions
+ 	add f type
+ 	set f f#
+-	call f(pbuffer)
++	callg f(pbuffer,outfile)
+ end
+ 
+ function number_int_long();end
+ function number_int_data();end
+ function number_int_datax();end
+-function number_text_dec(sv pbuffer)
++function number_text_dec(sv pbuffer,sd outfile)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
++	callg write(outfile,pointer,sz)
+ end
+ function number_text_oct(sv pbuffer)
+ 	datax sz#1;valuex pointer#1
+@@ -67,24 +70,24 @@ function number_func_sizex(sv pbuffer)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+ end
+-function number_var_size(sv pbuffer)
+-	call dot(pbuffer)
++function number_var_size(sv pbuffer,sd outfile)
++	callg dot(pbuffer,outfile)
+ end
+-function number_var_offset(sv pbuffer)
+-	call dot(pbuffer)
++function number_var_offset(sv pbuffer,sd outfile)
++	callg dot(pbuffer,outfile)
+ end
+ 
+-function normal(sv pbuffer)
+-	call numbertype(pbuffer)
++function normal(sv pbuffer,sd outfile)
++	callg numbertype(pbuffer,outfile)
+ end
+-function neg(sv pbuffer)
+-	call numbertype(pbuffer)
++function neg(sv pbuffer,sd outfile)
++	callg numbertype(pbuffer,outfile)
+ end
+-function not(sv pbuffer)
+-	call numbertype(pbuffer)
++function not(sv pbuffer,sd outfile)
++	callg numbertype(pbuffer,outfile)
+ end
+-function notneg(sv pbuffer)
+-	call numbertype(pbuffer)
++function notneg(sv pbuffer,sd outfile)
++	callg numbertype(pbuffer,outfile)
+ end
+ function open();end
+ function close();end
+--- ocompiler-1.orig/otoc/otoc.oc
++++ ocompiler-1/otoc/otoc.oc
+@@ -5,10 +5,6 @@ const EXIT_SUCCESS=0
+ const EXIT_FAILURE=1
+ const NULL=0
+ 
+-Const asciinul=0x0
+-Const asciidot=0x2E
+-Const asciic=0x63
+-
+ importx "puts" puts
+ importx "fopen" fopen
+ importx "fclose" fclose
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -1,25 +1,105 @@
+ 
++#aftercalli
++
++#A structure
++function arg(sv pbuffer,sd outfile)
++	charx a#1;call get_char(pbuffer,#a)
++	if a=(Xfile_arg_number)
++		call number(pbuffer,outfile)
++	elseif a=(Xfile_arg_varfn)
++		call varfunc(pbuffer,outfile)
++	elseif a=(Xfile_arg_string)
++		datax sz#1;valuex pointer#1
++		call get_string(pbuffer,#sz,#pointer)
++		call writeq(outfile)
++		call write(outfile,pointer,sz)
++		call writeq(outfile)
++	else #Xfile_arg_call
++		callg cll(pbuffer,outfile)
++	end
++end
++
+ #C structure
+-function cal(sv pbuffer)
++function cal(sv pbuffer,sd outfile)
+ 	char arg_call#1;call get_char(pbuffer,#arg_call)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
++	callg write(outfile,pointer,sz)
+ end
+ 
+ #CL structure
+-function cll(sv pbuffer)
+-	call cal(pbuffer)
++function cll(sv pbuffer,sd outfile)
++	call cal(pbuffer,outfile)
++	char a=asciiparenthesisleft
++	call write(outfile,#a,1)
+ 	datax args#1;call get_data(pbuffer,#args)
+-	sd n=0;while n!=args
+-		call arg(pbuffer)
+-		inc n
++	if args>=^1
++	#need to reverse the push order
++		set loop.directwrite (FALSE)
++		set mems.carg_size 0
++		set mems.cargx_size 0
++
++		call carg_stamp()
++		call arg(pbuffer,#mems.carg)
++		call carg_stamp()
++		sd n=1;while n!=args
++			call arg(pbuffer,#mems.carg)
++			call carg_stamp()
++			inc n
++		end
++		set loop.directwrite (TRUE)
++		call carg_resolve(outfile)
++	end
++	char b=asciiparenthesisright
++	callg write(outfile,#b,1)
++end
++function carg_stamp()
++	sd r;set r mwrite(#mems.carg_size,:,#mems.cargx)
++	if r!=1
++		call aftercallenable()
+ 	end
+ end
++function carg_resolve(sd outfile)
++	sv cursor;set cursor mems.cargx_size
++	add cursor mems.cargx
++	decst cursor
++	sd right;set right cursor#
++	decst cursor
++	call carg_resolve_one(cursor#,right,outfile)
++	while mems.cargx!=cursor
++		call writec(outfile)
++		set right cursor#
++		decst cursor
++		call carg_resolve_one(cursor#,right,outfile)
++	end
++end
++function carg_resolve_one(sv left,sv right,sd outfile)
++	sub right left
++	add left mems.carg
++	callg write(outfile,left,right)
++end
++
++#CD structure
++function cond(sv pbuffer,sd outfile)
++	call arg(pbuffer,outfile)
++	charx cnd#1;call get_char(pbuffer,#cnd)
++	call arg(pbuffer,outfile)
++	char a=asciicurlyleft
++	callg writen(outfile,#a,1)
++end
++
++#DoT
++function dot(sv pbuffer,sd outfile)
++	datax sz#1;valuex pointer#1
++	call get_string(pbuffer,#sz,#pointer)
++	callg var(pbuffer,outfile)
++end
+ 
+ #V structure
+-function var(sv pbuffer)
++function var(sv pbuffer,sd outfile)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
++	call write(outfile,pointer,sz)
+ 	charx suffix#1;call get_char(pbuffer,#suffix)
+ 	if suffix=(Xfile_suffix_true)
+ 		charx cast#1;call get_char(pbuffer,#cast)
+@@ -28,7 +108,7 @@ function var(sv pbuffer)
+ end
+ 
+ #VF structure
+-function varfunc(sv pbuffer)
++function varfunc(sv pbuffer,sd outfile)
+ 	charx prefix#1;call get_char(pbuffer,#prefix)
+ 	charx colon#1;call get_char(pbuffer,#colon)
+ 	if colon=(Xfile_arg_varfn_colon_yes)
+@@ -43,8 +123,8 @@ function varfunc(sv pbuffer)
+ 	end
+ 	charx d#1;call get_char(pbuffer,#d)
+ 	if d=(Xfile_arg_varfn_dot_no)
+-		call var(pbuffer)
++		call var(pbuffer,outfile)
+ 	else
+-		call dot(pbuffer)
++		callg dot(pbuffer,outfile)
+ 	end
+ end
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-1/src/files/functions/actions/dataparse.oc
+@@ -45,7 +45,7 @@ function get_dataSize()
+ 	vdata ptr_nobits_virtual%ptr_nobits_virtual
+ 	if ptr_nobits_virtual#=(Yes)
+ 		#this is here because this function is called from fndecargs and from simple declare add reference
+-		vdata ptr_nobitsDataStart%ptr_nobitsDataStart
++		vdata ptr_nobitsDataStart%%ptr_nobitsDataStart
+ 		sub reg ptr_nobitsDataStart#
+ 	endif
+ 	return reg
+--- ocompiler-1.orig/src/files/headers/ascii.h
++++ ocompiler-1/src/files/headers/ascii.h
+@@ -6,24 +6,36 @@ Const asciitab=0x9
+ Const asciireturn=0xa
+ Const asciicarriage=0xd
+ Const asciispace=0x20
++Const asciiexclamationmark=0x21
+ Const asciidoublequote=0x22
+ Const asciinumber=0x23
++Const asciipercent=0x25
++Const asciiand=0x26
+ Const asciiparenthesisstart=0x28
+ Const asciiparenthesisend=0x29
++Const asciiast=0x2A
+ Const asciicomma=0x2C
++Const asciiminus=0x2D
+ Const asciidot=0x2E
++Const asciislash=0x2F
+ Const asciizero=0x30
+ Const asciione=0x31
+ Const asciithree=0x33
+ Const asciieight=0x38
+ Const asciinine=0x39
++Const asciicolon=0x3A
+ Const asciisemicolon=0x3B
++Const asciiequal=0x3D
+ Const asciiaround=0x40
+ Const asciiA=0x41
+ Const asciiE=0x45
+ Const asciiF=0x46
++Const asciiL=0x4C
+ Const asciiZ=0x5A
++Const asciibs=0x5C
++Const asciicirc=0x5E
+ Const asciiunderscore=0x5F
++Const asciia=0x61
+ Const asciif=0x66
+ Const asciin=0x6E
+ Const asciir=0x72
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -279,7 +279,7 @@ Data datasecSize#1
+ const ptrdataSize^datasecSize
+ 
+ #when taking offset at nobits
+-data nobitsDataStart#1
++datax nobitsDataStart#1
+ const ptr_nobitsDataStart^nobitsDataStart
+ 
+ #fileformat#
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -2,8 +2,6 @@
+ const Xfile_sz_char=1
+ const Xfile_sz_int=4
+ 
+-Include "./xfileascii.h"
+-
+ const Xfile_comment=0
+ const Xfile_commentmulti=1
+ const Xfile_commentlineend=2
+@@ -86,39 +84,75 @@ const Xfile_numbers_parenthesis_close=0x
+ const Xfile_numbers_done=0x1f
+ # ! is 33(0x21 0x20 is space) is an operation
+ 
++#!
++Const asciiexclamationmark=0x21
++Const asciidollar=0x24
++Const asciipercent=0x25
++Const asciiand=0x26
++Const asciiast=0x2A
++Const asciiplus=0x2B
++Const asciiminus=0x2D
++Const asciislash=0x2F
++Const asciicolon=0x3A
++Const asciiless=0x3C
++Const asciiequal=0x3D
++Const asciigreater=0x3E
++Const asciiD=0x44
++Const asciiE=0x45
++Const asciiG=0x47
++Const asciiL=0x4C
++Const asciiR=0x52
++Const asciiS=0x53
++Const asciiU=0x55
++Const asciiV=0x56
++Const asciileftsquareBracket=0x5B
++Const asciibs=0x5C
++Const asciirightsquareBracket=0x5D
++Const asciicirc=0x5E
++Const asciia=0x61
++Const asciie=0x65
++Const asciig=0x67
++Const asciil=0x6C
++Const asciio=0x6F
++Const asciip=0x70
++Const asciiu=0x75
++Const asciivbar=0x7C
++Const asciirightcurlyBracket=0x7D
++!
++
+ # ! $ % ^ & * - =+
+ # e uU o p [ ]}
+ # a gG lL : \|
+ # < > /
+ #Const unreadyNumber=0
+-const Xfile_numbers_operation_add=asciiplus               #parsed at spelling
+-const Xfile_numbers_operation_sub=asciiminus              #parsed at spelling
+-const Xfile_numbers_operation_mul=asciiast                #parsed at spelling
+-const Xfile_numbers_operation_div=asciislash              #parsed at spelling
+-const Xfile_numbers_operation_divu=asciibs
+-const Xfile_numbers_operation_and=asciiand                #parsed at spelling
+-const Xfile_numbers_operation_or=asciivbar                #parsed at spelling
+-const Xfile_numbers_operation_xor=asciicirc               #parsed at spelling
+-const Xfile_numbers_operation_pow=asciidollar             #parsed at spelling
+-const Xfile_numbers_operation_rem=asciipercent            #parsed at spelling
+-const Xfile_numbers_operation_remu=asciicolon
+-const Xfile_numbers_operation_shl=asciileftsquareBracket
+-const Xfile_numbers_operation_sar=asciirightsquareBracket
+-const Xfile_numbers_operation_shr=asciirightcurlyBracket  #const Xfile_numbers_last is Xfile_numbers_operation_shr #const Xfile_numbers_notmapped is 0xff # 0x7f DEL 0x7E ~ this is 0x7D
+-const Xfile_numbers_operation_equal=asciiequal            #parsed at spelling
+-const Xfile_numbers_operation_inequal=asciie
+-const Xfile_numbers_operation_less=asciiless              #parsed at spelling
+-const Xfile_numbers_operation_greater=asciigreater        #parsed at spelling
+-const Xfile_numbers_operation_lessequal=asciiL
+-const Xfile_numbers_operation_greaterequal=asciiG
+-const Xfile_numbers_operation_logicaland=asciia
+-const Xfile_numbers_operation_logicalor=asciio
+-const Xfile_numbers_operation_unsignedless=asciiu
+-const Xfile_numbers_operation_unsignedgreater=asciiU
+-const Xfile_numbers_operation_unsignedlessequal=asciil
+-const Xfile_numbers_operation_unsignedgreaterequal=asciig
+-const Xfile_numbers_operation_parity=asciiexclamationmark #parsed at spelling
+-const Xfile_numbers_operation_odd=asciip
++const Xfile_numbers_operation_add=0x2B                    #parsed at spelling, asciiplus
++const Xfile_numbers_operation_sub=0x2D                    #parsed at spelling, asciiminus
++const Xfile_numbers_operation_mul=0x2A                    #parsed at spelling, asciiast
++const Xfile_numbers_operation_div=0x2F                    #parsed at spelling, asciislash
++const Xfile_numbers_operation_divu=0x5C                   # asciibs
++const Xfile_numbers_operation_and=0x26                    #parsed at spelling, asciiand
++const Xfile_numbers_operation_or=0x7C                     #parsed at spelling, asciivbar
++const Xfile_numbers_operation_xor=0x5E                    #parsed at spelling, asciicirc
++const Xfile_numbers_operation_pow=0x24                    #parsed at spelling, asciidollar
++const Xfile_numbers_operation_rem=0x25                    #parsed at spelling, asciipercent
++const Xfile_numbers_operation_remu=0x3A                   #asciicolon
++const Xfile_numbers_operation_shl=0x5B                    # asciileftsquareBracket
++const Xfile_numbers_operation_sar=0x5D                    # asciirightsquareBracket
++const Xfile_numbers_operation_shr=0x7D  #const Xfile_numbers_last is Xfile_numbers_operation_shr #const Xfile_numbers_notmapped is 0xff # 0x7f DEL 0x7E ~ asciirightcurlyBracket is 0x7D
++const Xfile_numbers_operation_equal=0x3D                  #parsed at spelling, asciiequal
++const Xfile_numbers_operation_inequal=0x65                # asciie
++const Xfile_numbers_operation_less=0x3C                   #parsed at spelling, asciiless
++const Xfile_numbers_operation_greater=0x3E                #parsed at spelling, asciigreater
++const Xfile_numbers_operation_lessequal=0x4C              # asciiL
++const Xfile_numbers_operation_greaterequal=0x47           # asciiG
++const Xfile_numbers_operation_logicaland=0x61             # asciia
++const Xfile_numbers_operation_logicalor=0x6F              # asciio
++const Xfile_numbers_operation_unsignedless=0x75           # asciiu
++const Xfile_numbers_operation_unsignedgreater=0x55        # asciiU
++const Xfile_numbers_operation_unsignedlessequal=0x6C      # asciil
++const Xfile_numbers_operation_unsignedgreaterequal=0x67   # asciig
++const Xfile_numbers_operation_parity=0x21                 #parsed at spelling, asciiexclamationmark
++const Xfile_numbers_operation_odd=0x70                    # asciip
+ 
+ #i from int
+ const Xfile_numbers_type_ilong=0
+@@ -140,9 +174,9 @@ const Xfile_suffix_false=0
+ const Xfile_suffix_true=1
+ const Xfile_suffix_notasuffix=2       # hacky way to see a function fast, instead of searching through all functions
+ const Xfile_suffix_cast_none=0
+-const Xfile_suffix_cast_value=asciiV
+-const Xfile_suffix_cast_data=asciiD
+-const Xfile_suffix_cast_string=asciiS
++const Xfile_suffix_cast_value=0x56    # asciiV
++const Xfile_suffix_cast_data=0x44     # asciiD
++const Xfile_suffix_cast_string=0x53   # asciiS
+ 
+ #a from any, t from type
+ const Xfile_action_areturn=0
+@@ -176,17 +210,17 @@ const Xfile_arg_call_normal=0x
+ const Xfile_arg_call_extern=0x1
+ const Xfile_arg_call_skipaftercall=0x2
+ 
+-const Xfile_action2_set=0
+-const Xfile_action2_add=1
+-const Xfile_action2_sub=2
+-const Xfile_action2_mult=3
+-const Xfile_action2_div=4
+-const Xfile_action2_divu=5
+-const Xfile_action2_rem=6
+-const Xfile_action2_remu=7
+-const Xfile_action2_and=8
+-const Xfile_action2_or=9
+-const Xfile_action2_xor=10
++const Xfile_action2_set=0x45  # asciiE
++const Xfile_action2_add=0x2B  # asciiplus
++const Xfile_action2_sub=0x2D  # asciiminus
++const Xfile_action2_mult=0x2A # asciiast
++const Xfile_action2_div=0x2F  # asciislash
++const Xfile_action2_divu=0x44 # asciiD
++const Xfile_action2_rem=0x25  # asciipercent
++const Xfile_action2_remu=0x52 # asciiR
++const Xfile_action2_and=0x26  # asciiand
++const Xfile_action2_or=0x7C   # asciivbar
++const Xfile_action2_xor=0x5E  # asciicirc
+ 
+ const Xfile_call_normal=0
+ const Xfile_call_ret=1
+--- ocompiler-1.orig/src/files/headers/xfileascii.h
++++ /dev/null
+@@ -1,32 +0,0 @@
+-
+-Const asciiexclamationmark=0x21
+-Const asciidollar=0x24
+-Const asciipercent=0x25
+-Const asciiand=0x26
+-Const asciiast=0x2A
+-Const asciiplus=0x2B
+-Const asciiminus=0x2D
+-Const asciislash=0x2F
+-Const asciicolon=0x3A
+-Const asciiless=0x3C
+-Const asciiequal=0x3D
+-Const asciigreater=0x3E
+-Const asciiD=0x44
+-Const asciiG=0x47
+-Const asciiL=0x4C
+-Const asciiS=0x53
+-Const asciiU=0x55
+-Const asciiV=0x56
+-Const asciileftsquareBracket=0x5B
+-Const asciibs=0x5C
+-Const asciirightsquareBracket=0x5D
+-Const asciicirc=0x5E
+-Const asciia=0x61
+-Const asciie=0x65
+-Const asciig=0x67
+-Const asciil=0x6C
+-Const asciio=0x6F
+-Const asciip=0x70
+-Const asciiu=0x75
+-Const asciivbar=0x7C
+-Const asciirightcurlyBracket=0x7D
+--- ocompiler-1.orig/src/files/inits/inits.oc
++++ ocompiler-1/src/files/inits/inits.oc
+@@ -91,7 +91,7 @@ call resetisimm()
+ #this is init at main.oc and used after that
+ #but since #! needed at first pass too
+ set datasecSize 0
+-#set nobitssecReg 0
++set nobitsDataStart 0   #at dtnb when using \\ will require this at pass init
+ 
+ sd p_b
+ setcall p_b is_for_64_is_impX_or_fnX_p_get()
+--- /dev/null
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -0,0 +1,35 @@
++/*
++multi
++line
++*/
++//not blank for deb pack. char *="1\03" is not working (src->binary is creating fuzz at deb)
++int c11;
++int c223;
++int c3;
++int a3;
++int b;
++void intern(int a,int b){//commenting
++}
++void f();
++void main(){
++a=a;
++a+=a;
++a-=a;
++a*=a;
++a/=a;
++a/=a;
++a%=a;
++a%=a;
++a&=a;
++a|=a;
++a^=a;
++1a;intern(1,"qw",a);
++a=f();
++11{
++}
++12{
++}
++{
++}
++__builtin_trap();
++}
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -1,11 +1,16 @@
+ AwEBDAAAAAptdWx0aQpsaW5lCgQACQAAAGluY2x1ZGUuaAEJAAAAaW5jbHVkZS5oAFoAAABub3Qg
+ YmxhbmsgZm9yIGRlYiBwYWNrLiBjaGFyICo9IjFcMDMiIGlzIG5vdCB3b3JraW5nIChzcmMtPmJp
+-bmFyeSBpcyBjcmVhdGluZyBmdXp6IGF0IGRlYikGAgAAAQAAAAACAAADAQAAADEfBgIAAAEAAAAA
+-AgECAAAAAAMBAAAAMh8AAwEAAAAzHwYCAAABAAAAAAICAgAAADQ1BgIAAAABAAAAYQEAAwEAAAAz
+-HwYCAAQAAQAAAGIAAQAAAGEFBgAAAGludGVybgABAAAAAgACAAEAAABhAgoAAABjb21tZW50aW5n
+-ERMBAAAAYRQAAQAAAGIBAAAAYwUEAAAAbWFpbgMAAAAAABYDAAAAAQAfAgEfAwIrEAADAQAAADEr
+-AAQCAAAAMDErAAUDAAAAMHgyKwAHBgAAAGludGVybisACAYAAABpbnRlcm4rAAkGAAAAaW50ZXJu
+-AQAAAGEAKwAKBgAAAGludGVybgEAAABhABgfGgkAAAYAAABpbnRlcm4DAAAAAgABAQQAAABtYWlu
+-AQAAAGEAAQQAAABtYWluAQAAAGEAAQIAAABxdwAAAwEAAAAxHwgAAAABAAAAYQAAAwABAAAAYwAA
+-AAALAAADAQAAADEfhQAAAwEAAAAxHwwRCgAAAQAAAGIAAAABAAAAYgAAAAMBAAAAMR8NAAADAQAA
+-ADIfhQAAAwEAAAAyHw8QERIVAAEDAAAAdHN0FwYAAAB4X2ZpbGUBGAEZ
++bmFyeSBpcyBjcmVhdGluZyBmdXp6IGF0IGRlYikYAAYCAAAAAgAAAGMxAgAAAwEAAAAxHwYCAAAA
++AgAAAGMyAgECAAAAAAMBAAAAMh8AAwEAAAAzHwYCAAAAAgAAAGMzAgICAAAANDUGAgAAAAEAAABh
++AQADAQAAADMfBgIABAABAAAAYgABAAAAYQUGAAAAaW50ZXJuAAIAAAACAAIAAQAAAGEBBwABAAAA
++YgIKAAAAY29tbWVudGluZxETAQAAAGEUAAEAAABiAQAAAGYFBAAAAG1haW4DAAAAAAAIAAAAAQAA
++AGEARQIAAAABAAAAYQAIAAAAAQAAAGEAKwIAAAABAAAAYQAIAAAAAQAAAGEALQIAAAABAAAAYQAI
++AAAAAQAAAGEAKgIAAAABAAAAYQAIAAAAAQAAAGEALwIAAAABAAAAYQAIAAAAAQAAAGEARAIAAAAB
++AAAAYQAIAAAAAQAAAGEAJQIAAAABAAAAYQAIAAAAAQAAAGEAUgIAAAABAAAAYQAIAAAAAQAAAGEA
++JgIAAAABAAAAYQAIAAAAAQAAAGEAfAIAAAABAAAAYQAIAAAAAQAAAGEAXgIAAAABAAAAYQAWAwAA
++AAEAHwIBHwMCKxAAAwEAAAAxKwAEAgAAADAxKwAFAwAAADB4MisABwYAAABpbnRlcm4rAAgGAAAA
++aW50ZXJuKwAJBgAAAGludGVybgEAAABhACsACgYAAABpbnRlcm4BAAAAYQAYHxoJAAAGAAAAaW50
++ZXJuAwAAAAIAAQEEAAAAbWFpbgEAAABhAAEEAAAAbWFpbgEAAABhAAECAAAAcXcAAAMBAAAAMR8I
++AAAAAQAAAGEARQMAAQAAAGYAAAAACwAAAwEAAAAxH4UAAAMBAAAAMR8MEQoAAAEAAABiAAAAAQAA
++AGIAAAADAQAAADEfDQAAAwEAAAAxH4UAAAMBAAAAMh8QEQ4PERIVAAEDAAAAdHN0FwYAAAB4X2Zp
++bGUBGQ==
+--- ocompiler-1.orig/tests/.expected/a.out.txt
++++ ocompiler-1/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+ f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAKpQECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAgVAAAAFQAAAAYAAAAAEAAAAQAAABUEAAAVlAQIFZQECKsAAACrAAAABQAAAAAQ
+-AAADAAAAwAQAAMCUBAjAlAQIEwAAABMAAAAEAAAAAQAAAAIAAADTBAAA06QECNOkBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAANMEAADTpAQI06QECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAQ6UECEMFAAAWAAAAAAAAAAAAAAAB
+-AAAAAAAAAA0AAAAGAAAAAwAAANOkBAjTBAAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++BAAAAIQECACEBAgVAAAAFQAAAAYAAAAAEAAAAQAAABUEAAAVlAQIFZQECIABAACAAQAABQAAAAAQ
++AAADAAAAlQUAAJWVBAiVlQQIEwAAABMAAAAEAAAAAQAAAAIAAACoBQAAqKUECKilBAhQAAAAUAAA
++AAQAAAABAAAAAQAAAKgFAACopQQIqKUECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAGKYECBgGAAAWAAAAAAAAAAAAAAAB
++AAAAAAAAAA0AAAAGAAAAAwAAAKilBAioBQAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -16,10 +16,14 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC
+-AzQ1AAAAAAaEBAgAAAAAcXcAAIuEJAQAAACjDYQECFNVi+yL3Mlbw1NVi+yL3PzuIovjugyEBAgP
+-tgJQuhGEBAiLwlBoAQAAAOjF////i+O4ZaUECP8QugaEBAiIArgBAAAAuQEAAAA5wQ+FBQAAAOkA
+-AAAAi+O5AQAAALoJhAQIiwKB+QAAAAB0B//J/zSI6/G4CYQECP8QuAIAAAC5AgAAADnBD4UPAAAA
+-6QoAAADp5P///+nf////yVvDzC9saWIvbGQtbGludXguc28uMgABAAAAAAAAAAQAAAAjpQQIBgAA
+-ADOlBAgLAAAAEAAAAAUAAABDpQQICgAAABYAAAAHAAAAWaUECAgAAAAMAAAACQAAAAwAAAAAAAAA
+-AAAAAAEAAAABAAAAAAAAAAAAAAACAAAAAAAAAAAAAAASAAAAYQBiAAAuZHluc3RyAC5keW5hbWlj
+-AGWlBAgBAAAAAAAAAAAAAAA=
++AzQ1AAAAAAaEBAgAAAAAcXcAAIuEJAQAAACjDYQECFNVi+yL3Mlbw1NVi+yL3LoGhAQIigK6BoQE
++CIgCugaEBAiKAroGhAQIAAK6BoQECIoCugaEBAgoAroGhAQIigq6BoQECIoC9uGIAroGhAQIigq6
++BoQECIoCD7rgB3MFxsT/6wPGxAD2+YgCugaEBAiKCroGhAQIigLGxAD28YgCugaEBAiKCroGhAQI
++igIPuuAHcwXGxP/rA8bEAPb5iCK6BoQECIoKugaEBAiKAsbEAPbxiCK6BoQECIoCugaEBAggAroG
++hAQIigK6BoQECAgCugaEBAiKAroGhAQIMAL87iKL47oMhAQID7YCULoRhAQIi8JQaAEAAADo9f7/
++/4vjuDqmBAj/ELoGhAQIiAK4AQAAALkBAAAAOcEPhQUAAADpAAAAAIvjuQEAAAC6CYQECIsCgfkA
++AAAAdAf/yf80iOvxuAmEBAj/ELgCAAAAuQEAAAA5wQ+FCgAAAOnp////6eT////pBQAAAOn2////
++yVvDzC9saWIvbGQtbGludXguc28uMgABAAAAAAAAAAQAAAD4pQQIBgAAAAimBAgLAAAAEAAAAAUA
++AAAYpgQICgAAABYAAAAHAAAALqYECAgAAAAMAAAACQAAAAwAAAAAAAAAAAAAAAEAAAABAAAAAAAA
++AAAAAAACAAAAAAAAAAAAAAASAAAAYQBiAAAuZHluc3RyAC5keW5hbWljADqmBAgBAAAAAAAAAAAA
++AAA=
+--- ocompiler-1.orig/tests/.expected/call/callg.oc.x.txt
++++ ocompiler-1/tests/.expected/call/callg.oc.x.txt
+@@ -1,7 +1,7 @@
+ AwMVAAABAAAAegYBBAABAAAAYQEWAgAAAAADAwAAADE0NB8AAwMAAAAxNDQfCQAAAQAAAGEAAAAA
+ FgEAAAAAAwMAAAAxNDQfCQACAQAAAGEAAAAAFgIAAAAAAwMAAAAxNDQfAAMDAAAAMTQ0HwoAAAEA
+ AABhAAAAAQAAAGEAAgAAAAEAAABhABYBAAAAAAMDAAAAMTQ0HwoAAgEAAABhAAAAAQAAAGEAAgAA
+-AAEAAABhABYCAAAAAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGEAAAMAAQAAAGEAAAAAFgEA
+-AAAAAwMAAAAxNDQfCAAAAAEAAABhAAADAgEAAABhAAAAABYCAAAAAAMDAAAAMTQ0HwADAwAAADE0
+-NB8IAAAAAQAAAGEAAAMBAQAAAGEAAAAAFgEAAAAAAwMAAAAxNDQfCAAAAAEAAABhAAADAwEAAABh
++AAEAAABhABYCAAAAAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGEARQMAAQAAAGEAAAAAFgEA
++AAAAAwMAAAAxNDQfCAAAAAEAAABhAEUDAgEAAABhAAAAABYCAAAAAAMDAAAAMTQ0HwADAwAAADE0
++NB8IAAAAAQAAAGEARQMBAQAAAGEAAAAAFgEAAAAAAwMAAAAxNDQfCAAAAAEAAABhAEUDAwEAAABh
+ AAAAAA==
+--- ocompiler-1.orig/tests/.expected/call/callx.oc.x.txt
++++ ocompiler-1/tests/.expected/call/callx.oc.x.txt
+@@ -1,5 +1,5 @@
+ AwMGAgAEAAEAAABhAQADAQAAADEfBQEAAABiAAAAAAARBQQAAABtYWluAwAAAAAAFgEAAAAAAwMA
+ AAAxNDQfGgkAAAEAAABhAQAAAAAAAwEAAAAxHxYBAAAAAAMDAAAAMTQ0HxoJAAABAAAAYgEAAAAA
+ AAMBAAAAMR8WAQAAAAADAwAAADE0NB8aCQABAQAAAGEBAAAAAAADAQAAADEfFgEAAAAAAwMAAAAx
+-NDQfGgkAAQEAAABiAQAAAAAAAwEAAAAxHxYBAAAAAAMDAAAAMTQ0HxoIAAAAAQAAAGEAAAMBAQAA
++NDQfGgkAAQEAAABiAQAAAAAAAwEAAAAxHxYBAAAAAAMDAAAAMTQ0HxoIAAAAAQAAAGEARQMBAQAA
+ AGIBAAAAAAADAQAAADIfGQ==
+--- ocompiler-1.orig/tests/.expected/comments.oc.x.txt
++++ ocompiler-1/tests/.expected/comments.oc.x.txt
+@@ -1,4 +1,4 @@
+ BAAKAAAAY29tbWVudHMuaAAADwAAAGFzZGFzZHNhZGFzZGFzZAAJAAAAd3FlcXdlcXdlAQYAAAAK
+ cXdlCiAFBAAAAHRlc3QDAAAAAAACAwAAADEyMwYBBwABAAAAYQIAAAMBAAAAMR8CAwAAADQ1NggA
+-AAABAAAAYQAAAgAAAAEAAABhAAIDAAAANzg5CAAAAAEAAABhAAAAAAMBAAAAMR8CAwAAAGFiYwAD
++AAABAAAAYQBFAgAAAAEAAABhAAIDAAAANzg5CAAAAAEAAABhAEUAAAMBAAAAMR8CAwAAAGFiYwAD
+ AAAAZGVmAQMAAAB6ego=
+--- ocompiler-1.orig/tests/.expected/divmul.oc.x.txt
++++ ocompiler-1/tests/.expected/divmul.oc.x.txt
+@@ -1,13 +1,13 @@
+ AwMGAgAAAAEAAABhAQADAQAAADEfBgIAAgABAAAAYgEAAwEAAAAxHwYCAAQAAQAAAGMBAAMBAAAA
+ MR8FBAAAAG1haW4DAAAAAAAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAA
+-ADE0NFwAAwEAAAAxHwgAAAABAAAAYQAEAgAAAAEAAABhABYEAAAAAAMDAAAAMTQ0HwADAwAAADE0
+-NB8AAwMAAAAxNDQfAAMDAAAAMTQ0OgADAwAAADk5OR8IAAAAAQAAAGIABAIAAAABAAAAYgAWBAAA
+-AAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMABAIAAAAB
++ADE0NFwAAwEAAAAxHwgAAAABAAAAYQAvAgAAAAEAAABhABYEAAAAAAMDAAAAMTQ0HwADAwAAADE0
++NB8AAwMAAAAxNDQfAAMDAAAAMTQ0OgADAwAAADk5OR8IAAAAAQAAAGIALwIAAAABAAAAYgAWBAAA
++AAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMALwIAAAAB
+ AAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAA
+-AGEABQIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0
+-NB8IAAAAAQAAAGIABQIAAAABAAAAYgAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0
+-HwADAwAAADE0NB8IAAAAAQAAAGMABQIAAAABAAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQf
+-AAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGEAAwIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8A
+-AwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGIAAwIAAAABAAAAYgAWBAAAAAAD
+-AwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMAAwIAAAABAAAA
++AGEARAIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0
++NB8IAAAAAQAAAGIARAIAAAABAAAAYgAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0
++HwADAwAAADE0NB8IAAAAAQAAAGMARAIAAAABAAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQf
++AAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGEAKgIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8A
++AwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGIAKgIAAAABAAAAYgAWBAAAAAAD
++AwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMAKgIAAAABAAAA
+ YwA=
+--- ocompiler-1.orig/tests/.expected/primsec.oc.x.txt
++++ ocompiler-1/tests/.expected/primsec.oc.x.txt
+@@ -1,5 +1,5 @@
+-AwMGAgAEAAEAAABhAgAABAEAAAAwHwgAAAABAAAAYQAAAAADAQAAADEfCAAAAAEAAABhAAEAAAMB
+-AAAAMh8IAAAAAQAAAGEAAgAAAwEAAAAzHwgAAAABAAAAYQADAAADAQAAADQfCAAAAAEAAABhAAQA
+-AAMBAAAANR8IAAAAAQAAAGEABgAAAwEAAAA2HwgAAAABAAAAYQAIAAADAQAAADcfCAAAAAEAAABh
+-AAkAAAMBAAAAOB8IAAAAAQAAAGEACgMAAQAAAGECAAAAAgAAAAEAAABhAAIAAAABAAAAYQAIAAAA
+-AQAAAGEACgMBAQAAAGECAAAAAgAAAAEAAABhAAIAAAABAAAAYQA=
++AwMGAgAEAAEAAABhAgAABAEAAAAwHwgAAAABAAAAYQBFAAADAQAAADEfCAAAAAEAAABhACsAAAMB
++AAAAMh8IAAAAAQAAAGEALQAAAwEAAAAzHwgAAAABAAAAYQAqAAADAQAAADQfCAAAAAEAAABhAC8A
++AAMBAAAANR8IAAAAAQAAAGEAJQAAAwEAAAA2HwgAAAABAAAAYQAmAAADAQAAADcfCAAAAAEAAABh
++AHwAAAMBAAAAOB8IAAAAAQAAAGEAXgMAAQAAAGECAAAAAgAAAAEAAABhAAIAAAABAAAAYQAIAAAA
++AQAAAGEAXgMBAQAAAGECAAAAAgAAAAEAAABhAAIAAAABAAAAYQA=
+--- ocompiler-1.orig/tests/.expected/template.oc.x.txt
++++ ocompiler-1/tests/.expected/template.oc.x.txt
+@@ -1,18 +1,18 @@
+ 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
+ AABubgAHAAIAAAAEAAAAdGVzdAACAgAAADI4
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -8,34 +8,50 @@ line
+ 
+ include "include.h" "include.h"
+ 
+-char *=1
+-char *={2,3}
+-char *="45"
++orphan off
++
++char c1=1
++char c2={2,3}
++char c3="45"
+ char a#3
+ value b^a
+ 
+-function intern(data a) #commenting
++function intern(data a,sd b) #commenting
+ end
+ 
+ library "a"
+-import "b" c
++import "b" f
+ 
+ entry main()
++
++set a a
++add a a
++sub a a
++mult a a
++div a a
++divu a a
++rem a a
++remu a a
++and a a
++or a a
++xor a a
++
+ hex -:,~\,~-\\+(1+01+0x2+\intern+\\intern+\intern.a+\intern.a\)
+ ;
+ call intern(1,"qw",main.a:main.a)
+-set a c()
++set a f()
+ if 1=1
+ else
+ end
+ 
+ callex b b 1
+-while 2=2
+-break
+-continue
++while 1=2
++	continue
++end
++whiletrue
++	break
+ end
+ ret
+ aftercall *tst
+ override x_file 1
+-orphan on
+ i3
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -79,6 +79,7 @@ switch acall/e
+ 
+ if [ ${is_del} = 0 ]; then
+ 	if [ ${is_diff} = 1 ]; then
++		diff a.out.c .expected/a.out.c || exit 1
+ 		tests=( `find -name "*.oc"` )
+ 		n=${#tests[@]}
+ 		n=$((n*3))   #is .oc .log and .x
+@@ -88,17 +89,19 @@ if [ ${is_del} = 0 ]; then
+ 		else
+ 			exit 1
+ 		fi
++	else # populate
++		mv a.out.c .expected
+ 	fi
+ else
+ 	#remove otoc files
+-	a=( `find -name "*.c"` )
++	a=( `find -maxdepth 1 -name "*.c"` )
+ 	for var in "${a[@]}"; do
+ 		rm ${var}
+ 	done
+ 
+ 	#remove base64 troubles #or remove them after diff
+ 	cd ${e}
+-	a=( `find . -type f ! -name "*.txt" ! -name "*.log"` )
++	a=( `find . -type f ! -name "*.txt" ! -name "*.log" ! -name "*.c"` )
+ 	for var in "${a[@]}"; do
+ 		rm ${var}
+ 	done
+--- ocompiler-1.orig/tests/compile
++++ ocompiler-1/tests/compile
+@@ -12,3 +12,14 @@ for file in "${tests[@]}"; do
+ 	echo ${OCOMP} ${file} ${OFLAGS}
+ 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${OCOMP} ${file} ${OFLAGS} || exit 1
+ done
++
++../otoc/otoc a.out.oc.x && {
++	cc a.out.c || {
++		if [ ! -e ../NOOCONVTEST ]; then
++			echo cc test result is wrong
++			exit 1
++		else
++			echo cc test result was disabled
++		fi
++	}
++}
+--- ocompiler-1.orig/tests/d
++++ ocompiler-1/tests/d
+@@ -1,5 +1,7 @@
+ 
+ ./x ${1} && \
+ ../otoc/otoc ${1}.oc.x && \
+-cc ${1}.c && \
+-cat ${1}.c
++cat ${1}.c && {
++	cc ${1}.c
++	mv ${1}.c .expected
++}
+--- ocompiler-1.orig/tests/tests
++++ ocompiler-1/tests/tests
+@@ -1,4 +1,3 @@
+ 
+-/bin/bash ./compile
+-
++/bin/bash ./compile && \
+ /bin/bash ./c 1
