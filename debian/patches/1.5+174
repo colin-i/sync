@@ -1,0 +1,228 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+174) xenial; urgency=medium
+ .
+   * make fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-26
+
+--- ocompiler-1.orig/ostrip/Makefile
++++ ocompiler-1/ostrip/Makefile
+@@ -14,11 +14,16 @@ endif
+ 
+ strippy=ostriputil
+ 
+-OFLAGS=${OFLAGSEXTRA}
+-
++ifndef ldprefer
++	OFLAGSPRE= include_sec 1
++endif
+ ifeq (${nobits_virtual},0)
+-OFLAGS+=nobits_virtual 0
++	OFLAGSPRE+= nobits_virtual 0
++endif
++ifndef OFLAGS
++	OFLAGS= ${OFLAGSPRE}
+ endif
++OFLAGS+= ${OFLAGSEXTRA}
+ 
+ ifndef OCOMP
+ OCOMP=../src/o
+@@ -35,13 +40,17 @@ OLINK=../ounused/ounused
+ ${OBJ}: ${FULLOBJS}
+ 	${launcher} ${OCOMP} $< ${OFLAGS}
+ 
+-#ATCCCOM = $(CC) ${linkerflags} -o ${OB}
+-ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o ${OB}
++ATCCCOM = $(CC) ${linkerflags} -o
++ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o
+ 
+ ${OB}: ${OBJ}
+ 	${launcher} ${OLINK} ${FULLOBJLOG}
+ 	@echo
+-	${ATLDCOM} ${FULLOBJO}
++	if [ -z "${ldprefer}" ]; then \
++		${ATCCCOM} ${OB} ${FULLOBJO}; \
++	else \
++		${ATLDCOM} ${OB} ${FULLOBJO}; \
++	fi
+ 	if [ "${nobits_virtual}" != "1" ]; then \
+ 		${FULLOBJ} ${FULLOBJ} ${FULLOBJLOG} ${FULLOBJO}; \
+ 		if [ "$$?" = "0" ]; then \
+@@ -81,7 +90,11 @@ uninstall:
+ 
+ test:
+ 	if [ "${nobits_virtual}" != "1" ]; then \
+-		${ATLDCOM} ${FULLOBJO} -o z; \
++		if [ -z "${ldprefer}" ]; then \
++			${ATCCCOM} z ${FULLOBJO}; \
++		else \
++			${ATLDCOM} z ${FULLOBJO}; \
++		fi; \
+ 		if [ "$$?" = "0" ]; then \
+ 			${FULLOBJ} ./z ${FULLOBJLOG} ${FULLOBJO}; \
+ 			if [ "$$?" = "0" ]; then \
+--- /dev/null
++++ ocompiler-1/ostrip/entry.oc
+@@ -0,0 +1 @@
++entry main(sd argc,sv argv) #0,ss exec,ss log1,ss *obj1)   #... logN objN
+--- /dev/null
++++ ocompiler-1/ostrip/entryraw.oc
+@@ -0,0 +1,3 @@
++entryraw main(sd argc,ss a0) #0,ss exec,ss log1,ss *obj1)   #... logN objN
++sv argv
++set argv #a0
+--- ocompiler-1.orig/ostrip/md
++++ ocompiler-1/ostrip/md
+@@ -1,2 +1,3 @@
+ 
+-OFLAGS="function_name 1 nul_res_pref 1" make linkerflags= $@
++OFLAGSEXTRA+=" function_name 1 nul_res_pref 1"
++OFLAGSEXTRA="${OFLAGSEXTRA}" make linkerflags= ldprefer=1 $@
+--- ocompiler-1.orig/ostrip/ostrip.oc
++++ ocompiler-1/ostrip/ostrip.oc
+@@ -75,11 +75,9 @@ include "obj.oc"
+ include "after.oc"
+ include "reldyn.oc"
+ 
+-entryraw main(sd argc,ss a0) #0,ss exec,ss log1,ss *obj1)   #... logN objN
+-if argc>=(1+3)  #0 is all the time
+-	sv argv
+-	set argv #a0
++include "entryraw.oc" "entry.oc"
+ 
++if argc>=(1+3)  #0 is all the time
+ 	sd verb%%ptrverbose
+ 	setcall verb# access(".debug",(F_OK))
+ 
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -22,26 +22,36 @@ FULLOBJS = ${FULLOBJ}.oc
+ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+ 
+-#OFLAGS=
++
++ifndef ldprefer
++	OFLAGSPRE= include_sec 1
++endif
+ 
+ #problems at box64 and CC
+ ifeq (${conv_64},0)
+-#ATCCCOM = $(CC) ${linkerflags} -o ${prog}
+-ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o
++	ATCCCOM = $(CC) ${linkerflags} -o
++	ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -lc -entry main -o
+ else
+-#ATCCCOM = $(CC) -m32 ${linkerflags} -o ${prog}
+-ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${L} -lc -entry main -o
+-OFLAGS+=conv_64 1
++	ATCCCOM = $(CC) -m32 ${linkerflags} -o
++	ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${L} -lc -entry main -o
++	OFLAGSPRE+= conv_64 1
+ endif
+ 
+-OFLAGS+=${OFLAGSEXTRA}
++ifndef OFLAGS
++	OFLAGS= ${OFLAGSPRE}
++endif
++OFLAGS+= ${OFLAGSEXTRA}
+ 
+ number=number.h
+ 
+ number.pre.o: number.pre.oc
+ 	${OCOMP} $< ${OFLAGS}
+ number.pre: number.pre.o
+-	${ATLDCOM} $@ $^
++	if [ -z "${ldprefer}" ]; then \
++		${ATCCCOM} $@ $^; \
++	else \
++		${ATLDCOM} $@ $^; \
++	fi
+ ${number}: number.pre
+ 	./$<
+ #       in case otoc.oc is modified
+@@ -50,8 +60,11 @@ ${OBJ}: ${FULLOBJS} ${number}
+ ${prog}: ${OBJ}
+ 	${OLINK} ${FULLOBJLOG}
+ 	@echo
+-	#${ATCCCOM} ${FULLOBJO}
+-	${ATLDCOM} ${prog} ${FULLOBJO}
++	if [ -z "${ldprefer}" ]; then \
++		${ATCCCOM} ${prog} ${FULLOBJO}; \
++	else \
++		${ATLDCOM} ${prog} ${FULLOBJO}; \
++	fi
+ 
+ install: all
+ 	install -D ${prog} $(DESTDIR)$(prefix)/bin/${prog}
+--- /dev/null
++++ ocompiler-1/otoc/entry.oc
+@@ -0,0 +1,3 @@
++entry main(sd argc,sv argv)
++incst argv
++sd s;set s argv#
+--- /dev/null
++++ ocompiler-1/otoc/entryraw.oc
+@@ -0,0 +1 @@
++entryraw main(sd argc,sv *,sd s)
+--- ocompiler-1.orig/otoc/mrd
++++ ocompiler-1/otoc/mrd
+@@ -3,6 +3,6 @@
+ # sudo ln -s /home/bc/before/lib/libc.so.6 /usr/x86_64-linux-gnu/lib/libc.so.6
+ #            and for libc_nonshared.a and ld-linux-x86-64.so.2
+ 
+-LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA="inplace_reloc 0" ./md
++LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA="inplace_reloc 0" ldprefer=1 ./md
+ 
+ #if qemu too, must comment in qemu-x86_64.conf (from qemu-user-binfmt)
+--- ocompiler-1.orig/otoc/number.pre.oc
++++ ocompiler-1/otoc/number.pre.oc
+@@ -30,7 +30,7 @@ const numbers_size=\-numbers_start
+ 	call fprintf(f,"%u",(Xfile_numbers_notmapped))
+ end
+ 
+-entry main()
++entry main() #attention that this can be entryraw or entry
+ 
+ sd f;set f fopen("number.h","wb")
+ vstr a="char data={";sd b;set b strlen(a)
+--- ocompiler-1.orig/otoc/otoc.oc
++++ ocompiler-1/otoc/otoc.oc
+@@ -56,8 +56,8 @@ function mainfn(sv s)
+ 	return (EXIT_FAILURE)
+ end
+ 
+-entryraw main(sd argc,sv *,sd s)
+-#entry main(sd argc,sv argv)
++include "entryraw.oc" "entry.oc"
++
+ 	if argc=2
+ 		sd a;set a mainfn(s)
+ 		call exit(a)
+--- ocompiler-1.orig/otoc/xfile.h
++++ ocompiler-1/otoc/xfile.h
+@@ -1,2 +1,4 @@
+-einclude "../src/files/headers/xfile.h" "/usr/include/ocompiler/xfile.h"
++
+ #einclude? will use all constants in the header. yes, but some are used without touching them, like in loop()
++einclude "/usr/include/ocompiler/xfile.h" "../src/files/headers/xfile.h"
++#        entryraw                         entry
