@@ -1,0 +1,497 @@
+
+const condpack_codereg=dwsz
+const condpack_number=dwsz
+const condpack_whileinscribe=dwsz #for while 0 is 0 ret end endfunction
+const condpack_whilebegin=condpack_whileinscribe+dwsz    #this is a numberpart plus coderegpart
+const condpack_ifinscribe=dwsz    #this a numberpart
+const condpack_elseinscribe=dwsz      #same
+const condpacksize=condpack_codereg+condpack_number
+const elseinscribe_write=0
+const elseinscribe_skip=1
+
+#err
+Function coderegtocondloop()
+	Data codesec%%ptr_codesec
+	Data codeReg#1
+	Data ptrcodeReg^codeReg
+
+	Call getcontReg(codesec,ptrcodeReg)
+
+	Data err#1
+	Data condloopsec%%ptr_conditionsloops
+
+	SetCall err addtosec(ptrcodeReg,(condpack_codereg),condloopsec)
+	Return err
+EndFunction
+
+#err
+Function condbeginwrite(data condnumber)
+	Data err#1
+	Data noerr=noerror
+
+	SetCall err coderegtocondloop()
+	If err!=noerr
+		Return err
+	EndIf
+
+	vData condloopsec%%ptr_conditionsloops
+
+	vData ptrcondnumber^condnumber
+	SetCall err addtosec(ptrcondnumber,(condpack_number),condloopsec)
+	Return err
+EndFunction
+
+#err
+Function condbegin(data ptrcontent,data ptrsize,data condnumber)
+	Data cond#1
+	vData ptrcond^cond
+	Data err#1
+	Data noerr=noerror
+
+	data dummy=0
+	data condnr#1
+	if main.parses=(pass_write)
+		setcall err xfile_add_char_if(condnumber)
+		If err!=noerr;Return err;EndIf
+		if condnumber!=(whiletruenumber)
+			SetCall err twoargs(ptrcontent,ptrsize,(not_a_subtype),ptrcond)
+			If err!=noerr;Return err;EndIf
+			SetCall err condbeginwrite(condnumber)
+			return err
+		endif
+		set condnr (whilenumber)
+	else
+		call advancecursors(ptrcontent,ptrsize,ptrsize#)
+		if condnumber!=(whiletruenumber)
+			set condnr condnumber
+		else
+			set condnr (whilenumber)
+		endelse
+	endelse
+	vData condloopsec%%ptr_conditionsloops
+	SetCall err addtosec(#dummy,(condpacksize),condloopsec)
+	Return err
+EndFunction
+
+#err
+Function checkcondloopclose()
+	Data regnr#1
+	Data ptrregnr^regnr
+	Data condloop%%ptr_conditionsloops
+	Call getcontReg(condloop,ptrregnr)
+	Data zero=0
+	If regnr!=zero
+		Char closeerr="All conditions/loops within a scope must be closed."
+		Str _closeerr^closeerr
+		Return _closeerr
+	EndIf
+	Data noerr=noerror
+	Return noerr
+EndFunction
+
+Const backjumpsize=5
+#err
+Function condjump(data size)
+	Char jump={0xe9}
+	Data jsize#1
+	Data bjsz=backjumpsize
+
+	Data pjsize^jsize
+
+	Set pjsize# size
+
+	Data pjump^jump
+
+	Data err#1
+	Data code%%ptr_codesec
+	SetCall err addtosec(pjump,bjsz,code)
+	Return err
+EndFunction
+
+#err
+Function condend(data number)
+	Data condloop%%ptr_conditionsloops
+	Data ptrcReg#1
+	Data ptrptrcReg^ptrcReg
+
+	Call getptrcontReg(condloop,ptrptrcReg)
+	If ptrcReg#=0
+		Char uncloseerr="Unexpected condition/loop close command."
+		Str _uncloseerr^uncloseerr
+		Return _uncloseerr
+	EndIf
+
+	Data codeoffset#1
+	Data ptrcodeoff^codeoffset
+	Data codesec%%ptr_codesec
+	Data structure#1
+	Data ptrstructure^structure
+
+	Call getcontReg(codesec,ptrcodeoff)
+	If number=(whilenumber)
+		Add codeoffset (backjumpsize)
+	EndIf
+	Call getcont(condloop,ptrstructure)
+	Add structure ptrcReg#
+	sd reg;set reg structure
+
+	sd marker
+	sd err;setcall err condendtest(#structure,number,codeoffset)
+	if err=(noerror)
+		if number=(elsenumber)
+			set marker structure
+			sub structure (condpack_elseinscribe) #to match for ptrcReg
+			if main.parses=(pass_write)
+				if structure#=(elseinscribe_write)
+					call condendwrite(marker,codeoffset)
+				endif
+			endif
+		elseIf number=(whilenumber)
+			set marker structure
+			sub structure (condpack_whilebegin) #to match for ptrcReg
+			if main.parses=(pass_write)
+				setcall err jumpback(codeoffset,marker)
+				If err!=(noerror)
+					Return err
+				EndIf
+				if structure#=(whilenumber) #or whiletruenumber
+					call condendwrite(marker,codeoffset)
+				elseif main.breakflag=(FALSE)  #this is an infinite loop with no breaks, some ret inside was, and must skip next dead ret if is endfunction
+					set main.ret_cont_break_marker (ret_cont_break_canskip)
+				else   #same whiletrue but with at least one break
+					set main.breakflag (FALSE)
+				endelse
+			endif
+		elseif main.parses=(pass_write)
+			call condendwrite(structure,codeoffset)
+		EndelseIf
+
+		sub reg structure
+		Sub ptrcReg# reg
+	endif
+	return err
+EndFunction
+
+#err
+function condendtest(sv p_conds,sd number,sd codeoffset)
+	sd conds;set conds p_conds#
+
+	#for breaks inside conditions
+	sd last;set last conds
+
+	whiletrue
+		Data lastcondition#1
+
+		sub conds (condpack_number)
+		Set lastcondition conds#
+		sub conds (condpack_codereg)
+
+		if lastcondition=(breaknumber)
+		#here is pass_write only
+			if number=(whilenumber)
+				call condendwrite(conds,codeoffset)
+				set main.breakflag (TRUE)
+			endif
+		elseIf lastcondition!=number
+			Char difcloseerr="The previous condition/loop is from a different type."
+			vStr _difcloseerr^difcloseerr
+			Return _difcloseerr
+		else
+			if number!=(whilenumber)
+				sub last (condpacksize)
+				if conds!=last   ##here are breaks
+					#move it to last to match the reg set outside
+					#and move ifinscribe/elseinscribe if it is the case
+					#ignore type, it will only be removed outside
+					#don't increase size to align ifinscribe and just swap
+
+					sd cursor;set cursor conds
+					sub cursor (condpack_number)
+					sd size
+					set size (condpack_codereg)
+					if cursor#=(ifinscribe)
+						add size (condpack_ifinscribe)
+					elseif number=(elsenumber)
+						add size (condpack_elseinscribe)
+						sd test;set test cursor
+						sub test (condpack_elseinscribe)
+						if test#=(ifinscribe) #need to get also ifinscribe, it will be closed in conditionscondend
+							sub cursor (condpack_ifinscribe)
+							add size (condpack_ifinscribe)
+						endif
+					else
+						add cursor (condpack_number)
+					endelse
+					sd aux#3
+					call memtomem(#aux,cursor,size)
+					while conds!=last
+						add conds (condpacksize)
+						call memtomem(cursor,conds,(condpacksize))
+						add cursor (condpacksize)
+					endwhile
+					call memtomem(cursor,#aux,size)
+				endif
+			endif
+			set p_conds# conds
+			return (noerror)
+		Endelse
+	endwhile
+endfunction #endg
+
+function condendwrite(sd structure,sd codeoffset)
+	Data jumploc#1
+	Data codesec%%ptr_codesec
+	vData writeloc#1
+	Data ptrwriteloc^writeloc
+
+	Call getcont(codesec,ptrwriteloc)
+
+	Set jumploc structure#
+	Sub codeoffset jumploc
+	Add writeloc jumploc
+	Sub writeloc (dwsz)
+
+	Set writeloc# codeoffset
+endfunction
+
+#err
+function jumpback(sd codeoffset,sd condstruct)
+	sub condstruct (condpack_codereg)
+	sub codeoffset condstruct#
+	neg codeoffset
+	sd err
+	SetCall err condjump(codeoffset)
+	return err
+endfunction
+
+#err
+Function conditionscondend(data close1,data close2)
+	Data err#1
+	Data noerr=noerror
+
+	setcall err xfile_add_end_ifif()
+	if err=(noerror)
+		Data number#1
+		Set number close1
+
+		Data ifnr=ifnumber
+		Data elsenr=elsenumber
+		Data structure%%ptr_conditionsloops
+
+		Whiletrue
+			SetCall err condend(number)
+			If err!=noerr
+				Return err
+			EndIf
+			sd c
+			If number=ifnr
+				If close2=elsenr
+					Set number elsenr
+					setcall c prevcond()
+					if c=(ifinscribe)
+						call Message("Warning: ENDELSEIF not matching IF")
+					endif
+					continue
+				endif
+				break
+			EndIf
+			If number=elsenr
+				setcall c prevcond()
+				if c=(ifinscribe)
+					break
+				endif
+			EndIf
+		EndWhile
+
+		Data ptrReg#1
+		Data ptrptrReg^ptrReg
+		Call getptrcontReg(structure,ptrptrReg)
+		Data Reg#1
+		Set Reg ptrReg#
+		Sub Reg (condpack_ifinscribe)
+		Set ptrReg# Reg
+	endif
+	Return err
+EndFunction
+function prevcond()
+	vData cl#1
+	vData structure%%ptr_conditionsloops
+	Call getcontplusReg(structure,#cl)
+	Sub cl (condpack_number)
+	return cl#
+endfunction
+
+Function closeifopenelse()
+	Data err#1
+	Data noerr=noerror
+
+	if main.ret_cont_break=(ret_cont_break_no)
+		SetCall err condjump(0)
+		If err!=noerr
+			Return err
+		EndIf
+	endif
+	Data ifnr=ifnumber
+	SetCall err condend(ifnr)
+	If err!=noerr
+		Return err
+	EndIf
+
+	setcall err xfile_add_char_ifif((Xfile_else))
+	if err=(noerror)
+		#this for unreachable else jumps bool
+		vData structure%%ptr_conditionsloops
+		if main.ret_cont_break=(ret_cont_break_no)
+			data e1=elseinscribe_write
+			setcall err addtosec(#e1,(condpack_elseinscribe),structure)
+			if err=(noerror)
+				Data elsenr=elsenumber
+				SetCall err condbeginwrite(elsenr)
+			endif
+		else # ret_cont_break_canskip ret_cont_break_mustskip ret_cont_break_notyet
+			if main.ret_cont_break!=(ret_cont_break_notyet) #is useless JMP, if no previous JMP in this ifinscribe, is also useless ELSE
+				setcall err elseg()
+				If err!=noerr
+					Return err
+				EndIf
+			endif
+			data e2=elseinscribe_skip
+			data *ignored codesection index#1
+			data *nr=elsenumber
+			setcall err addtosec(#e2,(condpack_elseinscribe+condpacksize),structure)
+		endelse
+	endif
+	Return err
+EndFunction
+
+#err
+function elseg()
+	sd pointer
+	vData structure%%ptr_conditionsloops
+	Call getcontplusReg(structure,#pointer)
+	sub pointer (condpack_number)
+	while pointer#=(breaknumber)  #skip first pack of breaks
+		sub pointer (condpacksize)
+	endwhile
+	if pointer#=(elsenumber)  #an else was accepted, then first IF was ok
+		return (noerror)
+	endif
+	return "ELSE is useless here."
+endfunction
+
+#err
+function continue()
+	sd regnr
+	sd structure
+	vData condloop%%ptr_conditionsloops
+	call getcontandcontReg(condloop,#structure,#regnr)
+	if regnr!=0
+		sd start;set start structure
+		add structure regnr
+		while start!=structure
+			sd type
+			sub structure (condpack_number)
+			set type structure#
+			if type!=(ifinscribe)
+				sub structure (condpack_codereg)
+				if type=(whilenumber)
+					vdata ptrcodesec%%ptr_codesec
+					sd codeoffset
+					call getcontReg(ptrcodesec,#codeoffset)
+					Add codeoffset (backjumpsize)
+					sd err;setcall err jumpback(codeoffset,structure)
+					return err
+				endif
+				if type=(elsenumber)
+					sub structure (condpack_elseinscribe)
+				endif
+			endif
+		endwhile
+	endif
+	return "There is no loop to continue."
+endfunction
+
+#err
+function break()
+	sd regnr
+	sd structure
+	vData condloop%%ptr_conditionsloops
+	call getcontandcontReg(condloop,#structure,#regnr)
+	if regnr!=0
+		sd start;set start structure
+		add structure regnr
+		while start!=structure
+			sd type
+			sub structure (condpack_number)
+			set type structure#
+			if type!=(ifinscribe)
+				sub structure (condpack_codereg)
+				if type=(whilenumber)
+					sd err
+					SetCall err condjump(0)
+					if err=(noerror)
+						SetCall err condbeginwrite((breaknumber))
+					endif
+					Return err
+				endif
+				if type=(elsenumber)
+					sub structure (condpack_elseinscribe)
+				endif
+			endif
+		endwhile
+	endif
+	return "There is no loop to break."
+endfunction
+
+#err
+function whilebegin(sd pcontent,sd pcomsize,sd number)
+	sd err
+	vData condloop%%ptr_conditionsloops
+	SetCall err addtosec(#number,(condpack_whileinscribe),condloop)
+	If err=(noerror)
+		SetCall err coderegtocondloop()
+		If err=(noerror)
+			SetCall err condbegin(pcontent,pcomsize,number)
+		EndIf
+	endif
+	return err
+endfunction
+#err
+function whileend()
+	sd err;setcall err xfile_add_end_ifif()
+	If err=(noerror)
+		SetCall err condend((whilenumber))
+	EndIf
+	return err
+endfunction
+
+#number
+function prev_cond(sd psecond)
+	sd structure
+	vData condloop%%ptr_conditionsloops
+	call getcontReg(condloop,#structure)
+	if structure=0
+		return (nocondnumber) #function
+	endif
+	call getcontplusReg(condloop,#structure)
+	sub structure (condpack_number)
+	while structure#=(breaknumber)
+		sub structure (condpacksize)
+	endwhile
+	if structure#=(whilenumber)
+		return (whilenumber)
+	endif
+	if structure#=(elsenumber)
+		set psecond# (nocondnumber)
+		return (elsenumber)
+	endif
+	#ifnumber at if or elseif
+	sub structure (condpacksize)
+	if structure#=(ifinscribe)
+		set psecond# (nocondnumber)
+	else
+	#structure#=(elsenumber)
+		set psecond# (elsenumber)
+	endelse
+	return (ifnumber)
+endfunction

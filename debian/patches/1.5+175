@@ -1,0 +1,388 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+175) xenial; urgency=medium
+ .
+   * break;endwhile
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-05-28
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -8,7 +8,10 @@ last=`curl https://api.github.com/repos/
+ #here must arh fast to push changelog + old file same time
+ #versionscript=./versionscript
+ ~/test/debinit2 "${1}" && \
++#there are problems at amd64xenial, not at bionic
+ ~/test/deb && \
++arh=i386 ~/test/publp && \
++~/u/desktop/ubuntu-archive-tools/copy-package -y --from ppa:colin-i/ubuntu/ppa -s xenial --to-suite bionic ocompiler && \
+ ~/test/publp && \
+ ./makewin32 && \
+ ~/test/del && \
+@@ -22,13 +25,12 @@ last=`curl https://api.github.com/repos/
+ ~/test/upapp && \
+ ~/test/pub upapp && \
+ ~/test/pub2 && \
+-~/test/publp2 && \
+-~/test/lp && \
++arch=i386 terminator=1 ~/test/publp2 && \
++~/u/desktop/ubuntu-archive-tools/copy-package -y -b --from ppa:colin-i/ubuntu/ppa -s xenial --to-suite bionic ocompiler && \
++~/test/publp2 bionic && \
++dist=bionic ~/test/lp && \
+ ~/test/lp x
+ 
+-#is something wrong with copy package and rebuild (maybe same with copy-package without -b)
+-#the xenial ostrip is not working, but was ok on edb testing here on jammy
+-
+ #plans:
+ 
+ #vars/fns/consts and usage locations in dbg sec for odbg
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1dawVCY6Eu6pnFhJfCDoVRqEv13FJ8Sn0
++File ID: 1H-ksw7mzSc7hFGGNCLJ_Ii2Zt4RAh6Rt
++<p>Found file: ./ocompiler-1-5+174.x86_64.rpm, 1H-ksw7mzSc7hFGGNCLJ_Ii2Zt4RAh6Rt, 2024-05-28T08:32:28.164Z, 72304, https://drive.google.com/uc?id=1H-ksw7mzSc7hFGGNCLJ_Ii2Zt4RAh6Rt&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+172.x86_64.rpm, 1dawVCY6Eu6pnFhJfCDoVRqEv13FJ8Sn0, 2024-05-25T07:14:34.777Z, 69021, https://drive.google.com/uc?id=1dawVCY6Eu6pnFhJfCDoVRqEv13FJ8Sn0&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+171.x86_64.rpm, 1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy, 2024-05-10T05:33:03.198Z, 69010, https://drive.google.com/uc?id=1vDKZa1sUNh_2-H-o2q71NAsY25ebjQJy&export=download
+--- ocompiler-1.orig/otoc/ascii.h
++++ ocompiler-1/otoc/ascii.h
+@@ -11,6 +11,7 @@ const asciidot=0x2e
+ const asciislash=0x2f
+ const asciisemicolon=0x3b
+ const asciiequal=0x3d
++const asciibs=0x5C
+ const asciiunderscore=0x5f
+ const asciia=0x61
+ const asciib=0x62
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -123,6 +123,8 @@ end
+ 
+ include "mem.oc"
+ 
++importx "strchr" strchr
++
+ #aftercalli *
+ 
+ include "action.oc"
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -9,10 +9,35 @@ function arg(sv pbuffer,sd outfile)
+ 	elseif a=(Xfile_arg_varfn)
+ 		call varfunc(pbuffer,outfile)
+ 	elseif a=(Xfile_arg_string)
+-		datax sz#1;valuex pointer#1
++		datax sz#1;vstrx pointer#1
+ 		call get_string(pbuffer,#sz,#pointer)
+ 		call writeq(outfile)
+-		call write(outfile,pointer,sz)
++		sd term;set term pointer;add term sz
++		sd start;set start pointer
++		while pointer!=term
++			char chars="\n\r\t"
++			char letters={asciin,asciir,asciit}
++			ss r;set r strchr(#chars,pointer#)
++			if r!=(NULL)
++				sd c;set c pointer;sub c start
++				if c!=0
++					call write(outfile,start,c)
++				end
++				char bs=asciibs;char d#1
++				sub r #chars
++				add r #letters
++				set d r#
++				call write(outfile,#bs,2)
++				inc pointer
++				set start pointer
++				continue
++			end
++			inc pointer
++		end
++		sub pointer start
++		if pointer!=0
++			call write(outfile,start,pointer)
++		end
+ 		call writeq(outfile)
+ 	else #Xfile_arg_call
+ 		callg cll(pbuffer,outfile)
+--- ocompiler-1.orig/src/files/actions/main/index.oc
++++ ocompiler-1/src/files/actions/main/index.oc
+@@ -243,6 +243,8 @@ if errormsg=(noerror)
+ 					Set fnavailable zero
+ 				elseif parses=(pass_write) #else is _notyet  . fnavailable is 2 only once, and no endfunction after
+ 					set ret_cont_break ret_cont_break_marker
++					set last_command commandset  ##for break skip if is last command
++					set last_subcommand subtype  ##for break skip if is last command
+ 				Endelseif
+ 
+ 				If comsize!=zero
+--- ocompiler-1.orig/src/files/functions/commands/cond.oc
++++ ocompiler-1/src/files/functions/commands/cond.oc
+@@ -123,13 +123,19 @@ Function condend(data number)
+ 
+ 	Data codeoffset#1
+ 	Data ptrcodeoff^codeoffset
+-	Data codesec%%ptr_codesec
++	vData codesec%%ptr_codesec
+ 	Data structure#1
+ 	Data ptrstructure^structure
+ 
+ 	Call getcontReg(codesec,ptrcodeoff)
+ 	If number=(whilenumber)
+-		Add codeoffset (backjumpsize)
++		if main.ret_cont_break!=(ret_cont_break_canskip)  #useless to write back jump after break or return
++			Add codeoffset (backjumpsize)
++		elseif main.last_command=(cCONDITIONS) #else skip backjump
++			if main.last_subcommand=(cBREAK)  #here the break jump is zero, skip also the break the jump
++				sub codeoffset (backjumpsize)
++			endif
++		endelseif
+ 	EndIf
+ 	Call getcont(condloop,ptrstructure)
+ 	Add structure ptrcReg#
+@@ -150,10 +156,18 @@ Function condend(data number)
+ 			set marker structure
+ 			sub structure (condpack_whilebegin) #to match for ptrcReg
+ 			if main.parses=(pass_write)
+-				setcall err jumpback(codeoffset,marker)
+-				If err!=(noerror)
+-					Return err
+-				EndIf
++				if main.ret_cont_break!=(ret_cont_break_canskip)  #useless to write back jump after break or return
++					setcall err jumpback(codeoffset,marker)
++					If err!=(noerror)
++						Return err
++					EndIf
++				elseif main.last_command=(cCONDITIONS) #else skip backjump
++					if main.last_subcommand=(cBREAK)  #here the break jump is zero, skip also the break the jump
++						valuex ptrcodeReg#1
++						Call getptrcontReg(codesec,#ptrcodeReg)
++						sub ptrcodeReg# (backjumpsize)
++					endif
++				endelseif
+ 				if structure#=(whilenumber) #or whiletruenumber
+ 					call condendwrite(marker,codeoffset)
+ 				elseif main.breakflag=(FALSE)  #this is an infinite loop with no breaks, some ret inside was, and must skip next dead ret if is endfunction
+@@ -187,7 +201,7 @@ function condendtest(sv p_conds,sd numbe
+ 		sub conds (condpack_codereg)
+ 
+ 		if lastcondition=(breaknumber)
+-		#here is pass_write only
++		#here is pass_write only, breaks are pass_write only
+ 			if number=(whilenumber)
+ 				call condendwrite(conds,codeoffset)
+ 				set main.breakflag (TRUE)
+@@ -200,7 +214,7 @@ function condendtest(sv p_conds,sd numbe
+ 			if number!=(whilenumber)
+ 				sub last (condpacksize)
+ 				if conds!=last   ##here are breaks
+-					#move it to last to match the reg set outside
++					#move it to last to match the reg set outside, and the breaks back, starting with the place of this closing cond
+ 					#and move ifinscribe/elseinscribe if it is the case
+ 					#ignore type, it will only be removed outside
+ 					#don't increase size to align ifinscribe and just swap
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -388,11 +388,11 @@ Data programentrypoint#1
+ const ptrprogramentrypoint^programentrypoint
+ 
+ #getcommand
+-Str commandset#1
++data commandset#1
+ Data subtype#1
+ Data ptrsubtype^subtype
+-
+-
++datax last_command#1
++datax last_subcommand#1
+ 
+ 
+ 
+@@ -533,6 +533,7 @@ data xbool#1
+ data xfile#1
+ charx xfile_sharp_comment#1
+ 
++#at endfunction, else jump, while end jump
+ charx ret_cont_break#1   #cont break? is also skipping the jump at conditions
+ charx ret_cont_break_marker#1
+ const ret_cont_break_no=0
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -23,7 +23,7 @@ a%=a;
+ a&=a;
+ a|=a;
+ a^=a;
+-1a;intern(1,"qw",a);
++1a;intern(1,"q\nw\re\tr",a);
+ a=f();
+ 11{
+ }
+--- ocompiler-1.orig/tests/.expected/a.out.oc.log
++++ ocompiler-1/tests/.expected/a.out.oc.log
+@@ -3,4 +3,4 @@ na.out.oc
+ ninclude.h
+ q
+ q
+-x00000015
++x0000001a
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -10,7 +10,7 @@ AAAAYQAIAAAAAQAAAGEAJQIAAAABAAAAYQAIAAAA
+ JgIAAAABAAAAYQAIAAAAAQAAAGEAfAIAAAABAAAAYQAIAAAAAQAAAGEAXgIAAAABAAAAYQAWAwAA
+ AAEAHwIBHwMCKxAAAwEAAAAxKwAEAgAAADAxKwAFAwAAADB4MisABwYAAABpbnRlcm4rAAgGAAAA
+ aW50ZXJuKwAJBgAAAGludGVybgEAAABhACsACgYAAABpbnRlcm4BAAAAYQAYHxoJAAAGAAAAaW50
+-ZXJuAwAAAAIAAQEEAAAAbWFpbgEAAABhAAEEAAAAbWFpbgEAAABhAAECAAAAcXcAAAMBAAAAMR8I
+-AAAAAQAAAGEARQMAAQAAAGYAAAAACwAAAwEAAAAxH4UAAAMBAAAAMR8MEQoAAAEAAABiAAAAAQAA
+-AGIAAAADAQAAADEfDQAAAwEAAAAxH4UAAAMBAAAAMh8QEQ4PERIVAAEDAAAAdHN0FwYAAAB4X2Zp
+-bGUBGQ==
++ZXJuAwAAAAIAAQEEAAAAbWFpbgEAAABhAAEEAAAAbWFpbgEAAABhAAEHAAAAcQp3DWUJcgAAAwEA
++AAAxHwgAAAABAAAAYQBFAwABAAAAZgAAAAALAAADAQAAADEfhQAAAwEAAAAxHwwRCgAAAQAAAGIA
++AAABAAAAYgAAAAMBAAAAMR8NAAADAQAAADEfhQAAAwEAAAAyHxARDg8REhUAAQMAAAB0c3QXBgAA
++AHhfZmlsZQEZ
+--- ocompiler-1.orig/tests/.expected/a.out.txt
++++ ocompiler-1/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+-f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAKpQECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAgVAAAAFQAAAAYAAAAAEAAAAQAAABUEAAAVlAQIFZQECIABAACAAQAABQAAAAAQ
+-AAADAAAAlQUAAJWVBAiVlQQIEwAAABMAAAAEAAAAAQAAAAIAAACoBQAAqKUECKilBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAKgFAACopQQIqKUECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAGKYECBgGAAAWAAAAAAAAAAAAAAAB
+-AAAAAAAAAA0AAAAGAAAAAwAAAKilBAioBQAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAL5QECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
++BAAAAIQECACEBAgaAAAAGgAAAAYAAAAAEAAAAQAAABoEAAAalAQIGpQECHEBAABxAQAABQAAAAAQ
++AAADAAAAiwUAAIuVBAiLlQQIEwAAABMAAAAEAAAAAQAAAAIAAACeBQAAnqUECJ6lBAhQAAAAUAAA
++AAQAAAABAAAAAQAAAJ4FAACepQQInqUECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAADqYECA4GAAAWAAAAAAAAAAAAAAAB
++AAAAAAAAAA0AAAAGAAAAAwAAAJ6lBAieBQAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -16,14 +16,13 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC
+-AzQ1AAAAAAaEBAgAAAAAcXcAAIuEJAQAAACjDYQECFNVi+yL3Mlbw1NVi+yL3LoGhAQIigK6BoQE
+-CIgCugaEBAiKAroGhAQIAAK6BoQECIoCugaEBAgoAroGhAQIigq6BoQECIoC9uGIAroGhAQIigq6
+-BoQECIoCD7rgB3MFxsT/6wPGxAD2+YgCugaEBAiKCroGhAQIigLGxAD28YgCugaEBAiKCroGhAQI
+-igIPuuAHcwXGxP/rA8bEAPb5iCK6BoQECIoKugaEBAiKAsbEAPbxiCK6BoQECIoCugaEBAggAroG
+-hAQIigK6BoQECAgCugaEBAiKAroGhAQIMAL87iKL47oMhAQID7YCULoRhAQIi8JQaAEAAADo9f7/
+-/4vjuDqmBAj/ELoGhAQIiAK4AQAAALkBAAAAOcEPhQUAAADpAAAAAIvjuQEAAAC6CYQECIsCgfkA
+-AAAAdAf/yf80iOvxuAmEBAj/ELgCAAAAuQEAAAA5wQ+FCgAAAOnp////6eT////pBQAAAOn2////
+-yVvDzC9saWIvbGQtbGludXguc28uMgABAAAAAAAAAAQAAAD4pQQIBgAAAAimBAgLAAAAEAAAAAUA
+-AAAYpgQICgAAABYAAAAHAAAALqYECAgAAAAMAAAACQAAAAwAAAAAAAAAAAAAAAEAAAABAAAAAAAA
+-AAAAAAACAAAAAAAAAAAAAAASAAAAYQBiAAAuZHluc3RyAC5keW5hbWljADqmBAgBAAAAAAAAAAAA
+-AAA=
++AzQ1AAAAAAaEBAgAAAAAcQp3DWUJcgAAi4QkBAAAAKMNhAQIU1WL7IvcyVvDU1WL7IvcugaEBAiK
++AroGhAQIiAK6BoQECIoCugaEBAgAAroGhAQIigK6BoQECCgCugaEBAiKCroGhAQIigL24YgCugaE
++BAiKCroGhAQIigIPuuAHcwXGxP/rA8bEAPb5iAK6BoQECIoKugaEBAiKAsbEAPbxiAK6BoQECIoK
++ugaEBAiKAg+64AdzBcbE/+sDxsQA9vmIIroGhAQIigq6BoQECIoCxsQA9vGIIroGhAQIigK6BoQE
++CCACugaEBAiKAroGhAQICAK6BoQECIoCugaEBAgwAvzuJ4vjugyEBAgPtgJQuhGEBAiLwlBoAQAA
++AOj1/v//i+O4MKYECP8QugaEBAiIArgBAAAAuQEAAAA5wQ+FBQAAAOkAAAAAi+O5AQAAALoJhAQI
++iwKB+QAAAAB0B//J/zSI6/G4CYQECP8QuAIAAAC5AQAAADnBD4UFAAAA6en////JW8PML2xpYi9s
++ZC1saW51eC5zby4yAAEAAAAAAAAABAAAAO6lBAgGAAAA/qUECAsAAAAQAAAABQAAAA6mBAgKAAAA
++FgAAAAcAAAAkpgQICAAAAAwAAAAJAAAADAAAAAAAAAAAAAAAAQAAAAEAAAAAAAAAAAAAAAIAAAAA
++AAAAAAAAABIAAABhAGIAAC5keW5zdHIALmR5bmFtaWMAMKYECAEAAAAAAAAAAAAAAA==
+--- ocompiler-1.orig/tests/.expected/cond.o.txt
++++ ocompiler-1/tests/.expected/cond.o.txt
+@@ -1,13 +1,13 @@
+ f0VMRgIBAQAAAAAAAAAAAAEAPgABAAAAAAAAAAAAAAAAAAAAAAAAAEIAAAAAAAAAAAAAAEAAAAAA
+ AEAACAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAEAAAABAAAAAwAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAHAAAAAQAAAAYAAAAAAAAAAAAAAAAAAAAABAAAAAAAAF0B
+-AAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAADQAAAAgAAAADAAAAAAAAAAAAAAAAAAAAXQUA
++AAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAHAAAAAQAAAAYAAAAAAAAAAAAAAAAAAAAABAAAAAAAAFgB
++AAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAADQAAAAgAAAADAAAAAAAAAAAAAAAAAAAAWAUA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAABgAAAACAAAAAAAAAAAAAAAAAAAA
+-AAAAAF0FAAAAAAAAeAAAAAAAAAAHAAAABAAAAAQAAAAAAAAAGAAAAAAAAAAgAAAABAAAAAAAAAAA
+-AAAAAAAAAAAAAADVBQAAAAAAAAAAAAAAAAAABAAAAAEAAAAEAAAAAAAAABgAAAAAAAAAKwAAAAQA
+-AAAAAAAAAAAAAAAAAAAAAAAA1QUAAAAAAAAAAAAAAAAAAAQAAAACAAAABAAAAAAAAAAYAAAAAAAA
+-ADYAAAADAAAAAAAAAAAAAAAAAAAAAAAAANUFAAAAAAAAPgAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA
++AAAAAFgFAAAAAAAAeAAAAAAAAAAHAAAABAAAAAQAAAAAAAAAGAAAAAAAAAAgAAAABAAAAAAAAAAA
++AAAAAAAAAAAAAADQBQAAAAAAAAAAAAAAAAAABAAAAAEAAAAEAAAAAAAAABgAAAAAAAAAKwAAAAQA
++AAAAAAAAAAAAAAAAAAAAAAAA0AUAAAAAAAAAAAAAAAAAAAQAAAACAAAABAAAAAAAAAAYAAAAAAAA
++ADYAAAADAAAAAAAAAAAAAAAAAAAAAAAAANAFAAAAAAAAPgAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -17,12 +17,12 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFhI
+ g+wwUFNVSIvsSIvcuAEAAAC5AQAAADnBD4UFAAAA6RIAAAC4AQAAALkBAAAAOcEPhQAAAAC4AQAA
+-ALkBAAAAOcEPhQ8AAADpCgAAAOnk////6d////+4AQAAALkBAAAAOcEPggUAAADpygAAALgBAAAA
+-uQEAAAA5wQ+DBQAAAOmzAAAAuAEAAAC5AQAAADnBD4QFAAAA6ZwAAAC4AQAAALkBAAAAOcEPhQUA
+-AADphQAAALgBAAAAuQEAAAA5wQ+GBQAAAOluAAAAuAEAAAC5AQAAADnBD4cFAAAA6VcAAAC4AQAA
+-ALkBAAAAOcEPjAUAAADpQAAAALgBAAAAuQEAAAA5wQ+NBQAAAOkpAAAAuAEAAAC5AQAAADnBD44F
+-AAAA6RIAAAC4AQAAALkBAAAAOcEPjwAAAAC4AQAAALkEAAAAOcEPiwAAAAC4AQAAALkCAAAAOcEP
+-igAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAwABAAAAAAAAAAAAAAAAAAAAAAAHAAAA
+-AwACAAAAAAAAAAAAAAAAAAAAAAANAAAAAwADAAAAAAAAAAAAAAAAAAAAAAATAAAAEgACAAAAAAAA
+-AAAAAAAAAAAAAAAALmRhdGEALnRleHQALmR0bmIAbWFpbgAuc3ltdGFiAC5yZWxhLmRhdGEALnJl
+-bGEudGV4dAAuc3RydGFiAA==
++ALkBAAAAOcEPhQoAAADpBQAAAOnk////uAEAAAC5AQAAADnBD4IFAAAA6coAAAC4AQAAALkBAAAA
++OcEPgwUAAADpswAAALgBAAAAuQEAAAA5wQ+EBQAAAOmcAAAAuAEAAAC5AQAAADnBD4UFAAAA6YUA
++AAC4AQAAALkBAAAAOcEPhgUAAADpbgAAALgBAAAAuQEAAAA5wQ+HBQAAAOlXAAAAuAEAAAC5AQAA
++ADnBD4wFAAAA6UAAAAC4AQAAALkBAAAAOcEPjQUAAADpKQAAALgBAAAAuQEAAAA5wQ+OBQAAAOkS
++AAAAuAEAAAC5AQAAADnBD48AAAAAuAEAAAC5BAAAADnBD4sAAAAAuAEAAAC5AgAAADnBD4oAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAMAAQAAAAAAAAAAAAAAAAAAAAAABwAAAAMAAgAA
++AAAAAAAAAAAAAAAAAAAADQAAAAMAAwAAAAAAAAAAAAAAAAAAAAAAEwAAABIAAgAAAAAAAAAAAAAA
++AAAAAAAAAC5kYXRhAC50ZXh0AC5kdG5iAG1haW4ALnN5bXRhYgAucmVsYS5kYXRhAC5yZWxhLnRl
++eHQALnN0cnRhYgA=
+--- ocompiler-1.orig/tests/.expected/cond.oc.x.txt
++++ ocompiler-1/tests/.expected/cond.oc.x.txt
+@@ -1,6 +1,6 @@
+ AwMFBAAAAG1haW4DAAAAAAALAAADAQAAADEfhQAAAwEAAAAxHwwLAAADAQAAADEfhQAAAwEAAAAx
+-HxENAAADAQAAADEfhQAAAwEAAAAxHw8QEQsAAAMBAAAAMR+CAAADAQAAADEfDAsAAAMBAAAAMR+D
+-AAADAQAAADEfDAsAAAMBAAAAMR+EAAADAQAAADEfDAsAAAMBAAAAMR+FAAADAQAAADEfDAsAAAMB
+-AAAAMR+GAAADAQAAADEfDAsAAAMBAAAAMR+HAAADAQAAADEfDAsAAAMBAAAAMR+MAAADAQAAADEf
+-DAsAAAMBAAAAMR+NAAADAQAAADEfDAsAAAMBAAAAMR+OAAADAQAAADEfDAsAAAMBAAAAMR+PAAAD
+-AQAAADEfEQsAAAMBAAAANB+LAAADAQAAADEfEQsAAAMBAAAAMh+KAAADAQAAADEfEQ==
++HxENAAADAQAAADEfhQAAAwEAAAAxHw8QDxELAAADAQAAADEfggAAAwEAAAAxHwwLAAADAQAAADEf
++gwAAAwEAAAAxHwwLAAADAQAAADEfhAAAAwEAAAAxHwwLAAADAQAAADEfhQAAAwEAAAAxHwwLAAAD
++AQAAADEfhgAAAwEAAAAxHwwLAAADAQAAADEfhwAAAwEAAAAxHwwLAAADAQAAADEfjAAAAwEAAAAx
++HwwLAAADAQAAADEfjQAAAwEAAAAxHwwLAAADAQAAADEfjgAAAwEAAAAxHwwLAAADAQAAADEfjwAA
++AwEAAAAxHxELAAADAQAAADQfiwAAAwEAAAAxHxELAAADAQAAADIfigAAAwEAAAAxHxE=
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -38,7 +38,7 @@ xor a a
+ 
+ hex -:,~\,~-\\+(1+01+0x2+\intern+\\intern+\intern.a+\intern.a\)
+ ;
+-call intern(1,"qw",main.a:main.a)
++call intern(1,"q\nw\re\tr",main.a:main.a)
+ set a f()
+ if 1=1
+ else
+--- ocompiler-1.orig/tests/cond.oc
++++ ocompiler-1/tests/cond.oc
+@@ -4,9 +4,11 @@ entry main()
+ if 1=1
+ elseif 1=1
+ endelseif
++
+ while 1=1
+ break
+ continue
++break
+ endwhile
+ 
+ if 1>=^1
