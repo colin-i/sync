@@ -1,0 +1,482 @@
+Format ElfObj64
+
+include "../include/prog.h"
+
+#win32 with _
+importx "memcpy" memcpy
+importx "sprintf" sprintf
+
+import "spaces" spaces
+
+#strings
+
+#0 yes  1 no
+function row_termination(sv p_ac,sv p_row)
+	ss ac;set ac p_ac#
+	if ac#=(LineFeed)
+		inc p_row#
+		return 0
+	endif
+	if ac#=(CarriageReturn)
+		inc ac;if ac#=0xa;set p_ac# ac;endif
+		inc p_row#
+		return 0
+	endif
+	return 1
+endfunction
+#error_row
+function escape_action(ss ac,ss pointer,ss stop_pointer)
+    sd row=1
+    #sd loop1=1
+    sd error_row=0
+    #
+    sd comments=0
+    char lines_com_c1="*";char lines_com_c2="/";ss test
+    const line_comment=1
+    const multiLine_comment=2
+    #
+    whiletrue
+        sd loop2=1
+        setcall ac spaces(ac)
+        #
+        if comments!=(multiLine_comment)
+            set comments 0
+            if ac#=(Slash)
+                set test ac
+                inc test
+                if test#=(Slash)
+                    set comments (line_comment)
+                    add ac 2
+                elseif test#=lines_com_c1
+                    set comments (multiLine_comment)
+                    add ac 2
+                endelseif
+            endif
+        endif
+        #
+	import "debug_phase_init" debug_phase_init
+        while loop2=1
+		setcall loop2 row_termination(#ac,#row)
+		if loop2=1
+			if ac#=0
+				if stop_pointer!=(NULL)
+					return error_row
+				end
+				set pointer# 0
+				call debug_phase_init(pointer)
+				return pointer
+			endif
+			if comments=0
+			    if pointer=stop_pointer
+			        set error_row row
+			    else
+			        set pointer# ac#
+			    endelse
+			    inc pointer
+			elseif comments=(multiLine_comment)
+			    if ac#=lines_com_c1
+			        set test ac;inc test;if test#=lines_com_c2;set comments 0;inc ac;endif
+			    endif
+			endelseif
+		elseif stop_pointer=(NULL)
+			call debug_phase_init(pointer)
+		endelseif
+            inc ac
+        endwhile
+	if error_row!=0
+		set pointer# 0
+		return error_row
+	endif
+    endwhile
+end
+#nr
+function escape_count(ss string,sd escape)
+    sd nr=0
+    sd escaped=0
+    while string#!=0
+        if string#=escape
+            xor escaped 1
+        elseif escaped=1
+		inc nr
+            set escaped 0
+
+		#this is not working nowadays, printf is searching for floats on xmm registers, kept as legacy
+		char l="l"
+		if string#=l
+			char f="f";
+			ss double_test=1
+			add double_test string
+			if double_test#=f
+				inc nr
+			endif
+		endif
+
+        endelseif
+        inc string
+    endwhile
+    return nr
+endfunction
+
+#debug
+
+function action_debug(sd type)
+	vstr orig=NULL
+	vstr m=NULL
+	if type=(action_debug_get_mem)
+		return m
+	endif
+	if type=(action_debug_get)
+		return #orig
+	end
+	# action_debug_free
+	set orig (NULL)
+	import "mem_free" mem_free
+	if m!=(NULL);call mem_free(#m);endif
+endfunction
+function action_debug_free()
+    call action_debug((action_debug_free))
+endfunction
+
+function debug_code()
+    value code#1
+    return #code
+endfunction
+
+function action_error()
+    sv p_action_errors
+    setcall p_action_errors action_debug((action_debug_get))
+    if p_action_errors#=(NULL)
+        ret
+    endif
+
+    vstr ac#1
+    vstr mem#1
+    call memcpy(#ac,p_action_errors,(2*:))
+
+    import "printEr" printEr
+    call printEr("Row: ")
+    sv p_c
+    setcall p_c debug_code()
+    sd row
+    setcall row escape_action(ac,mem,p_c#)
+    import "string_nl_print" string_nl_print
+    #a small reserve for a number like 2 000 000 000
+    char row_nr#dword_to_string_char
+    call sprintf(#row_nr,"%u",row)
+    call string_nl_print(#row_nr)
+    call string_nl_print(p_c#)
+endfunction
+
+#size
+function action_size(sd id)
+    import "block_get_size" block_get_size
+    sd block
+    setcall block struct_ids_action((ids_get),id)
+    sd size
+    setcall size block_get_size(block)
+    addcall size pool_size(id)
+    #add termination
+    add size 1
+    return size
+endfunction
+
+import "block_get_mem" block_get_mem
+
+#these ids are get only, is safe at throwless
+import "struct_ids_action" struct_ids_action
+import "struct_ids_actionpool" struct_ids_actionpool
+
+#size
+function pool_size(sd id)
+    sd poolblock
+    setcall poolblock struct_ids_actionpool((ids_get),id)
+    sd poolsize
+    setcall poolsize block_get_size(poolblock)
+    #detected at button actions="", swfdump giving error without "if poolsize!=0"
+    if poolsize=0;return 0;endif
+    #add header
+    add poolsize (1+2)
+    return poolsize
+endfunction
+
+#this has throws but for mem_exp_change and back are not required
+import "swf_actionblock" swf_actionblock
+import "file_get_content__resources_free" file_get_content__resources_free
+
+import "action_code_get_pointer" action_code_get_pointer
+import "action_code_values_index" action_code_values_index
+import "action_code_get" action_code_get
+
+
+aftercallimport ebool
+
+import "swf_actionblock_add" swf_actionblock_add
+import "actionrecordheader" actionrecordheader
+import "actionpool_value" actionpool_value
+
+#tags
+
+function action_push(sd factors)
+	sd iter^factors
+	sd size=0
+	while iter#!=-1
+		inc size
+		if iter#=(ap_Integer)
+			add size (DWORD)
+			incst iter
+		elseif iter#=(ap_double)
+			add size (QWORD)
+			add iter (2*:)
+		elseif iter#=(ap_Null)
+		#skip
+		elseif iter#=(ap_Undefined)
+		#skip
+		else
+		#if iter#==(ap_RegisterNumber)
+		#if iter#==(ap_Boolean)
+		#if iter#==(ap_Constant8)
+			add size (BYTE)
+			sd value
+			set value iter#
+			incst iter
+			if value=(ap_Constant8)
+			#set the action pool(if isn't) and verify to add +1size if 8 will go to ap_Constant16
+				sd translated_id
+				setcall translated_id actionpool_value(iter#v^)
+				if translated_id>0xff
+					inc size
+				endif
+			endif
+		endelse
+		incst iter
+	endwhile
+
+	call actionrecordheader((ActionPush),size)
+
+	sd cursor^factors
+	while cursor#!=-1
+		#test here Constant8 to Constant16
+		if cursor#=(ap_Constant8)
+			sv pointer
+			set pointer cursor
+			incst pointer
+			#call actionpool_getvalue, the pool already exists(actionpool_value if not)
+			import "actionpool_getvalue" actionpool_getvalue
+			setcall translated_id actionpool_getvalue(pointer#)
+			sd const_sz=BYTE
+			if translated_id>0xff
+				inc const_sz
+				set cursor# (ap_Constant16)
+			endif
+		endif
+
+		call swf_actionblock_add(cursor,1)
+
+		if cursor#=(ap_Integer)
+			incst cursor
+			call swf_actionblock_add(cursor,(DWORD))
+		elseif cursor#=(ap_double)
+			incst cursor
+			call swf_actionblock_add(cursor,(DWORD))
+			incst cursor
+			call swf_actionblock_add(cursor,(DWORD))
+		elseif cursor#=(ap_RegisterNumber)
+			incst cursor
+			call swf_actionblock_add(cursor,(BYTE))
+		elseif cursor#=(ap_Boolean)
+			incst cursor
+			call swf_actionblock_add(cursor,(BYTE))
+		elseif cursor#=(ap_Null)
+		#skip
+		elseif cursor#=(ap_Undefined)
+		#skip
+		else
+		#if cursor#==(ap_Constant8)
+		#or was modified to (ap_Constant16)
+			call swf_actionblock_add(#translated_id,const_sz)
+			incst cursor
+		endelse
+		incst cursor
+	endwhile
+endfunction
+
+function action_one(sd tag)
+    call swf_actionblock_add(#tag,1)
+      import "debug_phase_code_add" debug_phase_code_add
+      call debug_phase_code_add((FALSE))
+endfunction
+
+import "action_code_right_util" action_code_right_util
+#codepointer
+function action_caller(ss member,sv pfname,sd codepointer)
+	set codepointer action_caller_right(pfname,codepointer)
+
+	import "debug_x_preexpand_inter" debug_x_preexpand_inter
+	call debug_x_preexpand_inter(codepointer)
+	if member!=0
+		sd currentnr
+		sd p_currentnr
+		setcall p_currentnr action_code_values_index()
+		set currentnr p_currentnr#
+		sv values
+		setcall values action_code_get()
+
+		call action_code_member(member)
+		call action_member_loop_right(values)
+
+		import "debug_x_expand" debug_x_expand
+		call debug_x_expand(values)
+
+		set p_currentnr# currentnr
+	else
+		call debug_x_expand((NULL))
+	end
+	return codepointer
+endfunction
+#codepointer
+function action_caller_right(sv pfname,sd codepointer)
+	set pfname# action_code_get_pointer(#codepointer)
+	sd nrargs=0
+	while codepointer#!=(args_end)
+		setcall codepointer action_code_right_util(codepointer)
+		inc nrargs
+	endwhile
+	add codepointer (DWORD)
+	call action_push((ap_Integer),nrargs,-1)
+	return codepointer
+end
+
+#member
+
+import "action_get_one" action_get_one
+#the position where the mathpointer reachs
+function action_member_loop_left(sv mathpointer)  #set, ex get_member_pointer, let the string
+	sd name
+	set name action_code_get_pointer(#mathpointer)
+	call action_get_one(name)
+
+	#at first is something
+	if mathpointer#!=(no_pointer)
+		set name action_code_get_pointer(#mathpointer)
+		call action_push((ap_Constant8),name,-1)
+	else
+		add mathpointer :+DWORD  #to pass the pointer   + square_bracket_start
+		setcall mathpointer action_code_right_util(mathpointer)
+	end
+
+	whiletrue
+		if mathpointer#=(no_pointer)
+			add mathpointer :  #to pass the pointer
+			if mathpointer#d=(member_end)
+				add mathpointer (DWORD)
+				return mathpointer
+			end
+			#square_bracket_start
+			call action_one((ActionGetMember))
+			add mathpointer (DWORD)
+			setcall mathpointer action_code_right_util(mathpointer)
+		else
+			call action_one((ActionGetMember))
+			set name action_code_get_pointer(#mathpointer)
+			call action_push((ap_Constant8),name,-1)
+		end
+	end
+end
+function action_member_loop_right(sv mathpointer) #get, ex get_member, get the object
+	sd name
+	set name action_code_get_pointer(#mathpointer)
+	call action_get_one(name)
+	whiletrue
+		if mathpointer#!=(no_pointer)
+			set name action_code_get_pointer(#mathpointer)
+			call action_push((ap_Constant8),name,-1)
+		else
+			add mathpointer :  #to pass the pointer
+			if mathpointer#d=(square_bracket_start)
+				add mathpointer (DWORD)
+				setcall mathpointer action_code_right_util(mathpointer)
+			else #member_end
+				add mathpointer (DWORD)
+				return mathpointer
+			end
+		end
+		call action_one((ActionGetMember))
+	end
+end
+
+import "action_code_member" action_code_member
+#import "error" error
+#function action_member_write(ss member)
+#   const dup_member=256
+#    charx dup_data#dup_member  #was dup, escape, parse on values append, code. maybe the expression string to be passed as is, but is not necessary now
+#    vstr code^dup_data
+#    sd len
+#    setcall len strlen(member)
+#    inc len
+#    if len>(dup_member)
+#        call error("actionscript code limit exceeded")
+#    endif
+#    call memcpy(code,member,len)
+#    call forward_values_expand(action_member_write_tool,code)
+#endfunction
+
+#action
+
+import "swf_actionrecordheader" swf_actionrecordheader
+import "swf_mem_add" swf_mem_add
+function write_action(sd id)
+    sd block
+    setcall block struct_ids_action((ids_get),id)
+    sd mem
+    setcall mem block_get_mem(block)
+    sd size
+    setcall size block_get_size(block)
+    call pool_wr(id)
+    call swf_mem_add(mem,size)
+    #this is ActionEndFlag after ACTIONRECORD [zero or more]
+    data end=0
+    call swf_mem_add(#end,1)
+endfunction
+#void
+function pool_wr(sd id)
+    sd poolblock
+    setcall poolblock struct_ids_actionpool((ids_get),id)
+    sd poolsize
+    setcall poolsize block_get_size(poolblock)
+    #detected at button actions="", swfdump giving error without "if poolsize!=0"
+    if poolsize=0;return 0;endif
+    sd poolmem
+    setcall poolmem block_get_mem(poolblock)
+    call swf_actionrecordheader((ActionConstantPool),poolsize)
+    call swf_mem_add(poolmem,poolsize)
+endfunction
+
+#format and alt
+
+import "action_base" action_base
+
+function action_format(sv args)
+    sd args_nr=2
+    sv args_format
+    set args_format args;incst args_format
+    char e="%"
+    addcall args_nr escape_count(args_format#,e)
+    callex sprintf args args_nr
+    call action_base(args#)
+endfunction
+
+import "debug_base" debug_base
+import "alt_action_base" alt_action_base
+
+function action_sprite_base(sd sprite,ss actions,sd has_frames)
+	sd alt_ac;set alt_ac alt_action_base(actions,sprite,has_frames)
+	if alt_ac!=(NULL)
+		call debug_base(sprite)
+		call swf_actionblock((mem_exp_change),sprite)  #alt action is not using actionblock, is using swfblock
+		call action_base(alt_ac)
+		if alt_ac!=actions
+			call file_get_content__resources_free()
+		end
+		call swf_actionblock((mem_exp_change_back))
+	end
+endfunction

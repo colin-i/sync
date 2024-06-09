@@ -1,0 +1,71 @@
+Format ElfObj64
+
+include "../include/prog.h"
+
+#this has throws but for mem_exp_change and back are not required
+import "swf_actionblock" swf_actionblock
+
+import "alt_action" alt_action
+import "file_get_content__resources_free" file_get_content__resources_free
+
+aftercallimport ebool
+
+#this/an action
+
+import "action_base" action_base
+import "action_format" action_format
+import "debug_base" debug_base
+
+functionX action(ss ac)
+#ss ac       actionscript string to be parsed
+	sd alt_ac;set alt_ac alt_action(ac,0)
+	if alt_ac!=(NULL)  #can be two action() same DoAction
+		call debug_base(0)
+		call action_base(alt_ac)
+		if alt_ac!=ac
+			call file_get_content__resources_free()
+		end
+	end
+endfunction
+functionXx actionf(ss buffer,ss *format)
+#ss buffer   the buffer where to sprintf the format and the arguments
+#ss format   the format
+#...         % arguments here
+	sd alt_ac;set alt_ac alt_action(buffer,0)
+	if alt_ac!=(NULL)
+		call debug_base(0)
+		if buffer=alt_ac
+			call action_format(#buffer)
+		else
+			call action_base(alt_ac)
+			call file_get_content__resources_free()
+		end
+	end
+endfunction
+
+#sprite
+
+import "action_sprite_base" action_sprite_base
+
+functionX action_sprite(sd sprite,ss actions)
+#sd sprite    sprite id
+#ss actions   same as action
+	call action_sprite_base(sprite,actions,(TRUE))
+endfunction
+functionXx actionf_sprite(sd sprite,ss buffer,ss *format)
+#sd sprite    sprite id
+#ss buffer    same as actionf
+#ss format    same as actionf
+	sd alt_ac;set alt_ac alt_action(buffer,sprite)
+	if alt_ac!=(NULL)
+		call debug_base(sprite)
+		call swf_actionblock((mem_exp_change),sprite)   #alt action is not using actionblock, is using swfblock
+		if buffer=alt_ac
+			call action_format(#buffer)
+		else
+			call action_base(alt_ac)
+			call file_get_content__resources_free()
+		end
+		call swf_actionblock((mem_exp_change_back))
+	end
+endfunction

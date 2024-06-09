@@ -1,0 +1,118 @@
+Format ElfObj64
+
+include "../include/prog.h"
+
+#win32 with _
+importx "strlen" strlen
+importx "memcmp" memcmp
+
+function actionpoolid_root()
+    data id#1
+    return #id
+endfunction
+function actionpoolid()
+    data id#1
+    return #id
+endfunction
+function actionpoolid_get()
+    sd p_id
+    setcall p_id actionpoolid()
+    return p_id#
+endfunction
+
+import "struct_ids_actionpool" struct_ids_actionpool
+#block
+function actionpool_currentblock()
+    sd poolid;sd block
+    setcall poolid actionpoolid_get()
+    setcall block struct_ids_actionpool((ids_get),poolid)
+    return block
+endfunction
+
+import "block_get_mem" block_get_mem
+import "block_get_size" block_get_size
+import "stack_to_word_arg" stack_to_word_arg
+import "word_arg_to_stack" word_arg_to_stack
+
+import "swf_mem" swf_mem
+
+
+
+aftercallimport ebool
+
+
+
+#pool id
+function actionpool_value(ss value)
+	sd id
+	set id actionpool_value_ex(value,(FALSE))
+	return id
+end
+#pool id
+function actionpool_value_ex(ss value,sd force)
+    sd poolid
+    setcall poolid actionpoolid_get()
+    sd nr
+    call swf_mem((mem_exp_change_pool),poolid)
+    setcall nr actionpool_getvalue_ex(value,force)
+    call swf_mem((mem_exp_change_back_pool))
+    return nr
+endfunction
+#pool id
+function actionpool_getvalue(ss value)
+	sd id
+	set id actionpool_getvalue_ex(value,(FALSE))
+	return id
+end
+import "swf_mem_add" swf_mem_add
+import "error" error
+#pool id
+function actionpool_getvalue_ex(ss value,sd force)
+    sd block
+    setcall block actionpool_currentblock()
+    sd size
+    setcall size block_get_size(block)
+    sd nr
+    sd newlen
+    setcall newlen strlen(value)
+    if size=0
+	#is first value, add the pools header and count=1 , the pool mem is already selected when it comes from the second actionpool_getvalue at push
+        sd onevalue=1
+        call swf_mem_add(#onevalue,2)
+        set nr 0
+    else
+        sd mem
+        sd count
+        setcall mem block_get_mem(block)
+        setcall count word_arg_to_stack(mem)
+        set nr count
+	if force=(FALSE)
+		add mem (WORD)
+        while count!=0
+            sd len
+            setcall len strlen(mem)
+            if len=newlen
+                sd comp
+                setcall comp memcmp(mem,value,len)
+                if comp=0
+                    sub nr count
+                    return nr
+                endif
+            endif
+            inc len
+            add mem len
+            dec count
+        endwhile
+		setcall mem block_get_mem(block)
+	end
+	if nr=(maxuint16)
+		call error("max uint16 at action pool") #Count  UI16  Number of constants to follow
+	end
+        set count nr
+        inc count
+        call stack_to_word_arg(count,mem)
+    endelse
+    inc newlen
+    call swf_mem_add(value,newlen)
+    return nr
+endfunction

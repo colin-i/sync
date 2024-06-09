@@ -1,0 +1,74 @@
+Format ElfObj64
+
+include "../include/prog.h"
+
+import "action_debug" action_debug
+import "brace_blocks_counter_init" brace_blocks_counter_init
+import "action_code_values" action_code_values
+import "action_code_values_index" action_code_values_index
+import "escape_action" escape_action
+import "action_debug_free" action_debug_free
+
+
+
+aftercallimport ebool
+
+#this/an action
+
+import "action__code_row" action__code_row
+import "action_code_set" action_code_set
+import "action_code_row" action_code_row
+import "dupreserve_string" dupreserve_string
+import "brace_blocks_end" brace_blocks_end
+function action_base(ss ac)
+#ss ac       actionscript string to be parsed
+	sd p_values
+	setcall p_values action_code_values()
+	import "error" error
+	if p_values=(NULL);call error("Don't call the action now.");endif
+	#
+	sd nr
+	setcall nr action_code_values_index()
+	set nr# 0
+	call brace_blocks_counter_init()
+
+	import "actionx" actionx
+	sd x;set x actionx()
+	if x=(FALSE) #if true, only action__code_row loop
+		ss mem
+		setcall mem dupreserve_string(ac)
+
+		import "debug_action_init" debug_action_init
+		call debug_action_init(ac)
+		sd last;set last escape_action(ac,mem,0)
+		import "debug_x_pointers" debug_x_pointers
+		call debug_x_pointers(mem,last)
+		import "debug_action_phase" debug_action_phase
+		call debug_action_phase()
+
+		sv p_action_errors
+		setcall p_action_errors action_debug((action_debug_get))
+		set p_action_errors# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
+		sv cursor;set cursor p_action_errors;incst cursor;set cursor# mem
+		while mem#!=0
+			setcall mem action_code_row(mem,(FALSE))
+		endwhile
+		call action_code_set((math_end))
+		#reset to stop adding row nr at errors
+		set p_action_errors# (NULL)
+		call brace_blocks_end()
+
+		call debug_action_phase()
+
+		sv stored;set stored p_values
+		#                 code_values are not reallocated
+		while p_values#!=(math_end)
+			setcall p_values action__code_row(p_values)  #also at actionx
+		endwhile
+		import "debug_x" debug_x
+		call debug_x(stored,nr#) #need to be after, to modify pointers inside
+
+		#free mem ok,another free is at errors
+		call action_debug_free()
+	end
+endfunction
