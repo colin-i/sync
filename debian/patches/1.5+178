@@ -1,0 +1,179 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+178) xenial; urgency=medium
+ .
+   * fix fn args for ounused
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-06-19
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 18EX7DNiUvIP5r8glaDn0sZ6an2a0UlmO
++File ID: 1K8Jo3GynFSY5QozhkHr_RwNSufUyX-H9
++<p>Found file: ./ocompiler-1-5+177.x86_64.rpm, 1K8Jo3GynFSY5QozhkHr_RwNSufUyX-H9, 2024-06-19T05:09:17.008Z, 72433, https://drive.google.com/uc?id=1K8Jo3GynFSY5QozhkHr_RwNSufUyX-H9&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+175.x86_64.rpm, 18EX7DNiUvIP5r8glaDn0sZ6an2a0UlmO, 2024-06-15T10:53:11.558Z, 72434, https://drive.google.com/uc?id=18EX7DNiUvIP5r8glaDn0sZ6an2a0UlmO&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+174.x86_64.rpm, 1H-ksw7mzSc7hFGGNCLJ_Ii2Zt4RAh6Rt, 2024-05-28T08:32:28.164Z, 72304, https://drive.google.com/uc?id=1H-ksw7mzSc7hFGGNCLJ_Ii2Zt4RAh6Rt&export=download
+--- ocompiler-1.orig/src/files/functions.oc
++++ ocompiler-1/src/files/functions.oc
+@@ -1,5 +1,6 @@
+ 
+ Include "./functions/inits.oc"
++Include "./functions/debug.oc"
+ 
+ Include "./functions/commons/comfn.oc"
+ Include "./functions/commons/base.oc"
+@@ -57,6 +58,5 @@ Include "./functions/enumbags.oc"
+ Include "./functions/import.oc"
+ Include "./functions/override.oc"
+ Include "./functions/scopes.oc"
+-Include "./functions/debug.oc"
+ Include "./functions/index.oc"
+ Include "./functions/short.oc"
+--- ocompiler-1.orig/src/files/functions/actions/fndecargs.oc
++++ ocompiler-1/src/files/functions/actions/fndecargs.oc
+@@ -59,8 +59,11 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 				add ptrdataSize# datasize
+ 			endelse
+ 		endif
+-		call advancecursors(ptrcontent,ptrsize,sz)
+-		return (noerror)
++		setcall err vars_log_prepare(ptrcontent#,sz) #for ounused
++		If err=noerr
++			call advancecursors(ptrcontent,ptrsize,sz)
++		EndIf
++		Return err
+ 	endif
+ 
+ 	sd xfile_decltype
+--- ocompiler-1.orig/src/files/functions/commands/cond.oc
++++ ocompiler-1/src/files/functions/commands/cond.oc
+@@ -156,7 +156,7 @@ Function condend(data number)
+ 			set marker structure
+ 			sub structure (condpack_whilebegin) #to match for ptrcReg
+ 			if main.parses=(pass_write)
+-				if main.ret_cont_break!=(ret_cont_break_canskip)  #useless to write back jump after break or return
++				if main.ret_cont_break!=(ret_cont_break_canskip)  #useless to write back jump after break or return , continue endwhile is not logical
+ 					setcall err jumpback(codeoffset,marker)
+ 					If err!=(noerror)
+ 						Return err
+@@ -165,7 +165,15 @@ Function condend(data number)
+ 					if main.last_subcommand=(cBREAK)  #here the break jump is zero, skip also the break the jump
+ 						valuex ptrcodeReg#1
+ 						Call getptrcontReg(codesec,#ptrcodeReg)
++						#also from .debug if is the case
++						vdata ptrcodeRegD%%ptrcodeRegD
++						sd currentcodeReg;set currentcodeReg ptrcodeReg#
+ 						sub ptrcodeReg# (backjumpsize)
++						if ptrcodeRegD#=currentcodeReg ## break was last command from the previous row  , currentcodeReg is positive, codeRegD is 0 or increased
++							#example here: break\nend\n
++							#old modified reg is on the query for next but is not on .debug mem, will be at line end
++							set ptrcodeRegD# ptrcodeReg#
++						endif
+ 					endif
+ 				endelseif
+ 				if structure#=(whilenumber) #or whiletruenumber
+--- ocompiler-1.orig/src/files/functions/commons/vars.oc
++++ ocompiler-1/src/files/functions/commons/vars.oc
+@@ -82,18 +82,20 @@ endfunction
+ function vars_log_prepare(ss content,sd size)
+ 	data ptrobject%ptrobject
+ 	if ptrobject#=(TRUE)
+-		if size>0  #addvarref..orunref is erroring there for getsign and fndecargs
++		#fndec: sd \? close para error, with ) is checking there
++		#declare: data \? getsign error, data = is checking there
++		if size>^0
+ 			if content#=(unrefsign)
+ 				return (noerror)
+ 			endif
+ 			if content#=(throwlesssign)
+ 				inc content;dec size
+ 			endif
++			sd vals;setcall vals vars_log((get),content,size)
++			sd err
++			setcall err addtolog_array_withchar(vals,(log_offset))
++			return err
+ 		endif
+-		sd vals;setcall vals vars_log((get),content,size)
+-		sd err
+-		setcall err addtolog_array_withchar(vals,(log_offset))
+-		return err
+ 	endif
+ 	return (noerror)
+ endfunction
+--- ocompiler-1.orig/src/files/functions/debug.oc
++++ ocompiler-1/src/files/functions/debug.oc
+@@ -26,11 +26,12 @@ function debug_lines(sd reg,sd line,sd c
+ 			setcall err addtosec(#a,(bsz),ptrdebug)
+ 			if err=(noerror)
+ 				charx buf#dw_char_0
+-				sd len
++				charx len#1
+ 				inc aux
+ 				setcall len dwtomem(aux,#buf)
+ 				setcall err addtosec(#buf,len,ptrdebug)
+ 				if err=(noerror)
++					#const debug_separator=
+ 					char b=asciispace
+ 					setcall err addtosec(#b,(bsz),ptrdebug)
+ 					if err=(noerror)
+--- ocompiler-1.orig/tests/.expected/declareN.oc.log
++++ ocompiler-1/tests/.expected/declareN.oc.log
+@@ -1,5 +1,6 @@
+ p./
+ ndeclareN.oc
++ob.d
+ ob.a
+ ob.c
+ ob.e
+--- ocompiler-1.orig/tests/.expected/function.oc.log
++++ ocompiler-1/tests/.expected/function.oc.log
+@@ -1,5 +1,18 @@
+ p./
+ nfunction.oc
++otest.a
++otest.b
++otest.c
++otest.d
++otest.e
++otest.f
++otest.g
++otest.h
++otest.i
++otest.j
++o.a
++o.b
++o.c
+ q
+ vtest.b
+ vtest.d
+--- ocompiler-1.orig/tests/.expected/template.oc.log
++++ ocompiler-1/tests/.expected/template.oc.log
+@@ -6,6 +6,7 @@ ofile.path
+ ofile.lines
+ ofile.a
+ oline.a
++o.c
+ o.n
+ o.nn
+ o.test
