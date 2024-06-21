@@ -1,0 +1,2142 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-83) bionic; urgency=medium
+ .
+   * notnot and += optimizations
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-06-21
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -16,6 +16,6 @@ $(SUBDIRS):
+ .PHONY: $(TOPTARGETS) $(SUBDIRS)
+ 
+ test:
+-	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && echo tests ok
++	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && /bin/bash ./as && echo tests ok
+ 
+ .NOTPARALLEL:
+--- actionswf-1.orig/dev/importf.h
++++ actionswf-1/dev/importf.h
+@@ -61,6 +61,7 @@ importX "swf_exports_done" swf_exports_d
+ 
+ importX "action" action
+ importX "actionf" actionf
++importX "actiond" actiond
+ importX "action_sprite" action_sprite
+ importX "actionf_sprite" actionf_sprite
+ 
+--- actionswf-1.orig/include/action.h
++++ actionswf-1/include/action.h
+@@ -19,6 +19,7 @@ const block_else_end=0xfcCCccCC       #1
+ const block_end=0xfbBBbbBB            #F IF
+ const member_end=0xfaAAaaAA           #M
+ 
++const no_action=0
+ const call_action_left=0xf1011010     #1
+ const call_action_right=0xf2022020    #RH
+ const function_action=0xf3033030      #1
+@@ -95,6 +96,7 @@ const ActionNewObject=0x40
+ const ActionTypeOf=0x44         #builtin
+ const ActionEnumerate=0x46
+ const ActionPushDuplicate=0x4C
++const ActionStackSwap=0x4D
+ const ActionCallMethod=0x52
+ const ActionNewMethod=0x53
+ const ActionEnumerate2=0x55
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -122,6 +122,9 @@ const action_debug_get_mem=2
+ const actionjump_contentsize=2
+ const smallbackjump=-actionjump_contentsize
+ 
++const action_debug_comma=1
++const action_debug_recordlength=(action_debug_comma)+1 # ,2 from actionjump, if ,10 ...  must change
++
+ const actionrecordheader_tag_size=1
+ const actionrecordheader_length_size=2
+ const actionrecordheader_size=actionrecordheader_tag_size+actionrecordheader_length_size
+--- /dev/null
++++ actionswf-1/oaalternative
+@@ -0,0 +1,95 @@
++
++#1 file.swf  2 what to call (ex: ./a.out ...)  optional 3 verbose
++
++if [ -z "${1}" ]; then echo file path required; exit 1; fi
++if [ -z "${2}" ]; then echo alternative path required; exit 1; fi
++
++dname=`dirname ${1}`
++cd ${dname} || exit 1
++
++bname=`basename ${1}`
++
++log=${bname}.log
++if [ ! -e ${log} ]; then echo no log; exit 1; fi
++
++isdebug=${3}
++
++folder="${bname%.*}"
++if [ -n "${isdebug}" ]; then echo ${folder}; fi
++
++if [ -z "${isdebug}" ]; then
++	ffdec -export script ${folder} ${1} > /dev/null || exit 1  #silent somehow
++else
++	ffdec -export script ${folder} ${1} || exit 1
++fi
++
++out=${folder}.dbg
++mkdir -p ${out}
++
++cd ${folder}
++
++v=
++if [ -n "${isdebug}" ]; then v=-v; fi
++
++move () {
++	mv ${v} "${1}" ${2}
++}
++
++doaction () {
++	to=${1}
++	shift
++	if [ -z "$@" ]; then return 1; fi
++	for var in "$@"; do
++		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
++		f=${f::-1}
++		f=${to}_${f:6}
++		move ${var} ../${out}/${f}
++	done
++	return 0
++}
++s= #id
++while read p; do
++	if [ -z "${s}" ]; then
++		s=${p}
++		t= #type
++		if [ -n "${isdebug}" ]; then echo id = ${s}; fi
++	else
++		if [ -z "${t}" ]; then
++			if [ -z "${p}" ]; then
++				t=1 #can be show or done
++			else
++				t=2 #action
++				lines=${p}
++				if [ -n "${isdebug}" ]; then echo lines = ${lines}; fi
++			fi
++		elif [ ${t} = 1 ]; then
++			if [ -z "${p}" ]; then
++				echo show
++			else
++				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
++				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"` || { #else is a button
++					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"` # | xargs -I {} echo "\"{}\""`; doaction ${s} "${f}" #double escape the quotes
++					d=../${out}/${s}
++					move "${f}" ${d}
++					sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
++				}
++			fi
++			s=
++		else
++			if [ ${lines} -gt 0 ]; then
++				lines=$((lines-1))
++			elif [ -z "`echo ${p} | grep ,`" ]; then
++				s=${p}
++				t=
++			fi
++		fi
++	fi
++done <../${log}
++
++doaction 0 `find -maxdepth 3 -name DoAction.as`
++
++cd ..
++mv ${1} ${1}.orig
++${2} && \
++diff ${1} ${1}.orig && \
++rm -r ${v} ${folder}
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -7,6 +7,7 @@ import "swf_actionblock" swf_actionblock
+ 
+ import "alt_action" alt_action
+ import "file_get_content__resources_free" file_get_content__resources_free
++import "for_in_ptr" for_in_ptr
+ 
+ import "ebase" ebase
+ #aftercallimport ebool
+@@ -45,6 +46,13 @@ base action.bp;call ebase(action.bp)
+ 		end
+ 	end
+ endfunction
++functionX actiond(ss ac) #deprecated
++	sd ptr;set ptr for_in_ptr()
++	sd was;set was ptr#
++	set ptr# (flag_forin1)
++	call action(ac)
++	set ptr# was
++end
+ 
+ #sprite
+ 
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -189,6 +189,7 @@ import "brace_blocks_counter_inc" brace_
+ import "cond_blocks_at_index" cond_blocks_at_index
+ import "brace_blocks_counter_dec" brace_blocks_counter_dec
+ import "cond_blocks_noerror" cond_blocks_noerror
++import "debug_phase_code_remove" debug_phase_code_remove
+ 
+ #aftercallimport ebool
+ 
+@@ -304,7 +305,7 @@ function action__code_row_ex(sd codepoin
+         return codepointer
+ 	endif
+ 	if attrib=(break_flag)
+-        call action_code_break()
++		call action_code_break()
+ 		add codepointer (DWORD)
+ 		set action__code_row.rcb (ret_cont_break_break)
+ 		return codepointer
+@@ -322,86 +323,87 @@ function action__code_row_ex(sd codepoin
+     return codepointer
+ endfunction
+ function action_code_pack(sd codepointer)
+-    sd attrib
+-    set attrib codepointer#
+-    add codepointer (DWORD)
+-    #
+-    sd is_member=FALSE
+-    sd need_right=TRUE
+-    sd need_pop=FALSE
+-    if attrib=(ActionSetMember)
+-        set is_member (TRUE)
+-    elseif attrib=(ActionDelete)
+-        set is_member (TRUE)
+-        set need_right (FALSE)
+-        set need_pop (TRUE)
+-    elseif attrib=(ActionDefineLocal2)
+-        set need_right (FALSE)
+-    elseif attrib=(ActionDelete2)
+-        set need_right (FALSE)
+-        set need_pop (TRUE)
+-    endelseif
++	sd attrib
++	set attrib codepointer#
++	add codepointer (DWORD)
++	#
++	sd is_member=FALSE
++	sd need_right=TRUE
++	sd need_pop=FALSE
++	if attrib=(ActionSetMember)
++		set is_member (TRUE)
++	elseif attrib=(ActionDelete)
++		set is_member (TRUE)
++		set need_right (FALSE)
++		set need_pop (TRUE)
++	elseif attrib=(ActionDefineLocal2)
++		set need_right (FALSE)
++	elseif attrib=(ActionDelete2)
++		set need_right (FALSE)
++		set need_pop (TRUE)
++	endelseif
+ 	#else is ActionDefineLocal/ActionSetVariable
+-    #
+-    if is_member=(TRUE)
+-        setcall codepointer action_member_loop_left(codepointer)
+-    else
+-    #definelocal or setvariable or delete2
+-	sd name;set name action_code_get_pointer(#codepointer)
+-	call action_push((ap_Constant8),name,-1)
+-    endelse
+-    if need_right=(TRUE)
+-        if codepointer#=(ActionIncrement)
+-            add codepointer (DWORD)
+-            call action_code_inc_dec((ActionIncrement),attrib)
+-        elseif codepointer#=(ActionDecrement)
+-            add codepointer (DWORD)
+-            call action_code_inc_dec((ActionDecrement),attrib)
+-        elseif codepointer#=(mixt_equal)
+-            #+= .. ^= ..
+-            add codepointer (DWORD)
+-            sd mixt_op;set mixt_op codepointer#;add codepointer (DWORD)
+-            if attrib=(ActionSetVariable);call action_code_dupGet_var()
+-            else;call action_code_dupGet_member();endelse
+-            setcall codepointer action_code_right(codepointer)
+-            call action_one(mixt_op)
+-        else
+-            setcall codepointer action_code_right(codepointer)
+-        endelse
+-    endif
+-    call action_one(attrib)
+-    if need_pop=(TRUE)
+-        call action_one((ActionPop))
+-    endif
+-    return codepointer
++	if is_member=(TRUE)
++		setcall codepointer action_member_loop_left(codepointer)
++	else
++		#definelocal or setvariable or delete2
++		sd name;set name action_code_get_pointer(#codepointer)
++		call action_push((ap_Constant8),name,-1)
++	endelse
++	if need_right=(TRUE)
++		if codepointer#=(ActionIncrement)
++			add codepointer (DWORD)
++			call action_code_inc_dec((ActionIncrement),attrib)
++		elseif codepointer#=(ActionDecrement)
++			add codepointer (DWORD)
++			call action_code_inc_dec((ActionDecrement),attrib)
++		elseif codepointer#=(mixt_equal)
++			#+= .. ^= ..
++			add codepointer (DWORD)
++			sd mixt_op;set mixt_op codepointer#;add codepointer (DWORD)
++			if attrib=(ActionSetVariable);call action_code_dupGet_var()
++			else;call action_code_dupGet_member();endelse
++			setcall codepointer action_code_right(codepointer)
++			call action_one(mixt_op)
++		else
++			setcall codepointer action_code_right(codepointer)
++		endelse
++	endif
++	call action_one(attrib)
++	if need_pop=(TRUE)
++		call action_one((ActionPop))
++	endif
++	return codepointer
+ endfunction
+ import "actionrecordheader" actionrecordheader
+ import "swf_actionblock_add" swf_actionblock_add
+ function action_code_inc_dec(sd inc_dec,sd setvar_or_setmember)
+-    if setvar_or_setmember=(ActionSetVariable)
+-        call action_code_dupGet_var()
+-        call action_one(inc_dec)
+-    else
+-        call action_code_dupGet_member()
+-        call action_one(inc_dec)
+-    endelse
++	if setvar_or_setmember=(ActionSetVariable)
++		call action_code_dupGet_var()
++		call action_one(inc_dec)
++	else
++		call action_code_dupGet_member()
++		call action_one(inc_dec)
++	endelse
+ endfunction
+ function action_code_dupGet_var()
+     call action_one((ActionPushDuplicate))
+     call action_one((ActionGetVariable))
+ endfunction
++const first_storereg=0
++const ActionStoreRegister_length=1
+ function action_code_dupGet_member()
+-    sd second_reg=1
+-    call actionrecordheader((ActionStoreRegister),1)
+-        call swf_actionblock_add(#second_reg,1)
+-    call action_one((ActionPop))
+-    sd first_reg=0
+-    call actionrecordheader((ActionStoreRegister),1)
+-        call swf_actionblock_add(#first_reg,1)
+-    call action_push((ap_RegisterNumber),second_reg,-1)
+-    call action_push((ap_RegisterNumber),first_reg,-1)
+-    call action_push((ap_RegisterNumber),second_reg,-1)
+-    call action_one((ActionGetMember))
++	#maybe can remember and pushdup/store at M before last but there is extra code, and also watch the debugged file writes then, and store only at non squarebracket, can be inner calls there
++	#here with not Pop and two regs? will write more code by our side
++	call action_one((ActionStackSwap))
++	sd reg=first_storereg
++	call actionrecordheader((ActionStoreRegister),(ActionStoreRegister_length))
++	call swf_actionblock_add(#reg,(ActionStoreRegister_length))
++	call action_one((ActionStackSwap))
++	call action_one((ActionPushDuplicate))
++	call action_push((ap_RegisterNumber),reg,-1)
++	call action_one((ActionStackSwap))
++	call action_one((ActionGetMember))
+ endfunction
+ import "brace_blocks_add_write_current" brace_blocks_add_write_current
+ 
+@@ -433,9 +435,9 @@ function action_code_write_conditions(sd
+ 			end
+ 			call add_while_top_off((forin_marker))
+ 			#
+-			sd first_reg=0
+-			call actionrecordheader((ActionStoreRegister),1)
+-			call swf_actionblock_add(#first_reg,1)
++			sd first_reg=first_storereg
++			call actionrecordheader((ActionStoreRegister),(ActionStoreRegister_length))
++			call swf_actionblock_add(#first_reg,(ActionStoreRegister_length))
+ 			#
+ 			call action_push((ap_Null),-1)
+ 			call action_one((ActionEquals2))
+@@ -445,7 +447,7 @@ function action_code_write_conditions(sd
+ 			sd attr2;set attr2 codepointer#;add codepointer (DWORD)
+ 			#
+ 			if attr2=(ActionSetMember)
+-				setcall codepointer action_member_loop_left(codepointer)
++				setcall codepointer action_member_loop_left(codepointer,(NULL))
+ 			else
+ 				#var or set variable
+ 				sd newname;set newname action_code_get_pointer(#codepointer)
+@@ -490,17 +492,22 @@ function action_code_write_conditions(sd
+ 	endelse
+ 	if infinite_guard=codepointer
+ 		#using the operations function
+-		setcall codepointer action_code_right_util(codepointer)
+-		call write_ifjump_withNot()
++		sd c2=0
++		setcall codepointer action_code_right_util_ex(codepointer,#c2)
++		call write_ifjump_withNot(c2)
+ 	end
+ 	#return the current pointer
+ 	return codepointer
+ endfunction
+-function write_ifjump_withNot()
+-    #set to be not for entering the block
+-    call action_one((ActionNot))
+-    #write the jump offset
+-    call write_ifjump_addTo_braceBlocks()
++function write_ifjump_withNot(sd c2)
++	#set to be not for entering the block
++	if c2!=(ActionNot)
++		call action_one((ActionNot))
++	else # was not is not, remove was not
++		call debug_phase_code_remove(1,(action_debug_comma))
++	end
++	#write the jump offset
++	call write_ifjump_addTo_braceBlocks()
+ endfunction
+ function add_while_top_off(sd typeOfLoop)
+     call brace_blocks_add_write_current()
+@@ -773,47 +780,63 @@ function action_code_right(sd codepointe
+ endfunction
+ #codepointer
+ function action_code_right_util(sd codepointer)
+-    if codepointer#=(new_action)
+-        add codepointer (DWORD)
+-        sd member
+-        setcall codepointer action_code_new_or_call(codepointer,#member)
+-        if member=(no_pointer)
+-            call action_one((ActionNewObject))
+-        else
+-            call action_one((ActionNewMethod))
+-        endelse
+-        return codepointer
+-    endif
+-    sd compare_op_1
+-    sd compare_op_2
+-    setcall codepointer action_code_right_number(codepointer)
+-    while codepointer#!=(math_end)
+-        sd operation
+-        set operation codepointer#
+-        add codepointer (DWORD)
+-        if operation=(compare_action)
+-            set compare_op_1 codepointer#
+-            add codepointer (DWORD)
+-            set compare_op_2 codepointer#
+-            add codepointer (DWORD)
+-        elseif operation=(ifElse_start)
+-            call write_ifjump_withNot()
+-            setcall codepointer action_code_right_util(codepointer)
+-            call action_code_else_add()
+-            setcall codepointer action_code_right_util(codepointer)
+-            call brace_blocks_remove_write()
+-            return codepointer
+-        endelseif
+-        setcall codepointer action_code_right_number(codepointer)
+-        if operation!=(compare_action)
+-            call action_one(operation)
+-        else
+-            call action_one(compare_op_1)
+-            if compare_op_2!=0;call action_one(compare_op_2);endif
+-        endelse
+-    endwhile
+-    add codepointer (DWORD)
+-    return codepointer
++	set codepointer action_code_right_util_ex(codepointer,(NULL))
++	return codepointer
++end
++function action_code_right_util_ex(sd codepointer,sd outside_compare2)
++	if codepointer#=(new_action)
++		add codepointer (DWORD)
++		sd member
++		setcall codepointer action_code_new_or_call(codepointer,#member)
++		if member=(no_pointer)
++			call action_one((ActionNewObject))
++		else
++			call action_one((ActionNewMethod))
++		endelse
++		return codepointer
++	endif
++	sd compare_op_1
++	sd compare_op_2
++	setcall codepointer action_code_right_number(codepointer)
++	sd was_operation=no_action
++	while codepointer#!=(math_end)
++		sd operation
++		set operation codepointer#
++		add codepointer (DWORD)
++		if operation=(compare_action)
++			set compare_op_1 codepointer#
++			add codepointer (DWORD)
++			set compare_op_2 codepointer#
++			add codepointer (DWORD)
++		elseif operation=(ifElse_start)
++			#can be a simple get for a bool and still working here. if was_operation=(no_action);call error("inline ifelse doesn't know what to ask")
++			if was_operation=(compare_action)   #needed to optimize ActionNot
++				call write_ifjump_withNot(compare_op_2)
++			else
++				call write_ifjump_withNot(0)
++			end
++			setcall codepointer action_code_right_util(codepointer)
++			call action_code_else_add()
++			setcall codepointer action_code_right_util(codepointer)
++			call brace_blocks_remove_write()
++			return codepointer
++		endelseif
++		setcall codepointer action_code_right_number(codepointer)
++		if operation!=(compare_action)
++			call action_one(operation)
++		else
++			call action_one(compare_op_1)
++			if compare_op_2!=0;call action_one(compare_op_2);endif
++		endelse
++		set was_operation operation
++	endwhile
++	if outside_compare2!=(NULL)
++		if was_operation=(compare_action)
++			set outside_compare2# compare_op_2
++		end
++	end
++	add codepointer (DWORD)
++	return codepointer
+ endfunction
+ 
+ #codepointer
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -9,7 +9,6 @@ importx "memcpy" memcpy
+ importx "sscanf" sscanf
+ importx "strpbrk" strpbrk
+ 
+-import "str_next" str_next
+ import "str_expression_at_start" str_expression_at_start
+ 
+ import "debug_code" debug_code
+@@ -27,7 +26,7 @@ function get_operations()
+ endfunction
+ 
+ #bool
+-function action_parse_utilEndTypes(sd op,sv p_op,sd endtype1,sd endtype2)  #p_op is pointing at a stack variable
++function action_parse_utilEndTypes(sd op,ss p_op,sd endtype1,sd endtype2)
+     #when p_op is set, is to store the multiple kind of endtypes
+     if p_op!=0
+         set p_op# op
+@@ -100,6 +99,9 @@ endfunction
+ function for_in(datax flag)
+ 	and flag (flag_forin1)
+ end
++function for_in_ptr()
++	return #for_in.flag
++end
+ 
+ function ret_cont_break()
+ 	charx type#1
+@@ -115,8 +117,10 @@ import "action_code_get" action_code_get
+ import "action_code_values_index" action_code_values_index
+ import "block_get_mem_size" block_get_mem_size
+ import "block_get_size" block_get_size
+-import "block_get_psize" block_get_psize
+-
++import "memtrail" memtrail
++import "memtrailstrict" memtrailstrict
++import "compat" compat
++import "debug_phase_code_remove" debug_phase_code_remove
+ 
+ 
+ #aftercallimport ebool
+@@ -346,7 +350,7 @@ function else_verify(ss ac,sd else_index
+         #c_ind is lower
+         while ind!=c_ind
+ 			ss the_new_pointer;set the_new_pointer pointer
+-            setcall the_new_pointer action_code_row_ex(pointer,(FALSE),ind)
++			setcall the_new_pointer action_code_row_ex(pointer,(FALSE),ind)
+ 			if the_new_pointer=pointer;call error("Else not closed");endif
+ 			set pointer the_new_pointer
+             #
+@@ -408,96 +412,105 @@ function action_code_row_parse_instrumen
+ endfunction
+ #pointer
+ function action_parse_pack(ss ac,sd endChar)
+-    ss pointer
+-    sd isnewvar=FALSE
+-    sd isdelete
+-    setcall pointer str_expression_at_start(ac,"var")
+-    if pointer!=ac
+-        set isnewvar (TRUE)
+-    else
+-        set isdelete (FALSE)
+-        setcall pointer str_expression_at_start(ac,"delete")
+-        if pointer!=ac
+-            set isdelete (TRUE)
+-        endif
+-    endelse
+-    sd op
+-    char set={Equals}
+-    char secondChar#1
+-    char *term=0
+-    set secondChar endChar
+-    ss delims^set
++	ss pointer
++	sd isnewvar=FALSE
++	sd isdelete
++	setcall pointer str_expression_at_start(ac,"var")
++	if pointer!=ac
++		set isnewvar (TRUE)
++	else
++		set isdelete (FALSE)
++		setcall pointer str_expression_at_start(ac,"delete")
++		if pointer!=ac
++			set isdelete (TRUE)
++		else
++			set pointer spaces(pointer) #ffdec
++		endelse
++	endelse
++	sd op   ;#this is recursive stack for future expands, now is simple
++	char set={Equals}
++	char secondChar#1
++	char *term=0
++	set secondChar endChar
++	ss delims^set
++
++	set ac strcspn(pointer,delims)
++	add ac pointer
++	set op ac#
++	ss marker;set marker ac
++	if ac#!=(Nullchar)
++	#	set ac# (Nullchar) let this at memtrail or at test for inc_dec
++		inc ac
++	end
+ 
+-    setcall ac str_next(pointer,delims,#op)
+-    if isnewvar=(TRUE)
+-        if op=set
+-            call action_code_set((ActionDefineLocal))
+-            call action_code_set_pointer(pointer)
+-        else
+-            call action_code_set((ActionDefineLocal2))
+-            call action_code_set_pointer(pointer)
+-            return ac
+-        endelse
+-    else
+-        if isdelete=(FALSE)
+-            sd inc_dec
+-            if op!=set
+-                set inc_dec 0
+-                ss test
+-                set test ac
+-                if op!=0
+-                    sub test 3
+-                else
+-                    sub test 2
+-                endelse
+-                sd another_test
+-                set another_test test
+-                sub another_test pointer
+-                #test for some size for ++ or --
+-                if another_test>0
+-                    if test#=(Plus)
+-                        inc test
+-                        if test#=(Plus)
+-                            set inc_dec (ActionIncrement)
+-                            dec test
+-                            set test# 0
+-                        endif
+-                    elseif test#=(Hyphen)
+-                        inc test
+-                        if test#=(Hyphen)
+-                            set inc_dec (ActionDecrement)
+-                            dec test
+-                            set test# 0
+-                        endif
+-                    endelseif
+-                endif
+-                #if not ++ or -- return the current location (x;heatMaker;)
+-                if inc_dec=0
+-                    return ac
+-                endif
+-            else
+-                #test for += .. |= ..
+-                sd mixt_action;setcall mixt_action action_parse_test_mixt_equal(pointer,ac)
+-            endelse
+-            call action_parse_left_holder(pointer,(ActionSetVariable),(ActionSetMember))
+-            if op=set
+-            #mixt or not mixt
+-                if mixt_action!=0
+-                    call action_code_set((mixt_equal))
+-                    call action_code_set(mixt_action)
+-                endif
+-            else
+-                #is inc dec case
+-                call action_code_set(inc_dec)
+-                return ac
+-            endelse
+-        else
+-            call action_parse_left_holder(pointer,(ActionDelete2),(ActionDelete))
+-            return ac
+-        endelse
+-    endelse
+-    setcall ac action_parse_right(ac,endChar)
+-    return ac
++	if isnewvar=(TRUE)
++		call memtrail(marker)
++		if op=set
++			call action_code_set((ActionDefineLocal))
++			call action_code_set_pointer(pointer)
++		else
++			call action_code_set((ActionDefineLocal2))
++			call action_code_set_pointer(pointer)
++			return ac
++		endelse
++	elseif isdelete=(FALSE)
++		sd inc_dec
++		if op!=set
++			set inc_dec 0
++			ss test
++			set test marker
++			sub test 2
++			sd another_test
++			set another_test test
++			sub another_test pointer
++			#test for some size for ++ or --
++			if another_test>0
++				if test#=(Plus)
++					inc test
++					if test#=(Plus)
++						set inc_dec (ActionIncrement)
++						dec test
++						set test# 0
++					endif
++				elseif test#=(Hyphen)
++					inc test
++					if test#=(Hyphen)
++						set inc_dec (ActionDecrement)
++						dec test
++						set test# 0
++					endif
++				endelseif
++			endif
++			#if not ++ or -- return the current location (x;heatMaker;)
++			if inc_dec=0
++				return ac  ##here nothing for X. is ignoring
++			endif
++		else
++			#test for += .. |= ..
++			sd mixt_action;setcall mixt_action action_parse_test_mixt_equal(pointer,#marker)
++			#trail pointer at marker, after mixt shift
++			call memtrail(marker)
++		endelse
++		call action_parse_left_holder(pointer,(ActionSetVariable),(ActionSetMember))
++		if op=set
++			#mixt or not mixt
++			if mixt_action!=0
++				call action_code_set((mixt_equal))
++				call action_code_set(mixt_action)
++			endif
++		else
++			#is inc dec case
++			call action_code_set(inc_dec)
++			return ac
++		endelse
++	else
++		call memtrail(marker)
++		call action_parse_left_holder(pointer,(ActionDelete2),(ActionDelete))
++		return ac
++	endelse
++	set ac spaces(ac) #ffdec
++	setcall ac action_parse_right(ac,endChar)
++	return ac
+ endfunction
+ function action_parse_left_holder(ss pointer,sd ac1,sd ac2)
+     ss test
+@@ -511,43 +524,47 @@ function action_parse_left_holder(ss poi
+     endelse
+ endfunction
+ #0/action
+-function action_parse_test_mixt_equal(ss start,ss ac)
+-    dec ac
+-    ss pointer;set pointer ac
+-    dec ac
+-    ss dif;set dif ac;sub dif start
+-    if dif<=0
+-        return 0
+-    endif
+-    if ac#=0
+-        #0 can be set(qw['z']=x will be 00x) and at strchr will not be NULL
+-        return 0
+-    endif
+-    ss operations;setcall operations get_operations()
+-    ss p_op;setcall p_op strchr(operations,ac#)
+-    if p_op=(NULL);return 0;endif;sd op;set op p_op#
+-    if op=(shl);ss missing_shl="expecting value and <<"
+-        dec ac
+-        if ac=start
+-            call error(missing_shl)
+-        elseif ac#!=(shl)
+-            call error(missing_shl)
+-        endelseif
+-    elseif op=(sar_shr);ss missing_sar_shr="expecting value and >>"
+-        dec ac
+-        if ac=start
+-            call error(missing_sar_shr)
+-        elseif ac#!=(sar_shr)
+-            call error(missing_sar_shr)
+-        endelseif
+-        dec ac
+-        if ac#!=(sar_shr)
+-            inc ac
+-        endif
+-    endelseif
+-    set ac# 0
+-    sd action;setcall action action_parse_take_action(op,pointer)
+-    return action
++function action_parse_test_mixt_equal(ss start,sv p_ac)
++	ss ac;set ac p_ac#
++	dec ac
++	ss dif;set dif ac;sub dif start
++	if dif<=0
++		return 0
++	endif
++#	#is this was true? a['b']=c;for(d['e']=f;a==b;j['k']=l){}  is where action_parse_pack is and there ] is not 0, left_holder is later parsed
++#	if ac#=0
++#		#0 can be set(qw['z']=x will be 00x) and at strchr will not be NULL
++#		return 0
++#	endif
++	ss operations;setcall operations get_operations()
++	sd op;set op ac#
++	ss p_op;setcall p_op strchr(operations,op)
++	if p_op=(NULL);return 0;endif
++
++	ss pointer;set pointer ac
++	if op=(shl);vstr missing_shl="expecting value and <<"
++		dec ac
++		if ac=start
++			call error(missing_shl)
++		elseif ac#!=(shl)
++			call error(missing_shl)
++		endelseif
++	elseif op=(sar_shr);vstr missing_sar_shr="expecting value and >>"
++		dec ac
++		if ac=start
++			call error(missing_sar_shr)
++		elseif ac#!=(sar_shr)
++			call error(missing_sar_shr)
++		endelseif
++		dec ac
++		if ac#!=(sar_shr)
++			inc ac
++		endif
++	endelseif
++	set p_ac# ac
++	#this was for strings but now is memtrail()	set ac# 0
++	sd action;setcall action action_parse_take_action(op,pointer)
++	return action
+ endfunction
+ #pointer
+ function action_parse_right(ss ac,sd endChar)
+@@ -589,7 +606,7 @@ function action_code_row_parse_tool_util
+     return ac
+ endfunction
+ #pointer
+-function action_parse_loop(ss ac,sv p_op,sd endtype1,sd endtype2,sd p_ifElse_bool)  #p_op is pointing at a stack variable
++function action_parse_loop(ss ac,ss p_op,sd endtype1,sd endtype2,sd p_ifElse_bool)
+     sd bool
+     #can be on the stack but char is low value; ends are set again when recursivity
+     char oprs#operations_size
+@@ -606,15 +623,17 @@ function action_parse_loop(ss ac,sv p_op
+     vstr op_set^oprs
+     ss ops;setcall ops get_operations();call memcpy(op_set,ops,(operations_size))
+     whiletrue
+-        sd op
++		set ac spaces(ac) #ffdec
++		sd op         ;#op can't be charx, is recursive stack variable, is cleared in two places, here and at sv p_op
+         sd was_parenthesis=0
+         if ac#=(Openparenthesis)
+-            call action_code_set((parenthesis_start))
+-            inc ac
+-            setcall ac action_code_row_parse_tool(ac,(Closeparenthesis))
+-            #0 is the marker after op set; used at strings; and logicalAnd logicalOr shr and sar are not needing 0 but it's faster for strings, and are comparing with !=sign(0 is used); used at action_parse_take_action
+-            set op ac#;set ac# 0
+-            set was_parenthesis 1
++			call action_code_set((parenthesis_start))
++			inc ac
++			setcall ac action_code_row_parse_tool(ac,(Closeparenthesis))
++			#0 is the marker after op set; used at strings; and logicalAnd logicalOr shr and sar are not needing 0 but it's faster for strings
++			set ac spaces(ac) #ffdec
++			set op ac#;set ac# 0
++			set was_parenthesis 1
+         endif
+         #set end: is static variable and can be mod again inside previous function
+         set end endtype1
+@@ -636,46 +655,44 @@ function action_parse_loop(ss ac,sv p_op
+         if is_compare_ptr#=(TRUE)
+             set is_compare_ptr# (FALSE)
+         else
+-		if op=0
+-                if p_op!=0
+-                    set p_op# op
+-                endif
+-                return ac
+-		endif
+-                setcall bool action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
+-                if bool=(TRUE);return ac;endif
+-            sd x;setcall x action_parse_take_action(op,ac)
+-            call action_code_set(x)
++			if op=0
++				if p_op!=0
++					set p_op# op
++				endif
++				return ac
++			endif
++			setcall bool action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
++			if bool=(TRUE);return ac;endif
++			sd x;setcall x action_parse_take_action(op,ac)
++			call action_code_set(x)
+         endelse
+     endwhile
+ endfunction
+ #action
+ function action_parse_take_action(sd op,ss ac)
+-    sd x
+-    ss test
+-    if op=(add);set x (ActionAdd2)
+-    elseif op=(sub);set x (ActionSubtract)
+-    elseif op=(mlt);set x (ActionMultiply)
+-    elseif op=(div);set x (ActionDivide)
+-    elseif op=(modulo);set x (ActionModulo)
+-    elseif op=(and)
+-        set test ac;dec test
+-        if test#=(and);set x (ActionAnd);else;set x (ActionBitAnd);endelse
+-    elseif op=(or)
+-        set test ac;dec test
+-        if test#=(or);set x (ActionOr);else;set x (ActionBitOr);endelse
+-    elseif op=(xor);set x (ActionBitXor)
+-    elseif op=(shl);set x (ActionBitLShift)
+-    elseif op=(sar_shr)
+-        set test ac
+-        sub test 2
+-        if test#=0;set x (ActionBitRShift)
+-        else;set x (ActionBitURShift);endelse
+-    else
+-        #at "qwer"x can be x
+-        call error("unrecognized actionscript operation")
+-    endelse
+-    return x
++	sd x
++	if op=(add);set x (ActionAdd2)
++	elseif op=(sub);set x (ActionSubtract)
++	elseif op=(mlt);set x (ActionMultiply)
++	elseif op=(div);set x (ActionDivide)
++	elseif op=(modulo);set x (ActionModulo)
++	elseif op=(and)
++		dec ac
++		if ac#=(and);set x (ActionAnd);else;set x (ActionBitAnd);endelse
++	elseif op=(or)
++		dec ac
++		if ac#=(or);set x (ActionOr);else;set x (ActionBitOr);endelse
++	elseif op=(xor);set x (ActionBitXor)
++	elseif op=(shl);set x (ActionBitLShift)
++	elseif op=(sar_shr)
++		sub ac 2  #here there is already >> test
++		if ac#!=(sar_shr);set x (ActionBitRShift)
++		else;set x (ActionBitURShift);endelse
++	else
++		#at "qwer"x can be x
++		call error("unrecognized actionscript operation")
++	endelse
++	return x
+ endfunction
+ #pointer
+ function action_code_extended_operations(ss pointer,sd op)
+@@ -719,39 +736,48 @@ function action_code_extended_operations
+     return pointer
+ endfunction
+ #pointer
+-function action_code_take_main(ss ac,sv p_op,ss delims) #p_op is pointing at a stack variable
+-    #a string
+-    ss pointer
+-    setcall pointer action_code_str(ac)
+-    if pointer!=0
+-        set p_op# pointer#;set pointer# 0
+-        return pointer
+-    endif
+-    #a function
+-    setcall pointer action_code_parse_new_or_call(ac,(call_action_right))
+-    if pointer!=ac
+-        set p_op# pointer#;set pointer# 0
+-        return pointer
+-    endif
+-    #a variable(a.b.c[1+d])
+-    char neg="-"
+-    if pointer#=neg
+-        inc pointer
+-    endif
+-    sd pos
+-    setcall pos strcspn(pointer,delims)
+-    add pointer pos
+-    while pointer#=(Openingbracket)
+-        setcall pointer brackets_test(pointer)
+-        #continue with the member
+-        setcall pos strcspn(pointer,delims)
+-        add pointer pos
+-    endwhile
+-    sd op
+-    set op pointer#
+-    set p_op# op;set pointer# 0
+-    call action_code_take(ac)
+-    return pointer
++function action_code_take_main(ss ac,sv p_op,ss delims) #ss p_op will not clean the recursive stack variable
++	#a string
++	ss pointer
++	setcall pointer action_code_str(ac)
++	if pointer!=0
++		#set pointer spaces(pointer) ffdec
++		set p_op# pointer#;set pointer# 0
++		return pointer
++	endif
++	#a function
++	setcall pointer action_code_parse_new_or_call(ac,(call_action_right))
++	if pointer!=ac
++		set pointer spaces(pointer) #ffdec
++		set p_op# pointer#;set pointer# 0
++		return pointer
++	endif
++	#a variable(a.b.c[1+d])
++	char neg="-"
++	if pointer#=neg
++		inc pointer
++	endif
++	sd pos
++	setcall pos strcspn(pointer,delims)
++
++	#ffdec compatibility with deprecated and/or
++	sd was;set was pos
++	set pos compat(pointer,pos," and ","&&")
++	if was=pos
++		set pos compat(pointer,pos," or ","||")
++	end
++
++	add pointer pos
++	while pointer#=(Openingbracket)
++		setcall pointer brackets_test(pointer)
++		#continue with the member
++		setcall pos strcspn(pointer,delims)
++		add pointer pos
++	endwhile
++	call memtrailstrict(pointer)
++	set p_op# pointer#;set pointer# 0
++	call action_code_take(ac)
++	return pointer
+ endfunction
+ #pointer
+ function brackets_test(ss pointer)
+@@ -1128,10 +1154,8 @@ function brace_blocks_remove_write_jump(
+ 				sub blocks (DWORD)
+ 				if blocks#!=(forin_marker)
+ 					set skip_jump (actionrecordheader_size+actionjump_contentsize)
+-					sd memblock
+-					set memblock brace_blocks_get_memblock()
+-					set memblock block_get_psize(memblock)
+-					sub memblock# skip_jump
++					#also need to remove from debug
++					call debug_phase_code_remove(skip_jump,(action_debug_recordlength))
+ 					break
+ 				end
+ 			end
+@@ -1366,26 +1390,36 @@ function action_code_parse_deffunction(s
+ endfunction
+ #pointer
+ function action_code_parse_function_defarguments(ss ac)
+-    vstr argsdelims=",)"
+-    char close=")"
+-    inc ac
+-    if ac#=close
+-        inc ac
+-        return ac
+-    endif
+-    sd op=0
+-    while op!=close
+-        sd pos
+-        setcall pos strcspn(ac,argsdelims)
+-        call action_code_set_pointer(ac)
+-        add ac pos
+-        if ac#=0
+-            call error("close the function arguments sign expected: )")
+-        endif
+-        set op ac#
+-        set ac# 0
+-        inc ac
+-    endwhile
+-    return ac
++	vstr argsdelims=",)"
++	inc ac
++	if ac#=(Closeparenthesis)
++		inc ac
++		return ac
++	endif
++	whiletrue
++		ss end
++		setcall end strpbrk(ac,argsdelims)
++		if end!=(NULL)
++			while ac!=end
++				if ac#!=(Space)
++					call action_code_set_pointer(ac)
++					set ac end
++					if end#=(Closeparenthesis)
++						set end# (Nullchar)
++						inc ac
++						return ac
++					end
++					set end# (Nullchar)
++					break
++				end
++				inc ac
++			end
++			if end#=(Nullchar)
++				inc ac
++				continue
++			end
++			call error("argument missing")
++		end
++		call error("close the function arguments sign expected: )")
++	endwhile
+ endfunction
+-
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -167,9 +167,9 @@ function action_error()
+     call string_nl_print(p_c#)
+ endfunction
+ 
++import "block_get_size" block_get_size
+ #size
+ function action_size(sd id)
+-    import "block_get_size" block_get_size
+     sd block
+     setcall block struct_ids_action((ids_get),id)
+     sd size
+@@ -301,9 +301,9 @@ function action_push(sd factors)
+ endfunction
+ 
+ function action_one(sd tag)
+-    call swf_actionblock_add(#tag,1)
+-      import "debug_phase_code_add" debug_phase_code_add
+-      call debug_phase_code_add((FALSE))
++	call swf_actionblock_add(#tag,(actionrecordheader_tag_size))
++	import "debug_phase_code_add" debug_phase_code_add
++	call debug_phase_code_add((FALSE))
+ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
+@@ -371,12 +371,14 @@ function action_member_loop_left(sv math
+ 				add mathpointer (DWORD)
+ 				return mathpointer
+ 			end
+-			#square_bracket_start
+ 			call action_one((ActionGetMember))
++
++			#square_bracket_start
+ 			add mathpointer (DWORD)
+ 			setcall mathpointer action_code_right_util(mathpointer)
+ 		else
+ 			call action_one((ActionGetMember))
++
+ 			set name action_code_get_pointer(#mathpointer)
+ 			call action_push((ap_Constant8),name,-1)
+ 		end
+@@ -386,7 +388,7 @@ function action_member_loop_right(sv mat
+ 	sd name
+ 	set name action_code_get_pointer(#mathpointer)
+ 	call action_get_one(name)
+-	whiletrue
++	whiletrue # member_end can be right from the start at CallMethod
+ 		if mathpointer#!=(no_pointer)
+ 			set name action_code_get_pointer(#mathpointer)
+ 			call action_push((ap_Constant8),name,-1)
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -34,7 +34,11 @@ function debug_end()
+ 	valuex a#1
+ 	return #a
+ endfunction
+-function debug_actions()
++
++import "mem_free" mem_free
++import "f_close" f_close
++
++function debug_data()
+ 	#now is a string #datax a#1  #65535
+ 	value mem=NULL
+ 	#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
+@@ -42,12 +46,8 @@ function debug_actions()
+ 	#there is a limit on actions and on constant pool, so don't worry here
+ 	datax size#1
+ 	datax all_size#1
+-endfunction
+-
+-import "mem_free" mem_free
+-import "f_close" f_close
++	datax rows#1
+ 
+-function debug_data()
+ 	import "x_data" x_data
+ 	call x_data()
+ 	sv of%p_offsets
+@@ -57,8 +57,8 @@ function debug_data()
+ 		const p_debug_file^file
+ 		if file!=(NULL)
+ 			call f_close(#file)
+-			if debug_actions.mem!=(NULL)
+-				call mem_free(#debug_actions.mem)
++			if mem!=(NULL)
++				call mem_free(#mem)
+ 			end
+ 		end
+ 	endif
+@@ -127,6 +127,7 @@ end
+ import "row_termination" row_termination
+ import "brace_blocks_get_memblock" brace_blocks_get_memblock
+ import "block_get_size" block_get_size
++import "block_get_psize" block_get_psize
+ import "block_get_mem" block_get_mem
+ import "word_arg_to_stack" word_arg_to_stack
+ import "for_in" for_in
+@@ -174,9 +175,9 @@ function log_init(sd flags,sd path)
+ 		sv file%p_debug_file
+ 		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for comma character
+ 
+-		setcall debug_actions.mem memalloc(1)
+-		#this is later #set debug_actions.size 0
+-		set debug_actions.all_size 1
++		setcall debug_data.mem memalloc(1)
++		#this is later #set debug_data.size 0
++		set debug_data.all_size 1
+ 	end
+ end
+ 
+@@ -215,7 +216,8 @@ function debug_action_init(ss ac)
+ 		decst row   ##must be last entry not after
+ 		set end# row
+ 
+-		set debug_actions.size 0
++		set debug_data.size 0
++		set debug_data.rows 0
+ 	endif
+ endfunction
+ 
+@@ -224,29 +226,37 @@ function debug_phase_code(sd codepointer
+ 	if of#!=(NULL)
+ 		sv a;setcall a debug_mark_get()
+ 		if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+-			if debug_actions.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+-				sv b;set b a
++			if debug_data.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
++				sv rows;set rows a
+ 				sv end;setcall end debug_end()
+-				while codepointer>=^b#   # > ? same as above
++				while codepointer>=^rows#   # > ? same as above
+ 					call debug_mark_add()
+-					setcall b debug_mark_get()
+-					if b=end#
++					setcall rows debug_mark_get()
++					if rows>=end#   ;# > ? example when last row is b=1 }" then rows now will point at one row after last row
+ 						break
+ 					endif
+ 				endwhile
+-				sub b a
+-				div b :
+-
+-				#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+-				sv file%p_debug_file
+-				call f_printf((fprintf_min+1),file#,"%lu",b)
+-				call f_write(file#,debug_actions.mem,debug_actions.size)
+-				call f_write(file#,"\n",1)
+-				set debug_actions.size 0
++				sub rows a
++				div rows :
++				#do not write now, can be break;} or Not Not If  and need to truncate that
++				datax size#1;set size debug_data.size
++				set debug_data.size 0
++				set debug_data.rows rows
+ 			end
+ 		endif
+ 	endif
+ endfunction
++function debug_phase_code_flush()
++	if debug_data.rows!=0
++		#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
++		#will not bother concludefunction where is asking with ftell
++		sv file%p_debug_file
++		call f_printf((fprintf_min+1),file#,"%lu",debug_data.rows)
++		call f_write(file#,debug_data.mem,debug_phase_code.size)
++		call f_write(file#,"\n",1)
++		set debug_data.rows 0
++	end
++end
+ 
+ function debug_base_core(sd id)
+ 	sv file%p_debug_file
+@@ -281,19 +291,20 @@ end
+ function debug_phase_code_add(sd is_long,ss plength)
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+-		sd sz;set sz debug_actions.size
++		call debug_phase_code_flush()
++		sd sz;set sz debug_data.size
+ 		if is_long=(TRUE)
+-			add sz (1+2+2)
++			add sz (action_debug_comma+2+2)
+ 		else
+-			add sz 1
++			add sz (action_debug_comma)
+ 		end
+-		if sz>^debug_actions.all_size
+-			set debug_actions.all_size sz
+-			add debug_actions.all_size 0x1000
+-			set debug_actions.mem memrealloc(debug_actions.mem,debug_actions.all_size)
++		if sz>^debug_data.all_size
++			set debug_data.all_size sz
++			add debug_data.all_size 0x1000
++			set debug_data.mem memrealloc(debug_data.mem,debug_data.all_size)
+ 		end
+-		ss m;set m debug_actions.mem
+-		add m debug_actions.size
++		ss m;set m debug_data.mem
++		add m debug_data.size
+ 
+ 		set m# (Comma) #even if is only 1 action is lines,a1,a2...an
+ 
+@@ -313,9 +324,21 @@ function debug_phase_code_add(sd is_long
+ 			end
+ 			add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
+ 		end
+-		set debug_actions.size sz
++		set debug_data.size sz
+ 	endif
+ endfunction
++function debug_phase_code_remove(sd swflength,sd length)
++	sd memblock;set memblock brace_blocks_get_memblock()
++	sd p;set p block_get_psize(memblock)
++	sub p# swflength
++
++	if debug_data.size=0 #was last command on previous row
++		sub debug_phase_code.size length
++		#and let the empty row if is the case, then still can break there
++		ret
++	end
++	sub debug_data.size length
++end
+ 
+ function debug_definefunction(sv pointers)
+ 	sv of%p_offsets
+@@ -328,7 +351,7 @@ function debug_definefunction(sv pointer
+ 		incst pointers
+ 
+ 		sd offset
+-		set offset debug_actions.size  ##same size as debug_actions.size
++		set offset debug_data.size
+ 		char dummy={0xff,0xff} #0,0 is not ok inside
+ 		call debug_phase_code_add((TRUE),#dummy)
+ 		#inc offset ##to skip Comma  #but at fseek is not needed because fread is already skipping that
+@@ -350,7 +373,6 @@ function debug_concludefunction(sv point
+ 		incst pointers
+ 
+ 		sd offset;set offset pointers#d^
+-
+ 		vstr format="%04X"
+ 		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
+ 			call fseek(debug_data.file,prev_fileoffset,(SEEK_SET))
+@@ -370,7 +392,7 @@ function debug_concludefunction(sv point
+ 			call fprintf(debug_data.file,format,size)    #overwrite the dummy write
+ 			call fseek(debug_data.file,0,(SEEK_END))
+ 		else #on mem
+-			sd c;set c debug_actions.mem
++			sd c;set c debug_data.mem
+ 			inc offset ##to skip Comma
+ 			add c offset
+ 			call md_printf(c,format,size)
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -65,6 +65,8 @@ function action_base(ss ac)
+ 		while p_values#!=(math_end)
+ 			setcall p_values action__code_row(p_values)  #also at actionx
+ 		endwhile
++		import "debug_phase_code_flush" debug_phase_code_flush
++		call debug_phase_code_flush()
+ 		import "debug_x" debug_x
+ 		call debug_x(stored,nr#) #need to be after, to modify pointers inside
+ 
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -157,7 +157,7 @@ function file_write(sd file,sd buffer,sd
+ endfunction
+ 
+ 
+-function f_printf(sd nr,sd file,sd format) #...
++function f_printf(sd nr,sd file) #,sd *format,sd a1...,sd aN
+ 	sd r;set r f_printf_in(#file,nr)
+ 	if r=-1
+ 		call error("fprintf error")
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -340,10 +340,10 @@ function swf_actionblock_add(sd value,sd
+     call swf_actionblock((mem_exp_add),value,size)
+ endfunction
+ function actionrecordheader(sd tag,sd size)
+-    char t#actionrecordheader_tag_size
+-    char length#actionrecordheader_length_size
+-    set t tag
+-    call stack_to_word_arg(size,#length)
++	char t#actionrecordheader_tag_size
++	char length#actionrecordheader_length_size
++	set t tag
++	call stack_to_word_arg(size,#length)
+ 	call swf_actionblock_add(#t,(actionrecordheader_size))
+ 	import "debug_phase_code_add" debug_phase_code_add
+ 	call debug_phase_code_add((TRUE),#length)
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -5,7 +5,6 @@ importx "fwrite" fwrite
+ importx "realloc" realloc
+ importx "memcpy" memcpy
+ importx "free" free
+-importx "strcspn" strcspn
+ importx "strlen" strlen
+ importx "memcmp" memcmp
+ 
+@@ -195,21 +194,30 @@ endfunction
+ 
+ #strings
+ 
+-#str
+-function str_next(ss s,ss delims,sv p_op)  #p_op is pointing at a stack variable
+-    sd pos
+-    setcall pos strcspn(s,delims)
+-    ss x
+-    set x s
+-    add x pos
+-    set p_op# x#
+-    if x#=0
+-        return x
+-    endif
+-    set x# 0
+-    inc x
+-    return x
+-endfunction
++function memtrail(ss end)
++	whiletrue
++		dec end
++		if end#!=(Space)
++			inc end
++			set end# (Nullchar)
++			ret
++		end
++	end
++end
++function memtrailstrict(ss end)
++	dec end;if end#!=(Space)
++		ret
++	end
++	whiletrue
++		dec end
++		if end#!=(Space)
++			inc end
++			set end# (Nullchar)
++			ret
++		end
++	end
++end
++
+ #bool
+ function str_at_str_start(ss s1,ss s2)
+     sd l1
+@@ -270,6 +278,32 @@ function spaces(ss str)
+     endwhile
+ endfunction
+ 
++#newpos
++function compat(ss pointer,sd max,ss against,sd rep)
++	sd s;set s strlen(against)
++	sd return;set return max
++	add max pointer
++	sd start;set start pointer
++	sub max s
++	while pointer<^max  ## = ? will not be logical to end like "abc and"
++		sd c;set c memcmp(pointer,against,s)
++		if c=0
++			inc pointer
++
++			call memcpy(pointer,rep,2)
++			if s=5
++				ss and;set and pointer
++				add and 2
++				set and# (Space)
++			end
++
++			sub pointer start
++			return pointer
++		end
++		inc pointer
++	end
++	return return
++end
+ 
+ #closings
+ 
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -62,8 +62,9 @@ function actionx()
+ 	vdatax pointer#1
+ 	valuex end#1
+ 	if x_data.mem!=(NULL)
++	#flag_x | log, alt, debug_x
+ 		if end<=^pointer
+-			call error("error at x") #log, oaalternative, alt|debug_x, flag_x . and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
++			call error("error at x") # and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
+ 		end
+ 		sd size
+ 		set size pointer#v         ;#size of escaped block that was at parse + pad if debug_x_pad flag
+@@ -73,7 +74,7 @@ function actionx()
+ 		while pointer#!=(math_end)
+ 			set pointer action__code_row(pointer)
+ 		endwhile
+-		add pointer (DWORD)
++		add pointer (DWORD) #this will continue at next actionx
+ 		return (TRUE)
+ 	end
+ 	return (FALSE)
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,5 +1,5 @@
+ 0
+-26
++37
+ 
+ /*
+ debug_x
+@@ -26,6 +26,17 @@ for(a[0] in a[0]){}
+ while(true){break;continue;var p;}
+ for(;;){}
+ 
++a=new Object();
++a.b=3;
++a.c=new Array(1);a.c[0]=5;
++a.d=new Object();
++a.d.e=2;
++a.b++;
++a.c[0]--;
++a.d.e+=2;
++
++a=b!=1?q:w;
++
+ 5,9,0009
+ 1,5,
+ 2,5,2,,2,,2,,
+@@ -38,8 +49,17 @@ for(;;){}
+ 1,5,5,,,2,2,,5,,5,5,,,2,2,,2,2,
+ 1,5,5,,,2,2,,2
+ 1,2,,,,,2,,,,,2,,,5,,
+-1,2,5,,2,2,,,,,2,,5,,,2,2
++1,2,5,,2,2,,,,,2,,5,,,2
+ 1,2,,,1,1,,2,2,2,,2
+ 1,2,,5,,,1,1,,2,2,,5,2,,2
+ 1,2,2,2,,2
+ 1,2,,,2,2
++2,2,5,2,,
++1,2,,2,5,
++1,2,,2,5,5,2,,,2,,2,,5,5,
++1,2,,2,5,2,,
++1,2,,2,,2,5,
++1,2,,2,,1,,,2,,,,
++1,2,,2,,5,,1,,,2,,,,
++1,2,,2,,2,,1,,,2,,,5,,
++2,2,2,,5,,2,2,,2,2,,
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,16 +1,21 @@
+-RldTCGMDAABoABQAAAUAAAACAQBDAgARAD8DQgMAAIg7ABUAdGhpcwBnZXRWZXJzaW9uAGEAQXJy
+-YXkAYgBjAGQAZQBxAGYAZwBoAGkAagBrAGwAbQBuAG8AcAAAmwkAZm4AAQBhAAkAlgUABwIAAAA+
+-lgUABwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIACABOlgIACACWAgAIABxPlgIACAKW
+-BQAHAQAAAJYFAAcBAAAAlgIACANAHZYCAAgElgUAB/7///+WBQAHAgAAAEeWBQAHAgAAAAuWBQAH
+-AgAAAAyWBQAHAgAAAA2WBQAHAgAAAD+WBQAHAgAAAGCWBQAHAgAAAGGWBQAHAgAAAGKWBQAHAgAA
+-AEiWBQAHAgAAAGeWBQAHAgAAAEmWBQAHAgAAAEkSlgUABwIAAABnEpYFAAcCAAAASBKWBQAHAgAA
+-AGOWBQAHAgAAAGSWBQAHAgAAAGWWBQAHAgAAABCWBQAHAgAAABESnQIADQCWBQAHAgAAAJkCAAgA
+-lgUABwMAAAA8lgIACAWWCQAGMzPzPzMzMzM8lgIACAaWAgAIAhyWBQAHAAAAAE48lgIACAeWAgAI
+-CDyWAgAICZYFAAcCAAAAHZYCAAgKQZYCAAgKOxeWAgAIAByWAgAICToXlgIACAubBQAAAAAGAJYC
+-AAgCQR2WAgAIDJYFAAcAAAAAlgIACAs9PJYFAAcCAAAAlgUABwIAAABJEp0CAA8AlgIACA1BlgUA
+-BwkAAAA+lgUABwIAAACWBQAHAgAAAEkSnQIACwCWAgAIDkGZAgAGAJYCAAgPQZYFAAcCAAAAlgUA
+-BwIAAABJEp0CAAsAlgIACBBBmQIA3v+WAgAICUwcUB2WAgAICUwcUR2WAgAICUwclgUABwIAAABH
+-HZYCAAgRlgUABwIAAAA8mQIACQCWAgAIEUwcUB2WAgAIERyWBQAHAwAAAEgSnQIAAACWAgAIAhxV
+-hwEAAJYBAAJJnQIAEACWAgAIEpYCAAQAPJkCAOL/lgIACAIclgUABwAAAABOVYcBAACWAQACSZ0C
+-ABkAlgIACAIclgUABwAAAACWAgAEAE+ZAgDZ/5kCABAAmQIA9v+WAgAIE0GZAgDr/5YCAAgUHBKd
+-AgAFAJkCAO//AAAA
++RldTCJoEAABoABQAAAUAAAACAQBDAgARAD8DeQQAAIhEABcAdGhpcwBnZXRWZXJzaW9uAGEAQXJy
++YXkAYgBjAGQAZQBxAGYAZwBoAGkAagBrAGwAbQBuAG8AcAAAT2JqZWN0AHcAmwkAZm4AAQBhAAkA
++lgUABwIAAAA+lgUABwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIACABOlgIACACWAgAI
++ABxPlgIACAKWBQAHAQAAAJYFAAcBAAAAlgIACANAHZYCAAgElgUAB/7///+WBQAHAgAAAEeWBQAH
++AgAAAAuWBQAHAgAAAAyWBQAHAgAAAA2WBQAHAgAAAD+WBQAHAgAAAGCWBQAHAgAAAGGWBQAHAgAA
++AGKWBQAHAgAAAEiWBQAHAgAAAGeWBQAHAgAAAEmWBQAHAgAAAEkSlgUABwIAAABnEpYFAAcCAAAA
++SBKWBQAHAgAAAGOWBQAHAgAAAGSWBQAHAgAAAGWWBQAHAgAAABCWBQAHAgAAABESnQIADQCWBQAH
++AgAAAJkCAAgAlgUABwMAAAA8lgIACAWWCQAGMzPzPzMzMzM8lgIACAaWAgAIAhyWBQAHAAAAAE48
++lgIACAeWAgAICDyWAgAICZYFAAcCAAAAHZYCAAgKQZYCAAgKOxeWAgAIAByWAgAICToXlgIACAub
++BQAAAAAGAJYCAAgCQR2WAgAIDJYFAAcAAAAAlgIACAs9PJYFAAcCAAAAlgUABwIAAABJEp0CAA8A
++lgIACA1BlgUABwkAAAA+lgUABwIAAACWBQAHAgAAAEkSnQIACwCWAgAIDkGZAgAGAJYCAAgPQZYF
++AAcCAAAAlgUABwIAAABJEp0CAAsAlgIACBBBmQIA3v+WAgAICUwcUB2WAgAICUwcUR2WAgAICUwc
++lgUABwIAAABHHZYCAAgRlgUABwIAAAA8mQIACQCWAgAIEUwcUB2WAgAIERyWBQAHAwAAAEgSnQIA
++AACWAgAIAhxVhwEAAJYBAAJJnQIAEACWAgAIEpYCAAQAPJkCAOL/lgIACAIclgUABwAAAABOVYcB
++AACWAQACSZ0CABkAlgIACAIclgUABwAAAACWAgAEAE+ZAgDZ/5kCABAAmQIA9v+WAgAIE0GZAgDr
++/5YCAAgUHBKdAgAFAJkCAO//lgIACAKWBQAHAAAAAJYCAAgVQB2WAgAIAhyWAgAIBJYFAAcDAAAA
++T5YCAAgCHJYCAAgFlgUABwEAAACWBQAHAQAAAJYCAAgDQE+WAgAIAhyWAgAIBU6WBQAHAAAAAJYF
++AAcFAAAAT5YCAAgCHJYCAAgGlgUABwAAAACWAgAIFUBPlgIACAIclgIACAZOlgIACAeWBQAHAgAA
++AE+WAgAIAhyWAgAIBE2HAQAATUyWAgAEAE1OUE+WAgAIAhyWAgAIBU6WBQAHAAAAAE2HAQAATUyW
++AgAEAE1OUU+WAgAIAhyWAgAIBk6WAgAIB02HAQAATUyWAgAEAE1OlgUABwIAAABHT5YCAAgClgIA
++CAQclgUABwEAAABJnQIACwCWAgAICByZAgAGAJYCAAgWHB0AAAA=
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,33 +1,45 @@
+-yAEAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
++OAIAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+ aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
+ ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
+ AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
+ b24AKXt2YXIgYQB9dmFyIGkAaAApAGlmKDIAPTIAe3ZhciBqAHJldHVybiA5AH1lbHNlIGlmKDIA
+-PTIAe3ZhciBrAH1lbHNle3ZhciBsAH13aGlsZSgyAD0yAHt2YXIgbQB9ZgArAGYALQBmAAAyAGZv
+-cih2YXIgbgAyAG4AMwBuACsAe2JyZWFrO31mb3IodmFyIG8AaW4gYQB7Y29udGludWU7fWZvcihh
++PTIAe3ZhciBrAH1lbHNle3ZhciBsAH13aGlsZSgyAD0yAHt2YXIgbQB9ZgArO2YALTtmAD0yAGZv
++cih2YXIgbgAyAG4AMwBuACspe2JyZWFrO31mb3IodmFyIG8AaW4gYQB7Y29udGludWU7fWZvcihh
+ ADAAAGluIGEAMAAAe313aGlsZSh0cnVlAHticmVhaztjb250aW51ZTt2YXIgcAB9Zm9yKDsAKXt9
+-AAAAAAAAAAAwMAPzCgAAAAAAAAANAAAAAAAAAAAAAAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQ
+-EAHxJAAAAAAAAADu7u7+GgAAAAAAAAAfAAAAAAAAAAAAAAAAAAAAqqqq+k8AAAAxAAAAAAAAADYA
+-AAAAAAAAOwAAAAAAAAAAAAAAAAAAAKqqqvocAAAAQAAAAAAAAAD/////HQAAAEUAAAAAAAAAQEAE
+-9EsAAAAAAAAABwAAAAEAAAD/////7u7u/gAAAAAAAAAAPAAAAFgAAAAAAAAAgIAI+AcAAAD+////
+-RwAAAAcAAAACAAAACwAAAAcAAAACAAAADAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcAAAAC
+-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
++/////08AAADWAQAAAAAAANgBAAAAAAAAAAAAAAAAAACqqqr6QEAE9N4BAAAAAAAABwAAAAEAAAD/
++////7u7u/gAAAAAAAAAATwAAAOcBAAAAAAAA6QEAAAAAAAAAAAAAAAAAAFBQBfUHAAAAAAAAAP//
++//8AAAAAAAAAAKqqqvoHAAAABQAAAP////9PAAAA8AEAAAAAAADyAQAAAAAAAAAAAAAAAAAAqqqq
+++kBABPT4AQAAAAAAAO7u7v4AAAAAAAAAAE8AAAABAgAAAAAAAAMCAAAAAAAABQIAAAAAAAAAAAAA
++AAAAAKqqqvoHAAAAAgAAAP////9PAAAACQIAAAAAAAALAgAAAAAAAAAAAAAAAAAAqqqq+lAAAABP
++AAAADwIAAAAAAAARAgAAAAAAAAAAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAAAAAAAAqqqq+lEA
++AABPAAAAGAIAAAAAAAAaAgAAAAAAABwCAAAAAAAAAAAAAAAAAACqqqr6YGAG9kcAAAAHAAAAAgAA
++AP////8dAAAAIQIAAAAAAAAcAAAAIwIAAAAAAABwcAf3SQAAABIAAAAHAAAAAQAAANDQDf0cAAAA
++KAIAAAAAAAD/////HAAAACoCAAAAAAAA//////////8=
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,29 +1,38 @@
+-zAEAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
++LAIAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
+ dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
+ ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
+ AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
+ e3ZhciBhAH12YXIgaQBoACkAaWYoMgA9MgB7dmFyIGoAcmV0dXJuIDkAfWVsc2UgaWYoMgA9MgB7
+-dmFyIGsAfWVsc2V7dmFyIGwAfXdoaWxlKDIAPTIAe3ZhciBtAH1mACsAZgAtAGYAADIAZm9yKHZh
+-ciBuADIAbgAzAG4AKwB7YnJlYWs7fWZvcih2YXIgbwBpbiBhAHtjb250aW51ZTt9Zm9yKGEAMAAA
+-aW4gYQAwAAB7fXdoaWxlKHRydWUAe2JyZWFrO2NvbnRpbnVlO3ZhciBwAH1mb3IoOwApe30AAAAA
+-AAAAAAAAAAAwMAPzCgAAAA0AAAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQEAHxJAAAAO7u7v4a
+-AAAAHwAAAAAAAACqqqr6TwAAADEAAAA2AAAAOwAAAAAAAACqqqr6HAAAAEAAAAD/////HQAAAEUA
+-AABAQAT0SwAAAAcAAAABAAAA/////+7u7v4AAAAAPAAAAFgAAACAgAj4BwAAAP7///9HAAAABwAA
+-AAIAAAALAAAABwAAAAIAAAAMAAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABgAAAA
+-BwAAAAIAAABhAAAABwAAAAIAAABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dn
+-AAAAAAAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAAAHBw
+-B/dnAAAAEgAAAAcAAAACAAAAcHAH90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAABwAA
+-AAIAAABlAAAABwAAAAIAAAAQAAAABwAAAAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/////
+-BwAAAAMAAAD//////////zwAAACZAAAABgAAADMz8z8zMzMz/////zwAAACjAAAATgAAAKUAAAAA
+-AAAAUFAF9QcAAAAAAAAA/////wAAAACqqqr6/////zwAAACuAAAACAAAALEAAAD/////HQAAALQA
+-AAAHAAAAAgAAAP////9BAAAAvAAAADsAAADFAAAAOgAAAM4AAADTAAAAAAAAAKqqqvodAAAA1QAA
+-ADAwA/PfAAAAAAAAAEEAAADmAAAAu7u7+zwAAADtAAAAICAC8u8AAADu7u7+AAAAAP////+dAAAA
+-BwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAAAAEAAD4AAAAHAAAACQAAAP////+7
+-u7v7AAAAQJ0AAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAA/////0EAAAAeAQAAu7u7+wAA
+-AEBBAAAAKgEAAMzMzPwCAAAABgYFBQcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAA
+-AD0BAADd3d39HQAAAEABAABQAAAAHQAAAEQBAABRAAAAHQAAAEgBAABgYAb2RwAAAAcAAAACAAAA
+-/////+DgDv6wsAv7PAAAAFUBAAAHAAAAAgAAAP/////AwAz8HQAAAF0BAABQAAAAwMAM/BwAAABZ
+-AQAAcHAH90gAAAAAAAAABwAAAAMAAAD/////kJAJ+d3d3f3g4A7+HAAAAHYBAAA8AAAAcQEAAKCg
+-Cvrd3d394OAO/k4AAACPAQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq+k8AAACHAQAAAAAA
+-AFBQBfUHAAAAAAAAAP////8AAAAAqqqq+t3d3f0GBgUFHAAAAJwBAAD/////kJAJ+aCgCvpBAAAA
+-tQEAAN3d3f3g4A7+sLAL+8DADPzAwAz8HAAAAL0BAAD/////3d3d/f////8=
++dmFyIGsAfWVsc2V7dmFyIGwAfXdoaWxlKDIAPTIAe3ZhciBtAH1mACs7ZgAtO2YAPTIAZm9yKHZh
++ciBuADIAbgAzAG4AKyl7YnJlYWs7fWZvcih2YXIgbwBpbiBhAHtjb250aW51ZTt9Zm9yKGEAMAAA
++aW4gYQAwAAB7fXdoaWxlKHRydWUAe2JyZWFrO2NvbnRpbnVlO3ZhciBwAH1mb3IoOwApe31hAG5l
++dyBPYmplY3QAKTthAGIAMwBhAGMAbmV3IEFycmF5ADEAO2EAYwAwAAA1AGEAZABuZXcgT2JqZWN0
++ACk7YQBkAGUAMgBhAGIAKzthAGMAMAAALTthAGQAZQA9MgBhAGIAPTEAcQB3AAAwMAPzCgAAAA0A
++AAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQEAHxJAAAAO7u7v4aAAAAHwAAAAAAAACqqqr6TwAA
++ADEAAAA2AAAAOwAAAAAAAACqqqr6HAAAAEAAAAD/////HQAAAEUAAABAQAT0SwAAAAcAAAABAAAA
++/////+7u7v4AAAAAPAAAAFgAAACAgAj4BwAAAP7///9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAM
++AAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIA
++AABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH
++90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAAAHBwB/dnAAAAEgAAAAcAAAACAAAA
++cHAH90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQ
++AAAABwAAAAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/////BwAAAAMAAAD//////////zwA
++AACZAAAABgAAADMz8z8zMzMz/////zwAAACjAAAATgAAAKUAAAAAAAAAUFAF9QcAAAAAAAAA////
++/wAAAACqqqr6/////zwAAACuAAAACAAAALEAAAD/////HQAAALQAAAAHAAAAAgAAAP////9BAAAA
++vAAAADsAAADFAAAAOgAAAM4AAADTAAAAAAAAAKqqqvodAAAA1QAAADAwA/PfAAAAAAAAAEEAAADm
++AAAAu7u7+zwAAADtAAAAICAC8u8AAADu7u7+AAAAAP////+dAAAABwAAAAIAAABwcAf3SQAAAAAA
++AAAHAAAAAgAAAP////9BAAAAAAEAAD4AAAAHAAAACQAAAP////+7u7v7AAAAQJ0AAAAHAAAAAgAA
++AHBwB/dJAAAAAAAAAAcAAAACAAAA/////0EAAAAeAQAAu7u7+wAAAEBBAAAAKgEAAMzMzPwCAAAA
++BgYFBQcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAAD0BAADd3d39HQAAAEABAABQ
++AAAAHQAAAEQBAABRAAAAHQAAAEgBAABgYAb2RwAAAAcAAAACAAAA/////+DgDv6wsAv7PAAAAFUB
++AAAHAAAAAgAAAP/////AwAz8HQAAAF0BAABQAAAAwMAM/BwAAABZAQAAcHAH90gAAAAAAAAABwAA
++AAMAAAD/////kJAJ+d3d3f3g4A7+HAAAAHYBAAA8AAAAcQEAAKCgCvrd3d394OAO/k4AAACPAQAA
++AAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq+k8AAACHAQAAAAAAAFBQBfUHAAAAAAAAAP////8A
++AAAAqqqq+t3d3f0GBgUFHAAAAJwBAAD/////kJAJ+aCgCvpBAAAAtQEAAN3d3f3g4A7+sLAL+8DA
++DPzAwAz8HAAAAL0BAAD/////3d3d/R0AAADBAQAAQEAE9McBAADu7u7+AAAAAE8AAADQAQAA0gEA
++AAAAAACqqqr6BwAAAAMAAAD/////TwAAANYBAADYAQAAAAAAAKqqqvpAQAT03gEAAAcAAAABAAAA
++/////+7u7v4AAAAATwAAAOcBAADpAQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq+gcAAAAF
++AAAA/////08AAADwAQAA8gEAAAAAAACqqqr6QEAE9PgBAADu7u7+AAAAAE8AAAABAgAAAwIAAAUC
++AAAAAAAAqqqq+gcAAAACAAAA/////08AAAAJAgAACwIAAAAAAACqqqr6UAAAAE8AAAAPAgAAEQIA
++AAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvpRAAAATwAAABgCAAAaAgAAHAIAAAAAAACqqqr6
++YGAG9kcAAAAHAAAAAgAAAP////8dAAAAIQIAABwAAAAjAgAAcHAH90kAAAASAAAABwAAAAEAAADQ
++0A39HAAAACgCAAD/////HAAAACoCAAD//////////w==
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -40,6 +40,17 @@ for(var o in a){continue;}
+ for(a[0] in a[0]){}
+ while(true){break;continue;var p;}
+ for(;;){}
++
++a=new Object();
++a.b=3;
++a.c=new Array(1);a.c[0]=5;
++a.d=new Object();
++a.d.e=2;
++a.b++;
++a.c[0]--;
++a.d.e+=2;
++
++a=b!=1?q:w;
+ ")
+ 
+ call swf_done()
+--- actionswf-1.orig/tests/as
++++ actionswf-1/tests/as
+@@ -1,18 +1,3 @@
+ 
+-if [ -z "${conv_64}" ]; then conv_64=0; fi
+-o a.oc logfile 0 conv_64 ${conv_64} include_sec 1 && {
+-	if [ ${conv_64} = 1 ]; then
+-		if [ "`dpkg-architecture -qDEB_HOST_ARCH`" = "amd64" ]; then #cross
+-			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
+-				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -L../src -lactionswf
+-		else
+-			cc a.o -L../src -lactionswf
+-		fi
+-	else
+-		cc a.o -L../src -lactionswf
+-	fi && {
+-		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
+-		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out
+-		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
+-	}
+-}
++if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
++./asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
+--- /dev/null
++++ actionswf-1/tests/asv
+@@ -0,0 +1,17 @@
++
++if [ -z "${conv_64}" ]; then conv_64=0; fi
++o a.oc logfile 0 conv_64 ${conv_64} include_sec 1 && {
++	if [ ${conv_64} = 1 ]; then
++		if [ "`dpkg-architecture -qDEB_HOST_ARCH`" = "amd64" ]; then #cross
++			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
++				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -L${_L}../src -lactionswf
++		else
++			cc a.o -L${_L}../src -lactionswf
++		fi
++	else
++		cc a.o -L${_L}../src -lactionswf
++	fi && {
++		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../src; fi
++		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out
++	}
++}
+--- actionswf-1.orig/tests/entry.oc
++++ actionswf-1/tests/entry.oc
+@@ -1 +1,4 @@
+-entry main(sd argc)
++entry main(sd argc,sv argv)
++incst argv
++ss a1
++set a1 argv#
+--- actionswf-1.orig/tests/entryraw.oc
++++ actionswf-1/tests/entryraw.oc
+@@ -1 +1 @@
+-entryraw main(sd argc)
++entryraw main(sd argc,sd *,ss a1)
+--- /dev/null
++++ actionswf-1/tests/ffdec/a.oc
+@@ -0,0 +1,80 @@
++
++format elfobj64
++
++importx "_exit" exit
++
++einclude "../../dev/import.h"
++
++include "../entryraw.oc" "../entry.oc"
++
++sd f=debug_log
++if argc=2
++	importx "puts" puts
++	call puts("alt flag")
++	set f (debug_alt)
++	sub a1# (0x30)
++	or f a1#
++end
++
++call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
++
++call action("
++function c(){
++}
++function cc(a){
++}
++function ccc(a,b){
++}
++var a;
++delete a;
++delete a.b;
++var a=2;
++a=3;
++a.b=4;
++a=ccc(1,2);
++b.ccc(1,2);
++
++a=new c();
++
++//a+=2; will go to eval
++//a=a+2; will go to PushDuplicate that will go to eval
++a=eval('a')+2;
++
++a=1+(1+1)+a+a.b-1*1/1%1&1|1^1<<1>>1>>>1&&1||1;
++
++a[0]=1;
++a[b]=1;
++a='b';
++a=1.1;
++
++//a++; will go to eval
++//a--; will go to eval
++
++if(a==8){}
++if(a!=1){}
++if(a>1){}
++if(a<1){}
++if(a>=1){a=5;}
++else if(a<=1){a=3;}
++else{a=4;}
++
++while(a<9){a=eval('a')+1;}
++
++a=a==2?b:c;
++
++a=function(){return 2;}
++
++while(a<9){if(a==1){a=2;}else if(a==2){continue;}else if(a==4){break;}else{a=6;}}
++
++for(i=0;i<2;i=1+i){
++	if(a==1){a=2;}else if(a==2){continue;}
++}
++
++for(a in b){c=1+c;}
++")
++#call actiond("for(a in b){c=1+c;}") will be ""b"" and here straight "b"
++call action("return 1")
++
++call swf_done()
++
++call exit(0)
+--- /dev/null
++++ actionswf-1/tests/ffdec/as
+@@ -0,0 +1,3 @@
++
++if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
++_L=../ ../asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "./a.out 1" && cat a.swf.log
+--- /dev/null
++++ actionswf-1/tests/ffdec/c
+@@ -0,0 +1 @@
++rm a.o a.out a.swf a.swf.log a.swf.orig
+--- /dev/null
++++ actionswf-1/tests/ffdec/f
+@@ -0,0 +1 @@
++a=1 ./ff && cat a.swf.log
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/ffdec/ff
+@@ -0,0 +1,17 @@
++
++#1 d will be full diff
++
++if [ -z "${OCOMP}" ]; then OCOMP=o; fi
++if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
++${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
++LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
++	if [ -z "${a}" ]; then a=0; fi
++	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "qq ./a.out ${a}" || {
++		swfdump -D${1} a.swf.orig > 1
++		swfdump -D${1} a.swf > 2
++		diff 1 2 --color
++		rm 1 2
++		exit 1
++	}
++}
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -1,9 +1,9 @@
+ <!DOCTYPE html>
+ 
+ <style>
+-	#selection_table td {
++	/* #selection_table td {
+ 		border: 1px solid black;
+-	}
++	} for class is: table.selection_table td */
+ 	.blue
+ 	{
+ 		color:blue;
+@@ -21,19 +21,29 @@
+ 		font-size: small;
+ 		color:green;
+ 	}
++	table td {
++		border: 1px solid #0088FF;
++	}
++	#ffdec_diff td {
++		border: 1px solid #FF8800;
++	}
++	/*.ffdec_yes_partial {
++		border: 1px solid #0088FF !important;
++	}*/
+ </style>
+ 
+ <h3>X Syntax</h3>
+ 
+ <p>Black = 4 bytes. <span class="blue">Pointer = 4/8 bytes.</span> <span class="green">Green = replacement.</span> <span class="red">Red.</span></p>
++<p><span style="color:#0088FF">Border = ffdec ok.</span> <span style="color:#FF8800">Border = ffdec ok, but with differences.</span></p>
+ 
+-<table id="selection_table">
++<table>
+ 	<tr><td class="green">1</td></tr>
+ 	<tr><td>math_end</td></tr>
+ </table>
+ 
+ <br>Table 1: <!-- action_code_row<>action__code_row -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="green">2</td></tr>
+ 	<tr><td class="green">F</td></tr>
+ 	<tr><td>call_action_left</td><td class="green">C</td></tr>
+@@ -47,7 +57,7 @@
+ </table>
+ 
+ <br>Table 2: <!-- action_parse_pack<>action_code_pack -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="green">L</td><td class="green">R</td></tr>
+ 	<tr><td>ActionDefineLocal2</td><td class="blue">name</td></tr>
+ 	<tr><td>ActionDelete</td><td class="green">M</td></tr>
+@@ -55,59 +65,52 @@
+ </table>
+ 
+ <br>Table L: <!-- in packs, at for-in -->
+-<table id="selection_table">
++<table>
+ 	<tr><td>ActionDefineLocal</td><td class="blue">name</td></tr>
+ 	<tr><td>ActionSetVariable</td><td class="blue">name</td></tr>
+ 	<tr><td>ActionSetMember</td><td class="green">M</td></tr>
+ </table>
+ 
+ <br>Table C: <!-- action_code_parse_new_or_call<>action_code_new_or_call -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="blue">function</td><td class="green">{RG}</td><td>args_end</td><td><span class="blue">null</span>/<span class="green">MC</span></td></tr>
+ </table>
+ 
+ <br>Table F: <!-- action_code_parse_deffunction<>action_definefunction -->
+-<table id="selection_table">
++<table>
+ 	<tr><td>function_action</td><td class="blue">name</td><td class="blue">{arguments}</td><td class="blue">null</td><td class="green">{1}</td><td>block_end</td></tr>
+ </table>
+ 
+ <br>Table FR: <!--  action_parse_conditions<>action_code_write_conditions -->
+-<table id="selection_table">
++<table>
+ 	<tr><td rowspan=3>for</td><td>for_three</td>                 <td class="green">[2]</td>   <td>inter_for</td><td class="green">[2]</td><td>inter_for</td><td class="green">RG<sup-r>c</sup-r></td><td class="green" rowspan=3>{1}</td><td rowspan=3>whileblock_end</td></tr>
+ 	<tr>                      <td class="green" colspan=2>RT</td>                             <td class="green" colspan=4 rowspan=2>L</td></tr>
+-	<tr>                      <td>ActionEnumerate</td>           <td class="blue">pattern</td></tr>
++	<tr id="ffdec_diff">      <td>ActionEnumerate</td>           <td class="blue">pattern</td></tr>
+ </table>
+ 
+ <br>Table If: <!-- at action_parse_conditions<>at action_code_write_conditions -->
+-<table id="selection_table">
++<table>
+ 	<td>ActionIf</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>block_end</td>
+ </table>
+ 
+ <br>Table M: <!-- action_code_member<>action_member_loop -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="blue" rowspan=2>owner</td><td class="green" rowspan=2>MS</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
+ 	<tr>                                                                                                        <td class="blue">no_pointer</td><td>member_end</td></tr>
+ </table>
+ <br>Table MS: <!-- same -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="blue" colspan=3>member</td></td></tr>
+ 	<tr><td class="blue">no_pointer</td><td>square_bracket_start</td><td class="green">RG</td></tr>
+ </table>
+ <br>Table MC: <!-- same -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="blue" rowspan=2>owner</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
+ 	<tr>                                                                     <td class="blue">no_pointer</td><td>member_end</td></tr>
+ </table>
+ 
+ <br>Table O: <!-- get_operations<>in RG loop -->
+-<table id="selection_table">
+-	<tr><td class="green">OP</td></tr>
+-	<tr><td>ActionAnd</td></tr>
+-	<tr><td>ActionOr</td></tr>
+-</table>
+-
+-<br>Table OP: <!-- get_operations<>in RG loop/in ...pack -->
+-<table id="selection_table">
++<table>
+ 	<tr><td>ActionSubtract</td></tr>
+ 	<tr><td>ActionMultiply</td></tr>
+ 	<tr><td>ActionDivide</td></tr>
+@@ -119,31 +122,33 @@
+ 	<tr><td>ActionBitLShift</td></tr>
+ 	<tr><td>ActionBitRShift</td></tr>
+ 	<tr><td>ActionBitURShift</td></tr>
++	<tr><td>ActionAnd</td></tr>
++	<tr><td>ActionOr</td></tr>
+ </table>
+ 
+ <br>Table OC: <!-- get_operations<>in RG loop -->
+-<table id="selection_table">
++<table>
+ 	<tr><td rowspan=3>compare_action</td><td>ActionLess2</td><td>0/ActionNot</td></tr>
+ 	<tr>                                 <td>ActionGreater</td><td>0/ActionNot</td></tr>
+ 	<tr>                                 <td>ActionEquals2</td><td>0/ActionNot</td></tr>
+ </table>
+ 
+ <br>Table R: <!-- in ...pack<>in ...pack -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="green">RI</td></tr>
+-	<tr><td>ActionIncrement</td></tr>
+-	<tr><td>ActionDecrement</td></tr>
+-	<tr><td>mixt_equal</td><td class="green">OP</td><td class="green">RI</td></tr>
++	<tr id="ffdec_diff"><td>ActionIncrement</td></tr>
++	<tr id="ffdec_diff"><td>ActionDecrement</td></tr>
++	<tr id="ffdec_diff"><td>mixt_equal</td><td class="green">O</td><td class="green">RI</td></tr>
+ </table>
+ 
+ <br>Table RI: <!-- action_parse_right<>action_code_right -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="green">F</td></tr>
+ 	<tr><td class="green">RG</td></tr>
+ </table>
+ 
+ <br>Table RG: <!-- action_code_row_parse_tool<>action_code_right_util -->
+-<table id="selection_table">
++<table>
+ 	<tr><td>new_action</td><td class="green">C</td></tr>
+ 	<tr><td class="green" rowspan=4>RH</td><td class="red" rowspan=4>{</td><td class="green">O+RH</td><td class="red" rowspan=2>}</td></tr>
+ 	<tr>                                                                   <td class="green">OC+RH</td></tr>
+@@ -152,7 +157,7 @@
+ </table>
+ 
+ <br>Table RH: <!-- in action_code_take_main<>action_code_right_number -->
+-<table id="selection_table">
++<table>
+ 	<tr><td class="green" colspan=2>RT</td></tr>
+ 	<tr><td>ap_Integer</td><td>number</td></tr>
+ 	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
+@@ -162,9 +167,9 @@
+ </table>
+ 
+ <br>Table RT: <!-- action_code_take_pointer<>at for-in or ...right_number -->
+-<table id="selection_table">
++<table>
+ 	<tr><td>ActionGetVariable</td><td class="blue">name</td></tr>
+ 	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+ </table>
+ 
+-<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members MemberS MembersCall Operation OPeration OperationCompare Right RIght RiGht RigHt RighT</div>
++<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members MemberS MembersCall Operation OperationCompare Right RIght RiGht RigHt RighT</div>

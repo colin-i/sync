@@ -1,0 +1,379 @@
+
+format elfobj64
+
+include "../include/prog.h"
+
+function debug_mark()
+	valuex row#1
+	return #row
+endfunction
+function debug_mark_start()
+	sv a;setcall a debug_mark()
+	set a# 0
+endfunction
+function debug_mark_add()
+	sv a;setcall a debug_mark()
+	add a# :
+endfunction
+function debug_mark_get()
+	value offsets=NULL
+	const p_offsets^offsets
+
+	sv a;setcall a debug_mark()
+	sv b;set b a#
+	add b offsets
+	return b
+endfunction
+
+function debug_target()
+	valuex a#1
+	return #a
+endfunction
+
+function debug_end()
+	valuex a#1
+	return #a
+endfunction
+function debug_actions()
+	#now is a string #datax a#1  #65535
+	value mem=NULL
+	#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
+	#but all_size is growing +0x1000 from that limit, and the error is catched there, valuex?
+	#there is a limit on actions and on constant pool, so don't worry here
+	datax size#1
+	datax all_size#1
+endfunction
+
+import "mem_free" mem_free
+import "f_close" f_close
+
+function debug_data()
+	import "x_data" x_data
+	call x_data()
+	sv of%p_offsets
+	if of#!=(NULL)
+		call mem_free(of)
+		value file=NULL
+		const p_debug_file^file
+		if file!=(NULL)
+			call f_close(#file)
+			if debug_actions.mem!=(NULL)
+				call mem_free(#debug_actions.mem)
+			end
+		end
+	endif
+	import "alt_free" alt_free
+	call alt_free()
+endfunction
+
+function debug_phase_init(ss pointer)
+	sv of%p_offsets
+	if of#!=(NULL)
+		sv a;setcall a debug_mark_get()
+		set a# pointer
+		call debug_mark_add()
+	endif
+endfunction
+function debug_phase_parse(ss pointer)
+	sv of%p_offsets
+	if of#!=(NULL)
+		sv a
+		sv start;setcall start debug_mark_get()
+		sv target;setcall target debug_target()
+		if target#=(NULL)
+		#need to know empty rows
+			set a start
+			while pointer>a#
+				incst a
+			endwhile
+			set target# a
+		else
+			set a target#
+		endelse
+		#if pointer>=^a#  # and > ? it's not with spaces at end, therefore ";   \nabc" can go wrong
+		if pointer<^a#
+			ret
+		endif
+		import "action_code_get" action_code_get   #the pointer is not reallocated, can use offset but will be slower
+		sd x;setcall x action_code_get()
+		while start#<^pointer   #or a
+			set start# x
+			call debug_mark_add()
+			setcall start debug_mark_get()
+		endwhile
+		set start# x      ##also,set for this row, can be the only set
+		call debug_mark_add()
+		set target# (NULL)
+	endif
+endfunction
+
+function debug_action_phase()
+	sv of%p_offsets
+	if of#!=(NULL)
+		call debug_mark_start()  #second and third iteration
+	endif
+endfunction
+
+importx "sprintf" sprintf
+importx "memcpy" memcpy
+
+function md_printf(sd c,sd format,sd val) #to not write null on unknown
+	char mem#5
+	sd n;set n sprintf(#mem,format,val)
+	call memcpy(c,#mem,n)
+	return n
+end
+
+import "row_termination" row_termination
+import "brace_blocks_get_memblock" brace_blocks_get_memblock
+import "block_get_size" block_get_size
+import "block_get_mem" block_get_mem
+import "word_arg_to_stack" word_arg_to_stack
+import "for_in" for_in
+import "frames_as_shows" frames_as_shows
+
+importx "strlen" strlen
+importx "fseek" fseek
+importx "fread" fread
+importx "fprintf" fprintf
+
+
+
+#aftercallimport ebool
+
+import "memalloc" memalloc
+import "alt_init" alt_init
+import "dtitles_init" dtitles_init
+import "x_init" x_init
+import "f_open_mem" f_open_mem
+
+function flags_init(sd flags,sd path)
+	set flags x_init(flags,path)
+	call log_init(flags,path)
+	call alt_init(flags,path)
+	call dtitles_init(flags)
+
+	call frames_as_shows(flags)
+	call for_in(flags)
+endfunction
+
+function log_init(sd flags,sd path)
+	sv of%p_offsets
+	if of#!=(NULL)
+		call error("swf started, log not closed")
+	end
+	and flags (debug_log)
+	if flags=(debug_log)
+		setcall of# memalloc(1)  #0 on some systems can be NULL return
+
+		sd s;setcall s strlen(path)
+		sd a=4+1
+		add a s
+		sd b;setcall b memalloc(a)
+		call sprintf(b,"%s.log",path)
+		sv file%p_debug_file
+		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for comma character
+
+		setcall debug_actions.mem memalloc(1)
+		#this is later #set debug_actions.size 0
+		set debug_actions.all_size 1
+	end
+end
+
+import "f_printf" f_printf
+import "f_write" f_write
+import "f_tell" f_tell
+
+function debug_action_init(ss ac)
+	sv of%p_offsets
+	if of#!=(NULL)
+		sd start;set start ac
+
+		sd row=1     #at least one row, example: row 1,3 actions
+		while ac#!=0
+			call row_termination(#ac,#row)
+			inc ac
+		endwhile
+
+		#out rows\nac\n
+		sv file%p_debug_file
+		char f={Percent,l,u,LineFeed,Percent,s,LineFeed,Nullchar}
+		call f_printf((fprintf_min+2),file#,#f,row,start)
+
+		mult row :
+		import "memrealloc" memrealloc
+		setcall of# memrealloc(of#,row)
+
+		call debug_mark_start()  #prepare for first iteration
+
+		#set target to 0, for recognizing blank rows at second iteration
+		sv target;setcall target debug_target()
+		set target# (NULL)
+
+		add row of#
+		sv end;setcall end debug_end()   #at third iteration
+		decst row   ##must be last entry not after
+		set end# row
+
+		set debug_actions.size 0
+	endif
+endfunction
+
+function debug_phase_code(sd codepointer)
+	sv of%p_offsets
+	if of#!=(NULL)
+		sv a;setcall a debug_mark_get()
+		if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+			if debug_actions.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+				sv b;set b a
+				sv end;setcall end debug_end()
+				while codepointer>=^b#   # > ? same as above
+					call debug_mark_add()
+					setcall b debug_mark_get()
+					if b=end#
+						break
+					endif
+				endwhile
+				sub b a
+				div b :
+
+				#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+				sv file%p_debug_file
+				call f_printf((fprintf_min+1),file#,"%lu",b)
+				call f_write(file#,debug_actions.mem,debug_actions.size)
+				call f_write(file#,"\n",1)
+				set debug_actions.size 0
+			end
+		endif
+	endif
+endfunction
+
+function debug_base_core(sd id)
+	sv file%p_debug_file
+	call f_printf((fprintf_min+1),file#,"%u\n",id) #swf_button is calling action_sprite
+end
+function debug_base(sd id)
+	sv of%p_offsets
+	if of#!=(NULL)
+		call debug_base_core(id)
+	end
+end
+function debug_show(sd id)
+	sv of%p_offsets
+	if of#!=(NULL)
+		call debug_base_core(id)
+		call debug_write("\n\n",2)
+	end
+end
+function debug_write(ss s,sd d)
+	sv file%p_debug_file
+	call f_write(file#,s,d)
+end
+function debug_spritedone(sd p,sd i)
+	sv of%p_offsets
+	if of#!=(NULL)
+		call debug_base_core(p)
+		call debug_write("\n",1)
+		call debug_base_core(i)
+	end
+end
+
+function debug_phase_code_add(sd is_long,ss plength)
+	sv of%p_offsets
+	if of#!=(NULL)
+		sd sz;set sz debug_actions.size
+		if is_long=(TRUE)
+			add sz (1+2+2)
+		else
+			add sz 1
+		end
+		if sz>^debug_actions.all_size
+			set debug_actions.all_size sz
+			add debug_actions.all_size 0x1000
+			set debug_actions.mem memrealloc(debug_actions.mem,debug_actions.all_size)
+		end
+		ss m;set m debug_actions.mem
+		add m debug_actions.size
+
+		set m# (Comma) #even if is only 1 action is lines,a1,a2...an
+
+		if is_long=(TRUE)
+			inc m
+			sd here_sz
+			ss second=1
+			add second plength
+			if second#!=0
+				set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
+				add m here_sz
+				sub here_sz 2
+				call md_printf(m,"%02X",plength#)
+			else
+				set here_sz md_printf(m,"%X",plength#)  #only 0 is also printed
+				sub here_sz 2+2
+			end
+			add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
+		end
+		set debug_actions.size sz
+	endif
+endfunction
+
+function debug_definefunction(sv pointers)
+	sv of%p_offsets
+	if of#!=(NULL)
+		set pointers# f_tell(debug_data.file)
+		incst pointers
+
+		sd memblock;setcall memblock brace_blocks_get_memblock()
+		set pointers#d^ block_get_size(memblock)
+		incst pointers
+
+		sd offset
+		set offset debug_actions.size  ##same size as debug_actions.size
+		char dummy={0xff,0xff} #0,0 is not ok inside
+		call debug_phase_code_add((TRUE),#dummy)
+		#inc offset ##to skip Comma  #but at fseek is not needed because fread is already skipping that
+		set pointers#d^ offset
+	endif
+end
+import "error" error
+function debug_concludefunction(sv pointers)
+	sv of%p_offsets
+	if of#!=(NULL)
+		sd prev_fileoffset;set prev_fileoffset pointers#
+		sd now;set now f_tell(debug_data.file)
+		incst pointers
+
+		sd block;setcall block brace_blocks_get_memblock()
+		sd blockmem;set blockmem block_get_mem(block)
+		add blockmem pointers#d^
+		sd size;set size word_arg_to_stack(blockmem)
+		incst pointers
+
+		sd offset;set offset pointers#d^
+
+		vstr format="%04X"
+		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
+			call fseek(debug_data.file,prev_fileoffset,(SEEK_SET))
+			#now need to skip first number that is the number of rows
+			whiletrue
+				char a#1
+				sd ret
+				set ret fread(#a,1,1,debug_data.file)
+				if a=(Comma)  #there is a comma from here
+					break
+				endif
+				if ret!=1
+					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
+				end
+			end
+			call fseek(debug_data.file,offset,(SEEK_CUR))
+			call fprintf(debug_data.file,format,size)    #overwrite the dummy write
+			call fseek(debug_data.file,0,(SEEK_END))
+		else #on mem
+			sd c;set c debug_actions.mem
+			inc offset ##to skip Comma
+			add c offset
+			call md_printf(c,format,size)
+		end
+	endif
+end
