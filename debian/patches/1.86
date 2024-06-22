@@ -1,0 +1,56 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-86) bionic; urgency=medium
+ .
+   * fix i386 test
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-06-22
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -16,6 +16,6 @@ $(SUBDIRS):
+ .PHONY: $(TOPTARGETS) $(SUBDIRS)
+ 
+ test:
+-	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && /bin/bash ./as && echo tests ok
++	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && conv_64=${conv_64} /bin/bash ./as && echo tests ok
+ 
+ .NOTPARALLEL:
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -1,8 +1,14 @@
+ 
+-if [ -z "${conv_64}" ]; then conv_64=0; fi
+-o a.oc logfile 0 conv_64 ${conv_64} include_sec 1 && {
++inc="include_sec 1"
++if [ -z "${conv_64}" ]; then conv_64=0
++elif [ ${conv_64} = 1 ]; then
++	if [ "`dpkg-architecture -qDEB_HOST_ARCH`" = "amd64" ]; then #cross
++		inc=
++	fi
++fi
++o a.oc logfile 0 conv_64 ${conv_64} ${inc} && {
+ 	if [ ${conv_64} = 1 ]; then
+-		if [ "`dpkg-architecture -qDEB_HOST_ARCH`" = "amd64" ]; then #cross
++		if [ -z "${inc}" ]; then #cross
+ 			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
+ 				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -L${_L}../src -lactionswf
+ 		else

@@ -1,0 +1,17 @@
+
+if [ -z "${conv_64}" ]; then conv_64=0; fi
+o a.oc logfile 0 conv_64 ${conv_64} include_sec 1 && {
+	if [ ${conv_64} = 1 ]; then
+		if [ "`dpkg-architecture -qDEB_HOST_ARCH`" = "amd64" ]; then #cross
+			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
+				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -L${_L}../src -lactionswf
+		else
+			cc a.o -L${_L}../src -lactionswf
+		fi
+	else
+		cc a.o -L${_L}../src -lactionswf
+	fi && {
+		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../src; fi
+		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out
+	}
+}
