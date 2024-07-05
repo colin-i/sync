@@ -1,0 +1,2254 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+182) xenial; urgency=medium
+ .
+   * char[x]s
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-07-05
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -1,6 +1,9 @@
+ 
+ #1 msg
+ 
++if [ -z "${msg}" ]; then # more at test/publ
++	msg="${1}"
++fi
+ last=`curl https://api.github.com/repos/colin-i/o/releases/latest -s | jq .tag_name -r` && echo ${last} && \
+ ~/test/keyring2 && \
+ ~/test/arh2 ${last} && \
+@@ -10,6 +13,7 @@ last=`curl https://api.github.com/repos/
+ #there are problems at amd64xenial, not at bionic. can use xi386 amd64 at b but then will be a mess to copy both x and normal version from bionic onward
+ ~/test/deb && \
+ arh=i386 ~/test/publp && \
++#if copy will not work because of already published error, manual "Copy binaries" and will also rebuild missing amd64
+ ~/u/desktop/ubuntu-archive-tools/copy-package -y --from ppa:colin-i/ubuntu/ppa -s xenial --to-suite bionic ocompiler && \
+ ~/test/publp && \
+ ./makewin32 && \
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -1065,9 +1065,9 @@ format elfobj64<br>
+ </table>
+ <br>Table D:
+ <table id="selection_table">
+-	<tr><td>Xfile_declfield_const</td><td colspan=3></td>                                                                                     <td class="red" rowspan=3>name</td></tr>
+-	<tr><td>Xfile_declfield_stack</td><td></td>                      <td rowspan=2>Xfile_decltype_*</td><td rowspan=2>Xfile_declfeature_*</td></tr>
+-	<tr><td>Xfile_declfield_data</td> <td>Xfile_declfield_data_*</td></tr>
++	<tr><td>Xfile_declfield_const</td><td colspan=4></td>                                                                                                             <td class="red" rowspan=3>name</td></tr>
++	<tr><td>Xfile_declfield_stack</td><td colspan=2></td>                                    <td rowspan=2>Xfile_decltype_*</td><td rowspan=2>Xfile_declfeature_*</td></tr>
++	<tr><td>Xfile_declfield_data</td> <td>Xfile_declfield_data_*</td><td>Xfile_declext_*</td></tr>
+ </table>
+ <br>Table DT:
+ <table id="selection_table">
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1pzZGT69JrICC388rBVn6qGAYO_xWZ631
++File ID: 1Oz4j0oL9o2bZusAxE2a2dQji0qDzehdf
++<p>Found file: ./ocompiler-1-5+181.x86_64.rpm, 1Oz4j0oL9o2bZusAxE2a2dQji0qDzehdf, 2024-07-05T05:59:45.098Z, 72447, https://drive.google.com/uc?id=1Oz4j0oL9o2bZusAxE2a2dQji0qDzehdf&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+179.x86_64.rpm, 1pzZGT69JrICC388rBVn6qGAYO_xWZ631, 2024-06-25T05:03:08.904Z, 72284, https://drive.google.com/uc?id=1pzZGT69JrICC388rBVn6qGAYO_xWZ631&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+177.x86_64.rpm, 1K8Jo3GynFSY5QozhkHr_RwNSufUyX-H9, 2024-06-19T05:09:17.008Z, 72433, https://drive.google.com/uc?id=1K8Jo3GynFSY5QozhkHr_RwNSufUyX-H9&export=download
+--- ocompiler-1.orig/otoc/action.oc
++++ ocompiler-1/otoc/action.oc
+@@ -30,10 +30,12 @@ function action_areturn(sv pbuffer,sd ou
+ 		end
+ 		set loop.function_start (NULL) #if is not at endfunction, is here
+ 	end
++	char a="return "^  #also used at ret
++	call write(outfile,#a,\action_areturn.a)
+ 	callg arg(pbuffer,outfile)
+ end
+-function action_aexit(sv pbuffer,sd outfile)
+-	callg arg(pbuffer,outfile)
++function action_aexit(sv pbuffer,sd outfile) #this exit() an option? now only entryraw/exit case
++	callg action_areturn(pbuffer,outfile)
+ end
+ function action_tinc(sv pbuffer,sd outfile)
+ 	callg varfunc(pbuffer,outfile)
+--- ocompiler-1.orig/otoc/ascii.h
++++ ocompiler-1/otoc/ascii.h
+@@ -8,22 +8,11 @@ const asciiparenthesisleft=0x28
+ const asciiparenthesisright=0x29
+ const asciicomma=0x2c
+ const asciidot=0x2e
+-const asciislash=0x2f
+ const asciisemicolon=0x3b
+ const asciiequal=0x3d
+ const asciisquareleft=0x5B
+ const asciisquareright=0x5D
+ const asciibs=0x5C
+-const asciia=0x61
+ const asciic=0x63
+-const asciie=0x65
+-const asciif=0x66
+-const asciih=0x68
+-const asciii=0x69
+-const asciil=0x6c
+-const asciin=0x6e
+-const asciir=0x72
+-const asciit=0x74
+-const asciiw=0x77
+ const asciicurlyleft=0x7b
+ const asciicurlyright=0x7d
+--- ocompiler-1.orig/otoc/decl.oc
++++ ocompiler-1/otoc/decl.oc
+@@ -4,11 +4,11 @@
+ function functiondef_intern(sv pbuffer,sd outfile)
+ 	datax args#1;call get_data(pbuffer,#args)
+ 	if args>=^1
+-		charx type#1
+-		call decl(pbuffer,outfile,#type)
++		charx type#1;charx field#1
++		call decl(pbuffer,outfile,#field,#type)
+ 		sd n=1;while n!=args
+ 			call writec(outfile)
+-			call decl(pbuffer,outfile,#type)
++			call decl(pbuffer,outfile,#field,#type)
+ 			inc n
+ 		end
+ 	end
+@@ -21,25 +21,62 @@ end
+ #function functiondef_entry(sv pbuffer)
+ 
+ #D structure
+-function decl(sv pbuffer,sd outfile,ss ptype)
+-	charx field#1;call get_char(pbuffer,#field)
+-	if field!=(Xfile_declfield_const)
+-		if field=(Xfile_declfield_data)
++function decl(sv pbuffer,sd outfile,ss pfield,ss ptype)
++	call get_char(pbuffer,pfield)
++	if pfield#!=(Xfile_declfield_const)
++		if pfield#=(Xfile_declfield_data)
+ 			charx data#1;call get_char(pbuffer,#data)
++			charx signed#1;call get_char(pbuffer,#signed)
+ 		end
+ 		call get_char(pbuffer,ptype)
+ 		charx feature#1;call get_char(pbuffer,#feature)
+-		if ptype#=(Xfile_decltype_byte)
+-			char c={asciic,asciih,asciia,asciir}
+-			call write(outfile,#c,\decl.c)
+-		else
+-			char d={asciii,asciin,asciit}
+-			call write(outfile,#d,\decl.d)
+-		end
+-		char s=asciispace
+-		call write(outfile,#s,1)
++
++		value f^byte
++		value *^word
++		value *^int
++		value *^intByte
++		value *^long
++		value *^intByte  #longByte
++		value *^longWord
++		value *^longInt
++		sv fn;set fn ptype#     #type is used outside
++		mult fn :
++		add fn #f
++		set fn fn#
++		call fn(outfile)
++	else
++		char c="#define"^
++		call write(outfile,#c,\decl.c)
+ 	end
++	call writes(outfile)
++
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+ 	callg write(outfile,pointer,sz)
+ end
++function byte(sd outfile)
++	char a="char*"^
++	call write(outfile,#a,\byte.a-1)
++end
++function word(sd outfile)
++	char a="short*"^
++	call write(outfile,#a,\word.a-1)
++end
++function int(sd outfile)
++	char a="int*"^
++	call write(outfile,#a,\int.a-1)
++end
++function intByte(sd outfile)
++	call write(outfile,#byte.a,\byte.a)
++end
++function long(sd outfile)
++	char a="long"^
++	call write(outfile,#a,\long.a)
++end
++#function longByte()end
++function longWord(sd outfile)
++	call write(outfile,#word.a,\word.a)
++end
++function longInt(sd outfile)
++	call write(outfile,#int.a,\int.a)
++end
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -9,6 +9,7 @@ importx "fwrite" fwrite
+ 
+ importx "strchr" strchr
+ importx "printf" printf
++importx "fprintf" fprintf
+ 
+ const SEEK_SET=0
+ const SEEK_CUR=1
+@@ -154,7 +155,7 @@ include "number.oc"
+ include "var.oc"
+ 
+ function comment(sd outfile,sv pbuffer)
+-	char a={asciislash,asciislash}
++	char a="//"^
+ 	call write(outfile,#a,2)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+@@ -162,7 +163,7 @@ function comment(sd outfile,sv pbuffer)
+ end
+ function commentmulti(sd outfile,sv pbuffer)
+ 	char b=asciiasterisk
+-	char a={asciislash,asciiasterisk}
++	char a="/*"^
+ 	call write(outfile,#a,2)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+@@ -176,28 +177,17 @@ end
+ function format(sd *outfile,sv pbuffer) #will do nothing at the moment
+ 	charx fmt#1;call get_char(pbuffer,#fmt)
+ end
+-function end(sd outfile)
+-	call writecr(outfile)
+-	callg writenl(outfile)
+-end
+-function interrupt(sd outfile)
+-	#this is not arm #char a="__asm__(\"int $3\");"
+-	#this is no x86 #__asm__("BKPT");
+-	char a="__builtin_trap();"^
+-	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+-	callg writen(outfile,#a,\interrupt.a)
+-end
+-function line(sd outfile)
+-	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
+-	char a=asciisemicolon
+-	callg write(outfile,#a,1)
+-end
+-
+-#need write
+-function include(sd *output,sv pbuffer)
++function include(sd outfile,sv pbuffer)
+ 	charx type#1;call get_char(pbuffer,#type)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
++
++	char a="#include \""^
++	call write(outfile,#a,\include.a)
++	call write(outfile,pointer,sz)
++	call writeq(outfile)
++	call writenl(outfile)
++
+ 	charx alternative#1;call get_char(pbuffer,#alternative)
+ 	if alternative=(Xfile_include_alternative_yes)
+ 		call get_string(pbuffer,#sz,#pointer)
+@@ -227,8 +217,8 @@ function functiondef(sd outfile,sv pbuff
+ 	call aftercallenable()
+ end
+ function declare(sd outfile,sv pbuffer)
+-	charx type#1
+-	call decl(pbuffer,outfile,#type)
++	charx type#1;charx field#1
++	call decl(pbuffer,outfile,#field,#type)
+ 	datax sz#1;valuex pointer#1
+ 	charx sign#1;call get_char(pbuffer,#sign)
+ 	if sign=(Xfile_declsign_reserve)
+@@ -240,7 +230,11 @@ function declare(sd outfile,sv pbuffer)
+ 	else #Xfile_declsign_e*
+ 		charx mode#1;call get_char(pbuffer,#mode)
+ 		if mode=(Xfile_declmode_value)
+-			call writee(outfile)
++			if field!=(Xfile_declfield_const)
++				call writee(outfile)
++			else
++				call writes(outfile)
++			end
+ 			call number(pbuffer,outfile)
+ 		elseif mode=(Xfile_declmode_group)
+ 			call writeslsr(outfile)
+@@ -259,11 +253,23 @@ function declare(sd outfile,sv pbuffer)
+ 				call writeslsr(outfile)
+ 			end
+ 			call writee(outfile)
+-			call write_string(pbuffer,outfile)
++			call get_string(pbuffer,#sz,#pointer)
+ 			charx trim#1;call get_char(pbuffer,#trim)
++			if trim=(Xfile_declmode_string_pop_yes)
++				call write_popstring(pointer,sz,outfile)
++				if type!=(Xfile_decltype_byte) #why check here and not above? to let popstring to be normal and check for 0 size and write to file (is more easy at debug)
++					call puts("unimplemented") # char*={'a','b','c',0} is not "abc" ,downgrade to char? the sizeof and pointers then
++					call aftercallenable()
++				end
++			else
++				call write_string(pointer,sz,outfile)
++			end
+ 		end
+ 	endelse
+-	callg writetn(outfile)
++	if field!=(Xfile_declfield_const)
++		call writet(outfile)
++	end
++	callg writenl(outfile)
+ end
+ function action(sd outfile,sv pbuffer)
+ 	charx act#1;call get_char(pbuffer,#act)
+@@ -301,14 +307,14 @@ function callex(sd outfile,sv pbuffer)
+ 	call unimplemented_end()
+ end
+ function if(sd outfile,sv pbuffer)
+-	char a={asciii,asciif}
++	char a="if"^
+ 	call write(outfile,#a,\if.a)
+ 	callg cond(pbuffer,outfile)
+ end
+ function else()
+ end
+ function while(sd outfile,sv pbuffer)
+-	char a={asciiw,asciih,asciii,asciil,asciie}
++	char a="while"^
+ 	call write(outfile,#a,\while.a)
+ 	callg cond(pbuffer,outfile)
+ end
+@@ -319,7 +325,13 @@ function break()
+ end
+ function continue()
+ end
+-function ret()
++function end(sd outfile)
++	call writecr(outfile)
++	callg writenl(outfile)
++end
++function ret(sd outfile)
++	call write(outfile,#action_areturn.a,\action_areturn.a-1)
++	callg writetn(outfile)
+ end
+ function library(sd *outfile,sv pbuffer)
+ 	datax sz#1;valuex lib#1
+@@ -333,7 +345,7 @@ function import(sd outfile,sv pbuffer)
+ 	call get_string(pbuffer,#sza,#alias)
+ 
+ 	call write_long(outfile,alias,sza)
+-	char a={asciiparenthesisleft,asciiparenthesisright}
++	char a="()"^
+ 	call write(outfile,#a,2)
+ 	callg writetn(outfile)
+ end
+@@ -364,6 +376,18 @@ end
+ function orphan(sd *outfile,sv pbuffer)
+ 	charx orph#1;call get_char(pbuffer,#orph)
+ end
++function interrupt(sd outfile)
++	#this is not arm #char a="__asm__(\"int $3\");"
++	#this is no x86 #__asm__("BKPT");
++	char a="__builtin_trap();"^
++	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
++	callg writen(outfile,#a,\interrupt.a)
++end
++function line(sd outfile)
++	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
++	char a=asciisemicolon
++	callg write(outfile,#a,1)
++end
+ 
+ function write(sd outfile,ss buf,sd sz)
+ 	if loop.allowwrite=(TRUE)
+@@ -379,19 +403,6 @@ function write(sd outfile,ss buf,sd sz)
+ 	end
+ end
+ 
+-function writen(sd outfile,ss buf,sd sz)
+-	call write(outfile,buf,sz)
+-	callg writenl(outfile)
+-end
+-function writenl(sd outfile)
+-	char n=asciinewline
+-	callg write(outfile,#n,1)
+-end
+-function writetn(sd outfile) #terminator newline
+-	char sc=asciisemicolon
+-	callg writen(outfile,#sc,1)
+-end
+-
+ function writec(sd outfile)
+ 	char c=asciicomma
+ 	callg write(outfile,#c,1)
+@@ -412,6 +423,10 @@ function writel(sd outfile)
+ 	char a=asciiparenthesisleft
+ 	callg write(outfile,#a,1)
+ end
++function writenl(sd outfile)
++	char n=asciinewline
++	callg write(outfile,#n,1)
++end
+ function writeq(sd outfile)
+ 	char q=asciidquote
+ 	callg write(outfile,#q,1)
+@@ -420,6 +435,10 @@ function writer(sd outfile)
+ 	char a=asciiparenthesisright
+ 	callg write(outfile,#a,1)
+ end
++function writes(sd outfile)
++	char s=asciispace
++	callg write(outfile,#s,1)
++end
+ function writesl(sd outfile)
+ 	char left=asciisquareleft
+ 	callg write(outfile,#left,1)
+@@ -428,8 +447,27 @@ function writesr(sd outfile)
+ 	char right=asciisquareright
+ 	callg write(outfile,#right,1)
+ end
++function writet(sd outfile)
++	char sc=asciisemicolon
++	callg write(outfile,#sc,1)
++end
+ 
++function writen(sd outfile,ss buf,sd sz)
++	call write(outfile,buf,sz)
++	callg writenl(outfile)
++end
+ function writeslsr(sd outfile)
+ 	call writesl(outfile)
+ 	callg writesr(outfile)
+ end
++function writetn(sd outfile) #terminator newline
++	call writet(outfile)
++	callg writenl(outfile)
++end
++
++function fprintu(sd outfile,sd c)
++	sd items;set items fprintf(outfile,"%u",c) #this does't encounter allowwrite or directwrite at this moment
++	if items<0
++		call aftercallenable()
++	end
++end
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -9,7 +9,9 @@ function arg(sv pbuffer,sd outfile)
+ 	elseif a=(Xfile_arg_varfn)
+ 		call varfunc(pbuffer,outfile)
+ 	elseif a=(Xfile_arg_string)
+-		call write_string(pbuffer,outfile)
++		datax sz#1;vstrx pointer#1
++		call get_string(pbuffer,#sz,#pointer)
++		call write_string(pointer,sz,outfile)
+ 	else #Xfile_arg_call
+ 		callg cll(pbuffer,outfile)
+ 	end
+@@ -124,24 +126,21 @@ function varfunc(sv pbuffer,sd outfile)
+ 	end
+ end
+ 
+-function write_string(sv pbuffer,sd outfile)
+-	datax sz#1;vstrx pointer#1
+-	call get_string(pbuffer,#sz,#pointer)
++function write_string(ss pointer,sd sz,sd outfile)
+ 	call writeq(outfile)
+ 	sd term;set term pointer;add term sz
+ 	sd start;set start pointer
+ 	while pointer!=term
+ 		char chars="\n\r\t"
+-		char letters={asciin,asciir,asciit}
++		char *    ="nrt"^
+ 		ss r;set r strchr(#chars,pointer#)
+ 		if r!=(NULL)
+-			sd c;set c pointer;sub c start
+-			if c!=0
++			if start!=pointer
++				sd c;set c pointer;sub c start
+ 				call write(outfile,start,c)
+ 			end
+ 			char bs=asciibs;char d#1
+-			sub r #chars
+-			add r #letters
++			add r \write_string.chars
+ 			set d r#
+ 			call write(outfile,#bs,2)
+ 			inc pointer
+@@ -156,3 +155,17 @@ function write_string(sv pbuffer,sd outf
+ 	end
+ 	callg writeq(outfile)
+ end
++function write_popstring(ss pointer,sd sz,sd outfile)
++	call writecl(outfile) #write {}, can work for char*?see at declare
++	add sz pointer
++	if pointer!=sz
++		call fprintu(outfile,pointer#)
++		inc pointer
++		while pointer!=sz
++			call writec(outfile)
++			call fprintu(outfile,pointer#)
++			inc pointer
++		end
++	end
++	callg writecr(outfile)
++end
+--- ocompiler-1.orig/src/files/functions.oc
++++ ocompiler-1/src/files/functions.oc
+@@ -18,14 +18,14 @@ Include "./functions/values/operations.o
+ 
+ Include "./functions/elf/elf.oc"
+ 
+-Include "./functions/stack/stack_inits.oc"
++Include "./functions/mask.oc"
+ 
+ Include "./functions/argument/comwrite.oc"
+ Include "./functions/argument/imm.oc"
+ Include "./functions/argument/arg.oc"
+ Include "./functions/argument/argument.oc"
+ 
+-Include "./functions/stack/stack.oc"
++Include "./functions/stack.oc"
+ 
+ Include "./functions/global/funcs.oc"
+ Include "./functions/global/end.oc"
+--- ocompiler-1.orig/src/files/functions/actions/argstwo.oc
++++ ocompiler-1/src/files/functions/actions/argstwo.oc
+@@ -523,7 +523,12 @@ function writeop_promotes(sd dataarg,sd
+ 				set p# (val64_willbe)
+ 			elseif comp_at_bigs=2
+ 				#2 for zero extend; these are all low
+-				set op 0xb6
++				sd s;set s signbit(dataarg)
++				if s=0
++					set op 0xB6
++				else
++					set op 0xBE
++				endelse
+ 			endelseif
+ 			setcall err writeoperation_op(op,low,regopcode,(edxregnumber))
+ 		endif
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-1/src/files/functions/actions/dataparse.oc
+@@ -131,7 +131,6 @@ Function addvarreference(sv ptrcontent,s
+ 	SetCall errnr addaref(value,ptrcontent,ptrsize,valsize,typenumber,mask)
+ 	Return errnr
+ EndFunction
+-
+ #err
+ function addvarreferenceorunref(sv ptrcontent,sd ptrsize,sd valsize,sd typenumber,sd mask,sd stackoffset,sd is_expand)
+ 	data err#1
+@@ -177,6 +176,14 @@ function addvarreferenceorunref(sv ptrco
+ 	Call advancecursors(ptrcontent,ptrsize,valsize)
+ 	Return noerr
+ endfunction
++#same
++function addvarreferenceorunref_signed(sv ptrcontent,sd ptrsize,sd valsize,sd typenumber,sd mask,sd stackoffset,sd is_expand,sd is_signed)
++	if is_signed=(Xfile_declext_yes)
++		or mask (signbit)
++	endif
++	sd er;set er addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
++	return er
++endfunction
+ 
+ function getsign_size(sd start,sd last,sd mark,sd pdest) #mark is if was ended by a sign or whitespaces
+ 	if start!=mark
+--- ocompiler-1.orig/src/files/functions/actions/declare.oc
++++ ocompiler-1/src/files/functions/actions/declare.oc
+@@ -1,18 +1,13 @@
+ 
+ #err
+ function declare(sv pcontent,sd pcomsize,sd subtype,sd parses,sd bool_64)
+-	Data valsize#1
+-	Char sign#1
+-	#below also at virtual at get_reserve (with mask there)
+-	sd is_stack
+-	sd typenumber
+-	sd mask
+-
+-	sd unitsize
+-
+ 	sd declare_typenumber
+ 	sd is_expand
+-	setcall declare_typenumber commandSubtypeDeclare_to_typenumber(subtype,#is_expand)
++	sd is_signed
++	setcall declare_typenumber commandSubtypeDeclare_to_typenumber(subtype,#is_expand,#is_signed)
++
++	sd is_stack
++	sd typenumber
+ 
+ 	if parses=(pass_calls)
+ 		setcall typenumber stackfilter(declare_typenumber,#is_stack)
+@@ -35,6 +30,10 @@ function declare(sv pcontent,sd pcomsize
+ 	sd err
+ 	sd xfile_decltype
+ 	sd relocbool;sd dataxrel
++	sd unitsize
++	sd mask
++	Data valsize#1
++	Char sign#1
+ 
+ 	if declare_typenumber=(vintegernumber)
+ 		set is_stack (FALSE);set typenumber (integernumber)
+@@ -44,7 +43,7 @@ function declare(sv pcontent,sd pcomsize
+ 			else
+ 				set xfile_decltype (Xfile_decltype_longInt)
+ 			endelse
+-		else;set mask 0
++		else;set mask (dummy_mask)
+ 			if parses=(pass_init)
+ 				set unitsize (dwsz)
+ 			else
+@@ -59,7 +58,7 @@ function declare(sv pcontent,sd pcomsize
+ 			else
+ 				set xfile_decltype (Xfile_decltype_longByte)
+ 			endelse
+-		else;set mask 0
++		else;set mask (dummy_mask)
+ 			if parses=(pass_init)
+ 				set unitsize (dwsz)
+ 			else
+@@ -74,7 +73,7 @@ function declare(sv pcontent,sd pcomsize
+ 			else
+ 				set xfile_decltype (Xfile_decltype_long)
+ 			endelse
+-		else;set mask 0
++		else;set mask (dummy_mask)
+ 			if parses=(pass_init)
+ 				set unitsize (dwsz)
+ 			else
+@@ -89,7 +88,7 @@ function declare(sv pcontent,sd pcomsize
+ 			else
+ 				set xfile_decltype (Xfile_decltype_longWord)
+ 			endelse
+-		else;set mask 0
++		else;set mask (dummy_mask)
+ 			if parses=(pass_init)
+ 				set unitsize (dwsz)
+ 			else
+@@ -116,6 +115,7 @@ function declare(sv pcontent,sd pcomsize
+ 			else
+ 				if typenumber!=(charnumber)
+ 					if typenumber!=(constantsnumber)
++						set mask (dummy_mask)  #at pass_init, mask is used at get reserve data notchar, str reloc64 preference, define constant equal (is 0 pass there)
+ 						set unitsize (dwsz)
+ 					endif
+ 				else
+@@ -139,6 +139,9 @@ function declare(sv pcontent,sd pcomsize
+ 					set xfile_decltype (Xfile_decltype_longWord)
+ 				endelse
+ 			else
++				set mask (dummy_mask)   #at pass_write, mask is used where stack is false (dataassign with stack false, descend into enumcomma and writevar again with stack false)
++				#                                         at stack is beginning with dummy_mask
++
+ 				#xfile part
+ 				if typenumber=(constantsnumber)
+ 					set xfile_decltype (Xfile_decltype_const)
+@@ -154,7 +157,6 @@ function declare(sv pcontent,sd pcomsize
+ 				endelse
+ 			endelse
+ 		endelse
+-		set mask 0
+ 	endelse
+ 
+ 	set relocbool (FALSE)
+@@ -168,7 +170,7 @@ function declare(sv pcontent,sd pcomsize
+ 						call advancecursors(pcontent,pcomsize,pcomsize#)
+ 						return (noerror)
+ 					endif
+-					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool) #there are 3 more argument but are not used
++					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool) #there are 4 more argument but are not used
+ 					#                                                                            since %%|
+ 				endif
+ 			else
+@@ -184,7 +186,7 @@ function declare(sv pcontent,sd pcomsize
+ 					else
+ 					#search for data%  with R_X86_64_64
+ 						if relocbool=(TRUE)
+-							if mask=0
++							if mask=(dummy_mask)
+ 							#data str
+ 							#strs are without ""
+ 								vdata is_64_and_pref_is_rx866464%p_elf64_r_info_type
+@@ -194,7 +196,7 @@ function declare(sv pcontent,sd pcomsize
+ 							endif
+ 						endif
+ 					endelse
+-					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,dataxrel,is_stack) #there is 1 more argument but is not used
++					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,dataxrel,is_stack) #there are 2 more arguments but are not used
+ 					#                                                                               since %%|
+ 					if is_expand=(FALSE)
+ 						sd pdataReg%%ptr_dataReg
+@@ -206,7 +208,7 @@ function declare(sv pcontent,sd pcomsize
+ 				endif
+ 			endelse
+ 		else
+-			setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,pcontent#,valsize,sign,relocbool,dataxrel)
++			setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,is_signed,pcontent#,valsize,sign,relocbool,dataxrel)
+ 			if err=(noerror)
+ 				if typenumber=(constantsnumber)
+ 					if sign!=(pointersigndeclare)
+@@ -226,7 +228,7 @@ function declare(sv pcontent,sd pcomsize
+ 						return "Virtual declarations can have only the reserve sign."
+ 					endif
+ 				endelseif
+-				SetCall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool,dataxrel,is_stack,is_expand)
++				SetCall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool,dataxrel,is_stack,is_expand,is_signed)
+ 			endif
+ 		endelse
+ 	endif
+--- ocompiler-1.orig/src/files/functions/actions/enumcomma.oc
++++ ocompiler-1/src/files/functions/actions/enumcomma.oc
+@@ -40,7 +40,7 @@ function writevar(sd ptrvalue,sd unitsiz
+ 			endif
+ 		endif
+ 		SetCall err addtosec(ptrvalue,unitsize,ptrdatasec);If err!=noerr;Return err;EndIf
+-		if long_mask!=0
++		if long_mask!=(dummy_mask)
+ 			data null=0
+ 			SetCall err addtosec(#null,(dwsz),ptrdatasec)
+ 			return err
+--- ocompiler-1.orig/src/files/functions/actions/fn.oc
++++ ocompiler-1/src/files/functions/actions/fn.oc
+@@ -96,7 +96,7 @@ Function parsefunction(data ptrcontent,d
+ 				Set mask (referencebit)
+ 			else
+ 				call vars_log_set(content,sz) #more at the function
+-				set mask 0
++				set mask (dummy_mask)
+ 			endelse
+ 			sd can_scope64
+ 			setcall can_scope64 func_xfile(subtype)
+--- ocompiler-1.orig/src/files/functions/actions/fndecargs.oc
++++ ocompiler-1/src/files/functions/actions/fndecargs.oc
+@@ -32,7 +32,8 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 
+ 	sd vartype
+ 	sd is_expand
+-	setcall vartype commandSubtypeDeclare_to_typenumber(subtype,#is_expand)
++	sd is_signed
++	setcall vartype commandSubtypeDeclare_to_typenumber(subtype,#is_expand,#is_signed)
+ 
+ 	data is_stack#1
+ 	data ptrstack^is_stack
+@@ -67,7 +68,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 	endif
+ 
+ 	sd xfile_decltype
+-	sd long_mask=0
++	sd long_mask=(dummy_mask)
+ 	if is_stack=(TRUE)
+ 		if vartype=(stackdatanumber)
+ 			set xfile_decltype (Xfile_decltype_longInt)
+@@ -85,13 +86,13 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 			if vartype=(valuesinnernumber)
+ 				set vartype (integernumber)
+ 				if b=(TRUE)
+-					set long_mask (valueslongmask)
++					or long_mask (valueslongmask)
+ 					set datasize (qwsz)
+ 				endif
+ 				set xfile_decltype (Xfile_decltype_long)
+ 			else
+ 				if b=(TRUE)
+-					set long_mask (datapointbit)
++					or long_mask (datapointbit)
+ 					set datasize (qwsz)
+ 				endif
+ 				if vartype=(integernumber)
+@@ -115,7 +116,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 			set xfile_decltype (Xfile_decltype_word)
+ 		endelse
+ 	endelse
+-	setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,ptrcontent#,sz,(sign_not_required)) #2 more
++	setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,is_signed,ptrcontent#,sz,(sign_not_required)) #2 more
+ 	If err!=noerr
+ 		Return err
+ 	EndIf
+@@ -139,7 +140,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 	#setcall err maxsectioncheck(stackoff,#stackindex)
+ 	add stackindex stackoff
+ 
+-	setcall err addvarreferenceorunref(ptrcontent,ptrsize,sz,vartype,long_mask,stackindex,is_expand)
++	setcall err addvarreferenceorunref_signed(ptrcontent,ptrsize,sz,vartype,long_mask,stackindex,is_expand,is_signed)
+ 	If err!=noerr
+ 		Return err
+ 	EndIf
+@@ -177,7 +178,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 	#char
+ 		Dec stacktransfer1
+ 		Dec stacktransfer2
+-	elseif long_mask!=0
++	elseif long_mask!=(dummy_mask)
+ 	#values
+ 		call rex_w(#err)
+ 		If err!=noerr;Return err;EndIf
+@@ -189,7 +190,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 		Const fndecargs_offstart^stacktransfer1
+ 		Data ptrextra%%ptr_extra
+ 		sd reloff=fndecargs_offend-fndecargs_offstart
+-		if long_mask!=0
++		if long_mask!=(dummy_mask)
+ 			inc reloff
+ 		endif
+ 		SetCall err adddirectrel_base(ptrextra,reloff,sectionind,memoff)
+@@ -202,7 +203,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 	Data _codesec%%ptr_codesec
+ 
+ 	SetCall err addtosec(#stacktransfer1,(3*bsz+dwsz),_codesec);If err!=noerr;Return err;EndIf
+-	if long_mask!=0
++	if long_mask!=(dummy_mask)
+ 		call rex_w(#err)
+ 		If err!=noerr;Return err;EndIf
+ 	endif
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.oc
++++ ocompiler-1/src/files/functions/commons/getcommand.oc
+@@ -479,20 +479,30 @@ Const compointersvarsloc^pointersvars
+ const x_func_flag=0x80000000   #at def, varargs
+ 
+ #at ...call...
+-const x_callx_flag=0x80000000  #call a variable function import like functionx importx
+-const x_callg_flag=0x40000000  #skip aftercall
++const  x_callx_flag=0x80000000 #call a variable function import like functionx importx
++const  x_callg_flag=0x40000000 #skip aftercall
+ 
+ const call_ret_flag=0x20000000 #at call
+-const x_call_flag=0x10000000   #at setcall... . attention that at write_func is asking about callret and setcall does not have that
++const   x_call_flag=0x10000000 #at setcall... . attention that at write_func is asking about callret and setcall does not have that
+ 
+ const x_call_flags=x_call_flag|x_callx_flag|x_callg_flag
+ 
++const declares_flag=0x80000000 # chars charxs
++
+ #declare coresp
+-function commandSubtypeDeclare_to_typenumber(sd subtype,sd p_is_expand)
++function commandSubtypeDeclare_to_typenumber(sd subtype,sd p_is_expand,sd p_is_signed)
+ #these numbers will be used at getstruct directly
+ 	if subtype=(cCONST)
+ 		return (constantsnumber)
+ 	endif
++
++	sd test;set test subtype;and subtype (~declares_flag)
++	if test=subtype
++		set p_is_signed# (Xfile_declext_no)
++	else
++		set p_is_signed# (Xfile_declext_yes)
++	endelse
++
+ 	div subtype (com_size)
+ 	if subtype>=(xnumbers)
+ 		if subtype>=(xvnumbers)
+@@ -558,6 +568,16 @@ Function getcommand(value pcontent,data
+ 		#		set extstr skipretjump
+ 		#		set intercursors #pointer  ##only for elseGif
+ 		#	endif
++		elseif command=(cDECLARE) #here used for otoc to sign extend char, if imm is only 32 like now zero extend is default
++			whiletrue
++				if ptrsubtype#!=(cCHAR)
++					if ptrsubtype#!=(cCHARX)
++						break
++					endif
++				endif
++				set extstr "S"
++				break
++			endwhile
+ 		Elseif command=(cSTARTFUNCTION)
+ 			sd x_fn;setcall x_fn func_xfile(ptrsubtype#)
+ 			if x_fn!=(Xfile_function_not_x)
+@@ -610,7 +630,9 @@ Function getcommand(value pcontent,data
+ 				#	else #elseg
+ 				#		set main.ret_cont_break (ret_cont_break_skip)
+ 				#	endelse
+-				If command=(cSTARTFUNCTION)
++				if command=(cDECLARE) #chars/charxs
++					or ptrsubtype# (declares_flag)
++				elseIf command=(cSTARTFUNCTION)
+ 				#functionxx/entryx , varargs
+ 					#allow the command at 64, there is a check inside parsefunc, and for xfile better to know
+ 					#sd for64;setcall for64 is_for_64()
+--- ocompiler-1.orig/src/files/functions/dataassign.oc
++++ ocompiler-1/src/files/functions/dataassign.oc
+@@ -1,7 +1,7 @@
+ 
+ 
+ #err
+-Function dataassign(sd ptrcontent,sd ptrsize,sd sign,sd valsize,sd typenumber,sd punitsize,sd long_mask,sd relocbool,sd dataxrel,sd stack,sd is_expand)
++Function dataassign(sd ptrcontent,sd ptrsize,sd sign,sd valsize,sd typenumber,sd punitsize,sd long_mask,sd relocbool,sd dataxrel,sd stack,sd is_expand,sd is_signed)
+ 	Data false=FALSE
+ 	Data true=TRUE
+ 	Str err#1
+@@ -22,7 +22,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 		if typenumber=constantsnr
+ 			#this can't go after dataparse, addvarref will increase the offset
+ 			Call getcontReg(constantsstruct,ptroffset_const)
+-			SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,long_mask) #there are 2 more arguments but are not used
++			SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,(dummy_mask)) #there are 2 more arguments but are not used
+ 			#it is not a mistake to go with 0 mask in variable from here to addaref
+ 			If err!=noerr;Return err;EndIf
+ 		else
+@@ -35,13 +35,13 @@ Function dataassign(sd ptrcontent,sd ptr
+ 				setcall immovable_struct_cont getstructcont(sectiontypenumber)
+ 				call getcontReg(immovable_struct_cont,#reg)
+ 				#
+-				SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,sectiontypenumber,long_mask,0) #there is 1 more argument but is not used
++				SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,sectiontypenumber,(dummy_mask),0) #there is 1 more argument but is not used
+ 			else
+ 				#
+ 				setcall immovable_struct_cont getstructcont(typenumber)
+ 				call getcontReg(immovable_struct_cont,#reg)
+ 				#
+-				SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,long_mask,0,is_expand)
++				SetCall err addvarreferenceorunref_signed(ptrcontent,ptrsize,valsize,typenumber,long_mask,0,is_expand,is_signed)
+ 			endelse
+ 			If err!=noerr;Return err;EndIf
+ 
+@@ -142,7 +142,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 					if punitsize=(NULL)
+ 						setcall value get_img_vdata_dataReg()
+ 						if stack=false
+-							if long_mask!=0
++							if long_mask!=(dummy_mask)
+ 								add value (qwsz)
+ 							else
+ 								add value (dwsz)
+@@ -158,7 +158,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 						#let relocationsign, mess with dataReg, possible error will be catched at pass_write
+ 						inc punitsize#   #null end
+ 						if stack=false
+-							if long_mask=0
++							if long_mask=(dummy_mask)
+ 								#for ^ and rel64 write is somewhere else
+ 								addcall punitsize# reloc64_mid()
+ 							endif
+@@ -304,7 +304,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 							Return err
+ 						EndIf
+ 						sd v64;setcall v64 val64_p_get()
+-						if long_mask!=0
++						if long_mask!=(dummy_mask)
+ 							setcall v64# is_for_64()
+ 						else
+ 							set v64# (val64_no)
+@@ -525,7 +525,7 @@ function get_reserve_size(sv ptrcontent,
+ 			If err=(noerror)
+ 				SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
+ 				If err=(noerror)
+-					if long_mask!=0
++					if long_mask!=(dummy_mask)
+ 						SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
+ 					endif
+ 				endIf
+--- /dev/null
++++ ocompiler-1/src/files/functions/mask.oc
+@@ -0,0 +1,70 @@
++
++
++
++#mask bit
++function data_get_maskbit(sd pointer,sd bit)
++	add pointer (maskoffset)
++	and bit pointer#
++	return bit
++endfunction
++function importbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(idatabitfunction))
++	return bit
++endfunction
++function stackbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(stackbit))
++	return bit
++endfunction
++function stackrelativebit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(stackrelativebit))
++	return bit
++endfunction
++function datapointbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(datapointbit))
++	return bit
++endfunction
++function expandbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(expandbit))
++	return bit
++endfunction
++function expandbit_wrap(sd pointer)
++	vdata ptr_nobits_virtual%ptr_nobits_virtual
++	if ptr_nobits_virtual#=(Yes)
++		sd bit
++		setcall bit data_get_maskbit(pointer,(expandbit))
++		return bit
++	endif
++	return 0
++endfunction
++function pointbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(pointbit))
++	return bit
++endfunction
++function suffixbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(suffixbit))
++	return bit
++endfunction
++function signbit(sd pointer)
++	sd bit
++	setcall bit data_get_maskbit(pointer,(signbit))
++	return bit
++endfunction
++
++function stack_get_relative(sd location)
++	sd mask
++	set mask location
++	add mask (maskoffset)
++	set mask mask#
++	and mask (stackrelativebit)
++	if mask=0
++		return (ebxregnumber)
++	endif
++	return (ebpregnumber)
++endfunction
+--- /dev/null
++++ ocompiler-1/src/files/functions/stack.oc
+@@ -0,0 +1,173 @@
++
++
++#set(0)/get(1) index
++function ramp_index(data mode,data container)
++	data reg#1
++	data set=0
++	if mode=set
++		data ptrreg^reg
++		#const ramppointer^reg
++		call getcontReg(container,ptrreg)
++		data dword=4
++		sub reg dword
++	else
++		return reg
++	endelse
++endfunction
++
++
++#typenumber
++function stackfilter(data nr,data ptrstack)
++	data totalmemvariables=totalmemvariables
++	data numberofvars=numberofvars
++	data false=0
++	data true=1
++	set ptrstack# false
++	if nr>=totalmemvariables
++		if nr<numberofvars
++			sub nr totalmemvariables
++			set ptrstack# true
++		endif
++	endif
++	return nr
++endfunction
++
++
++#p
++function getptrramp()
++	data code#1
++	data ptrcode^code
++	data ptrcodesec%%ptr_codesec
++	call getcont(ptrcodesec,ptrcode)
++	data get=1
++	addcall code ramp_index(get)
++	return code
++endfunction
++#ind(before)
++function growramp(sd value,sv perr)
++	vdata ptrramp#1
++	setcall ptrramp getptrramp()
++	sd ret;set ret ptrramp#
++	setcall perr# maxsectioncheck(value,ptrramp)  #we are adding a dword( sub ebx dword ), at 64 can go further, there are reserves declarations, a check is required
++	return ret
++endfunction
++#ind(before)
++function addramp(sv perr)
++	sd index
++	setcall index stack64_enlarge((dwsz))
++	data ramp#1
++	setcall ramp growramp(index,perr)
++	return ramp
++endfunction
++#ind
++function getramp_ebxrel()
++	data ptrramp#1
++	setcall ptrramp getptrramp()
++	return ptrramp#
++endfunction
++
++#er
++function entryscope()
++	data container%%ptr_codesec
++	sd err
++	#push ebx,push ebp
++	const scope1_start=\;char scope1={0x53,0x55};const scope1_sz=\-scope1_start
++	const stackinitpush=2*dwsz
++	#mov e(r)bp e(r)sp
++	const scope2_start=\;char scope2={moveatregthemodrm,0xec};const scope2_sz=\-scope2_start
++	#mov e(r)bx e(r)sp
++	const scope3_start=\;char scope3={moveatregthemodrm,0xdc};const scope3_sz=\-scope3_start
++	#sub e(r)bx dword
++	const scope4_start=\;char scope4={0x81,0xeb}
++	data *scopestack=0;const scope4_sz=\-scope4_start
++
++	setcall err addtosec(#scope1,(scope1_sz),container);if err!=(noerror);return err;endif
++	setcall err rex_w_if64();if err!=(noerror);return err;endif
++	setcall err addtosec(#scope2,(scope2_sz),container);if err!=(noerror);return err;endif
++	setcall err rex_w_if64();if err!=(noerror);return err;endif
++	setcall err addtosec(#scope3,(scope3_sz),container);if err!=(noerror);return err;endif
++
++	sd bool;setcall bool align_stack()
++	if bool=(TRUE)
++		setcall err rex_w_if64();if err!=(noerror);return err;endif
++		setcall err addtosec(#scope4,(scope4_sz),container);if err!=(noerror);return err;endif
++		data set=0;call ramp_index(set,container) #here is storing the sum when stackvariables(ebx) is required
++	endif
++
++	setcall err align_entryscope()
++	return err
++endfunction
++
++#
++function entryscope_verify_code()
++	data ptrfnavailable%ptrfnavailable
++	data one=1
++	if ptrfnavailable#=one
++		data ptrinnerfunction%globalinnerfunction
++		if ptrinnerfunction#!=(TRUE)
++			data two=2
++			set ptrfnavailable# two
++			call entryscope()
++		endif
++	endif
++endfunction
++
++
++#er
++function addtocode_decstack(sd for_64)
++	char movtostack=moveatmemtheproc
++	char modrm#1
++	data rampindex#1
++
++	vdata stack^movtostack
++	vdata ptrcodesec%%ptr_codesec
++
++	sd err
++	if for_64=(TRUE)
++		call rex_w(#err);if err!=(noerror);return err;endif
++	endif
++
++	setcall rampindex addramp(#err)
++	#is with sub now     neg rampindex
++	if err=(noerror)
++		sd size
++		if rampindex<^0x80    #disp8 is signed
++			setcall modrm formmodrm((disp8),0,(ebxregnumber))
++			set size 3
++		else
++			setcall modrm formmodrm((disp32),0,(ebxregnumber))
++			set size 6
++		endelse
++		setcall err addtosec(stack,size,ptrcodesec)
++	endif
++	return err
++endfunction
++#er
++function addtocodeforstack(sd rightstackpointer,sd for_64)
++	#s^s
++	data noerr=noerror
++
++	sd err
++	setcall err writetake((eaxregnumber),rightstackpointer)
++	if err!=noerr
++		return err
++	endif
++
++	setcall err addtocode_decstack(for_64)
++	return err
++endfunction
++#er
++function addtocodefordata(sd value,sd for_64,sd ext)
++	char code=ateaximm
++	data val#1
++
++	sd err
++	setcall err reloc64_ante();If err!=(noerror);Return err;EndIf
++	data ptrcodesec%%ptr_codesec
++	set val value
++	setcall err addtosec(#code,5,ptrcodesec);If err!=(noerror);Return err;EndIf
++	setcall err reloc64_post_base_extension(ptrcodesec,ext);If err!=(noerror);Return err;EndIf
++
++	setcall err addtocode_decstack(for_64)
++	return err
++endfunction
+--- ocompiler-1.orig/src/files/functions/stack/stack.oc
++++ /dev/null
+@@ -1,173 +0,0 @@
+-
+-
+-#set(0)/get(1) index
+-function ramp_index(data mode,data container)
+-	data reg#1
+-	data set=0
+-	if mode=set
+-		data ptrreg^reg
+-		#const ramppointer^reg
+-		call getcontReg(container,ptrreg)
+-		data dword=4
+-		sub reg dword
+-	else
+-		return reg
+-	endelse
+-endfunction
+-
+-
+-#typenumber
+-function stackfilter(data nr,data ptrstack)
+-	data totalmemvariables=totalmemvariables
+-	data numberofvars=numberofvars
+-	data false=0
+-	data true=1
+-	set ptrstack# false
+-	if nr>=totalmemvariables
+-		if nr<numberofvars
+-			sub nr totalmemvariables
+-			set ptrstack# true
+-		endif
+-	endif
+-	return nr
+-endfunction
+-
+-
+-#p
+-function getptrramp()
+-	data code#1
+-	data ptrcode^code
+-	data ptrcodesec%%ptr_codesec
+-	call getcont(ptrcodesec,ptrcode)
+-	data get=1
+-	addcall code ramp_index(get)
+-	return code
+-endfunction
+-#ind(before)
+-function growramp(sd value,sv perr)
+-	vdata ptrramp#1
+-	setcall ptrramp getptrramp()
+-	sd ret;set ret ptrramp#
+-	setcall perr# maxsectioncheck(value,ptrramp)  #we are adding a dword( sub ebx dword ), at 64 can go further, there are reserves declarations, a check is required
+-	return ret
+-endfunction
+-#ind(before)
+-function addramp(sv perr)
+-	sd index
+-	setcall index stack64_enlarge((dwsz))
+-	data ramp#1
+-	setcall ramp growramp(index,perr)
+-	return ramp
+-endfunction
+-#ind
+-function getramp_ebxrel()
+-	data ptrramp#1
+-	setcall ptrramp getptrramp()
+-	return ptrramp#
+-endfunction
+-
+-#er
+-function entryscope()
+-	data container%%ptr_codesec
+-	sd err
+-	#push ebx,push ebp
+-	const scope1_start=\;char scope1={0x53,0x55};const scope1_sz=\-scope1_start
+-	const stackinitpush=2*dwsz
+-	#mov e(r)bp e(r)sp
+-	const scope2_start=\;char scope2={moveatregthemodrm,0xec};const scope2_sz=\-scope2_start
+-	#mov e(r)bx e(r)sp
+-	const scope3_start=\;char scope3={moveatregthemodrm,0xdc};const scope3_sz=\-scope3_start
+-	#sub e(r)bx dword
+-	const scope4_start=\;char scope4={0x81,0xeb}
+-	data *scopestack=0;const scope4_sz=\-scope4_start
+-
+-	setcall err addtosec(#scope1,(scope1_sz),container);if err!=(noerror);return err;endif
+-	setcall err rex_w_if64();if err!=(noerror);return err;endif
+-	setcall err addtosec(#scope2,(scope2_sz),container);if err!=(noerror);return err;endif
+-	setcall err rex_w_if64();if err!=(noerror);return err;endif
+-	setcall err addtosec(#scope3,(scope3_sz),container);if err!=(noerror);return err;endif
+-
+-	sd bool;setcall bool align_stack()
+-	if bool=(TRUE)
+-		setcall err rex_w_if64();if err!=(noerror);return err;endif
+-		setcall err addtosec(#scope4,(scope4_sz),container);if err!=(noerror);return err;endif
+-		data set=0;call ramp_index(set,container) #here is storing the sum when stackvariables(ebx) is required
+-	endif
+-
+-	setcall err align_entryscope()
+-	return err
+-endfunction
+-
+-#
+-function entryscope_verify_code()
+-	data ptrfnavailable%ptrfnavailable
+-	data one=1
+-	if ptrfnavailable#=one
+-		data ptrinnerfunction%globalinnerfunction
+-		if ptrinnerfunction#!=(TRUE)
+-			data two=2
+-			set ptrfnavailable# two
+-			call entryscope()
+-		endif
+-	endif
+-endfunction
+-
+-
+-#er
+-function addtocode_decstack(sd for_64)
+-	char movtostack=moveatmemtheproc
+-	char modrm#1
+-	data rampindex#1
+-
+-	vdata stack^movtostack
+-	vdata ptrcodesec%%ptr_codesec
+-
+-	sd err
+-	if for_64=(TRUE)
+-		call rex_w(#err);if err!=(noerror);return err;endif
+-	endif
+-
+-	setcall rampindex addramp(#err)
+-	#is with sub now     neg rampindex
+-	if err=(noerror)
+-		sd size
+-		if rampindex<^0x80    #disp8 is signed
+-			setcall modrm formmodrm((disp8),0,(ebxregnumber))
+-			set size 3
+-		else
+-			setcall modrm formmodrm((disp32),0,(ebxregnumber))
+-			set size 6
+-		endelse
+-		setcall err addtosec(stack,size,ptrcodesec)
+-	endif
+-	return err
+-endfunction
+-#er
+-function addtocodeforstack(sd rightstackpointer,sd for_64)
+-	#s^s
+-	data noerr=noerror
+-
+-	sd err
+-	setcall err writetake((eaxregnumber),rightstackpointer)
+-	if err!=noerr
+-		return err
+-	endif
+-
+-	setcall err addtocode_decstack(for_64)
+-	return err
+-endfunction
+-#er
+-function addtocodefordata(sd value,sd for_64,sd ext)
+-	char code=ateaximm
+-	data val#1
+-
+-	sd err
+-	setcall err reloc64_ante();If err!=(noerror);Return err;EndIf
+-	data ptrcodesec%%ptr_codesec
+-	set val value
+-	setcall err addtosec(#code,5,ptrcodesec);If err!=(noerror);Return err;EndIf
+-	setcall err reloc64_post_base_extension(ptrcodesec,ext);If err!=(noerror);Return err;EndIf
+-
+-	setcall err addtocode_decstack(for_64)
+-	return err
+-endfunction
+--- ocompiler-1.orig/src/files/functions/stack/stack_inits.oc
++++ /dev/null
+@@ -1,65 +0,0 @@
+-
+-
+-
+-#mask bit
+-function data_get_maskbit(sd pointer,sd bit)
+-	add pointer (maskoffset)
+-	and bit pointer#
+-	return bit
+-endfunction
+-function importbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(idatabitfunction))
+-	return bit
+-endfunction
+-function stackbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(stackbit))
+-	return bit
+-endfunction
+-function stackrelativebit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(stackrelativebit))
+-	return bit
+-endfunction
+-function datapointbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(datapointbit))
+-	return bit
+-endfunction
+-function expandbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(expandbit))
+-	return bit
+-endfunction
+-function expandbit_wrap(sd pointer)
+-	vdata ptr_nobits_virtual%ptr_nobits_virtual
+-	if ptr_nobits_virtual#=(Yes)
+-		sd bit
+-		setcall bit data_get_maskbit(pointer,(expandbit))
+-		return bit
+-	endif
+-	return 0
+-endfunction
+-function pointbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(pointbit))
+-	return bit
+-endfunction
+-function suffixbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(suffixbit))
+-	return bit
+-endfunction
+-
+-function stack_get_relative(sd location)
+-	sd mask
+-	set mask location
+-	add mask (maskoffset)
+-	set mask mask#
+-	and mask (stackrelativebit)
+-	if mask=0
+-		return (ebxregnumber)
+-	endif
+-	return (ebpregnumber)
+-endfunction
+--- ocompiler-1.orig/src/files/functions/xfile_details.oc
++++ ocompiler-1/src/files/functions/xfile_details.oc
+@@ -1,6 +1,6 @@
+ 
+ #err
+-function xfile_add_declare_if(sd decltype,sd is_stack,sd is_expand,ss content,sd size,sd sign,sd reloc,sd relocx)
++function xfile_add_declare_if(sd decltype,sd is_stack,sd is_expand,sd is_signed,ss content,sd size,sd sign,sd reloc,sd relocx)
+ 	if main.xfile!=(openno)
+ 		sd err
+ 		if decltype=(Xfile_decltype_const)
+@@ -16,6 +16,13 @@ function xfile_add_declare_if(sd decltyp
+ 					else
+ 						setcall err xfile_add_char((Xfile_declfield_data_concrete))
+ 					endelse
++					if err=(noerror)
++						if is_signed=(Xfile_declext_no)
++							setcall err xfile_add_char((Xfile_declext_no))
++						else
++							setcall err xfile_add_char((Xfile_declext_yes))
++						endelse
++					endif
+ 				endif
+ 			endelse
+ 			if err=(noerror)
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -32,6 +32,9 @@ const pointbit=0x80
+ #bit offset 8; runtime sufix offset
+ const suffixbit=0x100
+ 
++#bit offset 9: sign
++const signbit=0x200
++
+ const dummy_mask=0
+ const valueslongmask=datapointbit|pointbit
+ const location_bits=stackbit|expandbit
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -76,6 +76,9 @@ const Xfile_declmode_string=2
+ const Xfile_declmode_string_pop_no=0
+ const Xfile_declmode_string_pop_yes=1
+ 
++const Xfile_declext_no=0
++const Xfile_declext_yes=1
++
+ #here is ORing (~-N)
+ const Xfile_numbers_prefix_none=0x0
+ const Xfile_numbers_prefix_neg=0x1
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -2,17 +2,25 @@
+ multi
+ line
+ */
+-//not blank for deb pack. char *="1\03" is not working (src->binary is creating fuzz at deb)
++#include "include.h"
+ char c1=1;
+ char c2[]={2,3};
+ char c3[]="45";
++short c5=1;;int c6=1;;char* c7=1;;long c8=1;
++char* c9="";;short* ca=1;;int* cb=1;
++char cc[]={9,97,122};
++#define a1 1
+ char a[3];
+-int b;
+-long intern(int a,int b,int c){//commenting
+-c;
++long b;
++long intern(int a,int* b,long c){//commenting
++return c;
++}
++void f(){
++if(22){return;
++}
+ }
+ long puts();
+-void main(){
++long main(){
+ b=b;
+ b+=b;
+ b-=b;
+@@ -30,4 +38,5 @@ while(12){}
+ {
+ }
+ __builtin_trap();
++return 2;
+ }
+--- ocompiler-1.orig/tests/.expected/a.out.oc.log
++++ ocompiler-1/tests/.expected/a.out.oc.log
+@@ -3,4 +3,4 @@ na.out.oc
+ ninclude.h
+ q
+ q
+-x0000001a
++x0000003a
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -1,16 +1,19 @@
+-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
++aWxlARkHAQAAAwEAAAAyHw==
+--- ocompiler-1.orig/tests/.expected/a.out.txt
++++ ocompiler-1/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+-f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAOJQECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAgaAAAAGgAAAAYAAAAAEAAAAQAAABoEAAAalAQIGpQECJ8BAACfAQAABQAAAAAQ
+-AAADAAAAuQUAALmVBAi5lQQIEwAAABMAAAAEAAAAAQAAAAIAAADMBQAAzKUECMylBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAMwFAADMpQQIzKUECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAPKYECDwGAAAWAAAAAAAAAAAAAAAB
+-AAAAAAAAAA0AAAAGAAAAAwAAAMylBAjMBQAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAd5QECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
++BAAAAIQECACEBAg7AAAAOwAAAAYAAAAAEAAAAQAAADsEAAA7lAQIO5QECMcBAADHAQAABQAAAAAQ
++AAADAAAAAgYAAAKWBAgClgQIEwAAABMAAAAEAAAAAQAAAAIAAAAVBgAAFaYECBWmBAhQAAAAUAAA
++AAQAAAABAAAAAQAAABUGAAAVpgQIFaYECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAhaYECIUGAAAWAAAAAAAAAAAAAAAB
++AAAAAAAAAA0AAAAGAAAAAwAAABWmBAgVBgAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -16,14 +16,15 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC
+-AzQ1AAAAAAaEBAgAAAAAcQp3DWUJcgAAi4QkBAAAAKMNhAQIU1WL7IvcuhQAAAAD1YsCyVvDU1WL
+-7IvcugmEBAiLAroJhAQIiQK6CYQECIsCugmEBAgBAroJhAQIiwK6CYQECCkCugmEBAiLCroJhAQI
+-iwL34boJhAQIiQK6CYQECIsKugmEBAiLAg+64B9zB7r/////6wW6AAAAAPf5ugmEBAiJAroJhAQI
+-iwq6CYQECIsCugAAAAD38boJhAQIiQK6CYQECIsKugmEBAiLAg+64B9zB7r/////6wW6AAAAAPf5
+-uQmEBAiJEboJhAQIiwq6CYQECIsCugAAAAD38bkJhAQIiRG6CYQECIsCugmEBAghAroJhAQIiwK6
+-CYQECAkCugmEBAiLAroJhAQIMQL87ieL47oMhAQID7YCULoRhAQIi8JQaAEAAADox/7//4vjuF6m
+-BAj/ELoJhAQIiQK4AQAAALkBAAAAOcEPhQUAAADpAAAAAIvjuQEAAAC6CYQECIsCgfkAAAAAdAf/
+-yf80iOvxuAmEBAj/ELgCAAAAuQEAAAA5wQ+FBQAAAOnp////yVvDzC9saWIvbGQtbGludXguc28u
+-MgABAAAAAAAAAAQAAAAcpgQIBgAAACymBAgLAAAAEAAAAAUAAAA8pgQICgAAABYAAAAHAAAAUqYE
+-CAgAAAAMAAAACQAAAAwAAAAAAAAAAAAAAAEAAAABAAAAAAAAAAAAAAACAAAAAAAAAAAAAAASAAAA
+-YQBiAAAuZHluc3RyAC5keW5hbWljAF6mBAgBAAAAAAAAAAAAAAA=
++AzQ1AAEAAAABAAAAAQAAAAEAAAAahAQIAAEAAAABAAAACWF6AAAAJoQECAAAAABxCncNZQlyAAAA
++i4QkBAAAAKMthAQIU1WL7IvcuhQAAAAD1YsCyVvDU1WL7IvcuAIAAAC5AgAAADnBD4UDAAAAyVvD
++yVvDU1WL7IvcuimEBAiLArophAQIiQK6KYQECIsCuimEBAgBArophAQIiwK6KYQECCkCuimEBAiL
++CrophAQIiwL34bophAQIiQK6KYQECIsKuimEBAiLAg+64B9zB7r/////6wW6AAAAAPf5uimEBAiJ
++ArophAQIiwq6KYQECIsCugAAAAD38bophAQIiQK6KYQECIsKuimEBAiLAg+64B9zB7r/////6wW6
++AAAAAPf5uSmEBAiJEbophAQIiwq6KYQECIsCugAAAAD38bkphAQIiRG6KYQECIsCuimEBAghArop
++hAQIiwK6KYQECAkCuimEBAiLArophAQIMQL8zkiL47pMhAQID7YCULoxhAQIi8JQaAEAAADoqf7/
++/4vjuKemBAj/ELophAQIiQK4AQAAALkBAAAAOcEPhQUAAADpAAAAAIvjuQEAAAC6KYQECIsCgfkA
++AAAAdAf/yf80iOvxuCmEBAj/ELgCAAAAuQEAAAA5wQ+FBQAAAOnp////zLgBAAAAx8MCAAAAzYAv
++bGliL2xkLWxpbnV4LnNvLjIAAQAAAAAAAAAEAAAAZaYECAYAAAB1pgQICwAAABAAAAAFAAAAhaYE
++CAoAAAAWAAAABwAAAJumBAgIAAAADAAAAAkAAAAMAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAAAAAA
++AgAAAAAAAAAAAAAAEgAAAGEAYgAALmR5bnN0cgAuZHluYW1pYwCnpgQIAQAAAAAAAAAAAAAA
+--- ocompiler-1.orig/tests/.expected/acall/32.oc.x.txt
++++ ocompiler-1/tests/.expected/acall/32.oc.x.txt
+@@ -1,6 +1,6 @@
+-AwIUAQYAAABwcmludGYGAAAAcHJpbnRmBAADAAAAYS5oAAYCAAcBAAAAAAIAAAQBAAAAMB8ADgAA
+-AGFmdGVyY2FsbCB0ZXN0FQABBAAAAHRlc3QFAQAAAGEAAAAAAAkAAAEAAABiAAAAAAkAAAEAAABj
+-AAAAABEFAQAAAGIAAAAAAAkAAAYAAABwcmludGYBAAAAAQUAAAB0ZXN0ChEFAQAAAGMAAAAAAAkA
+-AAYAAABwcmludGYBAAAAAQYAAAB0ZXN0MgoRBQQAAABtYWluAwAAAAAABgIABAIBAAAAZQABAAAA
+-YQACAAAAaTMJAAABAAAAZQAAAAAVAgkAAAEAAABlAAAAABUDCQAAAQAAAGUAAAAABwEAAAQBAAAA
+-MB8=
++AwIUAQYAAABwcmludGYGAAAAcHJpbnRmBAADAAAAYS5oAAYCAAAHAQAAAAACAAAEAQAAADAfAA4A
++AABhZnRlcmNhbGwgdGVzdBUAAQQAAAB0ZXN0BQEAAABhAAAAAAAJAAABAAAAYgAAAAAJAAABAAAA
++YwAAAAARBQEAAABiAAAAAAAJAAAGAAAAcHJpbnRmAQAAAAEFAAAAdGVzdAoRBQEAAABjAAAAAAAJ
++AAAGAAAAcHJpbnRmAQAAAAEGAAAAdGVzdDIKEQUEAAAAbWFpbgMAAAAAAAYCAAAEAgEAAABlAAEA
++AABhAAIAAABpMwkAAAEAAABlAAAAABUCCQAAAQAAAGUAAAAAFQMJAAABAAAAZQAAAAAHAQAABAEA
++AAAwHw==
+--- ocompiler-1.orig/tests/.expected/acall/32.w.oc.x.txt
++++ ocompiler-1/tests/.expected/acall/32.w.oc.x.txt
+@@ -1,6 +1,6 @@
+-AwIUAQcAAABfcHJpbnRmBgAAAHByaW50ZgQAAwAAAGEuaAAGAgAHAQAAAAACAAAEAQAAADAfAA4A
+-AABhZnRlcmNhbGwgdGVzdBUAAQQAAAB0ZXN0BQEAAABhAAAAAAAJAAABAAAAYgAAAAAJAAABAAAA
+-YwAAAAARBQEAAABiAAAAAAAJAAAGAAAAcHJpbnRmAQAAAAEFAAAAdGVzdAoRBQEAAABjAAAAAAAJ
+-AAAGAAAAcHJpbnRmAQAAAAEGAAAAdGVzdDIKEQUEAAAAbWFpbgMAAAAAAAYCAAQCAQAAAGUAAQAA
+-AGEAAgAAAGkzCQAAAQAAAGUAAAAAFQIJAAABAAAAZQAAAAAVAwkAAAEAAABlAAAAAAcAAAAEAQAA
+-ADAf
++AwIUAQcAAABfcHJpbnRmBgAAAHByaW50ZgQAAwAAAGEuaAAGAgAABwEAAAAAAgAABAEAAAAwHwAO
++AAAAYWZ0ZXJjYWxsIHRlc3QVAAEEAAAAdGVzdAUBAAAAYQAAAAAACQAAAQAAAGIAAAAACQAAAQAA
++AGMAAAAAEQUBAAAAYgAAAAAACQAABgAAAHByaW50ZgEAAAABBQAAAHRlc3QKEQUBAAAAYwAAAAAA
++CQAABgAAAHByaW50ZgEAAAABBgAAAHRlc3QyChEFBAAAAG1haW4DAAAAAAAGAgAABAIBAAAAZQAB
++AAAAYQACAAAAaTMJAAABAAAAZQAAAAAVAgkAAAEAAABlAAAAABUDCQAAAQAAAGUAAAAABwAAAAQB
++AAAAMB8=
+--- ocompiler-1.orig/tests/.expected/acall/64.oc.x.txt
++++ ocompiler-1/tests/.expected/acall/64.oc.x.txt
+@@ -1,6 +1,6 @@
+-AwMUAQYAAABwcmludGYGAAAAcHJpbnRmBAADAAAAYS5oAAYCAAcBAAAAAAIAAAQBAAAAMB8ADgAA
+-AGFmdGVyY2FsbCB0ZXN0FQABBAAAAHRlc3QFAQAAAGEAAAAAAAkAAAEAAABiAAAAAAkAAAEAAABj
+-AAAAABEFAQAAAGIAAAAAAAkAAAYAAABwcmludGYBAAAAAQUAAAB0ZXN0ChEFAQAAAGMAAAAAAAkA
+-AAYAAABwcmludGYBAAAAAQYAAAB0ZXN0MgoRBQQAAABtYWluAwAAAAAABgIABAIBAAAAZQABAAAA
+-YQACAAAAaTMJAAABAAAAZQAAAAAVAgkAAAEAAABlAAAAABUDCQAAAQAAAGUAAAAABwAAAAQBAAAA
+-MB8=
++AwMUAQYAAABwcmludGYGAAAAcHJpbnRmBAADAAAAYS5oAAYCAAAHAQAAAAACAAAEAQAAADAfAA4A
++AABhZnRlcmNhbGwgdGVzdBUAAQQAAAB0ZXN0BQEAAABhAAAAAAAJAAABAAAAYgAAAAAJAAABAAAA
++YwAAAAARBQEAAABiAAAAAAAJAAAGAAAAcHJpbnRmAQAAAAEFAAAAdGVzdAoRBQEAAABjAAAAAAAJ
++AAAGAAAAcHJpbnRmAQAAAAEGAAAAdGVzdDIKEQUEAAAAbWFpbgMAAAAAAAYCAAAEAgEAAABlAAEA
++AABhAAIAAABpMwkAAAEAAABlAAAAABUCCQAAAQAAAGUAAAAAFQMJAAABAAAAZQAAAAAHAAAABAEA
++AAAwHw==
+--- ocompiler-1.orig/tests/.expected/acall/e.oc.x.txt
++++ ocompiler-1/tests/.expected/acall/e.oc.x.txt
+@@ -1,6 +1,6 @@
+-AwETCQAAAGxpYmMuc28uNhQBBgAAAHByaW50ZgYAAABwcmludGYEAAMAAABhLmgABgIABwEAAAAA
+-AgAABAEAAAAwHwAOAAAAYWZ0ZXJjYWxsIHRlc3QVAAEEAAAAdGVzdAUBAAAAYQAAAAAACQAAAQAA
+-AGIAAAAACQAAAQAAAGMAAAAAEQUBAAAAYgAAAAAACQAABgAAAHByaW50ZgEAAAABBQAAAHRlc3QK
+-EQUBAAAAYwAAAAAACQAABgAAAHByaW50ZgEAAAABBgAAAHRlc3QyChEFBAAAAG1haW4DAAAAAAAG
+-AgAEAgEAAABlAAEAAABhAAIAAABpMwkAAAEAAABlAAAAABUCCQAAAQAAAGUAAAAAFQMJAAABAAAA
+-ZQAAAAAHAQAABAEAAAAwHw==
++AwETCQAAAGxpYmMuc28uNhQBBgAAAHByaW50ZgYAAABwcmludGYEAAMAAABhLmgABgIAAAcBAAAA
++AAIAAAQBAAAAMB8ADgAAAGFmdGVyY2FsbCB0ZXN0FQABBAAAAHRlc3QFAQAAAGEAAAAAAAkAAAEA
++AABiAAAAAAkAAAEAAABjAAAAABEFAQAAAGIAAAAAAAkAAAYAAABwcmludGYBAAAAAQUAAAB0ZXN0
++ChEFAQAAAGMAAAAAAAkAAAYAAABwcmludGYBAAAAAQYAAAB0ZXN0MgoRBQQAAABtYWluAwAAAAAA
++BgIAAAQCAQAAAGUAAQAAAGEAAgAAAGkzCQAAAQAAAGUAAAAAFQIJAAABAAAAZQAAAAAVAwkAAAEA
++AABlAAAAAAcBAAAEAQAAADAf
+--- ocompiler-1.orig/tests/.expected/acall/ew.oc.x.txt
++++ ocompiler-1/tests/.expected/acall/ew.oc.x.txt
+@@ -1,6 +1,6 @@
+-EwoAAABtc3ZjcnQuZGxsFAEGAAAAcHJpbnRmBgAAAHByaW50ZgQAAwAAAGEuaAAGAgAHAQAAAAAC
+-AAAEAQAAADAfAA4AAABhZnRlcmNhbGwgdGVzdBUAAQQAAAB0ZXN0BQEAAABhAAAAAAAJAAABAAAA
+-YgAAAAAJAAABAAAAYwAAAAARBQEAAABiAAAAAAAJAAAGAAAAcHJpbnRmAQAAAAEFAAAAdGVzdAoR
+-BQEAAABjAAAAAAAJAAAGAAAAcHJpbnRmAQAAAAEGAAAAdGVzdDIKEQUEAAAAbWFpbgMAAAAAAAYC
+-AAQCAQAAAGUAAQAAAGEAAgAAAGkzCQAAAQAAAGUAAAAAFQIJAAABAAAAZQAAAAAVAwkAAAEAAABl
+-AAAAAAcAAAAEAQAAADAf
++EwoAAABtc3ZjcnQuZGxsFAEGAAAAcHJpbnRmBgAAAHByaW50ZgQAAwAAAGEuaAAGAgAABwEAAAAA
++AgAABAEAAAAwHwAOAAAAYWZ0ZXJjYWxsIHRlc3QVAAEEAAAAdGVzdAUBAAAAYQAAAAAACQAAAQAA
++AGIAAAAACQAAAQAAAGMAAAAAEQUBAAAAYgAAAAAACQAABgAAAHByaW50ZgEAAAABBQAAAHRlc3QK
++EQUBAAAAYwAAAAAACQAABgAAAHByaW50ZgEAAAABBgAAAHRlc3QyChEFBAAAAG1haW4DAAAAAAAG
++AgAABAIBAAAAZQABAAAAYQACAAAAaTMJAAABAAAAZQAAAAAVAgkAAAEAAABlAAAAABUDCQAAAQAA
++AGUAAAAABwAAAAQBAAAAMB8=
+--- ocompiler-1.orig/tests/.expected/base.oc.x.txt
++++ ocompiler-1/tests/.expected/base.oc.x.txt
+@@ -1,2 +1,2 @@
+-AwMGAgAEAAEAAAB6AQADAQAAADEfBQEAAABhAAAAAAAHCQAAAQQAAABtYWluAQAAAHoAEQUEAAAA
+-bWFpbgMAAAAAABYBAAAAAAMDAAAAMTQ0HwcIAAAAAQAAAHoACQAAAQAAAGEAAAAAGQ==
++AwMGAgAABAABAAAAegEAAwEAAAAxHwUBAAAAYQAAAAAABwkAAAEEAAAAbWFpbgEAAAB6ABEFBAAA
++AG1haW4DAAAAAAAWAQAAAAADAwAAADE0NB8HCAAAAAEAAAB6AAkAAAEAAABhAAAAABk=
+--- ocompiler-1.orig/tests/.expected/call/call-var.oc.x.txt
++++ ocompiler-1/tests/.expected/call/call-var.oc.x.txt
+@@ -1,3 +1,3 @@
+-AwIGAgACAAEAAABhAQADAQAAADEfCQAAAQAAAGEAAAAABgIABwABAAAAYwEAAwEAAAAxHwkAAAEA
+-AABjAAAAAAYCAAQAAQAAAGUBAAMBAAAAMR8JAAABAAAAZQAAAAAGAQQAAQAAAGgBAAMBAAAAMR8J
+-AAABAAAAaAAAAAA=
++AwIGAgAAAgABAAAAYQEAAwEAAAAxHwkAAAEAAABhAAAAAAYCAAAHAAEAAABjAQADAQAAADEfCQAA
++AQAAAGMAAAAABgIAAAQAAQAAAGUBAAMBAAAAMR8JAAABAAAAZQAAAAAGAQQAAQAAAGgBAAMBAAAA
++MR8JAAABAAAAaAAAAAA=
+--- ocompiler-1.orig/tests/.expected/call/call-var64.oc.x.txt
++++ ocompiler-1/tests/.expected/call/call-var64.oc.x.txt
+@@ -1,3 +1,3 @@
+-AwMGAgACAAEAAABhAQADAQAAADEfAAgAAABjYWxsIGEoKQYCAAcAAQAAAGMBAAMBAAAAMR8ACAAA
+-AGNhbGwgYygpBgIABAABAAAAZQEAAwEAAAAxHwkAAAEAAABlAAAAAAYBBAABAAAAaAEAAwEAAAAx
+-HwkAAAEAAABoAAAAAA==
++AwMGAgAAAgABAAAAYQEAAwEAAAAxHwAIAAAAY2FsbCBhKCkGAgAABwABAAAAYwEAAwEAAAAxHwAI
++AAAAY2FsbCBjKCkGAgAABAABAAAAZQEAAwEAAAAxHwkAAAEAAABlAAAAAAYBBAABAAAAaAEAAwEA
++AAAxHwkAAAEAAABoAAAAAA==
+--- ocompiler-1.orig/tests/.expected/call/callx.oc.x.txt
++++ ocompiler-1/tests/.expected/call/callx.oc.x.txt
+@@ -1,5 +1,5 @@
+-AwMGAgAEAAEAAABhAQADAQAAADEfBQEAAABiAAAAAAARBQQAAABtYWluAwAAAAAAFgEAAAAAAwMA
+-AAAxNDQfGgkAAAEAAABhAQAAAAAAAwEAAAAxHxYBAAAAAAMDAAAAMTQ0HxoJAAABAAAAYgEAAAAA
+-AAMBAAAAMR8WAQAAAAADAwAAADE0NB8aCQABAQAAAGEBAAAAAAADAQAAADEfFgEAAAAAAwMAAAAx
+-NDQfGgkAAQEAAABiAQAAAAAAAwEAAAAxHxYBAAAAAAMDAAAAMTQ0HxoIAAAAAQAAAGEARQMBAQAA
+-AGIBAAAAAAADAQAAADIfGQ==
++AwMGAgAABAABAAAAYQEAAwEAAAAxHwUBAAAAYgAAAAAAEQUEAAAAbWFpbgMAAAAAABYBAAAAAAMD
++AAAAMTQ0HxoJAAABAAAAYQEAAAAAAAMBAAAAMR8WAQAAAAADAwAAADE0NB8aCQAAAQAAAGIBAAAA
++AAADAQAAADEfFgEAAAAAAwMAAAAxNDQfGgkAAQEAAABhAQAAAAAAAwEAAAAxHxYBAAAAAAMDAAAA
++MTQ0HxoJAAEBAAAAYgEAAAAAAAMBAAAAMR8WAQAAAAADAwAAADE0NB8aCAAAAAEAAABhAEUDAQEA
++AABiAQAAAAAAAwEAAAAyHxk=
+--- /dev/null
++++ ocompiler-1/tests/.expected/chars.o.txt
+@@ -0,0 +1,29 @@
++f0VMRgEBAQAAAAAAAAAAAAEAAwABAAAAAAAAAAAAAAA0AAAAAAAAADQAIAAAACgACAAHAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAQAAAAMAAAAAAAAAAAQAAA4A
++AAAAAAAAAAAAAAQAAAAAAAAABwAAAAEAAAAGAAAAAAAAAA4EAADeAAAAAAAAAAAAAAAEAAAAAAAA
++AA0AAAAIAAAAAwAAAAAAAADsBAAAAgAAAAAAAAAAAAAABAAAAAAAAAAqAAAAAgAAAAAAAAAAAAAA
++7AQAAIAAAAAHAAAABAAAAAQAAAAQAAAAMgAAAAQAAAAAAAAAAAAAAGwFAAAAAAAABAAAAAEAAAAE
++AAAADAAAAD0AAAAEAAAAAAAAAAAAAABsBQAAtAAAAAQAAAACAAAABAAAAAwAAABIAAAAAwAAAAAA
++AAAAAAAAIAYAAFAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP//
++b2sAb2sAb2sAb2sAioQkBAAAAKIAAAAAioQkCAAAAKIBAAAAU1WL7IvcugAAAAAPtgK5/////zvB
++D4QRAAAAi+O6AgAAAIvCULgAAAAA/9C6AQAAAA++Arn/////O8EPhREAAACL47oFAAAAi8JQuAAA
++AAD/0Mlbw1NVi+yL3LoAAAAAD7YCuf////87wQ+EEQAAAIvjuggAAACLwlC4AAAAAP/QugEAAAAP
++vgK5/////zvBD4URAAAAi+O6CwAAAIvCULgAAAAA/9CL42j/AAAAaP8AAADoMP///4vjaAAAAAC4
++AAAAAP/QAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAMAAQAHAAAAAAAAAAAAAAADAAIADQAA
++AAAAAAAAAAAAAwADABMAAAAAAAAABAAAABAAAAAZAAAAAAAAAAQAAAAQAAAAHwAAAAAAAAAAAAAA
++IgACACUAAABtAAAAAAAAABIAAgAIAAAAAQMAAAAAAAAUAAAAAQMAAAEAAAAfAAAAAQMAAAAAAAA2
++AAAAAQEAAAIAAAA+AAAAAQQAAAAAAABFAAAAAQMAAAEAAABcAAAAAQEAAAUAAABkAAAAAQQAAAAA
++AAB0AAAAAQEAAAAAAACLAAAAAQEAAAgAAACTAAAAAQQAAAAAAACaAAAAAQEAAAEAAACxAAAAAQEA
++AAsAAAC5AAAAAQQAAAAAAADYAAAAAQUAAAAAAAAALmRhdGEALnRleHQALmR0bmIAcHV0cwAAZXhp
++dAAAc2lnbnMAbWFpbgAuc3ltdGFiAC5yZWxhLmRhdGEALnJlbGEudGV4dAAuc3RydGFiAA==
+--- /dev/null
++++ ocompiler-1/tests/.expected/chars.oc.log
+@@ -0,0 +1,8 @@
++p./
++nchars.oc
++o.a
++o.b
++osigns.a
++osigns.b
++q
++x0000000e
+--- /dev/null
++++ ocompiler-1/tests/.expected/chars.oc.x.txt
+@@ -0,0 +1,7 @@
++AwIGAgAAAAABAAAAYQIAAAUEAAAAMHhmZh8GAgABAAABAAAAYgIAAQMBAAAAMR8UAQQAAABwdXRz
++BAAAAHB1dHMFBQAAAHNpZ25zAAIAAAACAQAAAAEAAABhAgEBAAABAAAAYgsCAAAAAQAAAGEAhAAA
++BQoAAAAweEZGZmZGRmZmHwkAAAQAAABwdXRzAQAAAAECAAAAb2sRCwIAAAABAAAAYgCFAAEDAQAA
++ADEfCQAABAAAAHB1dHMBAAAAAQIAAABvaxERBQQAAABtYWluAwAAAAAACwIAAAABAAAAYQCEAAED
++AQAAADEfCQAABAAAAHB1dHMBAAAAAQIAAABvaxELAgAAAAEAAABiAIUAAQMBAAAAMR8JAAAEAAAA
++cHV0cwEAAAABAgAAAG9rEQkAAAUAAABzaWducwIAAAAAAAUEAAAAMHhmZh8AAAUEAAAAMHhmZh8U
++AQQAAABleGl0BAAAAGV4aXQJAAAEAAAAZXhpdAEAAAAAAAQBAAAAMB8=
+--- ocompiler-1.orig/tests/.expected/declare.oc.x.txt
++++ ocompiler-1/tests/.expected/declare.oc.x.txt
+@@ -1,8 +1,8 @@
+-AwMGAgAAAAEAAABhAgADAwEAAAAxLRACAwEAAAAxKwADAQAAADEYHwYCAAIAAQAAAGICAQIAAAAA
+-AwEAAAAyHwADAQAAADIfBgIABAABAAAAYwMAAAMBAAAAMR8GAQQAAQAAAGQBBgIABAEBAAAAZAEA
+-AwEAAAAxHwYCAAQCAgAAAGRkAAEAAABjBgIAAwABAAAAZQEAAwEAAAAxHwYCAAUAAQAAAGYBAAMB
+-AAAAMR8GAQUAAQAAAGcCAgYAAABxd2Vxd2UABgIABwABAAAAaAEAAwEAAAAxHwYBBwABAAAAaQEA
+-AwEAAAAxHwYAAQAAAGoCAAADAQAAADEfAAgAAAB2YWx1ZSBrJQYCAAQAAQAAAGsEAAADAQAAADEf
+-BgIBBAABAAAAbAEAAwEAAAAxHwAJAAAAcmV0dXJuIDErBwAAAAMBAAAAMSsAAwEAAAAxHwYCAAUB
+-AQAAAHoCAgMAAAAxMjMABgIABAEBAAAAegACAAAAZGQGAgABAAEAAAB3AAEAAABhBgIABgACAAAA
+-d3cAAQAAAGEGAQYAAwAAAHd3dwABAAAAYQ==
++AwMGAgAAAAABAAAAYQIAAwMBAAAAMS0QAgMBAAAAMSsAAwEAAAAxGB8GAgAAAgABAAAAYgIBAgAA
++AAADAQAAADIfAAMBAAAAMh8GAgAABAABAAAAYwMAAAMBAAAAMR8GAQQAAQAAAGQBBgIAAAQBAQAA
++AGQBAAMBAAAAMR8GAgAABAICAAAAZGQAAQAAAGMGAgAAAwABAAAAZQEAAwEAAAAxHwYCAAAFAAEA
++AABmAQADAQAAADEfBgEFAAEAAABnAgIGAAAAcXdlcXdlAAYCAAAHAAEAAABoAQADAQAAADEfBgEH
++AAEAAABpAQADAQAAADEfBgABAAAAagIAAAMBAAAAMR8ACAAAAHZhbHVlIGslBgIAAAQAAQAAAGsE
++AAADAQAAADEfBgIBAAQAAQAAAGwBAAMBAAAAMR8ACQAAAHJldHVybiAxKwcAAAADAQAAADErAAMB
++AAAAMR8GAgAABQEBAAAAegICAwAAADEyMwAGAgAABAEBAAAAegACAAAAZGQGAgAAAQABAAAAdwAB
++AAAAYQYCAAAGAAIAAAB3dwABAAAAYQYBBgADAAAAd3d3AAEAAABh
+--- ocompiler-1.orig/tests/.expected/declareN.oc.x.txt
++++ ocompiler-1/tests/.expected/declareN.oc.x.txt
+@@ -1,9 +1,9 @@
+-AwMFAQAAAGIAAQAAAAIAAgABAAAAZAYCAAAAAQAAAGEBAAMBAAAAMh8GAgAAAAEAAABjAgEDAAAA
+-AAMBAAAAMR8AAwEAAAAyHwADAQAAADMfAAoAAABjaGFyIGU9IiJeBgIAAAABAAAAZQICBAAAADEy
+-MzQABgIABAACAAAAYWEAAQAAAGEHAAIAAAACAAAAYWEBUxEADQAAAGNvbnN0IGE9XGIuYVwGAAEA
+-AABhAgAAAwEAAAAxHwYCAAABAQAAAHoCAAAAHwYCAAABAQAAAHoCAAABHwYCAAABAQAAAHoCAAAC
+-HwYCAAABAQAAAHoCAAADAQAAADEfBgIAAAEBAAAAegIAAAUDAAAAMHhmHwYCAAABAQAAAHoCAAAG
+-AQAAAGEfBgIAAAEBAAAAegIAAAcBAAAAYh8GAgAAAQEAAAB6AgAACAEAAABiHwYCAAABAQAAAHoC
+-AAAJAQAAAGIBAAAAYQAfBgIAAAEBAAAAegIAAAkBAAAAYgEAAABjAB8GAgAAAQEAAAB6AgAACQEA
+-AABiAQAAAGQAHwYCAAABAQAAAHoCAAAJAQAAAGIBAAAAZQAfBgIAAAEBAAAAegIAAAoBAAAAYgEA
+-AABhAB8=
++AwMFAQAAAGIAAQAAAAIAAAIAAQAAAGQGAgAAAAABAAAAYQEAAwEAAAAyHwYCAAAAAAEAAABjAgED
++AAAAAAMBAAAAMR8AAwEAAAAyHwADAQAAADMfAAoAAABjaGFyIGU9IiJeBgIAAAAAAQAAAGUCAgQA
++AAAxMjM0AAYCAAAEAAIAAABhYQABAAAAYQcAAgAAAAIAAABhYQFTEQANAAAAY29uc3QgYT1cYi5h
++XAYAAQAAAGECAAADAQAAADEfBgIAAAABAQAAAHoCAAAAHwYCAAAAAQEAAAB6AgAAAR8GAgAAAAEB
++AAAAegIAAAIfBgIAAAABAQAAAHoCAAADAQAAADEfBgIAAAABAQAAAHoCAAAFAwAAADB4Zh8GAgAA
++AAEBAAAAegIAAAYBAAAAYR8GAgAAAAEBAAAAegIAAAcBAAAAYh8GAgAAAAEBAAAAegIAAAgBAAAA
++Yh8GAgAAAAEBAAAAegIAAAkBAAAAYgEAAABhAB8GAgAAAAEBAAAAegIAAAkBAAAAYgEAAABjAB8G
++AgAAAAEBAAAAegIAAAkBAAAAYgEAAABkAB8GAgAAAAEBAAAAegIAAAkBAAAAYgEAAABlAB8GAgAA
++AAEBAAAAegIAAAoBAAAAYgEAAABhAB8=
+--- ocompiler-1.orig/tests/.expected/decocthex.oc.x.txt
++++ ocompiler-1/tests/.expected/decocthex.oc.x.txt
+@@ -1,7 +1,7 @@
+-ABEAAABkYXRhICo9MjE0NzQ4MzY0OAYCAAIBAAAAAAIAAQMKAAAAMjE0NzQ4MzY0OB8AOwAAAGRh
+-dGEgKj0weDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMUZGZmZGRmZm
+-BgIAAgEBAAAAIAIAAAU0AAAAMHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+-MDAwMDBGRmZmRkZmZh8GAgACAQEAAAAgAgAABBsAAAAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+-MDAfAB4AAABkYXRhICo9MDAwMDAwMDAwMDA3Nzc3Nzc3Nzc3NzcAHQAAAGRhdGEgKj0wMDAwMDAw
+-MDAwMDc3Nzc3Nzc3Nzc3BgIAAgEBAAAAIAIAAAQWAAAAMDAwMDAwMDAwMDAzNzc3Nzc3Nzc3Nx8G
+-AgACAQEAAAAgAgAABBYAAAAwMDAwMDAwMDAwMDE3Nzc3Nzc3Nzc3Hw==
++ABEAAABkYXRhICo9MjE0NzQ4MzY0OAYCAAACAQAAAAACAAEDCgAAADIxNDc0ODM2NDgfADsAAABk
++YXRhICo9MHgwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDFGRmZmRkZm
++ZgYCAAACAQEAAAAgAgAABTQAAAAweDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMEZGZmZGRmZmHwYCAAACAQEAAAAgAgAABBsAAAAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAfAB4AAABkYXRhICo9MDAwMDAwMDAwMDA3Nzc3Nzc3Nzc3NzcAHQAAAGRhdGEgKj0wMDAw
++MDAwMDAwMDc3Nzc3Nzc3Nzc3BgIAAAIBAQAAACACAAAEFgAAADAwMDAwMDAwMDAwMzc3Nzc3Nzc3
++NzcfBgIAAAIBAQAAACACAAAEFgAAADAwMDAwMDAwMDAwMTc3Nzc3Nzc3Nzcf
+--- ocompiler-1.orig/tests/.expected/divmul.oc.x.txt
++++ ocompiler-1/tests/.expected/divmul.oc.x.txt
+@@ -1,13 +1,13 @@
+-AwMGAgAAAAEAAABhAQADAQAAADEfBgIAAgABAAAAYgEAAwEAAAAxHwYCAAQAAQAAAGMBAAMBAAAA
+-MR8FBAAAAG1haW4DAAAAAAAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAA
+-ADE0NFwAAwEAAAAxHwgAAAABAAAAYQAvAgAAAAEAAABhABYEAAAAAAMDAAAAMTQ0HwADAwAAADE0
+-NB8AAwMAAAAxNDQfAAMDAAAAMTQ0OgADAwAAADk5OR8IAAAAAQAAAGIALwIAAAABAAAAYgAWBAAA
+-AAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMALwIAAAAB
+-AAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAA
+-AGEARAIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0
+-NB8IAAAAAQAAAGIARAIAAAABAAAAYgAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0
+-HwADAwAAADE0NB8IAAAAAQAAAGMARAIAAAABAAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQf
+-AAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGEAKgIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8A
+-AwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGIAKgIAAAABAAAAYgAWBAAAAAAD
+-AwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMAKgIAAAABAAAA
+-YwA=
++AwMGAgAAAAABAAAAYQEAAwEAAAAxHwYCAAACAAEAAABiAQADAQAAADEfBgIAAAQAAQAAAGMBAAMB
++AAAAMR8FBAAAAG1haW4DAAAAAAAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwAD
++AwAAADE0NFwAAwEAAAAxHwgAAAABAAAAYQAvAgAAAAEAAABhABYEAAAAAAMDAAAAMTQ0HwADAwAA
++ADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0OgADAwAAADk5OR8IAAAAAQAAAGIALwIAAAABAAAAYgAW
++BAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMALwIA
++AAABAAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAA
++AQAAAGEARAIAAAABAAAAYQAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAA
++ADE0NB8IAAAAAQAAAGIARAIAAAABAAAAYgAWBAAAAAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAA
++MTQ0HwADAwAAADE0NB8IAAAAAQAAAGMARAIAAAABAAAAYwAWBAAAAAADAwAAADE0NB8AAwMAAAAx
++NDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGEAKgIAAAABAAAAYQAWBAAAAAADAwAAADE0
++NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGIAKgIAAAABAAAAYgAWBAAA
++AAADAwAAADE0NB8AAwMAAAAxNDQfAAMDAAAAMTQ0HwADAwAAADE0NB8IAAAAAQAAAGMAKgIAAAAB
++AAAAYwA=
+--- ocompiler-1.orig/tests/.expected/function.oc.x.txt
++++ ocompiler-1/tests/.expected/function.oc.x.txt
+@@ -1,4 +1,4 @@
+-AwIFBAAAAHRlc3QACgAAAAIAAAABAAAAYQIAAgABAAAAYgIAAwABAAAAYwIABAABAAAAZAEEAAEA
+-AABlAgAFAAEAAABmAQUAAQAAAGcCAAcAAQAAAGgBBwABAAAAaQIBBAABAAAAahEFBQAAAHRlc3Qy
+-AgAAAAAAEQUFAAAAdGVzdDMCAQAAAAARBQUAAAB0ZXN0NAMAAwAAAAIAAQABAAAAYQIABgABAAAA
+-YgEGAAEAAABj
++AwIFBAAAAHRlc3QACgAAAAIAAAAAAQAAAGECAAACAAEAAABiAgAAAwABAAAAYwIAAAQAAQAAAGQB
++BAABAAAAZQIAAAUAAQAAAGYBBQABAAAAZwIAAAcAAQAAAGgBBwABAAAAaQIBAAQAAQAAAGoRBQUA
++AAB0ZXN0MgIAAAAAABEFBQAAAHRlc3QzAgEAAAAAEQUFAAAAdGVzdDQDAAMAAAACAAABAAEAAABh
++AgAABgABAAAAYgEGAAEAAABj
+--- ocompiler-1.orig/tests/.expected/include.oc.x.txt
++++ ocompiler-1/tests/.expected/include.oc.x.txt
+@@ -1,9 +1,2 @@
+-BAAJAAAAaW5jbHVkZS5oAABaAAAAbm90IGJsYW5rIGZvciBkZWIgcGFjay4gY2hhciAqPSIxXDAz
+-IiBpcyBub3Qgd29ya2luZyAoc3JjLT5iaW5hcnkgaXMgY3JlYXRpbmcgZnV6eiBhdCBkZWIpBAEJ
+-AAAAaW5jbHVkZS5oAQgAAABmYWtlZmlsZQBaAAAAbm90IGJsYW5rIGZvciBkZWIgcGFjay4gY2hh
+-ciAqPSIxXDAzIiBpcyBub3Qgd29ya2luZyAoc3JjLT5iaW5hcnkgaXMgY3JlYXRpbmcgZnV6eiBh
+-dCBkZWIpFwsAAABpbmNsdWRlX3NlYwEEAAkAAABpbmNsdWRlLmgAWgAAAG5vdCBibGFuayBmb3Ig
+-ZGViIHBhY2suIGNoYXIgKj0iMVwwMyIgaXMgbm90IHdvcmtpbmcgKHNyYy0+YmluYXJ5IGlzIGNy
+-ZWF0aW5nIGZ1enogYXQgZGViKQQACAAAAGZha2VmaWxlAQkAAABpbmNsdWRlLmgAWgAAAG5vdCBi
+-bGFuayBmb3IgZGViIHBhY2suIGNoYXIgKj0iMVwwMyIgaXMgbm90IHdvcmtpbmcgKHNyYy0+Ymlu
+-YXJ5IGlzIGNyZWF0aW5nIGZ1enogYXQgZGViKQ==
++BAAJAAAAaW5jbHVkZS5oAAQBCQAAAGluY2x1ZGUuaAEIAAAAZmFrZWZpbGUXCwAAAGluY2x1ZGVf
++c2VjAQQACQAAAGluY2x1ZGUuaAQACAAAAGZha2VmaWxlAQkAAABpbmNsdWRlLmg=
+--- ocompiler-1.orig/tests/.expected/offsetofvar.oc.x.txt
++++ ocompiler-1/tests/.expected/offsetofvar.oc.x.txt
+@@ -1,8 +1,8 @@
+-AwMGAgACAQAAAAABAAMBAAAANx8GAgACAAEAAABiAQADAQAAADEfBQEAAABhAAAAAAAGAgACAQAA
+-AAABAAMBAAAAMx8GAgACAAEAAABiAQADAQAAADEfBgIBAgEAAAAAAQADAQAAADUfBgIBAgABAAAA
+-YwEAAwEAAAAxHwYBBwEAAAAAAQYBBwABAAAAZAIAAAoBAAAAYQEAAABiAB8RBQQAAABtYWluAwAA
+-AAAAFAEGAAAAcHJpbnRmBgAAAHByaW50ZgYCAAUABAAAAGluZm8CAgMAAAAlZAoACQAABgAAAHBy
+-aW50ZgIAAAAAAAoBAAAAYQEAAABiAB8CAAAABAAAAGluZm8AAgIAAAAxMgkAAAYAAABwcmludGYC
+-AAAAAAAKAQAAAGEBAAAAYwAfAgAAAAQAAABpbmZvAAICAAAAMjAJAAAGAAAAcHJpbnRmAgAAAAAA
+-CgEAAABhAQAAAGQAHwIAAAAEAAAAaW5mbwACAQAAADgJAAAGAAAAcHJpbnRmAgAAAAAACgQAAABt
+-YWluAQAAAGIAHwIAAAAEAAAAaW5mbwACAgAAADI4BwAAAAQBAAAAMB8=
++AwMGAgAAAgEAAAAAAQADAQAAADcfBgIAAAIAAQAAAGIBAAMBAAAAMR8FAQAAAGEAAAAAAAYCAAAC
++AQAAAAABAAMBAAAAMx8GAgAAAgABAAAAYgEAAwEAAAAxHwYCAQACAQAAAAABAAMBAAAANR8GAgEA
++AgABAAAAYwEAAwEAAAAxHwYBBwEAAAAAAQYBBwABAAAAZAIAAAoBAAAAYQEAAABiAB8RBQQAAABt
++YWluAwAAAAAAFAEGAAAAcHJpbnRmBgAAAHByaW50ZgYCAAAFAAQAAABpbmZvAgIDAAAAJWQKAAkA
++AAYAAABwcmludGYCAAAAAAAKAQAAAGEBAAAAYgAfAgAAAAQAAABpbmZvAAICAAAAMTIJAAAGAAAA
++cHJpbnRmAgAAAAAACgEAAABhAQAAAGMAHwIAAAAEAAAAaW5mbwACAgAAADIwCQAABgAAAHByaW50
++ZgIAAAAAAAoBAAAAYQEAAABkAB8CAAAABAAAAGluZm8AAgEAAAA4CQAABgAAAHByaW50ZgIAAAAA
++AAoEAAAAbWFpbgEAAABiAB8CAAAABAAAAGluZm8AAgIAAAAyOAcAAAAEAQAAADAf
+--- ocompiler-1.orig/tests/.expected/onearg.oc.x.txt
++++ ocompiler-1/tests/.expected/onearg.oc.x.txt
+@@ -1,5 +1,5 @@
+-AwMFAQAAAGIAAAAAAAYCAAIAAQAAAGEBAAMBAAAAMR8RBQQAAABtYWluAwAAAAAABgIABQABAAAA
+-YQICBAAAAHF3ZXIABwAAAAMBAAAAMh8HAgEBAAEAAABhAAEBAAAAYgEAAABhAAcCAQAAAQAAAGEA
+-BwMBAAEBAAAAYgEAAABhAAcEAAAAAQAAAGEABwUAAAABAAAAYQAHBgAAAAEAAABhAAcHAAAAAQAA
+-AGEABwoAAAABAAAAYQAHCwAAAAEAAABhAAcMAAABAQAAAGIBAAAAYQAHAQAAAwEAAAAzHwcAAQQA
+-AABhc2RmBwACAAEBBAAAAG1haW4BAAAAYQEAAQAAAGEABwACAAAAAQAAAGIC
++AwMFAQAAAGIAAAAAAAYCAAACAAEAAABhAQADAQAAADEfEQUEAAAAbWFpbgMAAAAAAAYCAAAFAAEA
++AABhAgIEAAAAcXdlcgAHAAAAAwEAAAAyHwcCAQEAAQAAAGEAAQEAAABiAQAAAGEABwIBAAABAAAA
++YQAHAwEAAQEAAABiAQAAAGEABwQAAAABAAAAYQAHBQAAAAEAAABhAAcGAAAAAQAAAGEABwcAAAAB
++AAAAYQAHCgAAAAEAAABhAAcLAAAAAQAAAGEABwwAAAEBAAAAYgEAAABhAAcBAAADAQAAADMfBwAB
++BAAAAGFzZGYHAAIAAQEEAAAAbWFpbgEAAABhAQABAAAAYQAHAAIAAAABAAAAYgI=
+--- ocompiler-1.orig/tests/.expected/operations.oc.x.txt
++++ ocompiler-1/tests/.expected/operations.oc.x.txt
+@@ -2,31 +2,31 @@ AwIGAAEAAABhAgAAAwEAAAAxHwAAAQAAICAgICAg
+ ZGl2dSAgICAgICAgICAgcmVtICAgcmVtdSAgICAgcG93IGFuZCBvciAgeG9yIG5vdCBzaGwxIHNh
+ cjEgIHNocjEgICBlcXVhbCBpbmVxdWFsIGxlc3MgZ3JlYXRlciBsZXNzRXF1YWwgZ3JlYXRlckVx
+ dWFsIGxvZ2ljYWxBbmQgbG9naWNhbE9yIHVuc2lnbmVkTGVzcyAgdW5zaWduZWRHcmVhdGVyIHVu
+-c2lnbmVkTGVzc0VxdWFsIHVuc2lnbmVkR3JlYXRlckVxdWFsIHBhcml0eSBvZGQgIG5lZwYCAAAB
+-CAAAAGV4YW1wbGVzAgEeAAAAAAMBAAAAMysAAwEAAAAyHwADAQAAADYtAAMBAAAANB8AAwEAAAA1
+-KgADAQAAADUfAAMCAAAAMzIvAAMCAAAAMTAfAQMBAAAAMVwABQoAAAAweDEwMDAwMDAwHwADAgAA
+-ADMyJQADAgAAADEwHwEDAQAAADE6AAUEAAAAMHgxMB8AAwEAAAAzJAADAQAAADIfAAMBAAAANyYA
+-AwEAAAAyHwADAQAAADV8AAMBAAAAMh8AAwEAAAA3XgADAQAAADIfAgQBAAAAMB8AAwEAAAAyWwAD
+-AQAAADIfAAMBAAAAOF0AAwEAAAAzHwEDAQAAADF9AAMCAAAAMjUfAAMBAAAANz0AAwEAAAA3HwAD
+-AQAAADdlAAMBAAAANx8AAwEAAAAyPAADAQAAADMfAAMBAAAAMj4AAwEAAAAzHwADAQAAADlMAAMB
+-AAAAOR8AAwEAAAA5RwADAQAAADkfAAMBAAAAMWEABAEAAAAwHwAEAQAAADBvAAMBAAAAMR8AAwEA
+-AAAxdQAFCgAAADB4ZmZGRmZmRkYfAAMBAAAAMVUABQoAAAAweGZmRkZmZkZGHwEDAQAAADFsAQMB
+-AAAAMh8BAwEAAAAxZwAEAQAAADAfAAMBAAAANCEAAwEAAAAxHwADAQAAADJwAAMBAAAAMR8BBgEA
+-AABhHwD/AAAAaGV4OiAgICAgICAgICAgNSAgIDIgICAxOSAgMyAgICAgZiAgICAgICAgICAgICAg
+-MiAgICAgZiAgICAgICAgOSAgICAgMiA3ICAgNSAgIGZmICA4ICAgIDEgICAgIDdmICAgICAxICAg
+-ICAwICAgICAgIDEgICAgMCAgICAgICAxICAgICAgICAgMSAgICAgICAgICAgIDAgICAgICAgICAg
+-MSAgICAgICAgIDEgICAgICAgICAgICAgMCAgICAgICAgICAgICAgIDAgICAgICAgICAgICAgICAg
+-IDEgICAgICAgICAgICAgICAgICAgIDEgICAgICAxICAgIGZmFwYAAAB3X2FzX2UABgIAAgEJAAAA
+-b3ZlcmZsb3dzAgAAAwEAAAAyJAADAgAAADMxHwIEAAAAODAuLgYCAAIBAAAAAAIAAAMBAAAAMiQA
+-AwIAAAAzMh8CDQAAADAgICAgb3ZlcmZsb3cGAgACAQAAAAACAAADAQAAADIkAAMCAAAAMzMfAhcA
+-AAAwICAgIDEgb3ZlcmZsb3cgbWVzc2FnZQYCAAIBAAAAAAIAAAMBAAAAMVsAAwIAAAAzMR8CBAAA
+-ADgwLi4GAgACAQAAAAACAAADAQAAADFbAAMCAAAAMzIfAg0AAAAwICAgIG92ZXJmbG93BgIAAgEA
+-AAAAAgAABAEAAAAwWwADBAAAADExMTEfAgsAAAAwICAgIGRpcmVjdAYCAAIBAAAAAAIAAAUKAAAA
+-MHg4MDAwMDAwMF0AAwIAAAAzMR8CBAAAAGZmLi4GAgACAQAAAAACAAAFCgAAADB4ODAwMDAwMDBd
+-AAMCAAAAMzIfAgsAAABmZi4uIGRpcmVjdAYCAAIBAAAAAAIAAAUKAAAAMHg0MDAwMDAwMF0AAwIA
+-AAAzMR8CCwAAADAgICAgZGlyZWN0BgIAAgEAAAAAAgAABQoAAAAweDgwMDAwMDAwfQADAgAAADMx
+-HwIBAAAAMQYCAAIBAAAAAAIAAAUKAAAAMHg4MDAwMDAwMH0AAwIAAAAzMh8CCwAAADAgICAgZGly
+-ZWN0BgIAAgEAAAAAAgAABQoAAAAweGZmRkZmZkZFKwADAQAAADEfAgIAAABmZgYCAAIBAAAAAAIA
+-AAUKAAAAMHhmZkZGZmZGRSsAAwEAAAAyHwINAAAAMCAgICBvdmVyZmxvdwYCAAIBAAAAAAIAAAUK
+-AAAAMHg0MDAwMDAwMCoAAwEAAAAyHwICAAAAODAGAgACAQAAAAACAAAFCgAAADB4NDAwMDAwMDAq
+-AAMBAAAANB8CDQAAADAwICAgb3ZlcmZsb3c=
++c2lnbmVkTGVzc0VxdWFsIHVuc2lnbmVkR3JlYXRlckVxdWFsIHBhcml0eSBvZGQgIG5lZwYCAAAA
++AQgAAABleGFtcGxlcwIBHgAAAAADAQAAADMrAAMBAAAAMh8AAwEAAAA2LQADAQAAADQfAAMBAAAA
++NSoAAwEAAAA1HwADAgAAADMyLwADAgAAADEwHwEDAQAAADFcAAUKAAAAMHgxMDAwMDAwMB8AAwIA
++AAAzMiUAAwIAAAAxMB8BAwEAAAAxOgAFBAAAADB4MTAfAAMBAAAAMyQAAwEAAAAyHwADAQAAADcm
++AAMBAAAAMh8AAwEAAAA1fAADAQAAADIfAAMBAAAAN14AAwEAAAAyHwIEAQAAADAfAAMBAAAAMlsA
++AwEAAAAyHwADAQAAADhdAAMBAAAAMx8BAwEAAAAxfQADAgAAADI1HwADAQAAADc9AAMBAAAANx8A
++AwEAAAA3ZQADAQAAADcfAAMBAAAAMjwAAwEAAAAzHwADAQAAADI+AAMBAAAAMx8AAwEAAAA5TAAD
++AQAAADkfAAMBAAAAOUcAAwEAAAA5HwADAQAAADFhAAQBAAAAMB8ABAEAAAAwbwADAQAAADEfAAMB
++AAAAMXUABQoAAAAweGZmRkZmZkZGHwADAQAAADFVAAUKAAAAMHhmZkZGZmZGRh8BAwEAAAAxbAED
++AQAAADIfAQMBAAAAMWcABAEAAAAwHwADAQAAADQhAAMBAAAAMR8AAwEAAAAycAADAQAAADEfAQYB
++AAAAYR8A/wAAAGhleDogICAgICAgICAgIDUgICAyICAgMTkgIDMgICAgIGYgICAgICAgICAgICAg
++IDIgICAgIGYgICAgICAgIDkgICAgIDIgNyAgIDUgICBmZiAgOCAgICAxICAgICA3ZiAgICAgMSAg
++ICAgMCAgICAgICAxICAgIDAgICAgICAgMSAgICAgICAgIDEgICAgICAgICAgICAwICAgICAgICAg
++IDEgICAgICAgICAxICAgICAgICAgICAgIDAgICAgICAgICAgICAgICAwICAgICAgICAgICAgICAg
++ICAxICAgICAgICAgICAgICAgICAgICAxICAgICAgMSAgICBmZhcGAAAAd19hc19lAAYCAAACAQkA
++AABvdmVyZmxvd3MCAAADAQAAADIkAAMCAAAAMzEfAgQAAAA4MC4uBgIAAAIBAAAAAAIAAAMBAAAA
++MiQAAwIAAAAzMh8CDQAAADAgICAgb3ZlcmZsb3cGAgAAAgEAAAAAAgAAAwEAAAAyJAADAgAAADMz
++HwIXAAAAMCAgICAxIG92ZXJmbG93IG1lc3NhZ2UGAgAAAgEAAAAAAgAAAwEAAAAxWwADAgAAADMx
++HwIEAAAAODAuLgYCAAACAQAAAAACAAADAQAAADFbAAMCAAAAMzIfAg0AAAAwICAgIG92ZXJmbG93
++BgIAAAIBAAAAAAIAAAQBAAAAMFsAAwQAAAAxMTExHwILAAAAMCAgICBkaXJlY3QGAgAAAgEAAAAA
++AgAABQoAAAAweDgwMDAwMDAwXQADAgAAADMxHwIEAAAAZmYuLgYCAAACAQAAAAACAAAFCgAAADB4
++ODAwMDAwMDBdAAMCAAAAMzIfAgsAAABmZi4uIGRpcmVjdAYCAAACAQAAAAACAAAFCgAAADB4NDAw
++MDAwMDBdAAMCAAAAMzEfAgsAAAAwICAgIGRpcmVjdAYCAAACAQAAAAACAAAFCgAAADB4ODAwMDAw
++MDB9AAMCAAAAMzEfAgEAAAAxBgIAAAIBAAAAAAIAAAUKAAAAMHg4MDAwMDAwMH0AAwIAAAAzMh8C
++CwAAADAgICAgZGlyZWN0BgIAAAIBAAAAAAIAAAUKAAAAMHhmZkZGZmZGRSsAAwEAAAAxHwICAAAA
++ZmYGAgAAAgEAAAAAAgAABQoAAAAweGZmRkZmZkZFKwADAQAAADIfAg0AAAAwICAgIG92ZXJmbG93
++BgIAAAIBAAAAAAIAAAUKAAAAMHg0MDAwMDAwMCoAAwEAAAAyHwICAAAAODAGAgAAAgEAAAAAAgAA
++BQoAAAAweDQwMDAwMDAwKgADAQAAADQfAg0AAAAwMCAgIG92ZXJmbG93
+--- ocompiler-1.orig/tests/.expected/primsec.oc.x.txt
++++ ocompiler-1/tests/.expected/primsec.oc.x.txt
+@@ -1,5 +1,5 @@
+-AwMGAgAEAAEAAABhAgAABAEAAAAwHwgAAAABAAAAYQBFAAADAQAAADEfCAAAAAEAAABhACsAAAMB
+-AAAAMh8IAAAAAQAAAGEALQAAAwEAAAAzHwgAAAABAAAAYQAqAAADAQAAADQfCAAAAAEAAABhAC8A
+-AAMBAAAANR8IAAAAAQAAAGEAJQAAAwEAAAA2HwgAAAABAAAAYQAmAAADAQAAADcfCAAAAAEAAABh
+-AHwAAAMBAAAAOB8IAAAAAQAAAGEAXgMAAQAAAGECAAAAAgAAAAEAAABhAAIAAAABAAAAYQAIAAAA
+-AQAAAGEAXgMBAQAAAGECAAAAAgAAAAEAAABhAAIAAAABAAAAYQA=
++AwMGAgAABAABAAAAYQIAAAQBAAAAMB8IAAAAAQAAAGEARQAAAwEAAAAxHwgAAAABAAAAYQArAAAD
++AQAAADIfCAAAAAEAAABhAC0AAAMBAAAAMx8IAAAAAQAAAGEAKgAAAwEAAAA0HwgAAAABAAAAYQAv
++AAADAQAAADUfCAAAAAEAAABhACUAAAMBAAAANh8IAAAAAQAAAGEAJgAAAwEAAAA3HwgAAAABAAAA
++YQB8AAADAQAAADgfCAAAAAEAAABhAF4DAAEAAABhAgAAAAIAAAABAAAAYQACAAAAAQAAAGEACAAA
++AAEAAABhAF4DAQEAAABhAgAAAAIAAAABAAAAYQACAAAAAQAAAGEA
+--- ocompiler-1.orig/tests/.expected/sizeoffn.oc.x.txt
++++ ocompiler-1/tests/.expected/sizeoffn.oc.x.txt
+@@ -1,16 +1,17 @@
+-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
++ADAf
+--- ocompiler-1.orig/tests/.expected/sizeofvar.oc.x.txt
++++ ocompiler-1/tests/.expected/sizeofvar.oc.x.txt
+@@ -1,16 +1,16 @@
+-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
+--- ocompiler-1.orig/tests/.expected/template.oc.x.txt
++++ ocompiler-1/tests/.expected/template.oc.x.txt
+@@ -1,18 +1,18 @@
+-AwMGAgEEAAEAAAB4AQADAQAAADEfBgIBBAABAAAAeQEAAwEAAAAxHwUEAAAAZmlsZQAAAAAABgIB
+-BAAEAAAAcGF0aAEAAwEAAAAxHwYCAQQABQAAAGxpbmVzAQADAQAAADEfBgIBAgABAAAAYQEAAwEA
+-AAAxHwgAAAAFAAAAbGluZXMARQIAAQAFAAAAbGluZXMAAQQAAABmaWxlBQAAAGxpbmVzAAgAAQEE
+-AAAAZmlsZQUAAABsaW5lcwAABQAAAGxpbmVzAEUCAAAABQAAAGxpbmVzABEFBAAAAGxpbmUAAAAA
+-AAYCAQIAAQAAAGEBAAMBAAAAMR8RBQQAAABtYWluAwACAAAAAQcBAAAAAAEHAAEAAABjBgEHAQAA
+-AAABAAMBAAAAMR8GAQcAAQAAAG4BAAMBAAAAMR8GAQcAAgAAAG5uAQADAQAAADEfBgIABAEAAAAA
+-AgAABQQAAAAweDc3HwYCAAQABAAAAHRlc3QBAAMBAAAAMR8aBgIABAAFAAAAdGVzdDIBAAMBAAAA
+-MR8aBgIAAgABAAAAYQEAAwEAAAAxHwYBBAADAAAAYXV4AAQAAAB0ZXN0BgIABAAHAAAAYXV4ZGF0
+-YQAEAAAAdGVzdAgAAQAEAAAAdGVzdAABBAAAAGZpbGUBAAAAYQBFAAADAQAAADQfCAABAAQAAAB0
+-ZXN0AAEEAAAAbGluZQEAAABhAEUAAAMBAAAANB8IAAEAAQAAAG4AAQQAAABtYWluAQAAAG4ARQAA
+-AwEAAAA0HwgAAQABAAAAbgABBAAAAG1haW4BAAAAYwArAAADAQAAADQfCAABAAQAAAB0ZXN0AAEE
+-AAAAbWFpbgEAAAB5AEUAAAMBAAAANB8IAAEABAAAAHRlc3QAAAEAAAB5ACsAAAMBAAAANB8IAAEA
+-BAAAAHRlc3QAAQQAAABtYWluBAAAAHRlc3QAKwAAAwEAAAA0HwgAAQAEAAAAdGVzdAAABAAAAHRl
+-c3QAKwAAAwEAAAA0HwASAAAAbm90IHRoaXMgcmlnaHQgbm93ABEAAABzZXQgYXV4IzpmaWxlLmEg
+-NAgAAQAHAAAAYXV4ZGF0YQEBBAAAAGZpbGUBAAAAYQBFAAADAQAAADQfCAABAAMAAABhdXgBAQQA
+-AABmaWxlBAAAAHBhdGgARQAAAwEAAAAyHwgAAQADAAAAYXV4AQEEAAAAZmlsZQUAAABsaW5lcwAr
+-AAADAQAAADIfCAAAAAQAAAB0ZXN0ACsCAAAABQAAAHRlc3QyAAgAAAAEAAAAdGVzdAArAgAAAAIA
+-AABubgAHAAIAAAAEAAAAdGVzdAACAgAAADI4
++AwMGAgEABAABAAAAeAEAAwEAAAAxHwYCAQAEAAEAAAB5AQADAQAAADEfBQQAAABmaWxlAAAAAAAG
++AgEABAAEAAAAcGF0aAEAAwEAAAAxHwYCAQAEAAUAAABsaW5lcwEAAwEAAAAxHwYCAQACAAEAAABh
++AQADAQAAADEfCAAAAAUAAABsaW5lcwBFAgABAAUAAABsaW5lcwABBAAAAGZpbGUFAAAAbGluZXMA
++CAABAQQAAABmaWxlBQAAAGxpbmVzAAAFAAAAbGluZXMARQIAAAAFAAAAbGluZXMAEQUEAAAAbGlu
++ZQAAAAAABgIBAAIAAQAAAGEBAAMBAAAAMR8RBQQAAABtYWluAwACAAAAAQcBAAAAAAEHAAEAAABj
++BgEHAQAAAAABAAMBAAAAMR8GAQcAAQAAAG4BAAMBAAAAMR8GAQcAAgAAAG5uAQADAQAAADEfBgIA
++AAQBAAAAAAIAAAUEAAAAMHg3Nx8GAgAABAAEAAAAdGVzdAEAAwEAAAAxHxoGAgAABAAFAAAAdGVz
++dDIBAAMBAAAAMR8aBgIAAAIAAQAAAGEBAAMBAAAAMR8GAQQAAwAAAGF1eAAEAAAAdGVzdAYCAAAE
++AAcAAABhdXhkYXRhAAQAAAB0ZXN0CAABAAQAAAB0ZXN0AAEEAAAAZmlsZQEAAABhAEUAAAMBAAAA
++NB8IAAEABAAAAHRlc3QAAQQAAABsaW5lAQAAAGEARQAAAwEAAAA0HwgAAQABAAAAbgABBAAAAG1h
++aW4BAAAAbgBFAAADAQAAADQfCAABAAEAAABuAAEEAAAAbWFpbgEAAABjACsAAAMBAAAANB8IAAEA
++BAAAAHRlc3QAAQQAAABtYWluAQAAAHkARQAAAwEAAAA0HwgAAQAEAAAAdGVzdAAAAQAAAHkAKwAA
++AwEAAAA0HwgAAQAEAAAAdGVzdAABBAAAAG1haW4EAAAAdGVzdAArAAADAQAAADQfCAABAAQAAAB0
++ZXN0AAAEAAAAdGVzdAArAAADAQAAADQfABIAAABub3QgdGhpcyByaWdodCBub3cAEQAAAHNldCBh
++dXgjOmZpbGUuYSA0CAABAAcAAABhdXhkYXRhAQEEAAAAZmlsZQEAAABhAEUAAAMBAAAANB8IAAEA
++AwAAAGF1eAEBBAAAAGZpbGUEAAAAcGF0aABFAAADAQAAADIfCAABAAMAAABhdXgBAQQAAABmaWxl
++BQAAAGxpbmVzACsAAAMBAAAAMh8IAAAABAAAAHRlc3QAKwIAAAAFAAAAdGVzdDIACAAAAAQAAAB0
++ZXN0ACsCAAAAAgAAAG5uAAcAAgAAAAQAAAB0ZXN0AAICAAAAMjg=
+--- ocompiler-1.orig/tests/.expected/unref.oc.x.txt
++++ ocompiler-1/tests/.expected/unref.oc.x.txt
+@@ -1,3 +1,3 @@
+-AwMEAAcAAAB1bnJlZi5oAAYAAQAAAGICAAADAQAAADEfBQEAAABhAAAAAAAGAgECAAEAAABjAQAD
+-AQAAADEfBgIBAgABAAAAZAEAAwEAAAAxHxEFBAAAAG1haW4DAAAAAAAHAAIAAAEBAAAAYQEAAABk
+-AA==
++AwMEAAcAAAB1bnJlZi5oAAYAAQAAAGICAAADAQAAADEfBQEAAABhAAAAAAAGAgEAAgABAAAAYwEA
++AwEAAAAxHwYCAQACAAEAAABkAQADAQAAADEfEQUEAAAAbWFpbgMAAAAAAAcAAgAAAQEAAABhAQAA
++AGQA
+--- ocompiler-1.orig/tests/.expected/unref2.oc.x.txt
++++ ocompiler-1/tests/.expected/unref2.oc.x.txt
+@@ -1,3 +1,3 @@
+-AwMEAAcAAAB1bnJlZi5oAAYAAQAAAGICAAADAQAAADEfBQEAAABhAAAAAAAGAgECAAEAAABjAQAD
+-AQAAADEfBgIBAgABAAAAZAEAAwEAAAAxHxEJAAABAAAAYQIAAAAAAAYBAAAAYh8CAAABAQAAAGEB
+-AAAAYwA=
++AwMEAAcAAAB1bnJlZi5oAAYAAQAAAGICAAADAQAAADEfBQEAAABhAAAAAAAGAgEAAgABAAAAYwEA
++AwEAAAAxHwYCAQACAAEAAABkAQADAQAAADEfEQkAAAEAAABhAgAAAAAABgEAAABiHwIAAAEBAAAA
++YQEAAABjAA==
+--- ocompiler-1.orig/tests/a
++++ ocompiler-1/tests/a
+@@ -50,7 +50,8 @@ if [ -z "${ex}" ]; then
+ 		logs+=" ${f}.oc.log"
+ 		objs+=" ${f}.o"
+ 	done
+-	${OLINK} ${logs} || exit 1
++	${launcher} ${OLINK} ${logs} || exit 1
++	echo
+ 
+ 	if [ -n "${onlycomp}" ]; then exit 0; fi
+ 
+@@ -58,9 +59,10 @@ if [ -z "${ex}" ]; then
+ 		if [ -z "${old}" ]; then
+ 			cc ${objs}
+ 		else
+-			ld ${objs} --entry main --dynamic-linker=/lib/ld-linux.so.2 -m elf_i386 -o a.out -lc
++			if [ -z "${LD}" ]; then LD=ld; fi
++			${LD} ${objs} --entry main --dynamic-linker=/lib/ld-linux.so.2 -m elf_i386 -o a.out -lc
+ 		fi
+-		if [ -z "${edb}" ]; then ./a.out
++		if [ -z "${edb}" ]; then ${launcher} ./a.out
+ 		else edb --run a.out
+ 		fi
+ 	else
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -13,12 +13,23 @@ orphan off
+ char c1=1
+ char c2={2,3}
+ char c3="45"
++word c5=1;data c6=1;str c7=1;value c8=1
++vstr c9="";vword ca=1;vdata cb=1
++char cc="\taz"^
++
++const a1=1
++
+ char a#3
+ value b^a
+ 
+ function intern(data a,sd b,sv c) #commenting
+ 	return c
+ end
++function f()
++	if 2=2
++		ret
++	end
++end
+ 
+ library "a"
+ import "b" puts
+@@ -52,7 +63,8 @@ end
+ whiletrue
+ 	break
+ end
+-ret
++
+ aftercall *tst
+ override x_file 1
+ i3
++exit 2
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -100,7 +100,9 @@ else
+ 	done
+ 
+ 	#remoce cc output, will be different, based on distribution/architecture
+-	rm ./cc
++	if [ -e ./cc ]; then
++		rm ./cc
++	fi
+ 
+ 	#remove base64 troubles #or remove them after diff
+ 	cd ${e}
+--- /dev/null
++++ ocompiler-1/tests/chars.oc
+@@ -0,0 +1,27 @@
++
++format elfobj
++
++char a=0xff
++chars b=-1
++
++importx "puts" puts
++
++function signs(charx a,charxs b)
++	if a!=0xFFffFFff
++		call puts("ok")
++	end
++	if b=-1
++		call puts("ok")
++	end
++end
++
++entry main()
++if a!=-1
++	call puts("ok")
++end
++if b=-1
++	call puts("ok")
++end
++call signs(0xff,0xff)
++importx "exit" exit
++call exit(0)
+--- ocompiler-1.orig/tests/include.h
++++ ocompiler-1/tests/include.h
+@@ -1 +1 @@
+-#not blank for deb pack. char *="1\03" is not working (src->binary is creating fuzz at deb)
++
+--- /dev/null
++++ ocompiler-1/tests/r
+@@ -0,0 +1,2 @@
++
++launcher=q old=1 LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd ./a $@
