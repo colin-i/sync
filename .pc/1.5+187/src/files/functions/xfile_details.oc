@@ -1,0 +1,363 @@
+
+#err
+function xfile_add_declare_if(sd decltype,sd is_stack,sd is_expand,sd is_signed,ss content,sd size,sd sign,sd reloc,sd relocx)
+	if main.xfile!=(openno)
+		sd err
+		if decltype=(Xfile_decltype_const)
+			setcall err xfile_add_char((Xfile_declfield_const))
+		else
+			if is_stack=(TRUE)
+				setcall err xfile_add_char((Xfile_declfield_stack))
+			else
+				setcall err xfile_add_char((Xfile_declfield_data))
+				if err=(noerror)
+					if is_expand=(TRUE)
+						setcall err xfile_add_char((Xfile_declfield_data_expand))
+					else
+						setcall err xfile_add_char((Xfile_declfield_data_concrete))
+					endelse
+					if err=(noerror)
+						if is_signed=(Xfile_declext_no)
+							setcall err xfile_add_char((Xfile_declext_no))
+						else
+							setcall err xfile_add_char((Xfile_declext_yes))
+						endelse
+					endif
+				endif
+			endelse
+			if err=(noerror)
+				setcall err xfile_add_char(decltype)
+				if err=(noerror)
+					if content#=(throwlesssign)
+						setcall err xfile_add_char((Xfile_declfeature_throwless))
+						call stepcursors(#content,#size)
+					elseif content#=(unrefsign)
+						setcall err xfile_add_char((Xfile_declfeature_unref))
+						call stepcursors(#content,#size)
+					else
+						setcall err xfile_add_char((Xfile_declfeature_normal))
+					endelse
+				endif
+			endif
+		endelse
+		if err=(noerror)
+			setcall err xfile_add_string(content,size)
+			if sign!=(sign_not_required)
+				if err=(noerror)
+					if sign=(assignsign)
+						if reloc=(FALSE)
+							setcall err xfile_add_char((Xfile_declsign_equal))
+						elseif relocx=(FALSE)
+							setcall err xfile_add_char((Xfile_declsign_ereloc))
+						else
+							setcall err xfile_add_char((Xfile_declsign_erelocx))
+						endelse
+					elseif sign=(reservesign)
+						setcall err xfile_add_char((Xfile_declsign_reserve))
+					elseif sign=(pointersigndeclare)
+						setcall err xfile_add_char((Xfile_declsign_pointer))
+					else
+					#if sign==(nosign) reserve
+						setcall err xfile_add_char((Xfile_declsign_reserve))
+					endelse
+				endif
+			endif
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_fndef_if(sd content,sd sz,sd fn,sd x_or_not_x,sd varargs)
+	if main.xfile!=(openno)
+		sd err
+		setcall err xfile_add_base((Xfile_functiondef),content,sz)
+		if err=(noerror)
+			setcall err xfile_add_char(fn)
+			if err=(noerror)
+				if x_or_not_x!=(Xfile_function_not_x)
+					if varargs=0
+						setcall err xfile_add_char((Xfile_function_e_normal))
+					else
+						setcall err xfile_add_char((Xfile_function_e_varargs))
+					endelse
+				endif
+			endif
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+#err
+function xfile_fndef_struct_if()
+	if main.xfile!=(openno)
+		sd err
+		setcall main.xstruct tellfile(main.xfile,#err)
+		if main.xstruct!=(unierror)
+			set main.xstruct_dreg main.datasecSize ##also need to differentiate from a dummy function
+
+			setcall err xfile_add_char((Xfile_function_tintern_normal))
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+function xfile_fndef_structstart_if()
+	if main.xfile!=(openno)
+		value code%%ptr_codesec
+		call getcontReg(code,#main.xstruct_reg)
+	endif
+endfunction
+function xfile_fndef_structend_if()
+	if main.xstruct!=(unierror)
+		datax reg#1
+		value code%%ptr_codesec
+		call getcontReg(code,#reg)
+		if reg=main.xstruct_reg
+			if main.xstruct_dreg=main.datasecSize
+				call lseek(main.xfile,main.xstruct,(SEEK_SET))
+				char a=Xfile_function_tintern_struct
+				call write(main.xfile,#a,1)
+				call lseek(main.xfile,0,(SEEK_END)) #what if on extra? will return -1 but will move. to test, a next SEEK_CUR will be -1, and write?
+			endif
+		endif
+		set main.xstruct (unierror)
+	endif
+endfunction
+
+#err
+function xfile_add_varsufix_if(sd content,sd size,sd sufix,sd cast)
+	if main.xfile!=(openno)
+		sd err;setcall err xfile_add_string(content,size)
+		if err=(noerror)
+			setcall err xfile_add_char(sufix)
+			if sufix=(Xfile_suffix_true)
+				if err=(noerror)
+					setcall err xfile_add_char(cast)
+				endif
+			endif
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+
+data xf_commas#1;data xf_pos#1
+#err
+function xfile_prepare_commas_if()
+	if main.xfile!=(openno)
+		sd err
+		setcall main.xf_pos tellfile(main.xfile,#err)
+		if main.xf_pos=(unierror)
+			return err
+		endif
+	endif
+	set main.xf_commas 0  # outside if? is used at var size for declare
+	return (noerror)
+endfunction
+function xfile_inc_commas()#_if()         same as prepare_commas
+	#if main.xfile!=(openno)            same
+	inc main.xf_commas
+	#endif
+endfunction
+#err
+function xfile_add_commas_if()
+	if main.xfile!=(openno)
+		sd err
+		sd off;setcall off tellfile(main.xfile,#err)
+		if off=(unierror);return err;endif
+		sub off main.xf_pos
+		sd mem
+		setcall err mem_alloc(off,#mem)
+		if err=(noerror)
+			sd sz
+			setcall sz lseek(main.xfile,main.xf_pos,(SEEK_SET)) #no err? is safe to seek back.
+			call read(main.xfile,mem,off)                       #same approach
+			call lseek(main.xfile,main.xf_pos,(SEEK_SET))       #
+			setcall err xfile_add_int(main.xf_commas)           #err on back write? smallest write is hex : where : is only 3 bytes, here are 4
+			if err=(noerror)
+				setcall err writefile_errversion(main.xfile,mem,off)
+			endif
+			call free(mem)
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+#err
+function xfile_add_commas_interncall_if(sd content,sd size,sd sz)
+	if main.xfile!=(openno)
+		sd p;setcall p nr_of_args_64need_p_get();set p# 0
+		sd err
+		SetCall err enumcommas(#content,#size,sz,(FALSE),(pass_calls)) #there are 6 more arguments but are not used
+		if err=(noerror)
+			setcall err xfile_add_int(p#)
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_call_if(sd content,sd size,sd subtype)
+	if main.xfile!=(openno)
+		sd err
+		and subtype (x_callx_flag|x_callg_flag)
+		if subtype=0
+			setcall err xfile_add_char((Xfile_arg_call_normal)) #not forced extern
+		elseif subtype=(x_callx_flag)
+			setcall err xfile_add_char((Xfile_arg_call_extern)) #forced extern
+		elseif subtype=(x_callg_flag)
+			setcall err xfile_add_char((Xfile_arg_call_skipaftercall))
+		else
+		#if subtype!0
+			setcall err xfile_add_char((Xfile_arg_call_extern|Xfile_arg_call_skipaftercall))
+		endelse
+		if err=(noerror)
+			setcall err xfile_add_string(content,size)
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+#err
+function xfile_add_callret(sd action,sd subtype)
+	sd err
+
+	setcall err xfile_add_char(action)
+	if err=(noerror)
+		#this can go also with primsec with a test against CALL_primsec, add that flag at getcommand, but still there is a wrong cosmetic at subtype_test=0 and not subtype_test=CALL_primsec in a case
+		setcall subtype callret_flag(subtype)
+		if subtype=0
+			setcall err xfile_add_char((Xfile_call_normal))
+		else
+			setcall err xfile_add_char((Xfile_call_ret))
+		endelse
+	endif
+
+	return err
+endfunction
+#err
+function xfile_add_callret_if(sd action,sd subtype)
+	if main.xfile!=(openno)
+		sd err
+		setcall err xfile_add_callret(action,subtype)
+		return err
+	endif
+	return (noerror)
+endfunction
+#err
+function xfile_add_callret_ifif(sd action,sd subtype)
+	if main.parses=(pass_write)
+		sd err
+		setcall err xfile_add_callret_if(action,subtype)
+		return err
+	endif
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_end_if()
+	sd err;setcall err xfile_add_char_if((Xfile_end));return err
+endfunction
+#err
+function xfile_add_end_ifif()
+	if main.parses=(pass_write)
+		sd err;setcall err xfile_add_end_if();return err
+	endif
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_format_if(sd format,sd ignore)
+	if main.xfile!=(openno)
+		sd err
+		setcall err xfile_add_char((Xfile_format))
+		if err=(noerror)
+			if format=(elf_unix)
+				sd ptrobject%ptrobject
+				if ptrobject#=(TRUE)
+					sd b;setcall b is_for_64()
+					if b=(TRUE)
+						if ignore=(FALSE)
+							setcall err xfile_add_char((Xfile_format_elfobj64))
+						else
+							setcall err xfile_add_char((Xfile_format_elfobj64ig))
+						endelse
+					else
+						if ignore=(FALSE)
+							setcall err xfile_add_char((Xfile_format_elfobj))
+						else
+							setcall err xfile_add_char((Xfile_format_elfobjig))
+						endelse
+					endelse
+				else
+					setcall err xfile_add_char((Xfile_format_elf))
+				endelse
+			else
+				setcall err xfile_add_char((Xfile_format_exe))
+			endelse
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_import_if(sv pcontent,sd psize,sd subtype)
+	if main.xfile!=(openno)
+		sd err
+		setcall err xfile_add_char((Xfile_import))
+		if err=(noerror)
+			setcall err xfile_add_char(subtype)
+			if err=(noerror)
+				Datax impquotsz#1
+				Datax impescapes#1
+				Call quotinmem_noerr(pcontent,psize,#impquotsz,#impescapes) #the spelling errors were at pass init
+				setcall err addtosecstresc_xfile(pcontent,psize,impquotsz,impescapes,main.ptrtempdata)
+				if err=(noerror)
+					Call spaces(pcontent,psize)
+					sd imp_size;setcall imp_size find_whitespaceORcomment(pcontent#,psize#)
+					setcall err xfile_add_string(pcontent#,imp_size) #not a spelling error
+					call advancecursors(pcontent,psize,psize#) #,imp_size  spelling was at pass_init
+				endif
+			endif
+		endif
+		return err
+	endif
+	call advancecursors(pcontent,psize,psize#)
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_library_if(sv pcontent,sd psize)
+	if main.xfile!=(openno)
+		sd err
+		setcall err xfile_add_char((Xfile_library))
+		if err=(noerror)
+			Datax impquotsz#1
+			Datax impescapes#1
+			Call quotinmem_noerr(pcontent,psize,#impquotsz,#impescapes) #the spelling errors were at pass init
+			setcall err addtosecstresc_xfile(pcontent,psize,impquotsz,impescapes,main.ptrtempdata)
+			#here a low chances error, not a spelling error, spelling was at pass init
+			call advancecursors(pcontent,psize,psize#)
+		endif
+		return err
+	endif
+	call advancecursors(pcontent,psize,psize#)
+	return (noerror)
+endfunction
+
+#err
+function xfile_add_override_if(sd name,sd size,sd value)
+	if main.xfile!=(openno)
+		sd err
+		setcall err xfile_add_base((Xfile_override),name,size)
+		if err=(noerror)
+			setcall err xfile_add_char(value)
+		endif
+		return err
+	endif
+	return (noerror)
+endfunction

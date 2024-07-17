@@ -1,0 +1,511 @@
+
+importx "fseek" fseek
+importx "ftell" ftell
+importx "rewind" rewind
+importx "malloc" malloc
+importx "fread" fread
+importx "free" free
+importx "fwrite" fwrite
+
+importx "strchr" strchr
+importx "printf" printf
+importx "fprintf" fprintf
+
+const SEEK_SET=0
+const SEEK_CUR=1
+const SEEK_END=2
+
+const FALSE=0
+const TRUE=1
+
+include "xfile.h"
+#const Xfile_last=Xfile_line
+const Xfile_aftercall_declarative=Xfile_aftercall_import # less or equal
+const Xfile_cond_first=Xfile_cond_greatequalunsign
+include "ascii.h"
+
+include "mem.oc"
+
+datax result#1
+
+function loop(sd pointer,sd delim,sd output)
+	valuex bp#1
+	base bp
+
+	charx allowwrite#1
+	set allowwrite (TRUE)
+	charx directwrite#1
+	set directwrite (TRUE)
+	valuex function_start#1
+	set function_start (NULL)
+
+	add delim pointer
+	while pointer!=delim
+		charx command#1;call get_char(#pointer,#command)
+		#if command>(Xfile_last);call puts("Error");break;end
+		value Xfile_comment^comment
+		value *Xfile_commentmulti^commentmulti
+		value *Xfile_commentlineend^commentlineend
+		value *Xfile_format^format
+		value *Xfile_include^include
+		value *Xfile_functiondef^functiondef
+		value *Xfile_declare^declare
+		value *Xfile_action^action
+		value *Xfile_action2^action2
+		value *Xfile_call^call
+		value *Xfile_callex^callex
+		value *Xfile_if^if
+		value *Xfile_else^else
+		value *Xfile_while^while
+		value *Xfile_whiletrue^whiletrue
+		value *Xfile_break^break
+		value *Xfile_continue^continue
+		value *Xfile_end^end
+		value *Xfile_ret^ret
+		value *Xfile_library^library
+		value *Xfile_import^import
+		value *Xfile_aftercall^aftercall
+		value *Xfile_hex^hex
+		value *Xfile_override^override
+		value *Xfile_orphan^orphan
+		value *Xfile_interrupt^interrupt
+		value *Xfile_line^line
+		mult command :
+		sv dest^Xfile_comment;add dest command
+		set dest dest#
+		call dest(output,#pointer)
+	end
+end
+
+#exit
+function preloop(sd input,sd output)
+	set main.result (EXIT_FAILURE)
+	sd a;set a fseek(input,0,(SEEK_END)) #on 32 can be -1 return error
+	if a=0
+		sd size;set size ftell(input) #is still same place if file deleted in parallel
+		#if size!=-1  #lseek and same result (remark fileno)
+		call rewind(input)
+		sd buffer;set buffer malloc(size)
+		if buffer!=(NULL)
+			sd r;set r fread(buffer,size,1,input)
+			if r=1
+				set r mems()
+				if r=(TRUE)
+					set main.result (EXIT_SUCCESS)
+					call loop(buffer,size,output)
+					if main.result=(EXIT_SUCCESS)
+						callg end(output)
+					end
+					call memfree()
+				end
+			end
+			call free(buffer)
+		end
+	end
+	return main.result
+end
+
+function get_char(sv pbuffer,ss pchar)
+	ss buffer;set buffer pbuffer#
+	set pchar# buffer#
+	add pbuffer# (Xfile_sz_char)
+end
+
+function get_data(sv pbuffer,sd pdata)
+	sd buffer;set buffer pbuffer#
+	set pdata# buffer#
+	add pbuffer# (Xfile_sz_int)
+end
+
+function get_string(sv pbuffer,sd psize,sv ppointer)
+	call get_data(pbuffer,psize)
+	set ppointer# pbuffer#
+	add pbuffer# psize#
+end
+
+function unimplemented_start(ss com)
+	call printf("Unimplemented command: %s\n",com)
+	set loop.allowwrite (FALSE)
+end
+function unimplemented_end()
+	set loop.allowwrite (TRUE)
+end
+
+function aftercallenable()
+	set main.result (EXIT_FAILURE)
+	leave loop.bp
+	#aftercallenable
+end
+
+#aftercalli *
+
+function unimplemented()
+	call puts("unimplemented")
+	call aftercallenable()
+end
+
+function write_long(sd outfile,sd pointer,sd size)
+const write_long_cast_start=\
+	char a="long"^
+	char point=asciiasterisk
+const write_long_cast=\-write_long_cast_start
+	call write(outfile,#a,(write_long_cast))
+	callg write(outfile,pointer,size)
+end
+
+function comment(sd outfile,sv pbuffer)
+	char a="//"^
+	call write(outfile,#a,2)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	callg writen(outfile,pointer,sz)
+end
+
+include "action.oc"
+include "decl.oc"
+include "var.oc"
+include "number.oc"
+
+function commentmulti(sd outfile,sv pbuffer)
+	char b=asciiasterisk
+	char a="/*"^
+	call write(outfile,#a,2)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	call write(outfile,pointer,sz)
+	callg writen(outfile,#b,2)
+end
+function commentlineend(sd outfile,sv pbuffer)
+	call fseek(outfile,-1,(SEEK_CUR)) #this one and line command
+	callg comment(outfile,pbuffer)
+end
+function format(sd *outfile,sv pbuffer) #will do nothing at the moment
+	charx fmt#1;call get_char(pbuffer,#fmt)
+end
+function include(sd outfile,sv pbuffer)
+	charx type#1;call get_char(pbuffer,#type)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+
+	char a="#include \""^
+	call write(outfile,#a,\.a)
+	call write(outfile,pointer,sz)
+	call writeq(outfile)
+	call writenl(outfile)
+
+	charx alternative#1;call get_char(pbuffer,#alternative)
+	if alternative=(Xfile_include_alternative_yes)
+		call get_string(pbuffer,#sz,#pointer)
+	end
+end
+function functiondef(sd outfile,sv pbuffer)
+	set loop.function_start ftell(outfile)
+	if loop.function_start!=-1
+		datax sz#1;valuex pointer#1
+		call get_string(pbuffer,#sz,#pointer)
+		call write_void(outfile,pointer,sz)
+		call writel(outfile)
+		value intern^functiondef_intern
+		value *raw^functiondef_raw
+		value *extern^functiondef_extern
+		value *entry^functiondef_extern     #functiondef_entry
+		charx type#1;call get_char(pbuffer,#type)
+		mult type :
+		sv dest^intern;add dest type
+		set dest dest#
+		call dest(pbuffer,outfile)
+		call writer(outfile)
+		callg writecln(outfile)
+		ret
+	end
+	call aftercallenable()
+end
+function declare(sd outfile,sv pbuffer)
+	charx type#1;charx field#1
+	call decl(pbuffer,outfile,#field,#type)
+	datax sz#1;valuex pointer#1
+	charx sign#1;call get_char(pbuffer,#sign)
+	if sign=(Xfile_declsign_reserve)
+		call writesl(outfile)
+		call number(pbuffer,outfile)
+		call writesr(outfile)
+	elseif sign=(Xfile_declsign_pointer)
+		call get_string(pbuffer,#sz,#pointer)
+	else #Xfile_declsign_e*
+		charx mode#1;call get_char(pbuffer,#mode)
+		if mode=(Xfile_declmode_value)
+			if field!=(Xfile_declfield_const)
+				call writee(outfile)
+			else
+				call writes(outfile)
+			end
+			call number(pbuffer,outfile)
+		elseif mode=(Xfile_declmode_group)
+			call writeslsr(outfile)
+			call writee(outfile)
+			call writecl(outfile)
+			datax args#1;call get_data(pbuffer,#args)
+			call number(pbuffer,outfile)
+			sd n=1;while n!=args
+				call writec(outfile)
+				call number(pbuffer,outfile)
+				inc n
+			end
+			call writecr(outfile)
+		else #Xfile_declmode_string
+			if type=(Xfile_decltype_byte)
+				call writeslsr(outfile)
+			end
+			call writee(outfile)
+			call get_string(pbuffer,#sz,#pointer)
+			charx trim#1;call get_char(pbuffer,#trim)
+			if trim=(Xfile_declmode_string_pop_yes)
+				call write_popstring(pointer,sz,outfile)
+				if type!=(Xfile_decltype_byte) #why check here and not above? to let popstring to be normal and check for 0 size and write to file (is more easy at debug)
+					call unimplemented() # char*={'a','b','c',0} is not "abc" ,downgrade to char? the sizeof and pointers then
+				end
+			else
+				call write_string(pointer,sz,outfile)
+			end
+		end
+	endelse
+	if field!=(Xfile_declfield_const)
+		call writet(outfile)
+	end
+	callg writenl(outfile)
+end
+function action(sd outfile,sv pbuffer)
+	charx act#1;call get_char(pbuffer,#act)
+	call action1(act,pbuffer,outfile)
+	callg writetn(outfile)
+end
+function action2(sd outfile,sv pbuffer)
+	sd replay;set replay pbuffer#
+	call varfunc(pbuffer,outfile)
+
+	call writee(outfile)
+
+	charx a2#1;call get_char(pbuffer,#a2)
+	if a2!=(Xfile_action2_set)
+		if a2=(Xfile_action2_divu)
+			set a2 (Xfile_action2_div)
+		elseif a2=(Xfile_action2_remu)
+			set a2 (Xfile_action2_rem)
+		end
+		call write_longcast(outfile,#replay)
+		call write(outfile,#a2,1)
+	end
+
+	call arg(pbuffer,outfile)
+	callg writetn(outfile)
+end
+function call(sd outfile,sv pbuffer)
+	char c#1;call get_char(pbuffer,#c)
+	call cll(pbuffer,outfile)
+	callg writetn(outfile)
+end
+function callex(sd *outfile,sv pbuffer)
+	call unimplemented_start("callex")  #at some structures is complicated
+	char c#1;call get_char(pbuffer,#c)
+	call cal(pbuffer) #,outfile
+	call varfunc(pbuffer) #,outfile
+	call arg(pbuffer) #,outfile
+	call writetn() #outfile
+	call unimplemented_end()
+end
+function if(sd outfile,sv pbuffer)
+	char a="if"^
+	call write(outfile,#a,\.a)
+	callg cond(pbuffer,outfile)
+end
+function else()
+end
+function while(sd outfile,sv pbuffer)
+	char a="while"^
+	call write(outfile,#a,\.a)
+	callg cond(pbuffer,outfile)
+end
+function whiletrue(sd outfile)
+	callg writen(outfile,"{",1)
+end
+function break()
+end
+function continue()
+end
+function end(sd outfile)
+	call writecr(outfile)
+	callg writenl(outfile)
+end
+function ret(sd outfile)
+	call write(outfile,#action_areturn.a,\action_areturn.a-1)
+	callg writetn(outfile)
+end
+function library(sd *outfile,sv pbuffer)
+	datax sz#1;valuex lib#1
+	call get_string(pbuffer,#sz,#lib)
+end
+function import(sd outfile,sv pbuffer)
+	charx imp#1;call get_char(pbuffer,#imp)
+	datax sz#1;valuex name#1
+	call get_string(pbuffer,#sz,#name)
+	datax sza#1;valuex alias#1
+	call get_string(pbuffer,#sza,#alias)
+
+	call write_long(outfile,alias,sza)
+	char a="()"^
+	call write(outfile,#a,2)
+	callg writetn(outfile)
+end
+function aftercall(sd *outfile,sv pbuffer)
+	charx acall#1;call get_char(pbuffer,#acall)
+	if acall<=(Xfile_aftercall_declarative)
+		if acall=(Xfile_aftercall_declare)
+			charx feature#1;call get_char(pbuffer,#feature)
+			datax sz#1;valuex vr#1
+			call get_string(pbuffer,#sz,#vr)
+		end
+	end
+end
+function hex(sd *outfile,sv pbuffer)
+	call unimplemented_start("hex")
+	datax args#1;call get_data(pbuffer,#args)
+	sd n=0;while n!=args
+		call number(pbuffer) #,outfile
+		inc n
+	end
+	call unimplemented_end()
+end
+function override(sd *outfile,sv pbuffer)
+	datax sz#1;valuex name#1
+	call get_string(pbuffer,#sz,#name)
+	charx value#1;call get_char(pbuffer,#value)
+end
+function orphan(sd *outfile,sv pbuffer)
+	charx orph#1;call get_char(pbuffer,#orph)
+end
+function interrupt(sd outfile)
+	#this is not arm #char a="__asm__(\"int $3\");"
+	#this is no x86 #__asm__("BKPT");
+	char a="__builtin_trap();"^
+	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+	callg writen(outfile,#a,\.a)
+end
+function line(sd outfile)
+	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
+	#char a=asciisemicolon
+	#callg write(outfile,#a,1)
+end
+
+function write(sd outfile,ss buf,sd sz)
+	if loop.allowwrite=(TRUE)
+		sd items
+		if loop.directwrite=(TRUE)
+			set items fwrite(buf,sz,1,outfile)
+		else
+			set items mwrite(buf,sz,outfile)
+		end
+		if items!=1
+			call aftercallenable()
+		end
+	end
+end
+
+function writec(sd outfile)
+	char c=asciicomma
+	callg write(outfile,#c,1)
+end
+function writecl(sd outfile)
+	char c=asciicurlyleft
+	callg write(outfile,#c,1)
+end
+function writecr(sd outfile)
+	char a=asciicurlyright
+	callg write(outfile,#a,1)
+end
+function writee(sd outfile)
+	callg write(outfile,#cond.eq,1)
+end
+function writel(sd outfile)
+	char a=asciiparenthesisleft
+	callg write(outfile,#a,1)
+end
+function writenl(sd outfile)
+	char n=asciinewline
+	callg write(outfile,#n,1)
+end
+function writeq(sd outfile)
+	char q=asciidquote
+	callg write(outfile,#q,1)
+end
+function writer(sd outfile)
+	char a=asciiparenthesisright
+	callg write(outfile,#a,1)
+end
+function writes(sd outfile)
+	char s=asciispace
+	callg write(outfile,#s,1)
+end
+function writesl(sd outfile)
+	char left=asciisquareleft
+	callg write(outfile,#left,1)
+end
+function writesr(sd outfile)
+	char right=asciisquareright
+	callg write(outfile,#right,1)
+end
+function writet(sd outfile)
+	char sc=asciisemicolon
+	callg write(outfile,#sc,1)
+end
+
+function signed()
+end
+function unsigned(sd outfile)
+	char a="unsigned "^
+	callg write(outfile,#a,\.a)
+end
+function write_longcast_ex_ex(sd outfile,sd pbuffer,sv sign,sv fn)
+	call writel(outfile)
+	call sign(outfile)
+	call write(outfile,#write_long.a,\write_long.a)
+	call writer(outfile)
+	callg fn(pbuffer,outfile)
+end
+function write_longcast_ex(sd outfile,sd pbuffer,sv sign)
+	callg write_longcast_ex_ex(outfile,pbuffer,sign,varfunc)
+end
+function write_longcast_arg(sd outfile,sd pbuffer)
+	callg write_longcast_ex_ex(outfile,pbuffer,unsigned,arg)
+end
+function write_longcast(sd outfile,sd pbuffer)
+	callg write_longcast_ex(outfile,pbuffer,signed)
+end
+function write_void(sd outfile,sd pointer,sd size)
+	char a="void "^
+	call write(outfile,#a,\.a)
+	callg write(outfile,pointer,size)
+end
+
+function writecln(sd outfile)
+	call writecl(outfile)
+	callg writenl(outfile)
+end
+function writen(sd outfile,ss buf,sd sz)
+	call write(outfile,buf,sz)
+	callg writenl(outfile)
+end
+function writeslsr(sd outfile)
+	call writesl(outfile)
+	callg writesr(outfile)
+end
+function writetn(sd outfile) #terminator newline
+	call writet(outfile)
+	callg writenl(outfile)
+end
+
+function fprintu(sd outfile,sd c)
+	sd items;set items fprintf(outfile,"%u",c) #this does't encounter allowwrite or directwrite at this moment
+	if items<0
+		call aftercallenable()
+	end
+end
