@@ -1,0 +1,788 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+188) xenial; urgency=medium
+ .
+   * short cast
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-07-18
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1Zl96muMRobhQ1n0PE1u7TH0hAJFl7j0q
++File ID: 1ez8O3toptHLmXHzBnpdaV2epwD-QEhmB
++<p>Found file: ./ocompiler-1-5+187.x86_64.rpm, 1ez8O3toptHLmXHzBnpdaV2epwD-QEhmB, 2024-07-18T12:15:41.915Z, 73573, https://drive.google.com/uc?id=1ez8O3toptHLmXHzBnpdaV2epwD-QEhmB&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+186.x86_64.rpm, 1Zl96muMRobhQ1n0PE1u7TH0hAJFl7j0q, 2024-07-17T04:47:19.396Z, 73484, https://drive.google.com/uc?id=1Zl96muMRobhQ1n0PE1u7TH0hAJFl7j0q&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+185.x86_64.rpm, 1vQ5h_5Hrxc7Xh4DHoThmdLhNdhgaxSOt, 2024-07-16T10:23:52.362Z, 72950, https://drive.google.com/uc?id=1vQ5h_5Hrxc7Xh4DHoThmdLhNdhgaxSOt&export=download
+--- ocompiler-1.orig/otoc/action.oc
++++ ocompiler-1/otoc/action.oc
+@@ -66,10 +66,11 @@ function action_tnot(sv pbuffer,sd outfi
+ 	char *=asciihyphen   #this is fast for notneg function
+ 	callg actionsimple(pbuffer,a,outfile)
+ end
+-function action_tbase(sv pbuffer)
+-	call unimplemented_start("base/leave")
++function action_tbase(sv pbuffer,sd outfile)
++	call unimplemented_start("base/leave",outfile)
+ 	call varfunc(pbuffer)
+ 	call unimplemented_end()
++	call backchar(outfile);call backchar(outfile) #will term nl next
+ end
+ function action_tshl1(sv pbuffer,sd outfile)
+ 	char a={asciileft,asciileft}
+--- ocompiler-1.orig/otoc/ascii.h
++++ ocompiler-1/otoc/ascii.h
+@@ -1,5 +1,6 @@
+ 
+ const asciinul=0x0
++const asciitab=0x9
+ const asciinewline=0xa
+ const asciispace=0x20
+ const asciidquote=0x22
+@@ -12,6 +13,8 @@ const asciiplus=0x2b
+ const asciicomma=0x2c
+ const asciihyphen=0x2d
+ const asciidot=0x2e
++const asciizero=0x30
++const asciione=0x31
+ const asciisemicolon=0x3b
+ const asciileft=0x3c
+ const asciiright=0x3e
+--- /dev/null
++++ ocompiler-1/otoc/cond.oc
+@@ -0,0 +1,63 @@
++
++#aftercalli
++
++#CD structure
++function cond(sv pbuffer,sd outfile)
++	call writel(outfile)
++
++	#here is not o,must know signed/unsigned at start
++	sd replay;set replay pbuffer#
++	set loop.allowwrite (FALSE)
++	call arg(pbuffer) #,outfile
++	set loop.allowwrite (TRUE)
++	charx cnd#1;call get_char(pbuffer,#cnd)
++
++const unimplemented=-1
++const unsigned_cond=0
++const signed_cond=1
++	char conds=unsigned_cond;char *=">="^
++	char     *=unsigned_cond;char *=asciinul;char *="<"^
++	char     *=signed_cond;  char ne="!="^
++	char     *=signed_cond;  char eq="=="^
++	char     *=unsigned_cond;char *=asciinul;char *=">"^
++	char     *=unsigned_cond;char *="<="^
++	char     *=unimplemented;char *#2
++	char     *=unimplemented;char *#2
++	char     *=unimplemented;char *#2  #notparity
++	char     *=unimplemented;char *#2  #parity
++	char     *=signed_cond;  char ge=">="^
++	char     *=signed_cond;  char *=asciinul;char *="<"^
++	char     *=signed_cond;  char *=asciinul;char *=">"^
++	char     *=signed_cond;  char le="<="^
++
++	sub cnd (Xfile_cond_first)
++	ss set=1+2
++	mult set cnd
++	add set #conds
++	sd type;set type set#
++	inc set
++
++	if type=(unsigned_cond)
++		call write_longcast_arg(outfile,#replay)
++	elseif type=(signed_cond)
++		call arg(#replay,outfile)
++	else
++		call unimplemented()
++	end
++
++	if set#=(asciinul)
++		inc set
++		call write(outfile,set,1)
++	else
++		call write(outfile,set,2)
++	end
++
++	if type=(unsigned_cond)
++		call write_longcast_arg(outfile,pbuffer)
++	else
++		call arg(pbuffer,outfile)
++	end
++
++	call writer(outfile)
++	callg writecln(outfile)
++end
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -38,11 +38,36 @@ function loop(sd pointer,sd delim,sd out
+ 	set directwrite (TRUE)
+ 	valuex function_start#1
+ 	set function_start (NULL)
++	charx indentation#1
++	set indentation 0
++	charx same_line#1
++	set same_line (FALSE)
+ 
+ 	add delim pointer
+ 	while pointer!=delim
+ 		charx command#1;call get_char(#pointer,#command)
+ 		#if command>(Xfile_last);call puts("Error");break;end
++
++		whiletrue
++			if command!=(Xfile_end)
++				if command!=(Xfile_else)
++					break
++				end
++			end
++			dec indentation
++			break
++		end
++		if same_line=(FALSE)
++			sd i;set i indentation
++			while i>0
++				char a=asciitab
++				call write(output,#a,1)
++				dec i
++			end
++		else
++			set same_line (FALSE)
++		end
++
+ 		value Xfile_comment^comment
+ 		value *Xfile_commentmulti^commentmulti
+ 		value *Xfile_commentlineend^commentlineend
+@@ -123,9 +148,29 @@ function get_string(sv pbuffer,sd psize,
+ 	add pbuffer# psize#
+ end
+ 
+-function unimplemented_start(ss com)
++function backchar(sd outfile)
++	call fseek(outfile,-1,(SEEK_CUR))
++end
++function backindent(sd outfile)
++	sd i=1
++	mult i loop.indentation  ##0 or more
++	neg i
++	call fseek(outfile,i,(SEEK_CUR))
++end
++function line_continuation(sd outfile)
++	call backindent(outfile)
++	call backchar(outfile) #nl
++end
++
++function line(sd outfile) #this with the functions but is throwless
++	call line_continuation(outfile)
++	set loop.same_line (TRUE)
++end
++
++function unimplemented_start(ss com,sd outfile)
+ 	call printf("Unimplemented command: %s\n",com)
+ 	set loop.allowwrite (FALSE)
++	call backindent(outfile)
+ end
+ function unimplemented_end()
+ 	set loop.allowwrite (TRUE)
+@@ -163,8 +208,9 @@ end
+ 
+ include "action.oc"
+ include "decl.oc"
+-include "var.oc"
++include "cond.oc"
+ include "number.oc"
++include "var.oc"
+ 
+ function commentmulti(sd outfile,sv pbuffer)
+ 	char b=asciiasterisk
+@@ -176,7 +222,7 @@ function commentmulti(sd outfile,sv pbuf
+ 	callg writen(outfile,#b,2)
+ end
+ function commentlineend(sd outfile,sv pbuffer)
+-	call fseek(outfile,-1,(SEEK_CUR)) #this one and line command
++	call line_continuation(outfile)
+ 	callg comment(outfile,pbuffer)
+ end
+ function format(sd *outfile,sv pbuffer) #will do nothing at the moment
+@@ -298,13 +344,12 @@ function call(sd outfile,sv pbuffer)
+ 	call cll(pbuffer,outfile)
+ 	callg writetn(outfile)
+ end
+-function callex(sd *outfile,sv pbuffer)
+-	call unimplemented_start("callex")  #at some structures is complicated
++function callex(sd outfile,sv pbuffer)
++	call unimplemented_start("callex",outfile)  #at some structures is complicated
+ 	char c#1;call get_char(pbuffer,#c)
+ 	call cal(pbuffer) #,outfile
+ 	call varfunc(pbuffer) #,outfile
+ 	call arg(pbuffer) #,outfile
+-	call writetn() #outfile
+ 	call unimplemented_end()
+ end
+ function if(sd outfile,sv pbuffer)
+@@ -312,7 +357,18 @@ function if(sd outfile,sv pbuffer)
+ 	call write(outfile,#a,\.a)
+ 	callg cond(pbuffer,outfile)
+ end
+-function else()
++function else(sd outfile,sv pbuffer)
++	char a="else"^
++	call writecr(outfile)
++	call write(outfile,#a,\.a)
++	# next is { or if
++	ss buffer;set buffer pbuffer#
++	if buffer#!=(Xfile_if)
++		call writecln(outfile)
++	else
++		set loop.same_line (TRUE)
++		callg writes(outfile)
++	end
+ end
+ function while(sd outfile,sv pbuffer)
+ 	char a="while"^
+@@ -320,11 +376,22 @@ function while(sd outfile,sv pbuffer)
+ 	callg cond(pbuffer,outfile)
+ end
+ function whiletrue(sd outfile)
+-	callg writen(outfile,"{",1)
++	call write(outfile,#while.a,\while.a)
++	call writel(outfile)
++	char a=asciione
++	call write(outfile,#a,1)
++	call writer(outfile)
++	callg writecln(outfile)
+ end
+-function break()
++function break(sd outfile)
++	char a="break"^
++	call write(outfile,#a,\.a)
++	callg writetn(outfile)
+ end
+-function continue()
++function continue(sd outfile)
++	char a="continue"^
++	call write(outfile,#a,\.a)
++	callg writetn(outfile)
+ end
+ function end(sd outfile)
+ 	call writecr(outfile)
+@@ -350,7 +417,8 @@ function import(sd outfile,sv pbuffer)
+ 	call write(outfile,#a,2)
+ 	callg writetn(outfile)
+ end
+-function aftercall(sd *outfile,sv pbuffer)
++function aftercall(sd outfile,sv pbuffer)
++	call backindent(outfile)
+ 	charx acall#1;call get_char(pbuffer,#acall)
+ 	if acall<=(Xfile_aftercall_declarative)
+ 		if acall=(Xfile_aftercall_declare)
+@@ -360,8 +428,8 @@ function aftercall(sd *outfile,sv pbuffe
+ 		end
+ 	end
+ end
+-function hex(sd *outfile,sv pbuffer)
+-	call unimplemented_start("hex")
++function hex(sd outfile,sv pbuffer)
++	call unimplemented_start("hex",outfile)
+ 	datax args#1;call get_data(pbuffer,#args)
+ 	sd n=0;while n!=args
+ 		call number(pbuffer) #,outfile
+@@ -369,7 +437,8 @@ function hex(sd *outfile,sv pbuffer)
+ 	end
+ 	call unimplemented_end()
+ end
+-function override(sd *outfile,sv pbuffer)
++function override(sd outfile,sv pbuffer)
++	call backindent(outfile)
+ 	datax sz#1;valuex name#1
+ 	call get_string(pbuffer,#sz,#name)
+ 	charx value#1;call get_char(pbuffer,#value)
+@@ -384,11 +453,6 @@ function interrupt(sd outfile)
+ 	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+ 	callg writen(outfile,#a,\.a)
+ end
+-function line(sd outfile)
+-	call fseek(outfile,-1,(SEEK_CUR)) #this one and lineend comment
+-	#char a=asciisemicolon
+-	#callg write(outfile,#a,1)
+-end
+ 
+ function write(sd outfile,ss buf,sd sz)
+ 	if loop.allowwrite=(TRUE)
+@@ -481,6 +545,7 @@ function write_void(sd outfile,sd pointe
+ end
+ 
+ function writecln(sd outfile)
++	inc loop.indentation
+ 	call writecl(outfile)
+ 	callg writenl(outfile)
+ end
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -75,67 +75,6 @@ function carg_resolve_one(sv left,sv rig
+ 	callg write(outfile,left,right)
+ end
+ 
+-#CD structure
+-function cond(sv pbuffer,sd outfile)
+-	call writel(outfile)
+-
+-	#here is not o,must know signed/unsigned at start
+-	sd replay;set replay pbuffer#
+-	set loop.allowwrite (FALSE)
+-	call arg(pbuffer) #,outfile
+-	set loop.allowwrite (TRUE)
+-	charx cnd#1;call get_char(pbuffer,#cnd)
+-
+-const unimplemented=-1
+-const unsigned_cond=0
+-const signed_cond=1
+-	char conds=unsigned_cond;char *=">="^
+-	char     *=unsigned_cond;char *=asciinul;char *="<"^
+-	char     *=signed_cond;  char ne="!="^
+-	char     *=signed_cond;  char eq="=="^
+-	char     *=unsigned_cond;char *=asciinul;char *=">"^
+-	char     *=unsigned_cond;char *="<="^
+-	char     *=unimplemented;char *#2
+-	char     *=unimplemented;char *#2
+-	char     *=unimplemented;char *#2  #notparity
+-	char     *=unimplemented;char *#2  #parity
+-	char     *=signed_cond;  char ge=">="^
+-	char     *=signed_cond;  char *=asciinul;char *="<"^
+-	char     *=signed_cond;  char *=asciinul;char *=">"^
+-	char     *=signed_cond;  char le="<="^
+-
+-	sub cnd (Xfile_cond_first)
+-	ss set=1+2
+-	mult set cnd
+-	add set #conds
+-	sd type;set type set#
+-	inc set
+-
+-	if type=(unsigned_cond)
+-		call write_longcast_arg(outfile,#replay)
+-	elseif type=(signed_cond)
+-		call arg(#replay,outfile)
+-	else
+-		call unimplemented()
+-	end
+-
+-	if set#=(asciinul)
+-		inc set
+-		call write(outfile,set,1)
+-	else
+-		call write(outfile,set,2)
+-	end
+-
+-	if type=(unsigned_cond)
+-		call write_longcast_arg(outfile,pbuffer)
+-	else
+-		call arg(pbuffer,outfile)
+-	end
+-
+-	call writer(outfile)
+-	callg writecln(outfile)
+-end
+-
+ #DoT
+ function dot(sv pbuffer,sd outfile)
+ 	datax sz#1;valuex pointer#1
+@@ -147,10 +86,33 @@ end
+ function var(sv pbuffer,sd outfile)
+ 	datax sz#1;valuex pointer#1
+ 	call get_string(pbuffer,#sz,#pointer)
+-	call write(outfile,pointer,sz)
+ 	charx suffix#1;call get_char(pbuffer,#suffix)
+ 	if suffix=(Xfile_suffix_true)
+ 		charx cast#1;call get_char(pbuffer,#cast)
++		if cast!=(Xfile_suffix_cast_none)
++			call writel(outfile)
++			call writel(outfile)
++			if cast=(Xfile_suffix_cast_string) #char*
++				call intByte(outfile)
++			elseif cast=(Xfile_suffix_cast_word) #short*
++				call longWord(outfile)
++			elseif cast=(Xfile_suffix_cast_data) #int*
++				call longInt(outfile)
++			else # Xfile_suffix_cast_value long*
++				call long(outfile)
++			end
++			call writer(outfile)
++		end
++		call write(outfile,pointer,sz)
++		if cast!=(Xfile_suffix_cast_none)
++			call writer(outfile)
++		end
++		call writesl(outfile)
++		char a=asciizero
++		call write(outfile,#a,1)
++		call writesr(outfile)
++	else
++		callg write(outfile,pointer,sz)
+ 	end
+ 	#Xfile_suffix_no Xfile_suffix_notasuffix
+ end
+@@ -158,6 +120,9 @@ end
+ #VF structure
+ function varfunc(sv pbuffer,sd outfile)
+ 	charx prefix#1;call get_char(pbuffer,#prefix)
++	if prefix=(Xfile_arg_varfn_prefix_yes)
++		call write(outfile,#and.a,1)
++	end
+ 	charx colon#1;call get_char(pbuffer,#colon)
+ 	if colon=(Xfile_arg_varfn_colon_yes)
+ 		charx dt#1;call get_char(pbuffer,#dt)
+--- ocompiler-1.orig/src/files/functions/commons/vars.oc
++++ ocompiler-1/src/files/functions/commons/vars.oc
+@@ -314,6 +314,7 @@ EndFunction
+ const no_cast=Xfile_suffix_cast_none
+ const cast_value=Xfile_suffix_cast_value
+ const cast_data=Xfile_suffix_cast_data
++const cast_word=Xfile_suffix_cast_word
+ const cast_string=Xfile_suffix_cast_string
+ 
+ #err
+@@ -438,6 +439,7 @@ function cast_test(ss content,sd p_size)
+ 		if c=(cast_value)
+ 		elseif c=(cast_data)
+ 		elseif c=(cast_string)
++		elseif c=(cast_word) # for otoc at the moment
+ 		else
+ 			set c (no_cast)
+ 		endelse
+@@ -485,14 +487,14 @@ function cast_resolve(sd number,sd cast,
+ 		sd data;set data ptrdata#
+ 		add data (maskoffset)
+ 
+-		if cast=(cast_data)
+-			and data# (~pointbit)
+-		else
+-		#cast==(cast_value)
++		if cast=(cast_value)
+ 			sd for_64;setcall for_64 is_for_64()
+ 			if for_64!=0 #not at sizeof variable, will be xor
+ 				or data# (pointbit)
+ 			endif
++		else
++		#cast=(cast_data) cast=(cast_word)
++			and data# (~pointbit)
+ 		endelse
+ 		return (FALSE)
+ 	endif
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -185,6 +185,7 @@ const Xfile_suffix_notasuffix=2       #
+ const Xfile_suffix_cast_none=0
+ const Xfile_suffix_cast_value=0x56    # asciiV
+ const Xfile_suffix_cast_data=0x44     # asciiD
++const Xfile_suffix_cast_word=0x57     # asciiW
+ const Xfile_suffix_cast_string=0x53   # asciiS
+ 
+ #a from any, t from type
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -13,59 +13,70 @@ char cc[]={9,97,122};
+ char a[3];
+ long* b;
+ long*intern(int a,int* b,long* c){//commenting
+-a++;
+-a--;
+-c++;
+-c--;
+-c=-(long)c;
+-c=~(long)c;
+-;
+-;
+-c=(long)c<<1;
+-c=(unsigned long)c>>1;
+-c=(long)c>>1;
+-return c;
++	a++;
++	a--;
++	c++;
++	c--;
++	c=-(long)c;
++	c=~(long)c;
++	c=(long)c<<1;
++	c=(unsigned long)c>>1;
++	c=(long)c>>1;
++	return c;
+ };
+ void f(){
+-if(2==2){
+-return;
+-};
++	long* a=0;
++	long* b=0;
++	a=&b;
++	b=a[0];
++	b=((char*)a)[0];
++	b=((short*)a)[0];
++	b=((int*)a)[0];
++	b=((long*)a)[0];
++	if(2==2){
++		return;
++	};
+ };
+ struct st{
+-int a[1];
++	int a[1];
+ };
+ long*puts();
+ long*main(){
+-b=b;
+-b=(long)b+1;
+-b=(long)b-1;
+-b=(long)b*1;
+-c1=(long)c1/1;
+-c1=(long)c1/1;
+-c1=(long)c1%1;
+-c1=(long)c1%1;
+-c1=(long)c1&1;
+-c1=(long)c1|1;
+-b=(long)b^1;intern(1,"q\nw\re\tr",a);
+-b=puts();
+-if(1==1){
+-//elseif 1!!1
+-//elseif 1!1
+-};
+-if(1!=1){};
+-if(1<1){};
+-if(1>1){};
+-if(1<=1){};
+-if(1>=1){};
+-if((unsigned long)1<(unsigned long)1){};
+-if((unsigned long)1>(unsigned long)1){};
+-if((unsigned long)1<=(unsigned long)1){};
+-if((unsigned long)1>=(unsigned long)1){};
+-while(1==2){
+-};
+-{
+-};
+-char z=0xff+077+12-3+(4*3/2/1&1|1^1%5%5<<3>>3>>3==2!=2<3>3<=4>=4&&7||7<6>6<=6>=6);//char er=3!!2 char er=3!2 char er=3$2
+-char z2=a1;char z3=-a1;char z4=~a1;char z5=~-a1;__builtin_trap();
+-return 2;
++	b=b;
++	b=(long)b+1;
++	b=(long)b-1;
++	b=(long)b*1;
++	c1=(long)c1/1;
++	c1=(long)c1/1;
++	c1=(long)c1%1;
++	c1=(long)c1%1;
++	c1=(long)c1&1;
++	c1=(long)c1|1;
++	b=(long)b^1;
++	intern(1,"q\nw\re\tr",a);
++	b=puts();
++	if(1==1){
++		//elseif 1!!1
++		//elseif 1!1
++	};
++	if(1!=1){
++	}else if(1<1){
++	}else{};
++	if(1>1){};
++	if(1<=1){};
++	if(1>=1){};
++	if((unsigned long)1<(unsigned long)1){};
++	if((unsigned long)1>(unsigned long)1){};
++	if((unsigned long)1<=(unsigned long)1){};
++	if((unsigned long)1>=(unsigned long)1){};
++	while(1==2){
++		continue;
++	};
++	while(1){
++		break;
++	};
++	char z=0xff+077+12-3+(4*3/2/1&1|1^1%5%5<<3>>3>>3==2!=2<3>3<=4>=4&&7||7<6>6<=6>=6);//char er=3!!2 char er=3!2 char er=3$2
++	char z2=a1;char z3=-a1;char z4=~a1;char z5=~-a1;
++	__builtin_trap();
++	return 2;
+ };
+--- ocompiler-1.orig/tests/.expected/a.out.oc.log
++++ ocompiler-1/tests/.expected/a.out.oc.log
+@@ -3,4 +3,4 @@ na.out.oc
+ ninclude.h
+ q
+ q
+-x0000003f
++x00000047
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -7,26 +7,29 @@ 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
+--- ocompiler-1.orig/tests/.expected/a.out.txt
++++ ocompiler-1/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+-f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAA7JQECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAhDAAAAQwAAAAYAAAAAEAAAAQAAAEMEAABDlAQIQ5QECIsCAACLAgAABQAAAAAQ
+-AAADAAAAzgYAAM6WBAjOlgQIEwAAABMAAAAEAAAAAQAAAAIAAADhBgAA4aYECOGmBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAOEGAADhpgQI4aYECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAUacECFEHAAAWAAAAAAAAAAAAAAAB
+-AAAAAAAAAA0AAAAGAAAAAwAAAOGmBAjhBgAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAUZUECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
++BAAAAIQECACEBAhLAAAASwAAAAYAAAAAEAAAAQAAAEsEAABLlAQIS5QECPICAADyAgAABQAAAAAQ
++AAADAAAAPQcAAD2XBAg9lwQIEwAAABMAAAAEAAAAAQAAAAIAAABQBwAAUKcECFCnBAhQAAAAUAAA
++AAQAAAABAAAAAQAAAFAHAABQpwQIUKcECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAwKcECMAHAAAWAAAAAAAAAAAAAAAB
++AAAAAAAAAA0AAAAGAAAAAwAAAFCnBAhQBwAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -16,19 +16,21 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC
+-AzQ1AAEAAAABAAAAAQAAAAEAAAAahAQIAAEAAAABAAAACWF6AAAAJoQECAAAAABxCncNZQlyAEcB
+-//4CAAAAAACLhCQEAAAAoy2EBAhTVYvsi9y6LYQECP8Cui2EBAj/CroUAAAAA9WDAgS6FAAAAAPV
+-gyoEuhQAAAAD1fcauhQAAAAD1fcSuhQAAAAD1YkquhQAAAAD1YsqyVvDuhQAAAAD1dEiuhQAAAAD
+-1dEquhQAAAAD1dE6uhQAAAAD1YsCyVvDU1WL7IvcuAIAAAC5AgAAADnBD4UDAAAAyVvDyVvDU1WL
+-7IvcyVvDU1WL7IvcuimEBAiLArophAQIiQK4AQAAALophAQIAQK4AQAAALophAQIKQK5AQAAALop
+-hAQIiwL34bophAQIiQKxAboAhAQIigIPuuAHcwXGxP/rA8bEAPb5iAKxAboAhAQIigLGxAD28YgC
+-sQG6AIQECIoCD7rgB3MFxsT/6wPGxAD2+YgisQG6AIQECIoCxsQA9vGIIrABugCEBAggArABugCE
+-BAgIArgBAAAAuimEBAgxAvzOUIvjukyEBAgPtgJQujGEBAiLwlBoAQAAAOiC/v//i+O4c6cECP8Q
+-uimEBAiJArgBAAAAuQEAAAA5wQ+FAAAAALgBAAAAuQEAAAA5wQ+EAAAAALgBAAAAuQEAAAA5wQ+N
+-AAAAALgBAAAAuQEAAAA5wQ+OAAAAALgBAAAAuQEAAAA5wQ+PAAAAALgBAAAAuQEAAAA5wQ+MAAAA
+-ALgBAAAAuQEAAAA5wQ+DAAAAALgBAAAAuQEAAAA5wQ+GAAAAALgBAAAAuQEAAAA5wQ+HAAAAALgB
+-AAAAuQEAAAA5wQ+CAAAAAIvjuQEAAAC6KYQECIsCgfkAAAAAdAf/yf80iOvxuCmEBAj/ELgCAAAA
+-uQEAAAA5wQ+FBQAAAOnp////zLgBAAAAx8MCAAAAzYAvbGliL2xkLWxpbnV4LnNvLjIAAQAAAAAA
+-AAAEAAAAMacECAYAAABBpwQICwAAABAAAAAFAAAAUacECAoAAAAWAAAABwAAAGenBAgIAAAADAAA
+-AAkAAAAMAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAEgAAAGEAYgAALmR5
+-bnN0cgAuZHluYW1pYwBzpwQIAQAAAAAAAAAAAAAA
++AzQ1AAEAAAABAAAAAQAAAAEAAAAahAQIAAEAAAABAAAACWF6AAAAJoQECAAAAAAAAAAAAAAAAHEK
++dw1lCXIARwH//gIAAAAAAIuEJAQAAACjLYQECFNVi+yL3LothAQI/wK6LYQECP8KuhQAAAAD1YMC
++BLoUAAAAA9WDKgS6FAAAAAPV9xq6FAAAAAPV9xK6FAAAAAPViSq6FAAAAAPViyrJW8O6FAAAAAPV
++0SK6FAAAAAPV0Sq6FAAAAAPV0Tq6FAAAAAPViwLJW8NTVYvsi9y4NYQECLoxhAQIiQK6MYQECIsS
++iwK6NYQECIkCujGEBAiLEg+2Aro1hAQIiQK6MYQECIsSiwK6NYQECIkCujGEBAiLEosCujWEBAiJ
++AroxhAQIixKLAro1hAQIiQK4AgAAALkCAAAAOcEPhQMAAADJW8PJW8NTVYvsi9zJW8NTVYvsi9y6
++KYQECIsCuimEBAiJArgBAAAAuimEBAgBArgBAAAAuimEBAgpArkBAAAAuimEBAiLAvfhuimEBAiJ
++ArEBugCEBAiKAg+64AdzBcbE/+sDxsQA9vmIArEBugCEBAiKAsbEAPbxiAKxAboAhAQIigIPuuAH
++cwXGxP/rA8bEAPb5iCKxAboAhAQIigLGxAD28YgisAG6AIQECCACsAG6AIQECAgCuAEAAAC6KYQE
++CDEC/MZYi+O6TIQECA+2AlC6OYQECIvCUGgBAAAA6CX+//+L47jipwQI/xC6KYQECIkCuAEAAAC5
++AQAAADnBD4UAAAAAuAEAAAC5AQAAADnBD4QFAAAA6RcAAAC4AQAAALkBAAAAOcEPjQUAAADpAAAA
++ALgBAAAAuQEAAAA5wQ+OAAAAALgBAAAAuQEAAAA5wQ+PAAAAALgBAAAAuQEAAAA5wQ+MAAAAALgB
++AAAAuQEAAAA5wQ+DAAAAALgBAAAAuQEAAAA5wQ+GAAAAALgBAAAAuQEAAAA5wQ+HAAAAALgBAAAA
++uQEAAAA5wQ+CAAAAAIvjuQEAAAC6KYQECIsCgfkAAAAAdAf/yf80iOvxuCmEBAj/ELgCAAAAuQEA
++AAA5wQ+FBQAAAOnp////zLgBAAAAx8MCAAAAzYAvbGliL2xkLWxpbnV4LnNvLjIAAQAAAAAAAAAE
++AAAAoKcECAYAAACwpwQICwAAABAAAAAFAAAAwKcECAoAAAAWAAAABwAAANanBAgIAAAADAAAAAkA
++AAAMAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAEgAAAGEAYgAALmR5bnN0
++cgAuZHluYW1pYwDipwQIAQAAAAAAAAAAAAAA
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -37,6 +37,14 @@ function intern(data a,sd b,sv c) #comme
+ 	return c
+ end
+ function f()
++	value a=0
++	value b=0
++	set a #b
++	set b a#
++	set b a#s
++	set b a#w
++	set b a#d
++	set b a#v
+ 	if 2=2
+ 		ret
+ 	end
+@@ -64,7 +72,7 @@ or c1 1
+ xor b 1
+ 
+ hex -:,~\,~-\\+(1+01+0x2+\intern+\\intern+\intern.a+\intern.a\)
+-;
++
+ call intern(1,"q\nw\re\tr",main.a:main.a)
+ set b puts()
+ 
+@@ -72,8 +80,9 @@ if 1=1
+ #elseif 1!!1
+ #elseif 1!1
+ end
+-if 1!=1;end
+-if 1<1;end
++if 1!=1
++elseif 1<1
++else;end
+ if 1>1;end
+ if 1<=1;end
+ if 1>=1;end
+@@ -91,7 +100,7 @@ whiletrue
+ end
+ 
+ char z=0xff+077+12-3+(4*3/2//1&1|1^1%5%%5<<3>>3>>>3=2!=2<3>3<=4>=4&&7||7<^6>^6<=^6>=^6) ;#char er=3!!2 char er=3!2 char er=3$2
+-char z2=a1;char z3=-a1;char z4=~a1;char z5=~-a1;
++char z2=a1;char z3=-a1;char z4=~a1;char z5=~-a1
+ 
+ aftercall *tst
+ override x_file 1
