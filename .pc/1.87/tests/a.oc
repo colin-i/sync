@@ -1,0 +1,58 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+einclude "../dev/import.h"
+
+include "entryraw.oc" "entry.oc"
+
+sd f=debug_log|debug_x_pad
+if argc=2
+	importx "puts" puts
+	call puts("flag_x")
+	or f (flag_x)
+end
+call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+
+call action("
+/*
+debug_x
+*/
+function fn(a){
+	return 2;
+}
+this.this.getVersion();
+
+this.this.this=this;
+
+//note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+a=new Array(1);
+var b=(-2+0x2-2*2/2%2&2|2^2<2>2==2!=2<=2>=2<<2>>2>>>2&&2||2?2:3);
+var c=1.2;var d=a[0];var e='q';
+f=2;var g;delete g;delete this.f;
+h=function(){var a;}var i=h();
+if(2==2){var j;return 9;}else if(2==2){var k;}else{var l;}
+while(2==2){var m;}
+f++;f--;f+=2;
+for(var n=2;n<3;n++){break;}
+for(var o in a){continue;}
+for(a[0] in a[0]){}
+while(true){break;continue;var p;}
+for(;;){}
+
+a=new Object();
+a.b=3;
+a.c=new Array(1);a.c[0]=5;
+a.d=new Object();
+a.d.e=2;
+a.b++;
+a.c[0]--;
+a.d.e+=2;
+
+a=b!=1?q:w;
+")
+
+call swf_done()
+
+call exit(0)

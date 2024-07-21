@@ -1,0 +1,692 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-87) bionic; urgency=medium
+ .
+   * fix builtin at x. fix last row blanks at log
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-07-21
+
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -27,6 +27,6 @@ Where:
+ SpriteId or 0 for root.
+ TextLinesNumber is the number of lines that TextLines has.
+ TextLines is the text like in action[_sprite] call.
+-NumberA lines, then NumberA1+...+NumberAN<=TextLinesNumber, less only when last line(s) is/are blank(s).
++NumberA lines, then NumberA1+...+NumberAN=TextLinesNumber
+ NumberB1...NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+ FinalSpriteId is the if from the swf
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -64,65 +64,66 @@ endfunction
+ 
+ #name/null
+ function action_code_write_builtin_names(sv codepointer,sv p_action) #action is value only because is working with stack
+-	set codepointer codepointer#
++	sd name
++	set name x_pointer_touchless(codepointer)
+ 	sd compare
+ 	vstr int="int"
+-	setcall compare strcmp(codepointer,int)
++	setcall compare strcmp(name,int)
+ 	if compare=0
+ 		set p_action# (ActionToInteger)
+ 		return int
+ 	endif
+ 	vstr rnd="random"
+-	setcall compare strcmp(codepointer,rnd)
++	setcall compare strcmp(name,rnd)
+ 	if compare=0
+ 	#0�(maximum-1)
+ 		set p_action# (ActionRandomNumber)
+ 		return rnd
+ 	endif
+ 	vstr ascii="ord"
+-	setcall compare strcmp(codepointer,ascii)
++	setcall compare strcmp(name,ascii)
+ 	if compare=0
+ 		set p_action# (ActionCharToAscii)
+ 		return ascii
+ 	endif
+ 	vstr chr="chr"
+-	setcall compare strcmp(codepointer,chr)
++	setcall compare strcmp(name,chr)
+ 	if compare=0
+ 		set p_action# (ActionAsciiToChar)
+ 		return chr
+ 	endif
+ 	vstr typeOf="typeof"
+-	setcall compare strcmp(codepointer,typeOf)
++	setcall compare strcmp(name,typeOf)
+ 	if compare=0
+ 		set p_action# (ActionTypeOf)
+ 		return typeOf
+ 	endif
+ 	vstr stop="stop"
+-	setcall compare strcmp(codepointer,stop)
++	setcall compare strcmp(name,stop)
+ 	if compare=0
+ 		set p_action# (ActionStop)
+ 		return stop
+ 	endif
+ 	vstr play="play"
+-	setcall compare strcmp(codepointer,play)
++	setcall compare strcmp(name,play)
+ 	if compare=0
+ 		set p_action# (ActionPlay)
+ 		return play
+ 	endif
+ 	vstr nframe="nextFrame"
+-	setcall compare strcmp(codepointer,nframe)
++	setcall compare strcmp(name,nframe)
+ 	if compare=0
+ 		set p_action# (ActionNextFrame)
+ 		return nframe
+ 	endif
+ 	vstr pframe="prevFrame"
+-	setcall compare strcmp(codepointer,pframe)
++	setcall compare strcmp(name,pframe)
+ 	if compare=0
+ 		set p_action# (ActionPreviousFrame)
+ 		return pframe
+ 	endif
+ 	vstr goto="gotoAndStop"
+-	setcall compare strcmp(codepointer,goto)
++	setcall compare strcmp(name,goto)
+ 	if compare=0
+ 		set p_action# (ActionGotoFrame)
+ 		incst p_action
+@@ -130,7 +131,7 @@ function action_code_write_builtin_names
+ 		return goto
+ 	endif
+ 	vstr gotop="gotoAndPlay"
+-	setcall compare strcmp(codepointer,gotop)
++	setcall compare strcmp(name,gotop)
+ 	if compare=0
+ 		set p_action# (ActionGotoFrame)
+ 		incst p_action
+@@ -138,7 +139,7 @@ function action_code_write_builtin_names
+ 		return gotop
+ 	endif
+ 	vstr trace="trace"
+-	setcall compare strcmp(codepointer,trace)
++	setcall compare strcmp(name,trace)
+ 	if compare=0
+ 		set p_action# (ActionTrace)
+ 		return trace
+@@ -146,14 +147,15 @@ function action_code_write_builtin_names
+ 	return (NULL)
+ endfunction
+ 
++import "x_pointer" x_pointer
++import "x_pointer_touchless" x_pointer_touchless
++import "x_pointer_x" x_pointer_x
+ function action_code_get_pointer(sv p_codepointer)
+-	import "x_pointer" x_pointer
+ 	sd a;set a x_pointer(p_codepointer#)
+ 	incst p_codepointer#  #to pass the pointer
+ 	return a
+ end
+ function action_code_get_pointer_touchless(sv p_codepointer)
+-	import "x_pointer_touchless" x_pointer_touchless
+ 	sd a;set a x_pointer_touchless(p_codepointer#)
+ 	incst p_codepointer#  #to pass the pointer
+ 	return a
+@@ -220,7 +222,7 @@ function action_code_set_ex(sd value,sd
+ 	add x size
+ 	if x>=(totalvalues)
+ 		import "error" error
+-		call error("size error")
++		call error("size error at values")
+ 	endif
+ 	sd pointer
+ 	setcall pointer action_code_values()
+@@ -669,28 +671,29 @@ function action_code_write_function_call
+ endfunction
+ #codepointer
+ function action_code_write_builtin_function(sv codepointer,sd pwant_return)
+-    sv pointer
+-    set pointer codepointer
+-    if pointer#!=(no_pointer)
+-        #no builtin at members
+-        return codepointer
+-    endif
+-    add pointer :  #to pass the pointer
+-    #
+-    sd cursor
+-    setcall cursor action_code_write_builtin_set(pointer,pwant_return)
+-    if cursor=pointer
+-        return codepointer
+-    endif
+-    return cursor
++	sv pointer
++	set pointer codepointer
++	if pointer#!=(no_pointer)
++		#no builtin at members
++		return codepointer
++	endif
++	add pointer :  #to pass the pointer
++	#
++	sd cursor
++	setcall cursor action_code_write_builtin_set(pointer,pwant_return)
++	if cursor=pointer
++		return codepointer
++	endif
++	call x_pointer_x(pointer) #in case is to .x, must trim pointer
++	return cursor
+ endfunction
+ #codepointer
+-function action_code_write_builtin_set(sd codepointer,sd pwant_return)
++function action_code_write_builtin_set(sv codepointer,sd pwant_return)
+ 	ss name
+ 	#these acts must stay on stack, can be builtin inside builtin
+ 	sd act
+ 	sd act2
+-	setcall name action_code_write_builtin_names(codepointer,#act)
++	set name action_code_write_builtin_names(codepointer,#act)
+ 	if name!=(NULL)
+ 		sd test;set test codepointer
+ 		add test :   #to pass the pointer
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -106,6 +106,17 @@ function debug_phase_parse(ss pointer)
+ 		set target# (NULL)
+ 	endif
+ endfunction
++function debug_phase_parse_end() #for the case when last rows are blank
++	sd x;setcall x action_code_get()
++	sv start
++	set start debug_mark_get()
++	sv end;setcall end debug_end()
++	while start<^end#
++		set start# x
++		call debug_mark_add()
++		setcall start debug_mark_get()
++	endwhile
++end
+ 
+ function debug_action_phase()
+ 	sv of%p_offsets
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -8,7 +8,7 @@ import "action_code_values" action_code_
+ import "action_code_values_index" action_code_values_index
+ import "escape_action" escape_action
+ import "action_debug_free" action_debug_free
+-
++import "debug_phase_parse_end" debug_phase_parse_end
+ 
+ 
+ #aftercallimport ebool
+@@ -53,6 +53,7 @@ function action_base(ss ac)
+ 		while mem#!=0
+ 			setcall mem action_code_row(mem,(FALSE))
+ 		endwhile
++		call debug_phase_parse_end() #can't be after math_end the case when last rows are blank
+ 		call action_code_set((math_end))
+ 		#reset to stop adding row nr at errors
+ 		set p_action_errors# (NULL)
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -31,6 +31,12 @@ function x_pointer(sv pointer)
+ 	end
+ 	return value
+ end
++function x_pointer_x(sv pointer) #same as x_pointer
++	if x_data.f!=(NULL)
++		sub pointer# action_debug((action_debug_get_mem))
++		inc pointer#
++	end
++end
+ function x_pointer_touchless(sv pointer)
+ 	sd value
+ 	set value pointer#
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,5 +1,5 @@
+ 0
+-37
++56
+ 
+ /*
+ debug_x
+@@ -37,6 +37,25 @@ a.d.e+=2;
+ 
+ a=b!=1?q:w;
+ 
++//manual class extends
++var class1=function(){
++	trace('class1');
++}
++class1.prototype.func1=function(){
++	trace('func1');
++}
++var class2=function(){
++	this.constructor();
++	this.func1();
++}
++class2.prototype=class1.prototype;
++var o2=new class2();
++
++//from asm point of view, all can be done regarding interface statement:
++//ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
++//at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
++//	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
++
+ 5,9,0009
+ 1,5,
+ 2,5,2,,2,,2,,
+@@ -63,3 +82,15 @@ a=b!=1?q:w;
+ 1,2,,2,,5,,1,,,2,,,,
+ 1,2,,2,,2,,1,,,2,,,5,,
+ 2,2,2,,5,,2,2,,2,2,,
++3,2,5,0006
++1,2,
++1,
++1,2,,2,,2,5,0006
++1,2,
++1,
++1,2,5,002A
++1,5,2,,2,,
++1,5,2,,2,,
++1,
++1,2,,2,2,,2,,
++6,2,5,2,,
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,21 +1,25 @@
+-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
++CBpAPAAAAA==
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,4 +1,4 @@
+-OAIAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+++AIAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+ aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
+ ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
+ AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
+@@ -7,39 +7,49 @@ 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
+-////7u7u/gAAAAAAAAAATwAAAOcBAAAAAAAA6QEAAAAAAAAAAAAAAAAAAFBQBfUHAAAAAAAAAP//
+-//8AAAAAAAAAAKqqqvoHAAAABQAAAP////9PAAAA8AEAAAAAAADyAQAAAAAAAAAAAAAAAAAAqqqq
+-+kBABPT4AQAAAAAAAO7u7v4AAAAAAAAAAE8AAAABAgAAAAAAAAMCAAAAAAAABQIAAAAAAAAAAAAA
+-AAAAAKqqqvoHAAAAAgAAAP////9PAAAACQIAAAAAAAALAgAAAAAAAAAAAAAAAAAAqqqq+lAAAABP
+-AAAADwIAAAAAAAARAgAAAAAAAAAAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAAAAAAAAqqqq+lEA
+-AABPAAAAGAIAAAAAAAAaAgAAAAAAABwCAAAAAAAAAAAAAAAAAACqqqr6YGAG9kcAAAAHAAAAAgAA
+-AP////8dAAAAIQIAAAAAAAAcAAAAIwIAAAAAAABwcAf3SQAAABIAAAAHAAAAAQAAANDQDf0cAAAA
+-KAIAAAAAAAD/////HAAAACoCAAAAAAAA//////////8=
++amVjdAApO2EAZABlADIAYQBiACs7YQBjADAAAC07YQBkAGUAPTIAYQBiAD0xAHEAdwB2YXIgY2xh
++c3MxAGZ1bmN0aW9uACl7dHJhY2UAJ2NsYXNzMQAAO31jbGFzczEAcHJvdG90eXBlAGZ1bmMxAGZ1
++bmN0aW9uACl7dHJhY2UAJ2Z1bmMxAAA7fXZhciBjbGFzczIAZnVuY3Rpb24AKXt0aGlzAGNvbnN0
++cnVjdG9yACk7dGhpcwBmdW5jMQApO31jbGFzczIAcHJvdG90eXBlAGNsYXNzMQBwcm90b3R5cGUA
++dmFyIG8yAG5ldyBjbGFzczIAKTsAAAAAAAAAMDAD8woAAAAAAAAADQAAAAAAAAAAAAAAAAAAAD4A
++AAAHAAAAAgAAAP////+7u7v7EBAB8SQAAAAAAAAA7u7u/hoAAAAAAAAAHwAAAAAAAAAAAAAAAAAA
++AKqqqvpPAAAAMQAAAAAAAAA2AAAAAAAAADsAAAAAAAAAAAAAAAAAAACqqqr6HAAAAEAAAAAAAAAA
++/////x0AAABFAAAAAAAAAEBABPRLAAAAAAAAAAcAAAABAAAA/////+7u7v4AAAAAAAAAADwAAABY
++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
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,4 +1,4 @@
+-LAIAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
++/AIAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
+ dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
+ ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
+ AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
+@@ -7,32 +7,40 @@ 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
+-0A39HAAAACgCAAD/////HAAAACoCAAD//////////w==
++ACk7YQBkAGUAMgBhAGIAKzthAGMAMAAALTthAGQAZQA9MgBhAGIAPTEAcQB3AHZhciBjbGFzczEA
++ZnVuY3Rpb24AKXt0cmFjZQAnY2xhc3MxAAA7fWNsYXNzMQBwcm90b3R5cGUAZnVuYzEAZnVuY3Rp
++b24AKXt0cmFjZQAnZnVuYzEAADt9dmFyIGNsYXNzMgBmdW5jdGlvbgApe3RoaXMAY29uc3RydWN0
++b3IAKTt0aGlzAGZ1bmMxACk7fWNsYXNzMgBwcm90b3R5cGUAY2xhc3MxAHByb3RvdHlwZQB2YXIg
++bzIAbmV3IGNsYXNzMgApOwAAAAAAAAAAAAAAMDAD8woAAAANAAAAAAAAAD4AAAAHAAAAAgAAAP//
++//+7u7v7EBAB8SQAAADu7u7+GgAAAB8AAAAAAAAAqqqq+k8AAAAxAAAANgAAADsAAAAAAAAAqqqq
+++hwAAABAAAAA/////x0AAABFAAAAQEAE9EsAAAAHAAAAAQAAAP/////u7u7+AAAAADwAAABYAAAA
++gIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAACAAAADAAAAAcAAAACAAAADQAAAAcAAAAC
++AAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAACAAAAYgAAAAcAAAACAAAAcHAH90gA
++AAAAAAAABwAAAAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAAcHAH
++90kAAAASAAAABwAAAAIAAABwcAf3ZwAAABIAAAAHAAAAAgAAAHBwB/dIAAAAEgAAAAcAAAACAAAA
++YwAAAAcAAAACAAAAZAAAAAcAAAACAAAAZQAAAAcAAAACAAAAEAAAAAcAAAACAAAAEQAAAAcAAAAC
++AAAA0NAN/QcAAAACAAAA/////wcAAAADAAAA//////////88AAAAmQAAAAYAAAAzM/M/MzMzM///
++//88AAAAowAAAE4AAAClAAAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq+v////88AAAArgAA
++AAgAAACxAAAA/////x0AAAC0AAAABwAAAAIAAAD/////QQAAALwAAAA7AAAAxQAAADoAAADOAAAA
++0wAAAAAAAACqqqr6HQAAANUAAAAwMAPz3wAAAAAAAABBAAAA5gAAALu7u/s8AAAA7QAAACAgAvLv
++AAAA7u7u/gAAAAD/////nQAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAAAAB
++AAA+AAAABwAAAAkAAAD/////u7u7+wAAAECdAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAA
++AP////9BAAAAHgEAALu7u/sAAABAQQAAACoBAADMzMz8AgAAAAYGBQUHAAAAAgAAAHBwB/dJAAAA
++AAAAAAcAAAACAAAA/////0EAAAA9AQAA3d3d/R0AAABAAQAAUAAAAB0AAABEAQAAUQAAAB0AAABI
++AQAAYGAG9kcAAAAHAAAAAgAAAP/////g4A7+sLAL+zwAAABVAQAABwAAAAIAAAD/////wMAM/B0A
++AABdAQAAUAAAAMDADPwcAAAAWQEAAHBwB/dIAAAAAAAAAAcAAAADAAAA/////5CQCfnd3d394OAO
++/hwAAAB2AQAAPAAAAHEBAACgoAr63d3d/eDgDv5OAAAAjwEAAAAAAABQUAX1BwAAAAAAAAD/////
++AAAAAKqqqvpPAAAAhwEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvrd3d39BgYFBRwAAACc
++AQAA/////5CQCfmgoAr6QQAAALUBAADd3d394OAO/rCwC/vAwAz8wMAM/BwAAAC9AQAA/////93d
++3f0dAAAAwQEAAEBABPTHAQAA7u7u/gAAAABPAAAA0AEAANIBAAAAAAAAqqqq+gcAAAADAAAA////
++/08AAADWAQAA2AEAAAAAAACqqqr6QEAE9N4BAAAHAAAAAQAAAP/////u7u7+AAAAAE8AAADnAQAA
++6QEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvoHAAAABQAAAP////9PAAAA8AEAAPIBAAAA
++AAAAqqqq+kBABPT4AQAA7u7u/gAAAABPAAAAAQIAAAMCAAAFAgAAAAAAAKqqqvoHAAAAAgAAAP//
++//9PAAAACQIAAAsCAAAAAAAAqqqq+lAAAABPAAAADwIAABECAAAAAAAAUFAF9QcAAAAAAAAA////
++/wAAAACqqqr6UQAAAE8AAAAYAgAAGgIAABwCAAAAAAAAqqqq+mBgBvZHAAAABwAAAAIAAAD/////
++HQAAACECAAAcAAAAIwIAAHBwB/dJAAAAEgAAAAcAAAABAAAA0NAN/RwAAAAoAgAA/////xwAAAAq
++AgAA/////zwAAAAwAgAAMDAD8z8CAAAAAAAAEBAB8QAAAABCAgAACAAAAEkCAAD/////7u7u/ru7
++u/tPAAAAUwIAAFoCAABkAgAAAAAAAKqqqvowMAPzcgIAAAAAAAAQEAHxAAAAAHUCAAAIAAAAfAIA
++AP/////u7u7+u7u7+zwAAACJAgAAMDAD85gCAAAAAAAAEBAB8aACAADu7u7+mwIAAAAAAACqqqr6
++EBAB8bMCAADu7u7+rgIAAAAAAACqqqr6u7u7+08AAAC8AgAAwwIAAAAAAACqqqr6TgAAAM0CAADU
++AgAAAAAAAKqqqvr/////PAAAAOICAABAQAT06QIAAO7u7v4AAAAA/////w==
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -51,6 +51,25 @@ a.c[0]--;
+ a.d.e+=2;
+ 
+ a=b!=1?q:w;
++
++//manual class extends
++var class1=function(){
++	trace('class1');
++}
++class1.prototype.func1=function(){
++	trace('func1');
++}
++var class2=function(){
++	this.constructor();
++	this.func1();
++}
++class2.prototype=class1.prototype;
++var o2=new class2();
++
++//from asm point of view, all can be done regarding interface statement:
++//ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
++//at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
++//	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
+ ")
+ 
+ call swf_done()
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -1,5 +1,5 @@
+ 
+-# 0 is diff and move, without ${1} is clean
++# 0 is diff and move else is diff or exit, without ${1} is clean
+ 
+ if [ -z "${1}" ]; then
+ 	rm -f a.o a.out a.swf a.swf.x a.swf.log
+@@ -34,6 +34,8 @@ smart_diff () {
+ 	smart_diff .expected/a.swf a.swf
+ 	if [ $? != 0 ]; then
+ 		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++		stat --printf="\n%s\n" .expected/a.swf
++		stat --printf="%s\n" a.swf
+ 		echo y \? m \?; read -n1 -t $((60*60*24)) ans
+ 		if [ "${ans}" = "m" ]; then
+ 			swfdump -D .expected/a.swf > 1
+@@ -53,6 +55,8 @@ smart_diff () {
+ 	smart_diff .expected/a.swf.x${v} a.swf.x
+ 	if [ $? != 0 ]; then
+ 		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++		stat --printf="\n%s\n" .expected/a.swf.x${v}
++		stat --printf="%s\n" a.swf.x
+ 		echo y \?; read -n1 -t $((60*60*24)) ans
+ 		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+ 		base64 a.swf.x > .expected/a.swf.x${v}.txt
+--- actionswf-1.orig/touch/Makefile
++++ /dev/null
+@@ -1,37 +0,0 @@
+-
+-ifndef OCOMP
+-OCOMP=o
+-endif
+-ifndef OLINK
+-OLINK=ounused
+-endif
+-ifndef OCONV
+-OCONV=otoc
+-endif
+-ifndef linkerflags
+-linkerflags=-O3 -s
+-endif
+-
+-OFLAGS=x_file 2
+-
+-proj=oatouch
+-
+-all: ${proj}
+-
+-${proj}: main.o
+-	${OLINK} main.oc.log
+-	@echo
+-	$(CC) ${linkerflags} $< -o ${proj}
+-	# `pkg-config --libs gtk4`
+-
+-%.o: %.oc
+-	${OCOMP} $< ${OFLAGS}
+-	${OCONV} $<.x
+-	$(CC) -c $*.c
+-
+-clean:
+-	-rm -f main.o
+-	-rm -f main.oc.log
+-	-rm -f main.oc.x
+-	-rm -f main.c
+-	-rm -f ${proj}
+--- actionswf-1.orig/touch/main.oc
++++ /dev/null
+@@ -1,4 +0,0 @@
+-
+-format elfobj64
+-
+-entry main()
+--- actionswf-1.orig/touch/mk
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-OCONV=~/o/ocompiler-1/otoc/otoc make
+--- /dev/null
++++ actionswf-1/translator/Makefile
+@@ -0,0 +1,37 @@
++
++ifndef OCOMP
++OCOMP=o
++endif
++ifndef OLINK
++OLINK=ounused
++endif
++ifndef OCONV
++OCONV=otoc
++endif
++ifndef linkerflags
++linkerflags=-O3 -s
++endif
++
++OFLAGS=x_file 2
++
++proj=oatouch
++
++all: ${proj}
++
++${proj}: main.o
++	${OLINK} main.oc.log
++	@echo
++	$(CC) ${linkerflags} $< -o ${proj}
++	# `pkg-config --libs gtk4`
++
++%.o: %.oc
++	${OCOMP} $< ${OFLAGS}
++	${OCONV} $<.x
++	$(CC) -c $*.c
++
++clean:
++	-rm -f main.o
++	-rm -f main.oc.log
++	-rm -f main.oc.x
++	-rm -f main.c
++	-rm -f ${proj}
+--- /dev/null
++++ actionswf-1/translator/main.oc
+@@ -0,0 +1,4 @@
++
++format elfobj64
++
++entry main()
+--- /dev/null
++++ actionswf-1/translator/mk
+@@ -0,0 +1,2 @@
++
++OCONV=~/o/ocompiler-1/otoc/otoc make
