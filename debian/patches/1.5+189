@@ -1,0 +1,540 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+189) xenial; urgency=medium
+ .
+   * small diff at ounused
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-07-28
+
+--- ocompiler-1.orig/Makefile
++++ ocompiler-1/Makefile
+@@ -23,7 +23,6 @@ ${ver}:
+ #if ! [ -s ./src/obj.txt ];then
+ verify_comp_with_link:
+ 	cd ./src; ${launcher} ../ounused/ounused ./linux/obj.oc.log
+-	@echo
+ 
+ #if only after ':' is after; if after ':' and below, one is at start the other one at end
+ all: ${ver}
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1ez8O3toptHLmXHzBnpdaV2epwD-QEhmB
++File ID: 1CoZW_kmKD_rXBhdBsxVy8U-MH_DtJpiC
++<p>Found file: ./ocompiler-1-5+188.x86_64.rpm, 1CoZW_kmKD_rXBhdBsxVy8U-MH_DtJpiC, 2024-07-28T11:55:44.897Z, 73622, https://drive.google.com/uc?id=1CoZW_kmKD_rXBhdBsxVy8U-MH_DtJpiC&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+187.x86_64.rpm, 1ez8O3toptHLmXHzBnpdaV2epwD-QEhmB, 2024-07-18T12:15:41.915Z, 73573, https://drive.google.com/uc?id=1ez8O3toptHLmXHzBnpdaV2epwD-QEhmB&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+186.x86_64.rpm, 1Zl96muMRobhQ1n0PE1u7TH0hAJFl7j0q, 2024-07-17T04:47:19.396Z, 73484, https://drive.google.com/uc?id=1Zl96muMRobhQ1n0PE1u7TH0hAJFl7j0q&export=download
+--- ocompiler-1.orig/ostrip/Makefile
++++ ocompiler-1/ostrip/Makefile
+@@ -45,7 +45,6 @@ ATLDCOM = $(LD) --dynamic-linker=/lib64/
+ 
+ ${OB}: ${OBJ}
+ 	${launcher} ${OLINK} ${FULLOBJLOG}
+-	@echo
+ 	if [ -z "${ldprefer}" ]; then \
+ 		${ATCCCOM} ${OB} ${FULLOBJO}; \
+ 	else \
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -59,7 +59,6 @@ ${OBJ}: ${FULLOBJS} ${number}
+ 	${OCOMP} $< ${OFLAGS}
+ ${prog}: ${OBJ}
+ 	${OLINK} ${FULLOBJLOG}
+-	@echo
+ 	if [ -z "${ldprefer}" ]; then \
+ 		${ATCCCOM} ${prog} ${FULLOBJO}; \
+ 	else \
+--- /dev/null
++++ ocompiler-1/otoc/common.h
+@@ -0,0 +1,13 @@
++
++const EXIT_SUCCESS=0
++const EXIT_FAILURE=1
++const NULL=0
++
++const SEEK_SET=0
++const SEEK_CUR=1
++const SEEK_END=2
++
++const FALSE=0
++const TRUE=1
++
++const DWORD=4
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -11,13 +11,6 @@ importx "strchr" strchr
+ importx "printf" printf
+ importx "fprintf" fprintf
+ 
+-const SEEK_SET=0
+-const SEEK_CUR=1
+-const SEEK_END=2
+-
+-const FALSE=0
+-const TRUE=1
+-
+ include "xfile.h"
+ #const Xfile_last=Xfile_line
+ const Xfile_aftercall_declarative=Xfile_aftercall_import # less or equal
+@@ -176,6 +169,8 @@ function unimplemented_end()
+ 	set loop.allowwrite (TRUE)
+ end
+ 
++include "util.oc"
++
+ function aftercallenable()
+ 	set main.result (EXIT_FAILURE)
+ 	leave loop.bp
+@@ -266,11 +261,18 @@ function declare(sd outfile,sv pbuffer)
+ 	datax sz#1;valuex pointer#1
+ 	charx sign#1;call get_char(pbuffer,#sign)
+ 	if sign=(Xfile_declsign_reserve)
++		#as a special case, [1] is removed for C. and whit what replaced? const a=1 and [a]. alternatives? structure with declared vars, = at nobits vars
++		#this for structures, and not only because at o #1 is not [1], will make more similar
++		set loop.allowwrite number_allowwrite(pbuffer#)
+ 		call writesl(outfile)
+ 		call number(pbuffer,outfile)
+ 		call writesr(outfile)
++		set loop.allowwrite (TRUE)  # example: at unimplemented commands and at condition sign check is FALSE
+ 	elseif sign=(Xfile_declsign_pointer)
++		call writee(outfile)
++		call write(outfile,#and.a,1)
+ 		call get_string(pbuffer,#sz,#pointer)
++		call write(outfile,pointer,sz)
+ 	else #Xfile_declsign_e*
+ 		charx mode#1;call get_char(pbuffer,#mode)
+ 		if mode=(Xfile_declmode_value)
+--- ocompiler-1.orig/otoc/otoc.oc
++++ ocompiler-1/otoc/otoc.oc
+@@ -1,9 +1,7 @@
+ 
+ format elfobj64
+ 
+-const EXIT_SUCCESS=0
+-const EXIT_FAILURE=1
+-const NULL=0
++include "common.h"
+ 
+ importx "puts" puts
+ importx "fopen" fopen
+--- /dev/null
++++ ocompiler-1/otoc/util.oc
+@@ -0,0 +1,19 @@
++
++function number_allowwrite(ss buffer)
++	if buffer#=(Xfile_numbers_prefix_none)
++		inc buffer
++		if buffer#=(Xfile_numbers_type_tdecimal)
++			inc buffer
++			if buffer#d=1
++				add buffer (DWORD)
++				if buffer#=(asciione)
++					inc buffer
++					if buffer#=(Xfile_numbers_done)
++						return (FALSE)
++					end
++				end
++			end
++		end
++	end
++	return (TRUE)
++end
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -124,6 +124,7 @@ function varfunc(sv pbuffer,sd outfile)
+ 		call write(outfile,#and.a,1)
+ 	end
+ 	charx colon#1;call get_char(pbuffer,#colon)
++	charx d#1
+ 	if colon=(Xfile_arg_varfn_colon_yes)
+ 		charx dt#1;call get_char(pbuffer,#dt)
+ 		if dt=(Xfile_arg_varfn_dot_yes)
+@@ -133,12 +134,30 @@ function varfunc(sv pbuffer,sd outfile)
+ 		datax szv#1;valuex vr#1
+ 		call get_string(pbuffer,#szv,#vr)
+ 		charx suffix#1;call get_char(pbuffer,#suffix)
+-	end
+-	charx d#1;call get_char(pbuffer,#d)
+-	if d=(Xfile_arg_varfn_dot_no)
++
++		call get_char(pbuffer,#d)
++		if d=(Xfile_arg_varfn_dot_yes) #not using dot() because in the middle is the location( ((struct a*)c)->b ), dot() for sizeof a.b offsetof a.b
++			datax sz#1;valuex pointer#1
++			call get_string(pbuffer,#sz,#pointer)
++			call writel(outfile)
++			call writel(outfile)
++			call write(outfile,#functiondef_intern.a,\functiondef_intern.a)
++			call write(outfile,pointer,sz)
++			call write(outfile,#write_long.point,1)
++			call writer(outfile)
++			call write(outfile,vr,szv)
++			call writer(outfile)
++			char a="->"^
++			call write(outfile,#a,\.a)
++		end
+ 		call var(pbuffer,outfile)
+ 	else
+-		callg dot(pbuffer,outfile)
++		call get_char(pbuffer,#d)
++		if d=(Xfile_arg_varfn_dot_no)
++			call var(pbuffer,outfile)
++		else
++			callg dot(pbuffer,outfile)
++		end
+ 	end
+ end
+ 
+--- ocompiler-1.orig/ounused/Makefile
++++ ocompiler-1/ounused/Makefile
+@@ -26,7 +26,6 @@ ATLDCOM = $(LD) ${linkerflags} -melf_i38
+ ${OB}: ${OBJ}
+ 	${ATLDCOM} ${FULLOBJO}
+ 	${launcher} ./${OB} ${FULLOBJLOG}
+-	@echo
+ 
+ install: all
+ 	install -D ${OB} \
+--- ocompiler-1.orig/ounused/loop.oc
++++ ocompiler-1/ounused/loop.oc
+@@ -127,9 +127,9 @@ endfunction
+ 
+ function changedir(ss s)
+ 	if s#!=0 #it's extern chdir error
+-		sd d
+-		setcall d chdir(s)
+-		if d!=0
++		datax int#1
++		setcall int chdir(s)
++		if int!=0
+ 			Call erExit("chdir error")
+ 		endif
+ 	endif
+--- ocompiler-1.orig/ounused/resolve.oc
++++ ocompiler-1/ounused/resolve.oc
+@@ -29,6 +29,9 @@ function resolve(sd j)
+ 	sd k
+ 	setcall k uconst_resolved(2)
+ 	#
++	sv so^stdout
++	call fflush(so#) #there is no line end at stdout, then flush is required
++	#
+ 	sv st^stderr
+ 	sd fls
+ 	setcall fls filessize()
+@@ -37,11 +40,9 @@ function resolve(sd j)
+ 	setcall imps_sz importssize()
+ 	sd const_sz
+ 	setcall const_sz constssize()
+-	Call fprintf(st#,"%u logs, %u files, %u unique imports, %u %s/%s, %u %s resolved, %u %s/%s resolved.",j,fls,imps_sz,const_sz,c,v,i,f,k,c,v)
++	Call fprintf(st#,"\n%u logs, %u files, %u unique imports, %u %s/%s, %u %s resolved, %u %s/%s resolved.",j,fls,imps_sz,const_sz,c,v,i,f,k,c,v) #starting with a new line to not be on the same line with stdout
++	#\n, end ending with another one for no echo after this program
+ 	call messagedelim()
+-
+-	sv so^stdout
+-	call fflush(so#) #there is no line end at stdout, then flush is required
+ endfunction
+ 
+ function wrongExit(ss x,ss n,sd len)
+--- ocompiler-1.orig/src/files/actions/setdefdir.oc
++++ ocompiler-1/src/files/actions/setdefdir.oc
+@@ -6,9 +6,9 @@ Char storeachar#1
+ Set storeachar filenameloc#
+ Set filenameloc# null
+ 
+-sd chdirresult#1
+-setcall chdirresult changedir(path_nofree)
+-if chdirresult!=chdirok
++datax chdir_result#1
++setcall chdir_result changedir(path_nofree)
++if chdir_result!=chdirok
+ 	str startchdirerr="Cannot set active folder:"
+ 	setcall errormsg errorDefOut(startchdirerr,path_nofree)
+ 	Call msgerrexit(errormsg)
+--- ocompiler-1.orig/src/linux/files/prefextra.oc
++++ ocompiler-1/src/linux/files/prefextra.oc
+@@ -15,7 +15,7 @@ function prefextra_helper(ss prefpath,sd
+ 	sd err
+ 	sd s2;setcall s2 strlen(prefpath)
+ 	sd mem
+-	sd a
++	datax int#1
+ 
+ 	#first verify in home
+ 	ss homestr="HOME"
+@@ -29,8 +29,8 @@ function prefextra_helper(ss prefpath,sd
+ 			call memtomem(mem,envhome,s1)
+ 			ss p;set p mem;add p s1;set p# (asciislash);inc p
+ 			call memtomem(p,prefpath,s2);add p s2;set p# (NULL)
+-			setcall a access(mem,(F_OK))
+-			if a=0
++			setcall int access(mem,(F_OK))
++			if int=0
+ 				SetCall err file_get_content_ofs(mem,ptrpreferencessize,ptrpreferencescontent,(NULL))
+ 				if err=(noerror)
+ 					call free(mem)
+@@ -71,8 +71,8 @@ function prefextra_helper(ss prefpath,sd
+ 				call memtomem(scrpath,prefpath,s2)
+ 				add scrpath s2
+ 				set scrpath# (NULL)
+-				setcall a access(mem,(F_OK))
+-				if a=0
++				setcall int access(mem,(F_OK))
++				if int=0
+ 					SetCall err file_get_content_ofs(mem,ptrpreferencessize,ptrpreferencescontent,(NULL)) #openfile has alloc err msg
+ 					if err=(noerror)
+ 						call free(mem)
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -11,8 +11,8 @@ char* c9="";short* ca=1;int* cb=1;
+ char cc[]={9,97,122};
+ #define a1 1
+ char a[3];
+-long* b;
+-long*intern(int a,int* b,long* c){//commenting
++long* b=&a;
++long*intern(int a,int* b,long* c,long* d){//commenting
+ 	a++;
+ 	a--;
+ 	c++;
+@@ -22,7 +22,10 @@ long*intern(int a,int* b,long* c){//comm
+ 	c=(long)c<<1;
+ 	c=(unsigned long)c>>1;
+ 	c=(long)c>>1;
+-	return c;
++	return d;
++};
++struct st{
++	int a;
+ };
+ void f(){
+ 	long* a=0;
+@@ -33,13 +36,13 @@ void f(){
+ 	b=((short*)a)[0];
+ 	b=((int*)a)[0];
+ 	b=((long*)a)[0];
++	int c;
++	long* d=&c;
++	a=((struct st*)d)->a;
+ 	if(2==2){
+ 		return;
+ 	};
+ };
+-struct st{
+-	int a[1];
+-};
+ long*puts();
+ long*main(){
+ 	b=b;
+@@ -53,7 +56,7 @@ long*main(){
+ 	c1=(long)c1&1;
+ 	c1=(long)c1|1;
+ 	b=(long)b^1;
+-	intern(1,"q\nw\re\tr",a);
++	intern(1,"q\nw\re\tr",a,a);
+ 	b=puts();
+ 	if(1==1){
+ 		//elseif 1!!1
+--- ocompiler-1.orig/tests/.expected/a.out.oc.log
++++ ocompiler-1/tests/.expected/a.out.oc.log
+@@ -3,4 +3,4 @@ na.out.oc
+ ninclude.h
+ q
+ q
+-x00000047
++x0000004b
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -4,32 +4,34 @@ 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
+-AABhMR8VAAEDAAAAdHN0FwYAAAB4X2ZpbGUBGQcBAAADAQAAADIf
++HwYCAAAEAAEAAABiAAEAAABhBQYAAABpbnRlcm4AAAQAAAACAAACAAEAAABhAQcAAQAAAGIBBAAB
++AAAAYwEEAAEAAABkAgoAAABjb21tZW50aW5nBwIAAAABAAAAYQAHBAAAAAEAAABhAAcDAAAAAQAA
++AGMABwUAAAABAAAAYwAHBgAAAAEAAABjAAcHAAAAAQAAAGMABwgAAAABAAAAYwAHCQAAAAEAAABj
++AAcKAAAAAQAAAGMABwsAAAABAAAAYwAHDAAAAAEAAABjAAcAAgAAAAEAAABkABEFAgAAAHN0AAEA
++AAAABgIBAAIAAQAAAGEBAAMBAAAAMR8RBQEAAABmAAAAAAAABgIAAAQAAQAAAGECAAAEAQAAADAf
++BgIAAAQAAQAAAGICAAAEAQAAADAfCAAAAAEAAABhAEUCAQAAAQAAAGIACAAAAAEAAABiAEUCAAAA
++AQAAAGEBAAgAAAABAAAAYgBFAgAAAAEAAABhAVMIAAAAAQAAAGIARQIAAAABAAAAYQFXCAAAAAEA
++AABiAEUCAAAAAQAAAGEBRAgAAAABAAAAYgBFAgAAAAEAAABhAVYGAgEAAgABAAAAYwEAAwEAAAAx
++HwYCAAAEAAEAAABkAAEAAABjCAAAAAEAAABhAEUCAAEAAQAAAGQBAQIAAABzdAEAAABhAAsAAAMB
++AAAAMh+FAAADAQAAADIfEhEREwEAAABhFAABAAAAYgQAAABwdXRzBQQAAABtYWluAwAAAAAACAAA
++AAEAAABiAEUCAAAAAQAAAGIACAAAAAEAAABiACsAAAMBAAAAMR8IAAAAAQAAAGIALQAAAwEAAAAx
++HwgAAAABAAAAYgAqAAADAQAAADEfCAAAAAIAAABjMQAvAAADAQAAADEfCAAAAAIAAABjMQBEAAAD
++AQAAADEfCAAAAAIAAABjMQAlAAADAQAAADEfCAAAAAIAAABjMQBSAAADAQAAADEfCAAAAAIAAABj
++MQAmAAADAQAAADEfCAAAAAIAAABjMQB8AAADAQAAADEfCAAAAAEAAABiAF4AAAMBAAAAMR8WAwAA
++AAEAHwIBHwMCKxAAAwEAAAAxKwAEAgAAADAxKwAFAwAAADB4MisABwYAAABpbnRlcm4rAAgGAAAA
++aW50ZXJuKwAJBgAAAGludGVybgEAAABhACsACgYAAABpbnRlcm4BAAAAYQAYHwkAAAYAAABpbnRl
++cm4EAAAAAgAAAQQAAABtYWluAQAAAGEAAgABAQQAAABtYWluAQAAAGEAAAEAAABhAAEHAAAAcQp3
++DWUJcgAAAwEAAAAxHwgAAAABAAAAYgBFAwAEAAAAcHV0cwAAAAALAAADAQAAADEfhQAAAwEAAAAx
++HwALAAAAZWxzZWlmIDEhITEACgAAAGVsc2VpZiAxITERCwAAAwEAAAAxH4QAAAMBAAAAMR8MCwAA
++AwEAAAAxH40AAAMBAAAAMR8MGhELAAADAQAAADEfjgAAAwEAAAAxHxoRCwAAAwEAAAAxH48AAAMB
++AAAAMR8aEQsAAAMBAAAAMR+MAAADAQAAADEfGhELAAADAQAAADEfgwAAAwEAAAAxHxoRCwAAAwEA
++AAAxH4YAAAMBAAAAMR8aEQsAAAMBAAAAMR+HAAADAQAAADEfGhELAAADAQAAADEfggAAAwEAAAAx
++HxoRCgAAAQAAAGIAAAABAAAAYgAAAAMBAAAAMR8NAAADAQAAADEfhQAAAwEAAAAyHxARDg8RBgIA
++AAAAAQAAAHoCAAAFBAAAADB4ZmYrAAQDAAAAMDc3KwADAgAAADEyLQADAQAAADMrEAADAQAAADQq
++AAMBAAAAMy8AAwEAAAAyXAADAQAAADEmAAMBAAAAMXwAAwEAAAAxXgADAQAAADElAAMBAAAANToA
++AwEAAAA1WwADAQAAADNdAAMBAAAAM30AAwEAAAAzPQADAQAAADJlAAMBAAAAMjwAAwEAAAAzPgAD
++AQAAADNMAAMBAAAANEcAAwEAAAA0YQADAQAAADdvAAMBAAAAN3UAAwEAAAA2VQADAQAAADZsAAMB
++AAAANmcAAwEAAAA2GB8aACQAAABjaGFyIGVyPTMhITIgY2hhciBlcj0zITIgY2hhciBlcj0zJDIG
++AgAAAAACAAAAejICAAAGAgAAAGExHxoGAgAAAAACAAAAejMCAAEGAgAAAGExHxoGAgAAAAACAAAA
++ejQCAAIGAgAAAGExHxoGAgAAAAACAAAAejUCAAMGAgAAAGExHxUAAQMAAAB0c3QXBgAAAHhfZmls
++ZQEZBwEAAAMBAAAAMh8=
+--- ocompiler-1.orig/tests/.expected/a.out.txt
++++ ocompiler-1/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+-f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAUZUECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAhLAAAASwAAAAYAAAAAEAAAAQAAAEsEAABLlAQIS5QECPICAADyAgAABQAAAAAQ
+-AAADAAAAPQcAAD2XBAg9lwQIEwAAABMAAAAEAAAAAQAAAAIAAABQBwAAUKcECFCnBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAFAHAABQpwQIUKcECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAwKcECMAHAAAWAAAAAAAAAAAAAAAB
+-AAAAAAAAAA0AAAAGAAAAAwAAAFCnBAhQBwAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAbJUECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
++BAAAAIQECACEBAhTAAAAUwAAAAYAAAAAEAAAAQAAAFMEAABTlAQIU5QECA4DAAAOAwAABQAAAAAQ
++AAADAAAAYQcAAGGXBAhhlwQIEwAAABMAAAAEAAAAAQAAAAIAAAB0BwAAdKcECHSnBAhQAAAAUAAA
++AAQAAAABAAAAAQAAAHQHAAB0pwQIdKcECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAA5KcECOQHAAAWAAAAAAAAAAAAAAAB
++AAAAAAAAAA0AAAAGAAAAAwAAAHSnBAh0BwAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -16,21 +16,22 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC
+-AzQ1AAEAAAABAAAAAQAAAAEAAAAahAQIAAEAAAABAAAACWF6AAAAJoQECAAAAAAAAAAAAAAAAHEK
+-dw1lCXIARwH//gIAAAAAAIuEJAQAAACjLYQECFNVi+yL3LothAQI/wK6LYQECP8KuhQAAAAD1YMC
+-BLoUAAAAA9WDKgS6FAAAAAPV9xq6FAAAAAPV9xK6FAAAAAPViSq6FAAAAAPViyrJW8O6FAAAAAPV
+-0SK6FAAAAAPV0Sq6FAAAAAPV0Tq6FAAAAAPViwLJW8NTVYvsi9y4NYQECLoxhAQIiQK6MYQECIsS
+-iwK6NYQECIkCujGEBAiLEg+2Aro1hAQIiQK6MYQECIsSiwK6NYQECIkCujGEBAiLEosCujWEBAiJ
+-AroxhAQIixKLAro1hAQIiQK4AgAAALkCAAAAOcEPhQMAAADJW8PJW8NTVYvsi9zJW8NTVYvsi9y6
+-KYQECIsCuimEBAiJArgBAAAAuimEBAgBArgBAAAAuimEBAgpArkBAAAAuimEBAiLAvfhuimEBAiJ
+-ArEBugCEBAiKAg+64AdzBcbE/+sDxsQA9vmIArEBugCEBAiKAsbEAPbxiAKxAboAhAQIigIPuuAH
+-cwXGxP/rA8bEAPb5iCKxAboAhAQIigLGxAD28YgisAG6AIQECCACsAG6AIQECAgCuAEAAAC6KYQE
+-CDEC/MZYi+O6TIQECA+2AlC6OYQECIvCUGgBAAAA6CX+//+L47jipwQI/xC6KYQECIkCuAEAAAC5
+-AQAAADnBD4UAAAAAuAEAAAC5AQAAADnBD4QFAAAA6RcAAAC4AQAAALkBAAAAOcEPjQUAAADpAAAA
+-ALgBAAAAuQEAAAA5wQ+OAAAAALgBAAAAuQEAAAA5wQ+PAAAAALgBAAAAuQEAAAA5wQ+MAAAAALgB
+-AAAAuQEAAAA5wQ+DAAAAALgBAAAAuQEAAAA5wQ+GAAAAALgBAAAAuQEAAAA5wQ+HAAAAALgBAAAA
+-uQEAAAA5wQ+CAAAAAIvjuQEAAAC6KYQECIsCgfkAAAAAdAf/yf80iOvxuCmEBAj/ELgCAAAAuQEA
+-AAA5wQ+FBQAAAOnp////zLgBAAAAx8MCAAAAzYAvbGliL2xkLWxpbnV4LnNvLjIAAQAAAAAAAAAE
+-AAAAoKcECAYAAACwpwQICwAAABAAAAAFAAAAwKcECAoAAAAWAAAABwAAANanBAgIAAAADAAAAAkA
+-AAAMAAAAAAAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAEgAAAGEAYgAALmR5bnN0
+-cgAuZHluYW1pYwDipwQIAQAAAAAAAAAAAAAA
++AzQ1AAEAAAABAAAAAQAAAAEAAAAahAQIAAEAAAABAAAACWF6AAAAJoQECAAAAAAAAAAAAAAAAE+E
++BAhxCncNZQlyAEcB//4CAAAAAAAAAAAAi4QkBAAAAKMthAQIU1WL7Ivcui2EBAj/ArothAQI/wq6
++FAAAAAPVgwIEuhQAAAAD1YMqBLoUAAAAA9X3GroUAAAAA9X3EroUAAAAA9WJKroUAAAAA9WLKslb
++w7oUAAAAA9XRIroUAAAAA9XRKroUAAAAA9XROroYAAAAA9WLAslbw1NVi+yL3Mlbw1NVi+yL3Lg1
++hAQIujGEBAiJAroxhAQIixKLAro1hAQIiQK6MYQECIsSD7YCujWEBAiJAroxhAQIixKLAro1hAQI
++iQK6MYQECIsSiwK6NYQECIkCujGEBAiLEosCujWEBAiJAro5hAQIixKDwgCLAroxhAQIiQK4AgAA
++ALkCAAAAOcEPhQMAAADJW8PJW8NTVYvsi9y6KYQECIsCuimEBAiJArgBAAAAuimEBAgBArgBAAAA
++uimEBAgpArkBAAAAuimEBAiLAvfhuimEBAiJArEBugCEBAiKAg+64AdzBcbE/+sDxsQA9vmIArEB
++ugCEBAiKAsbEAPbxiAKxAboAhAQIigIPuuAHcwXGxP/rA8bEAPb5iCKxAboAhAQIigLGxAD28Ygi
++sAG6AIQECCACsAG6AIQECAgCuAEAAAC6KYQECDEC/MJgi+O6JoQECA+2AlC6TIQECA+2AlC6PYQE
++CIvCUGgBAAAA6An+//+L47gGqAQI/xC6KYQECIkCuAEAAAC5AQAAADnBD4UAAAAAuAEAAAC5AQAA
++ADnBD4QFAAAA6RcAAAC4AQAAALkBAAAAOcEPjQUAAADpAAAAALgBAAAAuQEAAAA5wQ+OAAAAALgB
++AAAAuQEAAAA5wQ+PAAAAALgBAAAAuQEAAAA5wQ+MAAAAALgBAAAAuQEAAAA5wQ+DAAAAALgBAAAA
++uQEAAAA5wQ+GAAAAALgBAAAAuQEAAAA5wQ+HAAAAALgBAAAAuQEAAAA5wQ+CAAAAAIvjuQEAAAC6
++KYQECIsCgfkAAAAAdAf/yf80iOvxuCmEBAj/ELgCAAAAuQEAAAA5wQ+FBQAAAOnp////zLgBAAAA
++x8MCAAAAzYAvbGliL2xkLWxpbnV4LnNvLjIAAQAAAAAAAAAEAAAAxKcECAYAAADUpwQICwAAABAA
++AAAFAAAA5KcECAoAAAAWAAAABwAAAPqnBAgIAAAADAAAAAkAAAAMAAAAAAAAAAAAAAABAAAAAQAA
++AAAAAAAAAAAAAgAAAAAAAAAAAAAAEgAAAGEAYgAALmR5bnN0cgAuZHluYW1pYwAGqAQIAQAAAAAA
++AAAAAAAA
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -22,7 +22,7 @@ const a1=1
+ char a#3
+ value b^a
+ 
+-function intern(data a,sd b,sv c) #commenting
++function intern(data a,sd b,sv c,sv d) #commenting
+ 	inc a
+ 	dec a
+ 	incst c
+@@ -34,7 +34,10 @@ function intern(data a,sd b,sv c) #comme
+ 	shl1 c
+ 	shr1 c
+ 	sar1 c
+-	return c
++	return d
++end
++function st()
++	datax a#1
+ end
+ function f()
+ 	value a=0
+@@ -45,15 +48,14 @@ function f()
+ 	set b a#w
+ 	set b a#d
+ 	set b a#v
++	datax c#1
++	value d^c
++	set a d#:st.a
+ 	if 2=2
+ 		ret
+ 	end
+ end
+ 
+-function st()
+-	datax a#1
+-end
+-
+ library "a"
+ import "b" puts
+ 
+@@ -73,7 +75,7 @@ xor b 1
+ 
+ hex -:,~\,~-\\+(1+01+0x2+\intern+\\intern+\intern.a+\intern.a\)
+ 
+-call intern(1,"q\nw\re\tr",main.a:main.a)
++call intern(1,"q\nw\re\tr",main.a:a,main.a)
+ set b puts()
+ 
+ if 1=1
