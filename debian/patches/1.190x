@@ -1,0 +1,120 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-190x) xenial; urgency=medium
+ .
+   * to be same with source
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-07-29
+
+--- ovideo-1.orig/arh/pub
++++ ovideo-1/arh/pub
+@@ -1,5 +1,13 @@
+ 
+-git show master:version.txt > version.txt && \
++echo "test/xver? (n)o? then git show master:verion.txt" && \
++read -n1 -t $((60*60*24)) ans && \
++if [ "${ans}" != "n" ]; then
++	echo xver && \
++	~/test/xver ./version.txt
++else
++	echo git show && \
++	git show master:version.txt > version.txt
++fi && \
+ ~/test/debinit2 "${1}" && \
+ ~/test/keyring && \
+ ~/test/deb && \
+--- ovideo-1.orig/src/_dif/dif~lin.oc
++++ ovideo-1/src/_dif/dif~lin.oc
+@@ -819,8 +819,8 @@ function uninit_start()
+ 	sd er
+ 	setcall er home_folder(#f,(NULL))
+ 	if er=(noerror)
+-		sd a;setcall a access(f,(F_OK))
+-		if a=0
++		datax int#1;setcall int access(f,(F_OK))
++		if int=0
+ 			setcall er move_to_folder(f)
+ 		else
+ 			return (error)
+--- ovideo-1.orig/src/_exec/init.oc
++++ ovideo-1/src/_exec/init.oc
+@@ -116,12 +116,12 @@ endfunction
+ 
+ #er
+ function init_dir(sd f)
+-	sd is
+-	setcall is access(f,(F_OK))
++	datax#1 int
++	setcall int access(f,(F_OK))
+ 	#this looks useless check but we want mkdir to return success, then, it is ok, ignoring mkdir by others between these calls
+-	if is=-1
+-		setcall is mkdir(f,(flag_dmode))
+-		if is!=0
++	if int=-1
++		setcall int mkdir(f,(flag_dmode))
++		if int!=0
+ 			return "mkdir error"
+ 		endif
+ 	endif
+@@ -131,10 +131,10 @@ endfunction
+ function init_sys_file(sd f,sd data,sd sz,sv perr,sv forward)
+ 	char buf#biggest_string+1+4+1
+ 	call sprintf(#buf,"%s.data",f)
+-	sd is
+-	setcall is access(#buf,(F_OK))
++	datax#1 int
++	setcall int access(#buf,(F_OK))
+ 	if forward=(NULL)
+-		if is=-1
++		if int=-1
+ 			#open
+ 			const O_WRONLY=0x0001
+ 			sd fd
+@@ -149,7 +149,7 @@ function init_sys_file(sd f,sd data,sd s
+ 			endif
+ 		endif
+ 	else
+-		if is=0
++		if int=0
+ 			call forward(#buf)
+ 		endif
+ 	endelse
+@@ -158,10 +158,10 @@ endfunction
+ 
+ #d
+ function uninit_folder(sv fn)
+-	sd d;sd a
++	sd d;datax#1 int
+ 	setcall d fn()
+-	setcall a access(d,(F_OK))
+-	if a=0
++	setcall int access(d,(F_OK))
++	if int=0
+ 		return d
+ 	endif
+ 	return (NULL)
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.189
+\ No newline at end of file
++1.190
+\ No newline at end of file
