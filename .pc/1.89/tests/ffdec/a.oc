@@ -1,0 +1,80 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+einclude "../../dev/import.h"
+
+include "../entryraw.oc" "../entry.oc"
+
+sd f=debug_log
+if argc=2
+	importx "puts" puts
+	call puts("alt flag")
+	set f (debug_alt)
+	sub a1# (0x30)
+	or f a1#
+end
+
+call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+
+call action("
+function c(){
+}
+function cc(a){
+}
+function ccc(a,b){
+}
+var a;
+delete a;
+delete a.b;
+var a=2;
+a=3;
+a.b=4;
+a=ccc(1,2);
+b.ccc(1,2);
+
+a=new c();
+
+//a+=2; will go to eval
+//a=a+2; will go to PushDuplicate that will go to eval
+a=eval('a')+2;
+
+a=1+(1+1)+a+a.b-1*1/1%1&1|1^1<<1>>1>>>1&&1||1;
+
+a[0]=1;
+a[b]=1;
+a='b';
+a=1.1;
+
+//a++; will go to eval
+//a--; will go to eval
+
+if(a==8){}
+if(a!=1){}
+if(a>1){}
+if(a<1){}
+if(a>=1){a=5;}
+else if(a<=1){a=3;}
+else{a=4;}
+
+while(a<9){a=eval('a')+1;}
+
+a=a==2?b:c;
+
+a=function(){return 2;}
+
+while(a<9){if(a==1){a=2;}else if(a==2){continue;}else if(a==4){break;}else{a=6;}}
+
+for(i=0;i<2;i=1+i){
+	if(a==1){a=2;}else if(a==2){continue;}
+}
+
+for(a in b){c=1+c;}
+")
+#call actiond("for(a in b){c=1+c;}") will be ""b"" and here straight "b"
+call action("return 1")
+
+call swf_done()
+
+call exit(0)
