@@ -1,0 +1,2459 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-88) bionic; urgency=medium
+ .
+   * float/push/string
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-08-12
+
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -18,8 +18,7 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp x && \
+ ~/test/arh2 ${last} 1
+ 
+-#while(true)  ;true; at for
+-#break jump at break;endwhile
++#trace(1,2) is error
+ 
+ #is
+ #"a=1; //dsfdsffsd
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -71,7 +71,8 @@ link:
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+-		LD_LIBRARY_PATH=../src ${launcher} ./${name} =; \
++		LD_LIBRARY_PATH=../src ${launcher} ./${name} && \
++		LD_LIBRARY_PATH=../src ${launcher} ./${name} x; \
+ 	fi
+ #\? is 0x3f log,alt,titles,x , inside -0x30, 0 is 0x30, \; to 0xb log,alt,x , = is 0xd log,titles,x
+ 
+--- actionswf-1.orig/example/entry.oc
++++ actionswf-1/example/entry.oc
+@@ -1,4 +1,5 @@
+ 
+-entryraw main(sd *argc,sd *argv0,ss argv1)
+-
+-sub argv1# 0x30
++entryraw main(sd argc,sd *argv0,ss *argv1)
++sd flags=flag_pool
++if argc!=1;or flags (flag_pool_read);end
++#sub argv1# 0x30
+--- actionswf-1.orig/example/entry_arg.oc
++++ actionswf-1/example/entry_arg.oc
+@@ -1,4 +1,5 @@
+ 
+-entry main(sd *argc,sv argv)
+-
+-incst argv;ss argv1;set argv1 argv#;sub argv1# 0x30
++entry main(sd argc,sv *argv)
++sd flags=flag_pool
++if argc!=1;or flags (flag_pool_read);end
++#incst argv;ss argv1;set argv1 argv#;sub argv1# 0x30
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -17,7 +17,7 @@ const shape_lat=40
+ 
+ include "entry_arg.oc" "entry.oc"
+ 
+-call swf_new_ex("example.swf",(width),(height),0x001100,24,argv1#)
++call swf_new_ex("example.swf",(width),(height),0x001100,24,flags)
+ 
+ sd shape
+ setcall shape swf_shape_basic((shape_lat),(shape_lat),0xffeeFEff,0x11FF22ff)
+--- actionswf-1.orig/include/action.h
++++ actionswf-1/include/action.h
+@@ -70,11 +70,13 @@ const ActionBitRShift=0x64     #OP
+ const ActionBitURShift=0x65    #OP
+ const ActionGreater=0x67       #OC
+ const ActionPush=0x96
++	const ap_String=0
++	const ap_Float=1
+ 	const ap_Null=2
+ 	const ap_Undefined=3
+ 	const ap_RegisterNumber=4
+ 	const ap_Boolean=5
+-	const ap_double=6        #RH
++	const ap_Double=6        #RH
+ 	const ap_Integer=7       #RH
+ 	const ap_Constant8=8     #RH
+ 	const ap_Constant16=9
+--- actionswf-1.orig/include/actionswf.h
++++ actionswf-1/include/actionswf.h
+@@ -1,6 +1,8 @@
+ 
+ #define flag_forin1 0x20
+ #define flag_framesAsShows 0x40
++#define flag_pool 0x100
++#define flag_pool_read 0x200
+ 
+ #ifdef __cplusplus
+ extern "C" {
+--- actionswf-1.orig/include/flags.h
++++ actionswf-1/include/flags.h
+@@ -11,3 +11,6 @@ const flag_framesAsShows=0x40
+ const flag_x=0x80
+ 
+ const flags_x=debug_x|debug_x_pad|flag_x
++
++const flag_pool=0x100
++const flag_pool_read=0x200 # else is write
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -13,18 +13,20 @@ const NULL=0
+ const BYTE=1
+ const WORD=2
+ const DWORD=4
+-const QWORD=8
++#const QWORD=8
+ 
+ const SEEK_SET=0
+ const SEEK_CUR=1
+ const SEEK_END=2
+ 
+ const maxuint16=0xffFF
++const uint16_str_len=5
+ 
+ const block_size=0x1000
+ 
+ const mem_struct__size_off=4
+-const mem_struct_size=8
++const mem_struct__size_size=4
++const mem_struct_size=mem_struct__size_off+mem_struct__size_size
+ 
+ const mem_exp_init=0
+ const mem_exp_add=1
+@@ -50,6 +52,7 @@ const ids_counter=5
+ const fd_error=-1
+ const fd_none=fd_error
+ const not_an_id=-1
++const any_id=~not_an_id
+ const dword_to_string_char=1+9+1
+ 
+ const End=0
+@@ -109,6 +112,7 @@ const from_done=1
+ 
+ const max_structures=999
+ const ids_str_len=3 #"999"
++const ext_str_len=1+ids_str_len+1+uint16_str_len+1 # separator ids separator word_str_len null
+ 
+ const action_code_values_unit=DWORD
+ 
+@@ -132,3 +136,11 @@ const actionrecordheader_size=actionreco
+ const ret_cont_break_nothing=0
+ const ret_cont_break_something=1
+ const ret_cont_break_break=2
++
++const totalvalues=maxuint16
++
++const doubleH_exp=0x7fF00000
++const doubleH_sign=0x80000000
++
++#const F_OK=0  # 0 2 4 6 are same as windows
++const R_OK=4
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -37,7 +37,7 @@ endif
+ 
+ #this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+ #	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x local
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x local actionpush
+ expitems = action swf tool ../shared/action_dllmain
+ 
+ exte=libexte.a
+@@ -104,7 +104,6 @@ endif
+ 
+ ${name}: ${obs} ${eobs}
+ 	${OLINK} ${logs}
+-	@echo
+ 	$(AR) cr ${exte} ${obs}
+ 	${ATLDCOM}
+ endif
+@@ -116,7 +115,6 @@ endif
+ 
+ ounused:
+ 	${OLINK} ${logs}
+-	@echo
+ 
+ compile: ${obs} ${eobs}
+ 
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -6,7 +6,6 @@ include "../include/prog.h"
+ importx "strcmp" strcmp
+ importx "strlen" strlen
+ 
+-const totalvalues=0xffFF
+ function action_code_values_container()
+     value setofvalues=NULL
+     return #setofvalues
+@@ -350,7 +349,7 @@ function action_code_pack(sd codepointer
+ 	else
+ 		#definelocal or setvariable or delete2
+ 		sd name;set name action_code_get_pointer(#codepointer)
+-		call action_push((ap_Constant8),name,-1)
++		call action_push((ap_Constant8),name)
+ 	endelse
+ 	if need_right=(TRUE)
+ 		if codepointer#=(ActionIncrement)
+@@ -403,7 +402,7 @@ function action_code_dupGet_member()
+ 	call swf_actionblock_add(#reg,(ActionStoreRegister_length))
+ 	call action_one((ActionStackSwap))
+ 	call action_one((ActionPushDuplicate))
+-	call action_push((ap_RegisterNumber),reg,-1)
++	call action_push((ap_RegisterNumber),reg)
+ 	call action_one((ActionStackSwap))
+ 	call action_one((ActionGetMember))
+ endfunction
+@@ -432,7 +431,7 @@ function action_code_write_conditions(sd
+ 				call action_one((ActionEnumerate2))
+ 			else #deprecated ActionEnumerate
+ 				set name action_code_get_pointer(#codepointer)
+-				call action_push((ap_Constant8),name,-1)
++				call action_push((ap_Constant8),name)
+ 				call action_one((ActionEnumerate))
+ 			end
+ 			call add_while_top_off((forin_marker))
+@@ -441,7 +440,7 @@ function action_code_write_conditions(sd
+ 			call actionrecordheader((ActionStoreRegister),(ActionStoreRegister_length))
+ 			call swf_actionblock_add(#first_reg,(ActionStoreRegister_length))
+ 			#
+-			call action_push((ap_Null),-1)
++			call action_push((ap_Null))
+ 			call action_one((ActionEquals2))
+ 			#write the jump offset
+ 			call write_ifjump_addTo_braceBlocks()
+@@ -453,9 +452,9 @@ function action_code_write_conditions(sd
+ 			else
+ 				#var or set variable
+ 				sd newname;set newname action_code_get_pointer(#codepointer)
+-				call action_push((ap_Constant8),newname,-1)
++				call action_push((ap_Constant8),newname)
+ 			endelse
+-			call action_push((ap_RegisterNumber),first_reg,-1)
++			call action_push((ap_RegisterNumber),first_reg)
+ 			call action_one(attr2)
+ 			return codepointer
+ 		endif
+@@ -528,7 +527,7 @@ function action_code_break()
+     if p_type#=(while_marker)
+         call write_jump(0)
+     else  #forin_marker
+-        call action_push((ap_Null),-1)
++        call action_push((ap_Null))
+         call action_one((ActionEquals2))
+         call write_ifjump()
+     endelse
+@@ -542,7 +541,7 @@ function action_code_break()
+     call brace_blocks_counter_inc()
+ endfunction
+ function remove_forIn_stack()
+-    call action_push((ap_Null),-1)
++    call action_push((ap_Null))
+     call action_one((ActionEquals2))
+     call action_one((ActionNot))
+     call actionrecordheader((ActionIf),2)
+@@ -768,7 +767,7 @@ function action_code_new_or_call(sv code
+ 		import "action_caller" action_caller
+ 		setcall codepointer action_caller(pmember#,#fname,codepointer)
+ 	end
+-	call action_push((ap_Constant8),fname,-1)
++	call action_push((ap_Constant8),fname)
+ 	return codepointer
+ endfunction
+ #codepointer
+@@ -821,6 +820,8 @@ function action_code_right_util_ex(sd co
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			call action_code_else_add()
+ 			setcall codepointer action_code_right_util(codepointer)
++			import "actionpush" actionpush
++			call actionpush() # must release example 2:[jump 0]3 , next will correct jump 0
+ 			call brace_blocks_remove_write()
+ 			return codepointer
+ 		endelseif
+@@ -863,17 +864,17 @@ function action_code_right_number(sd cod
+         if attrib=(ActionGetVariable)
+ 		set var action_code_get_pointer(#codepointer)
+             call action_one_command(var)
+-        elseif attrib=(ap_double)
+-		sd low;set low codepointer#;add codepointer (DWORD)
+-		call action_push(attrib,low,codepointer#,-1)
++        elseif attrib=(ap_Double)
++		sd high;set high codepointer#;add codepointer (DWORD)
++		call action_push(attrib,high,codepointer#)
+ 		add codepointer (DWORD)
+         elseif attrib=(ap_Integer)
+-		call action_push(attrib,codepointer#,-1)
++		call action_push(attrib,codepointer#)
+ 		add codepointer (DWORD)
+         else
+         #ap_Constant8
+ 		set var action_code_get_pointer(#codepointer)
+-		call action_push(attrib,var,-1)
++		call action_push(attrib,var)
+         endelse
+     endelse
+     return codepointer
+@@ -883,28 +884,28 @@ function action_one_command(ss command)
+ 	#
+ 	setcall compare strcmp("null",command)
+ 	if compare=0
+-		call action_push((ap_Null),-1)
++		call action_push((ap_Null))
+ 		ret
+ 	endif
+ 	setcall compare strcmp("undefined",command)
+ 	if compare=0
+-		call action_push((ap_Undefined),-1)
++		call action_push((ap_Undefined))
+ 		ret
+ 	endif
+ 	set compare action_true_compare(command)
+ 	if compare=0
+-		call action_push((ap_Boolean),1,-1)
++		call action_push((ap_Boolean),1)
+ 		ret
+ 	endif
+ 	setcall compare strcmp("false",command)
+ 	if compare=0
+-		call action_push((ap_Boolean),0,-1)
++		call action_push((ap_Boolean),0)
+ 		ret
+ 	endif
+ 	call action_get_one(command)
+ endfunction
+ function action_get_one(ss variable)
+-    call action_push((ap_Constant8),variable,-1)
++    call action_push((ap_Constant8),variable)
+     call action_one((ActionGetVariable))
+ endfunction
+ 
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -121,7 +121,7 @@ import "memtrail" memtrail
+ import "memtrailstrict" memtrailstrict
+ import "compat" compat
+ import "debug_phase_code_remove" debug_phase_code_remove
+-
++import "mem_cmp_bool" mem_cmp_bool
+ 
+ #aftercallimport ebool
+ 
+@@ -825,10 +825,10 @@ function action_code_str(ss ac)
+     return next
+ endfunction
+ function action_code_take(ss ac)
+-    sd b;setcall b numeric_code(ac)
+-    if b=(TRUE)
+-        ret
+-    endif
++	sd b;setcall b numeric_code(ac)
++	if b=(TRUE)
++		ret
++	endif
+ 	call action_code_take_pointer(ac)
+ endfunction
+ function action_code_take_pointer(sd ac)
+@@ -844,41 +844,64 @@ function action_code_take_pointer(sd ac)
+ endfunction
+ #bool
+ function numeric_code(ss ac)
+-    ss pointer;set pointer ac
+-    char neg="-"
+-    if pointer#=neg
+-        inc pointer
+-    endif
+-    sd bool
+-    setcall bool is_numeric(pointer#)
+-    if bool!=(TRUE);return (FALSE);endif
+-    #
+-    data value_low#1;data value_high#1
+-    #
+-    ss decimal_symbol_test
+-    char dot="."
+-    setcall decimal_symbol_test strchr(pointer,dot)
+-    if decimal_symbol_test!=(NULL)
+-        call action_code_set((ap_double))
+-        call sscanf(ac,"%lf",#value_low)
+-        call action_code_set(value_high)
+-        call action_code_set(value_low)
+-        return (TRUE)
+-    endif
+-    #
+-    call action_code_set((ap_Integer))
+-    #
+-    ss hextest
+-    set hextest pointer
+-    inc hextest
+-    char hex="x"
+-    if hextest#=hex
+-        call sscanf(ac,"%x",#value_low)
+-    else
+-        call sscanf(ac,"%u",#value_low)
+-    endelse
+-    call action_code_set(value_low)
+-    return (TRUE)
++	ss pointer;set pointer ac
++	char neg="-"
++	if pointer#=neg
++		inc pointer
++	endif
++	sd bool
++	setcall bool is_numeric(pointer#)
++	if bool!=(TRUE)
++		char i="Infinity"
++		sd c;set c mem_cmp_bool(pointer,#i,\.i) #versus a string
++		if c=(FALSE)
++			char n="NaN"
++			set c mem_cmp_bool(pointer,#n,\.n)
++			if c=(FALSE)
++				return (FALSE)
++			end
++			sd b=-1^doubleH_sign
++			if ac!=pointer ##swfdump is seeing -nan , nan
++				or b (doubleH_sign)
++			end
++			call action_code_set((ap_Double))
++			call action_code_set(b)
++			call action_code_set(-1)
++			return (TRUE)
++		end
++		sd a=doubleH_exp
++		if ac!=pointer ##negative
++			or a (doubleH_sign)
++		end
++		call action_code_set((ap_Double))
++		call action_code_set(a)
++		call action_code_set(0)
++		return (TRUE)
++	endif
++	data value_low#1;data value_high#1
++	ss decimal_symbol_test
++	char dot="."
++	setcall decimal_symbol_test strchr(pointer,dot)
++	if decimal_symbol_test!=(NULL)
++		call action_code_set((ap_Double))
++		call sscanf(ac,"%lf",#value_low)  # e is nice but need to write to not be subtract there (ex: ...e-38), then will be "g" here
++		call action_code_set(value_high)
++		call action_code_set(value_low)
++		return (TRUE)
++	endif
++	call action_code_set((ap_Integer))
++	#
++	ss hextest
++	set hextest pointer
++	inc hextest
++	char hex="x"
++	if hextest#=hex
++		call sscanf(ac,"%x",#value_low)
++	else
++		call sscanf(ac,"%u",#value_low)
++	endelse
++	call action_code_set(value_low)
++	return (TRUE)
+ endfunction
+ function action_code_member(ss ac)
+     vstr delims=".["
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -29,20 +29,164 @@ function actionpool_currentblock()
+     return block
+ endfunction
+ 
+-import "block_get_mem" block_get_mem
+-import "block_get_size" block_get_size
++importx "free" free
++import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
++function pool_data(sd id)
++	charx write#1
++	charx read#1
++	sv block;set block struct_ids_actionpool_filter((ids_get),id)
++	if block!=(NULL)
++		call free(block) #see struct_ids set
++	end
++end
++const constpool_unique=0x00
++const  constpool_multi=0xff
++function pool_realentry(sd pos)
++	sd id;set id actionpoolid_get()
++	sd b;set b struct_ids_actionpool_filter((ids_get),id)
++	ss mem;set mem block_get_mem(b)
++	add mem pos
++	set mem# (constpool_multi)
++end
++
++importx "access" access
++importx "fseek" fseek
++importx "fread" fread
++importx "unlink" unlink
++importx "fclose" fclose
++importx "sprintf" sprintf
++importx "fopen" fopen
++importx "ftell" ftell
++
+ import "stack_to_word_arg" stack_to_word_arg
+ import "word_arg_to_stack" word_arg_to_stack
+-
+ import "swf_mem" swf_mem
+-
+-
++import "block_get_mem" block_get_mem
++import "block_get_size" block_get_size
++import "block_reset_size" block_reset_size
++import "mem_block_add_throwless" mem_block_add_throwless
++import "block_get_mem_size" block_get_mem_size
+ 
+ #aftercallimport ebool
+ 
++import "f_open_mem" f_open_mem
++import "f_write" f_write
++import "memalloc" memalloc
++import "mem_block_add" mem_block_add
++
++function pool_init(sd flags)
++#when entering a frame must know what is. a frame with no savings at read will have cursor at start and later in that frame if is a pool request then will error
++	sd test=flag_pool
++	and test flags
++	if test!=0
++		and flags (flag_pool_read)
++		if flags=0
++			set pool_data.write (TRUE)
++			set pool_data.read (FALSE)  #is a read alone test case
++		else
++			set pool_data.write (FALSE) #most of are write else read
++			set pool_data.read (TRUE)
++		end
++		ret
++	end
++	set pool_data.write (FALSE)  #there are 2 write alone test cases
++	set pool_data.read (FALSE)
++end
++function pool_entry()
++	sd id;set id actionpoolid_get()
++	sd pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
++	char a=constpool_unique
++	callg mem_block_add(pb,#a,1)
++end
++function pool_reentry()
++	sd id;set id actionpoolid_get()
++	sd b;set b struct_ids_actionpool_filter((ids_get),id)
++	sd mem;sd size
++	call block_get_mem_size(b,#mem,#size)
++	sd cursor;set cursor mem#
++	if cursor<^size
++		inc mem#
++		add mem cursor
++		if mem#s=(constpool_unique)
++			return (not_an_id)
++		end
++		return (any_id)
++	end
++	callg error("error at pool read")
++end
++const pool_cursor_size=mem_struct__size_size
++function pool_read(sd id,sd frame_nr)
++	if pool_data.read!=(FALSE)
++		inc frame_nr  ##for next frame preparation
++
++		sv pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
++		call block_reset_size(pb#)  #if is after a read is ok, else is useless
++		data cursor=pool_cursor_size
++		call mem_block_add(pb,#cursor,(pool_cursor_size))  #if is first and after a read is ok, else is useless
++
++		sd name;set name pool_savepath(id,frame_nr)
++		sd a;set a access(name,(R_OK))
++		if a=0
++			sd f;set f fopen(name,"rb")
++			#call unlink(name) #"the file will remain in existence until the last file descriptor referring to it is closed"
++			#wine same thing. #include <unistd.h>#include <stdio.h>void main(){FILE*f=fopen("q","rb");unlink("q");fseek(f,0,SEEK_END);printf("%lu\n",ftell(f));}
++			#but now with java flashalizer only after fclose
++			if f=(NULL)
++				call free(name)
++				vstr er="pool read error"
++				call error(er)
++			end
++			call fseek(f,0,(SEEK_END))
++			sd sz;set sz ftell(f)
++			if sz=-1
++				call free(name)
++				call fclose(f)
++				call error(er)
++			end
++			call fseek(f,0,(SEEK_SET))
++			sd bool;set bool mem_block_add_throwless(pb,(NULL),sz)
++			if bool=(FALSE)
++				call free(name)
++				call fclose(f)
++				call error(er)
++			end
++			sd mem;set mem block_get_mem(pb#)
++			add mem (pool_cursor_size)
++			call fread(mem,sz,1,f)
++			call fclose(f)
++			call unlink(name)
++		end
++		call free(name)
++	end
++end
++function pool_done(sd id,sd frame_nr)
++	if pool_data.write!=(FALSE)
++		sd b;set b struct_ids_actionpool_filter((ids_get),id)
++		sd sz;set sz block_get_size(b)
++		if sz!=0
++			sd mem;set mem block_get_mem(b)
++			sd name;set name pool_savepath(id,frame_nr)
++			sd f;set f f_open_mem(name,"wb")
++			call f_write(f,mem,sz)
++			call fclose(f)
++			call block_reset_size(b)
++		end
++		ret
++	end
++	callg pool_read(id,frame_nr)
++end
++function pool_savepath_init(sd a)
++	valuex path#1;set path a
++	import "strlen_of" strlen_of
++	valuex size#1;set size strlen_of(path,(ext_str_len)) #size_t is ulong
++end
++function pool_savepath(sd id,sd fr)
++	sd m;set m memalloc(pool_savepath_init.size)
++	call sprintf(m,"%s.%u.%u",pool_savepath_init.path,id,fr)
++	return m
++end
+ 
+-
+-#pool id
++#pool id (U16)
+ function actionpool_value(ss value)
+ 	sd id
+ 	set id actionpool_value_ex(value,(FALSE))
+@@ -59,60 +203,78 @@ function actionpool_value_ex(ss value,sd
+     return nr
+ endfunction
+ #pool id
+-function actionpool_getvalue(ss value)
+-	sd id
+-	set id actionpool_getvalue_ex(value,(FALSE))
+-	return id
+-end
++#function actionpool_getvalue(ss value);	sd id;	set id actionpool_getvalue_ex(value,(FALSE));	return id;end
+ import "swf_mem_add" swf_mem_add
+ import "error" error
+ #pool id
+ function actionpool_getvalue_ex(ss value,sd force)
+-    sd block
+-    setcall block actionpool_currentblock()
+-    sd size
+-    setcall size block_get_size(block)
+-    sd nr
+-    sd newlen
+-    setcall newlen strlen(value)
+-    if size=0
+-	#is first value, add the pools header and count=1 , the pool mem is already selected when it comes from the second actionpool_getvalue at push
+-        sd onevalue=1
+-        call swf_mem_add(#onevalue,2)
+-        set nr 0
+-    else
+-        sd mem
+-        sd count
+-        setcall mem block_get_mem(block)
+-        setcall count word_arg_to_stack(mem)
+-        set nr count
+-	if force=(FALSE)
+-		add mem (WORD)
+-        while count!=0
+-            sd len
+-            setcall len strlen(mem)
+-            if len=newlen
+-                sd comp
+-                setcall comp memcmp(mem,value,len)
+-                if comp=0
+-                    sub nr count
+-                    return nr
+-                endif
+-            endif
+-            inc len
+-            add mem len
+-            dec count
+-        endwhile
++	sd block
++	setcall block actionpool_currentblock()
++	sd size
++	setcall size block_get_size(block)
++	sd nr
++	sd newlen
++	setcall newlen strlen(value)
++	if size=0
++	#is first value, add the pools header and count=1 , # before: actionpool_getvalue(the pool mem is already selected when it comes from the second  at push)
++		sd testid
++		if force=(FALSE)
++			if pool_data.write!=(FALSE)
++				call pool_entry()
++			elseif pool_data.read!=(FALSE)
++				set testid pool_reentry()
++				if testid=(not_an_id)
++					return (not_an_id)
++				end
++			end
++		end
++		sd onevalue=1
++		call swf_mem_add(#onevalue,2)
++		set nr 0
++	else
++		sd mem
++		sd count
+ 		setcall mem block_get_mem(block)
+-	end
+-	if nr=(maxuint16)
+-		call error("max uint16 at action pool") #Count  UI16  Number of constants to follow
+-	end
+-        set count nr
+-        inc count
+-        call stack_to_word_arg(count,mem)
+-    endelse
+-    inc newlen
+-    call swf_mem_add(value,newlen)
+-    return nr
++		setcall count word_arg_to_stack(mem)
++		set nr count
++		if force=(FALSE)
++			add mem (WORD)
++			while count!=0
++				sd len
++				setcall len strlen(mem)
++				if len=newlen
++					sd comp
++					setcall comp memcmp(mem,value,len)
++					if comp=0
++						sub nr count
++						if pool_data.write!=(FALSE)
++							call pool_realentry(nr)
++						end
++						return nr
++					endif
++				endif
++				inc len
++				add mem len
++				dec count
++			endwhile
++			if pool_data.write!=(FALSE)
++				call pool_entry()
++			elseif pool_data.read!=(FALSE)
++				set testid pool_reentry()
++				if testid=(not_an_id)
++					return (not_an_id)
++				end
++			end
++			setcall mem block_get_mem(block)
++		end
++		if nr=(maxuint16)
++			call error("max uint16 at action pool") #Count  UI16  Number of constants to follow
++		end
++		set count nr
++		inc count
++		call stack_to_word_arg(count,mem)
++	endelse
++	inc newlen
++	call swf_mem_add(value,newlen)
++	return nr
+ endfunction
+--- /dev/null
++++ actionswf-1/src/actionpush.oc
+@@ -0,0 +1,186 @@
++
++format elfobj64
++
++#ActionPush added to a query, and released at the action for them
++
++include "../include/prog.h"
++
++import "mem_free" mem_free
++
++function push()
++	value mem=NULL
++	datax size#1    #same as debug_data, and here is from x values
++	datax allsize#1
++	if mem!=(NULL)
++		call mem_free(#mem)
++	end
++end
++
++importx "memcpy" memcpy
++importx "strlen" strlen
++
++#aftercalli
++
++import "actionrecordheader_core" actionrecordheader_core
++import "swf_actionblock_add" swf_actionblock_add
++
++function actionpush()
++#allmost all before action_one, but also before actionrecordheader( two examples: a=function (){} and a=1?2:3 )
++	if push.size!=0
++		call actionrecordheader_core((ActionPush),push.size)
++		call swf_actionblock_add(push.mem,push.size)
++		import "debug_phase_code_add" debug_phase_code_add
++		call debug_phase_code_add((TRUE),#push.size)
++		set push.size 0
++	end
++end
++
++import "actionpool_value" actionpool_value
++
++import "memalloc" memalloc
++import "memrealloc" memrealloc
++import "error" error
++
++function push_init()
++	set push.allsize 1
++	set push.mem memalloc(1) #same
++	set push.size 0
++end
++function push_add_ex(sd size,sd value,sd type)
++	sd newsize
++	set newsize push.size
++	add newsize size
++	if newsize>^(maxuint16)
++		call error("actionrecordheader too big")
++	end
++	if newsize>^push.allsize
++		set push.allsize newsize
++		add push.allsize 0x100
++		set push.mem memrealloc(push.mem,push.allsize)
++	end
++	sd mem;set mem push.mem
++	add mem push.size
++	if type=0
++		call memcpy(mem,#value,size)
++	else
++		call memcpy(mem,value,size)
++	end
++	set push.size newsize
++end
++function push_add(sd size,sd value)
++	call push_add_ex(size,value,0)
++end
++
++function action_push(sd type,sd valuehigh,sd valuelow)
++	if type=(ap_Constant8)
++		#set the action pool(if isn't) and verify to add +1size if 8 will go to ap_Constant16
++		sd translated_id
++		setcall translated_id actionpool_value(valuehigh)
++		if translated_id!=(not_an_id)
++			if translated_id<=0xff
++				call push_add((BYTE),(ap_Constant8))
++				call push_add((BYTE),translated_id)
++			else
++				call push_add((BYTE),(ap_Constant16))
++				call push_add((WORD),translated_id)
++			end
++		else
++			call push_add((BYTE),(ap_String))
++			sd size=1;add size strlen(valuehigh)
++			call push_add_ex(size,valuehigh,1)
++		end
++	elseif type=(ap_Integer)
++		call push_add((BYTE),(ap_Integer))
++		call push_add((DWORD),valuehigh)
++	elseif type=(ap_Boolean)
++		call push_add((BYTE),(ap_Boolean))
++		call push_add((BYTE),valuehigh)
++	elseif type=(ap_Null)
++		call push_add((BYTE),(ap_Null))
++	elseif type=(ap_Undefined)
++		call push_add((BYTE),(ap_Undefined))
++	elseif type=(ap_RegisterNumber)
++		call push_add((BYTE),(ap_RegisterNumber))
++		call push_add((BYTE),valuehigh)
++	else #if type=(ap_Double)
++		sd f;set f float(valuehigh,valuelow)
++		if f=(float_double)
++			call push_add((BYTE),(ap_Double))
++			call push_add((DWORD),valuehigh)
++			callg push_add((DWORD),valuelow)
++		end
++	end # string literal, float
++endfunction
++
++const float_double=-1
++function float(sd h,sd l)
++	sd f;set f floatconv(h,l)
++	if f!=(float_double)
++		call push_add((BYTE),(ap_Float))
++		call push_add((DWORD),f)
++	end
++	return f
++end
++function floatconv(sd h,sd l)
++const    sign=doubleH_sign
++	sd sign=sign
++	and sign h
++	and h  ~sign
++const max_exp=doubleH_exp
++	sd exp =max_exp
++	and exp h
++	and h  ~max_exp
++	if exp=0
++		if h=0
++			if l=0
++				#+-0
++				return sign
++			end
++		end
++		#subnormal always dif, at 32 [1/2^149,1/2^126), at 64 [1/2^1074,1/2^1022)
++		return (float_double)
++	end
++	if exp=(max_exp)
++		if h=0
++			if l=0
++				#+- infinity
++				or sign (0x7f800000)
++				return sign
++			end
++		end
++		#(s/q/alt/+)Nan
++		return (float_double)
++	end
++#at 32 -126 to 127, at 64 -1022 to 1023
++#                12345678
++const to_max_exp64=0x100000
++const e64=1023
++const e32=127
++const minexp=e64-e32+1 # 897
++const maxexp=e64+e32   # 1150
++const minexp_opt=minexp*to_max_exp64
++const maxexp_opt=maxexp*to_max_exp64
++	if exp<(minexp_opt)
++		return (float_double)
++	end
++	if exp>(maxexp_opt)
++		return (float_double)
++	end
++const     f2=0xE0000000
++const f2to32=0x20000000
++	sd f2=~f2
++	and f2 l
++	if f2!=0
++		return (float_double)
++	end
++	divu l (f2to32)
++const e64to32=(minexp-1)*to_max_exp64
++	sub exp (e64to32)
++	mult exp 8   #to 32 exp bits
++	mult h 8     #same
++
++	or h exp
++	or h sign
++	or h l
++	return h
++end
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -211,96 +211,13 @@ import "action_code_get" action_code_get
+ #aftercallimport ebool
+ 
+ import "swf_actionblock_add" swf_actionblock_add
+-import "actionrecordheader" actionrecordheader
+-import "actionpool_value" actionpool_value
++import "action_push" action_push
+ 
+ #tags
+ 
+-function action_push(sd factors)
+-	sd iter^factors
+-	sd size=0
+-	while iter#!=-1
+-		inc size
+-		if iter#=(ap_Integer)
+-			add size (DWORD)
+-			incst iter
+-		elseif iter#=(ap_double)
+-			add size (QWORD)
+-			add iter (2*:)
+-		elseif iter#=(ap_Null)
+-		#skip
+-		elseif iter#=(ap_Undefined)
+-		#skip
+-		else
+-		#if iter#==(ap_RegisterNumber)
+-		#if iter#==(ap_Boolean)
+-		#if iter#==(ap_Constant8)
+-			add size (BYTE)
+-			sd value
+-			set value iter#
+-			incst iter
+-			if value=(ap_Constant8)
+-			#set the action pool(if isn't) and verify to add +1size if 8 will go to ap_Constant16
+-				sd translated_id
+-				setcall translated_id actionpool_value(iter#v^)
+-				if translated_id>0xff
+-					inc size
+-				endif
+-			endif
+-		endelse
+-		incst iter
+-	endwhile
+-
+-	call actionrecordheader((ActionPush),size)
+-
+-	sd cursor^factors
+-	while cursor#!=-1
+-		#test here Constant8 to Constant16
+-		if cursor#=(ap_Constant8)
+-			sv pointer
+-			set pointer cursor
+-			incst pointer
+-			#call actionpool_getvalue, the pool already exists(actionpool_value if not)
+-			import "actionpool_getvalue" actionpool_getvalue
+-			setcall translated_id actionpool_getvalue(pointer#)
+-			sd const_sz=BYTE
+-			if translated_id>0xff
+-				inc const_sz
+-				set cursor# (ap_Constant16)
+-			endif
+-		endif
+-
+-		call swf_actionblock_add(cursor,1)
+-
+-		if cursor#=(ap_Integer)
+-			incst cursor
+-			call swf_actionblock_add(cursor,(DWORD))
+-		elseif cursor#=(ap_double)
+-			incst cursor
+-			call swf_actionblock_add(cursor,(DWORD))
+-			incst cursor
+-			call swf_actionblock_add(cursor,(DWORD))
+-		elseif cursor#=(ap_RegisterNumber)
+-			incst cursor
+-			call swf_actionblock_add(cursor,(BYTE))
+-		elseif cursor#=(ap_Boolean)
+-			incst cursor
+-			call swf_actionblock_add(cursor,(BYTE))
+-		elseif cursor#=(ap_Null)
+-		#skip
+-		elseif cursor#=(ap_Undefined)
+-		#skip
+-		else
+-		#if cursor#==(ap_Constant8)
+-		#or was modified to (ap_Constant16)
+-			call swf_actionblock_add(#translated_id,const_sz)
+-			incst cursor
+-		endelse
+-		incst cursor
+-	endwhile
+-endfunction
+-
+ function action_one(sd tag)
++	import "actionpush" actionpush
++	call actionpush()
+ 	call swf_actionblock_add(#tag,(actionrecordheader_tag_size))
+ 	import "debug_phase_code_add" debug_phase_code_add
+ 	call debug_phase_code_add((FALSE))
+@@ -342,7 +259,7 @@ function action_caller_right(sv pfname,s
+ 		inc nrargs
+ 	endwhile
+ 	add codepointer (DWORD)
+-	call action_push((ap_Integer),nrargs,-1)
++	call action_push((ap_Integer),nrargs)
+ 	return codepointer
+ end
+ 
+@@ -358,7 +275,7 @@ function action_member_loop_left(sv math
+ 	#at first is something
+ 	if mathpointer#!=(no_pointer)
+ 		set name action_code_get_pointer(#mathpointer)
+-		call action_push((ap_Constant8),name,-1)
++		call action_push((ap_Constant8),name)
+ 	else
+ 		add mathpointer :+DWORD  #to pass the pointer   + square_bracket_start
+ 		setcall mathpointer action_code_right_util(mathpointer)
+@@ -380,7 +297,7 @@ function action_member_loop_left(sv math
+ 			call action_one((ActionGetMember))
+ 
+ 			set name action_code_get_pointer(#mathpointer)
+-			call action_push((ap_Constant8),name,-1)
++			call action_push((ap_Constant8),name)
+ 		end
+ 	end
+ end
+@@ -391,7 +308,7 @@ function action_member_loop_right(sv mat
+ 	whiletrue # member_end can be right from the start at CallMethod
+ 		if mathpointer#!=(no_pointer)
+ 			set name action_code_get_pointer(#mathpointer)
+-			call action_push((ap_Constant8),name,-1)
++			call action_push((ap_Constant8),name)
+ 		else
+ 			add mathpointer :  #to pass the pointer
+ 			if mathpointer#d=(square_bracket_start)
+@@ -426,18 +343,21 @@ import "action_code_member" action_code_
+ 
+ import "swf_actionrecordheader" swf_actionrecordheader
+ import "swf_mem_add" swf_mem_add
+-function write_action(sd id)
+-    sd block
+-    setcall block struct_ids_action((ids_get),id)
+-    sd mem
+-    setcall mem block_get_mem(block)
+-    sd size
+-    setcall size block_get_size(block)
+-    call pool_wr(id)
+-    call swf_mem_add(mem,size)
+-    #this is ActionEndFlag after ACTIONRECORD [zero or more]
+-    data end=0
+-    call swf_mem_add(#end,1)
++function write_action(sd id,sd frame)
++	sd block
++	setcall block struct_ids_action((ids_get),id)
++	sd mem
++	setcall mem block_get_mem(block)
++	sd size
++	setcall size block_get_size(block)
++	call pool_wr(id)
++	call swf_mem_add(mem,size)
++	#this is ActionEndFlag after ACTIONRECORD [zero or more]
++	data end=0
++	call swf_mem_add(#end,1)
++
++	import "pool_done" pool_done
++	callg pool_done(id,frame)
+ endfunction
+ #void
+ function pool_wr(sd id)
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -1,8 +1,6 @@
+ 
+ format elfobj64
+ 
+-const R_OK=4
+-
+ include "../include/prog.h"
+ 
+ importx "strrchr" strrchr
+@@ -39,6 +37,7 @@ importx "strlen" strlen
+ 
+ import "memalloc" memalloc
+ import "error" error
++import "len_of" len_of
+ 
+ function alt_init(sd flags,sd path)
+ 	if alt_join.folder!=(NULL)
+@@ -52,8 +51,7 @@ function alt_init(sd flags,sd path)
+ 			sub r path
+ 			set size r
+ 		end
+-		sd finalsize=4+1+ids_str_len+1+5+1  #ext separator ids _ word_str_len ... null
+-		add finalsize size
++		sd finalsize;set finalsize len_of(size,4+ext_str_len) #ext+...
+ 
+ 		setcall alt_join.folder memalloc(finalsize)
+ 		call memcpy(alt_join.folder,path,size)
+@@ -82,8 +80,8 @@ function alt_action_base(sd orig_action,
+ 		else
+ 			call sprintf(alt_join.concat_point,"%u",preid)
+ 		end
+-		sd read;set read access(alt_join.folder,(R_OK))
+-		if read=0
++		datax int#1;set int access(alt_join.folder,(R_OK))
++		if int=0
+ 			sd mem
+ 			set mem file_get_content(alt_join.folder,(NULL))
+ 			call unlink(alt_join.folder) #if there are two action() at one frame, the second one must not see this
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -379,6 +379,7 @@ function swf_button_base(sd state_def_id
+     import "new_sprite_id" new_sprite_id
+     sd id
+     setcall id new_sprite_id()
++
+     call action_sprite_base(id,actions,(FALSE))
+ 
+     add size (BUTTONCONDACTION_header_size)
+@@ -403,7 +404,7 @@ function swf_button_base(sd state_def_id
+     call swf_mem_add(#CharacterEndFlag,1)
+     import "write_action" write_action
+     call swf_mem_add(#BUTTONCONDACTION,(BUTTONCONDACTION_header_size))
+-    call write_action(id)
++    call write_action(id,0)
+ 
+     call free_sprite_id(id,ButtonId)
+     return ButtonId
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -144,7 +144,6 @@ import "word_arg_to_stack" word_arg_to_s
+ import "for_in" for_in
+ import "frames_as_shows" frames_as_shows
+ 
+-importx "strlen" strlen
+ importx "fseek" fseek
+ importx "fread" fread
+ importx "fprintf" fprintf
+@@ -158,6 +157,7 @@ import "alt_init" alt_init
+ import "dtitles_init" dtitles_init
+ import "x_init" x_init
+ import "f_open_mem" f_open_mem
++import "strlen_of" strlen_of
+ 
+ function flags_init(sd flags,sd path)
+ 	set flags x_init(flags,path)
+@@ -167,6 +167,8 @@ function flags_init(sd flags,sd path)
+ 
+ 	call frames_as_shows(flags)
+ 	call for_in(flags)
++	import "pool_init" pool_init
++	callg pool_init(flags)
+ endfunction
+ 
+ function log_init(sd flags,sd path)
+@@ -178,10 +180,8 @@ function log_init(sd flags,sd path)
+ 	if flags=(debug_log)
+ 		setcall of# memalloc(1)  #0 on some systems can be NULL return
+ 
+-		sd s;setcall s strlen(path)
+-		sd a=4+1
+-		add a s
+-		sd b;setcall b memalloc(a)
++		sd size;setcall size strlen_of(path,4+1)
++		sd b;setcall b memalloc(size)
+ 		call sprintf(b,"%s.log",path)
+ 		sv file%p_debug_file
+ 		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for comma character
+@@ -263,7 +263,10 @@ function debug_phase_code_flush()
+ 		#will not bother concludefunction where is asking with ftell
+ 		sv file%p_debug_file
+ 		call f_printf((fprintf_min+1),file#,"%lu",debug_data.rows)
+-		call f_write(file#,debug_data.mem,debug_phase_code.size)
++		if debug_phase_code.size!=0
++		# while(q){break;}
++			call f_write(file#,debug_data.mem,debug_phase_code.size)
++		end
+ 		call f_write(file#,"\n",1)
+ 		set debug_data.rows 0
+ 	end
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -61,11 +61,21 @@ importx "free" free
+ import "error" error
+ 
+ #file
++function f_open(sd path,sd format)
++	sd f;setcall f fopen(path,format)
++	if f=(NULL)
++		char a="fopen error"
++		vstr e^a
++		call error(e)
++	endif
++	return f
++endfunction
++#file
+ function f_open_mem(sd path,sd format)
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
+ 		call free(path)
+-		call error("fopen error")
++		call error(f_open.e)
+ 	endif
+ 	call free(path)
+ 	return f
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -36,13 +36,13 @@ import "error" error
+ import "file_get_content" file_get_content
+ import "exportsId_get" exportsId_get
+ 
+-function swf_new_ex_local(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd add_debug)
++function swf_new_ex_local(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd flags)
+ #ss path             file out pathname
+ #sd width
+ #sd height
+ #sd backgroundcolor  0xRRGGBB  value
+ #sd fps              swf frames per second
+-
++#sd flags            see flags.h
+     #F=uncompressed, C=ZLib
+ const hd_start=\
+     char *=F
+@@ -61,7 +61,7 @@ data size2=\-hd2
+ vdata hd_pack2%hd2
+ 
+ 	import "flags_init" flags_init
+-	call flags_init(add_debug,path)
++	call flags_init(flags,path)
+     call swf_mem((mem_exp_init),path,(file_sz_off-hd_start))
+ 
+     #identifiers for swf
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -3,7 +3,6 @@ Format ElfObj64
+ include "../include/prog.h"
+ 
+ #win32 with _
+-importx "strlen" strlen
+ importx "memcpy" memcpy
+ 
+ #this is throwless here
+@@ -65,6 +64,7 @@ import "bits_packs" bits_packs
+ import "word_swap_arg" word_swap_arg
+ import "block_get_size" block_get_size
+ import "block_reset_size" block_reset_size
++import "push" push
+ 
+ import "actionpoolid" actionpoolid;import "actionpoolid_root" actionpoolid_root
+ import "actionpool_currentblock" actionpool_currentblock
+@@ -74,12 +74,11 @@ import "stack_to_word_arg" stack_to_word
+ import "word_arg_to_stack" word_arg_to_stack
+ 
+ 
+-
+ #aftercallimport ebool
+ 
+ 
+-
+ import "dtitles_frame" dtitles_frame
++import "strlen_of" strlen_of
+ 
+ #id
+ function identifiers_get()
+@@ -93,10 +92,12 @@ function identifiers_get()
+ endfunction
+ 
+ function free_sprite_id(sd id,sd finalId_or_containerId) #containerId for buttons
+-    call struct_ids((ids_free),id)
++	call struct_ids((ids_free),id)
+ #these two are ok throwless
+ 	callg struct_ids_action((ids_free),id)
+ 	callg struct_ids_actionpool((ids_free),id)
++	import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
++	call struct_ids_actionpool_filter((ids_free),id)
+ #
+ 	import "debug_spritedone" debug_spritedone
+ 	call debug_spritedone(id,finalId_or_containerId)
+@@ -105,6 +106,8 @@ endfunction
+ import "error" error
+ import "struct_ids_actionpool" struct_ids_actionpool
+ import "struct_ids_action" struct_ids_action
++import "struct_ids_action_set" struct_ids_action_set
++import "struct_ids_actionpool_set" struct_ids_actionpool_set
+ import "mem_block_add" mem_block_add
+ import "def_mem" def_mem
+ import "debug_show" debug_show
+@@ -140,49 +143,56 @@ function swf_mem(sd proc,sd arg,sd len)
+ 		ret
+ 	endif
+ 	if proc=(mem_exp_init)
+-    #arg is file
+-    #len is filelength offset
+-        if path_mem!=(NULL)
+-            call error("The previous swf was not ended.")
+-        endif
+-        #0
+-        import "memalloc" memalloc
+-        setcall path_size strlen(arg);inc path_size
+-        setcall path_mem memalloc(path_size)
+-        call memcpy(path_mem,arg,path_size)
+-        #1
+-        setcall swf_frames_reg.main_id def_mem()
+-        set id swf_frames_reg.main_id
+-        call swf_actionblock((mem_exp_init),swf_frames_reg.main_id)
+-        set call_struct c_main
+-        #2
+-        call exports_init()
+-        #3
+-        import "action_code_values_init" action_code_values_init
+-        call action_code_values_init()
+-        #
+-        set filelength_offset len
+-        #
+-        ret
++		#arg is file
++		#len is filelength offset
++		if path_mem!=(NULL)
++			call error("The previous swf was not ended.")
++		endif
++		#0
++		import "memalloc" memalloc
++		setcall path_size strlen_of(arg,1)
++		setcall path_mem memalloc(path_size)
++		call memcpy(path_mem,arg,path_size)
++		import "pool_savepath_init" pool_savepath_init
++		call pool_savepath_init(path_mem)
++		#1
++		setcall swf_frames_reg.main_id def_mem()
++		set id swf_frames_reg.main_id
++		call swf_actionblock((mem_exp_init),swf_frames_reg.main_id)
++		set call_struct c_main
++		#2
++		call exports_init()
++		#3
++		import "action_code_values_init" action_code_values_init
++		call action_code_values_init()
++		#4
++		import "push_init" push_init
++		call push_init()
++		#
++		set filelength_offset len
++		#
++		ret
+ 	endif
+ 	if proc=(mem_exp_free)
+-        if path_mem!=(NULL)
+-            #0
+-            call mem_free(#path_mem)
+-            #1 freeing all ids(main(exports,root+sprites),acs,pools)
+-            call struct_ids((ids_all_free))
+-            #2 exports
+-            sd exports
+-            setcall exports exportsId()
+-            set exports# (not_an_id)
+-            #3 set of values
+-            call action_code_values_free()
+-            #file
+-            if file_out!=(fd_error)
+-                call file_close(#file_out)
+-            endif
+-        endif
+-        ret
++		#0 freeing all ids(main(exports,root+sprites),acs,pools) #also new sprite on error and change here will free here
++		call struct_ids((ids_all_free))
++		if path_mem!=(NULL)
++			#1
++			call mem_free(#path_mem)
++			#2 exports
++			sd exports
++			setcall exports exportsId()
++			set exports# (not_an_id)
++			#3 set of values
++			call action_code_values_free()
++			#$
++			call push()
++			#file
++			if file_out!=(fd_error)
++				call file_close(#file_out)
++			endif
++		endif
++		ret
+ 	endif
+     if path_mem=(NULL)
+     #swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+@@ -279,13 +289,13 @@ function swf_actionblock(sd proc,sd arg,
+         ret
+ 	endif
+ 	if proc=(mem_exp_init)
+-        set id arg
+-        set id_back id
+-        call struct_ids_action((ids_set),id)
+-        call struct_ids_actionpool((ids_set),id)
+-        sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# id
+-        sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# id
+-        ret
++		set id arg
++		set id_back id
++		sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# id
++		sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# id
++		call struct_ids_action_set(id)
++		call struct_ids_actionpool_set(id)
++		ret
+ 	endif
+     sv p_block
+     setcall p_block struct_ids_action((ids_get_pointer),id)
+@@ -317,7 +327,7 @@ function swf_actionblock(sd proc,sd arg,
+ 			sd tagsz
+ 			setcall tagsz action_size(id)
+ 			call swf_tag_recordheader_entry((DoAction),tagsz)
+-			call write_action(id)
++			call write_action(id,frames)
+ 			sd poolblock
+ 			setcall poolblock actionpool_currentblock()
+ 			call block_reset_size(poolblock)
+@@ -325,6 +335,8 @@ function swf_actionblock(sd proc,sd arg,
+ 		elseif arg=(from_show)  #here is an ending from show with no size
+ 			call debug_show(id) #to keep the count of frames at debugger
+ 			call swf_frames_inc(frames,arg2)
++			import "pool_read" pool_read
++			call pool_read(id,frames)
+ 		elseif frames=0    #here is an ending from done with no size and no previous show
+ 			if frames_as_shows.flag=0
+ 				call swf_frames_inc(frames,arg2) #a default frame, how was before at root, and at sprite is ok
+@@ -339,7 +351,7 @@ endfunction
+ function swf_actionblock_add(sd value,sd size)
+     call swf_actionblock((mem_exp_add),value,size)
+ endfunction
+-function actionrecordheader(sd tag,sd size)
++function actionrecordheader_core(sd tag,sd size)
+ 	char t#actionrecordheader_tag_size
+ 	char length#actionrecordheader_length_size
+ 	set t tag
+@@ -347,6 +359,12 @@ function actionrecordheader(sd tag,sd si
+ 	call swf_actionblock_add(#t,(actionrecordheader_size))
+ 	import "debug_phase_code_add" debug_phase_code_add
+ 	call debug_phase_code_add((TRUE),#length)
++end
++function actionrecordheader(sd tag,sd size)
++#push pool dummy_jump( },for(a;,continue ) store(mixt,enum) if(remForIns) write_jump(breakW,breakForIn) writeif_jump(_add(forin,ifwithnot),break) jump(else) goto definef
++	import "actionpush" actionpush
++	call actionpush()
++	call actionrecordheader_core(tag,size)
+ endfunction
+ function swf_actionrecordheader(sd tag,sd size)
+     char t#1
+@@ -360,8 +378,8 @@ endfunction
+ function new_sprite_id()
+     sd id
+     setcall id def_mem()
+-    call struct_ids_action((ids_set),id)
+-    call struct_ids_actionpool((ids_set),id)
++    call struct_ids_action_set(id)
++    call struct_ids_actionpool_set(id)
+     return id
+ endfunction
+ 
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -385,7 +385,7 @@ import "swf_showframe_base" swf_showfram
+ functionX swf_showframe()
+ base swf_new.bp;call ebase(swf_new.bp)
+ 	sd p;set p swf_frames_pointer()
+-	call swf_showframe_base(p)
++	call swf_showframe_base(p) #if on error will error at unregistered input id
+ endfunction
+ 
+ ######################
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -336,6 +336,30 @@ function freelater()
+     call file_resources_free()
+ endfunction
+ 
++#bool
++function mem_cmp_bool(ss a,ss b,sd n)
++	add n a
++	while a<^n
++		if a#!=b#
++			return (FALSE)
++		end
++		inc a
++		inc b
++	end
++	return (TRUE)
++end
++
++function mem_block_add_throwless(sv p_block,ss newblock,sd newblock_size)
++	char throwless=FALSE
++	set throwless (TRUE)
++	call mem_block_add(p_block,newblock,newblock_size)
++	if throwless=(FALSE)
++		return (FALSE)
++	end
++	set throwless (FALSE)
++	return (TRUE)
++end
++
+ importx "malloc" malloc
+ importx "fclose" fclose
+ 
+@@ -343,6 +367,7 @@ import "action_error" action_error
+ import "freereset" freereset   #..x with no args
+ import "action_debug_free" action_debug_free
+ import "file_get_content__resources_free" file_get_content__resources_free
++import "pool_data" pool_data
+ 
+ function ebase(valuex bp)
+ end
+@@ -410,107 +435,128 @@ endfunction
+ #mem procedures
+ 
+ function mem_block_add(sv p_block,ss newblock,sd newblock_size)
+-    sd block
+-    sd allsize
+-    sd size
+-
+-    set block p_block#
+-    sd sz_test
+-    setcall size block_get_fullsize(block)
+-    set allsize block#
+-    set sz_test size
+-    add sz_test newblock_size
++	sd block
++	sd allsize
++	sd size
++
++	set block p_block#
++	sd sz_test
++	setcall size block_get_fullsize(block)
++	set allsize block#
++	set sz_test size
++	add sz_test newblock_size
+ 
+ 	if sz_test>^0x7fFFffFF
++		if mem_block_add_throwless.throwless=(TRUE)
++			set mem_block_add_throwless.throwless (FALSE)
++			ret
++		end
+ 		call error("size error") #easy to test, call multiple action(...)
+ 	end
+ 
+-    if sz_test>^allsize
+-    #was >= but when >?, here and in another 2 places
+-        divu sz_test (block_size)
+-        mult sz_test (block_size)
+-        add sz_test (block_size)
+-    #    set allsize sz_test
+-        setcall block memrealloc(block,sz_test)  #allsize
+-        set p_block# block
+-        set block# sz_test  ##allsize
+-    endif
+-    sd pointer
+-    set pointer block
+-    add pointer size
+-    call memcpy(pointer,newblock,newblock_size)
+-    add size newblock_size
+-    add block (mem_struct__size_off)
+-    set block# size
++	if sz_test>^allsize
++		#was >= but when >?, here and in another 2 places
++		divu sz_test (block_size)
++		mult sz_test (block_size)
++		add sz_test (block_size)
++		#set allsize sz_test
++		setcall block realloc(block,sz_test)  #allsize
++		if block=(NULL)
++			if mem_block_add_throwless.throwless=(TRUE)
++				set mem_block_add_throwless.throwless (FALSE)
++				ret
++			end
++			call error("realloc error at add")
++		end
++		set p_block# block
++		set block# sz_test  ##allsize
++	endif
++	if newblock!=(NULL)
++		sd pointer
++		set pointer block
++		add pointer size
++		call memcpy(pointer,newblock,newblock_size)
++	end
++	add size newblock_size
++	add block (mem_struct__size_off)
++	set block# size
+ endfunction
+ 
+ #structure ids
+ 
+ function struct_ids(sd proc,sd id)
+-    vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures
+-    vdata strct^structures
+-    data counter=0
+-    sv ac_ptr
+-    sv pointer
++	vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures    ,    pool.constants
++	vdata strct^structures
++	data counter=0
++	sv ac_ptr
++	sv pointer
+ 	if proc=(ids_counter)
+ 		return counter
+ 	endif
+ 	if proc=(ids_all_free)
+-        #starting with ids_all_free:
+-        #                #counter increment#, then null at ac,pools
+-        #   mem_free at struct_ids_action_expand
+-        #   can have errors at any point and here all are verified
+-        set pointer :;mult pointer counter;add pointer strct
+-        while strct!=pointer
+-            sub pointer :;if pointer#!=(NULL);call free(pointer#);endif
+-            dec counter
+-            setcall ac_ptr struct_ids_action((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+-            setcall ac_ptr struct_ids_actionpool((ids_get),counter);if ac_ptr!=(NULL);call free(ac_ptr);endif
+-        endwhile
+-        ret
++		#starting with ids_all_free:
++		#                #counter increment#, then null at ac,pools
++		#   can have errors at any point and here all are verified
++		set pointer :;mult pointer counter;add pointer strct
++		while strct!=pointer
++			dec counter
++			sub pointer :
++			if pointer#!=(NULL)
++				call free(pointer#)
++				setcall ac_ptr struct_ids_action((ids_get),counter)
++				if ac_ptr!=(NULL)
++					call free(ac_ptr)
++					setcall ac_ptr struct_ids_actionpool((ids_get),counter)
++					if ac_ptr!=(NULL)
++						call free(ac_ptr)
++						call pool_data(counter)
++					endif
++				endif
++			endif
++		endwhile
++		ret
+ 	endif
+ 
+-    sd ident
++	sd ident
+ 	if proc!=(ids_set)
+ 		set ident id
+ 	else
+ 		set ident counter
+ 	endelse
+-    setcall pointer move_to_n_pointer(strct,ident)
++	setcall pointer move_to_n_pointer(strct,ident)
+ 	if proc=(ids_get)
+ 		return pointer#
+ 	endif
+ 	if proc=(ids_set)
+ 	#id
+-        if counter=(max_structures)
+-            call error("too many objects")
+-        endif
+-        sd newblock
+-        setcall newblock def_data()
+-	#can be in a free place, but since log, that will overwrite previous ids, to keep them compressed, a solution can be two parse twice
+-	#	sv iter
+-	#	set iter pointer
+-	#	while iter!=strct
+-	#		sub iter :
+-	#		if iter#=0
+-	#			set iter# newblock
+-	#			sub iter strct
+-	#			div iter :
+-	#			return iter
+-	#		endif
+-	#	endwhile
+-        set pointer# newblock
+-        #counter increment#
+-        #sd c; for counter verification inside
+-        sd c;set c counter;inc counter
+-        setcall ac_ptr struct_ids_action((ids_get_pointer),c);set ac_ptr# (NULL)
+-        setcall ac_ptr struct_ids_actionpool((ids_get_pointer),c);set ac_ptr# (NULL)
+-        #counter increment#
+-        return ident
++		if counter=(max_structures)
++			call error("too many objects")
++		endif
++		sd newblock
++		setcall newblock def_data()
++		#can be in a free place, but since log, that will overwrite previous ids, to keep them compressed, a solution can be to parse twice
++		#and in this way, free+NULL only on top id, free only at action/pool/pool_filter
++		#	sv iter
++		#	set iter pointer
++		#	while iter!=strct
++		#		sub iter :
++		#		if iter#=0
++		#			set iter# newblock
++		#			sub iter strct
++		#			div iter :
++		#			return iter
++		#		endif
++		#	endwhile
++		set pointer# newblock
++		#counter increment#
++		sd c;set c counter;inc counter
++		setcall ac_ptr struct_ids_action((ids_get_pointer),c);set ac_ptr# (NULL)  #required for example at exports and free all
++		#counter increment#
++		return ident
+ 	endif
+ 	if proc=(ids_get_pointer)
+-        if ident>=counter;call error("Unexistent input id.");endif
+-        return pointer
++		if ident>=counter;call error("Unexistent input id.");endif
++		return pointer
+ 	endif
+ 	#else
+ 	#if proc==(ids_free)
+@@ -527,28 +573,57 @@ function struct_ids_actionpool(sd proc,s
+     sd v;setcall v struct_ids_expand(proc,id,#actionpool_structures)
+     return v
+ endfunction
++function struct_ids_actionpool_filter(sd proc,sd id)
++	vdatax actionpool_structures#max_structures
++	sd v;setcall v struct_ids_expand(proc,id,#actionpool_structures)
++	return v
++endfunction
+ function struct_ids_expand(sd proc,sd id,sd p_action_structures)
+-    sv pointer;setcall pointer move_to_n_pointer(p_action_structures,id)
++	sv pointer;setcall pointer move_to_n_pointer(p_action_structures,id)
+ 	if proc=(ids_get)
+ 		return pointer#
+ 	endif
+ 	if proc=(ids_set)
+-        setcall pointer# def_data()
++		set pointer# (NULL)  #this is extra at action but a lot of get_pointer set (NULL) are removed on the same way
++		setcall pointer# def_data()
+ 	elseif proc=(ids_get_pointer)
+-        #call to verify if the user input has a wrong id
+-        sd c;setcall c struct_ids((ids_counter))
+-        if id>=c;call error("Unregistered input id.");endif
+-        #
+-        return pointer
++		#call to verify if the user input has a wrong id
++		sd c;setcall c struct_ids((ids_counter))
++		if id>=c;call error("Unregistered input id.");endif
++		#
++		return pointer
+ 	else
+-    #if proc==(ids_free)
+-        call mem_free(pointer)
++		#if proc==(ids_free)
++		call free(pointer#)
+ 	endelse
+ endfunction
+-
++function struct_ids_action_set(sd id)
++	callg struct_ids_action((ids_set),id)
++	# is next and is set (NULL) inside. sv p;set p struct_ids_actionpool((ids_get_pointer),id);set p# (NULL)
++end
++import "pool_read" pool_read
++function struct_ids_actionpool_set(sd id)
++	call struct_ids_actionpool((ids_set),id)
++	call struct_ids_actionpool_filter((ids_set),id) #flag_pool is almost default
++	callg pool_read(id,-1) #not 0? cheap fast way, most of them have action and will also increment there
++end
+ 
+ #strings
+ 
++function len_of(sd s,sd add)
++	sd s2;set s2 s
++	add s add
++	if s<^s2
++		call error("gigantic path error")
++	end
++	return s
++end
++function strlen_of(sd p,sd add) #of from overflow
++	sd s;set s strlen(p)
++	set s len_of(s,add)
++	return s
++end
++
+ #alloc
+ function dupreserve_string(ss str)
+     sd len
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -51,7 +51,6 @@ import "action_code_values" action_code_
+ import "action_code_get" action_code_get
+ 
+ importx "fwrite" fwrite
+-importx "strlen" strlen
+ importx "sprintf" sprintf
+ importx "fseek" fseek
+ importx "fread" fread
+@@ -62,6 +61,7 @@ importx "fclose" fclose
+ 
+ 
+ import "action__code_row" action__code_row
++import "strlen_of" strlen_of
+ 
+ #is not x or x?
+ function actionx()
+@@ -106,10 +106,8 @@ function x_init(sd flags,sd path)
+ 	set flag flags  ##log is on current x, here is another x, no parse, no log
+ 	and flag (flags_x)
+ 	if flag!=0
+-		sd s;setcall s strlen(path)
+-		sd a=2+1
+-		add a s
+-		sd b;setcall b memalloc(a)
++		sd size;setcall size strlen_of(path,2+1)
++		sd b;setcall b memalloc(size)
+ 		call sprintf(b,"%s.x",path)
+ 
+ 		sd x=flag_x
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,5 +1,5 @@
+ 0
+-56
++89
+ 
+ /*
+ debug_x
+@@ -44,53 +44,106 @@ var class1=function(){
+ class1.prototype.func1=function(){
+ 	trace('func1');
+ }
++ASSetPropFlags(class1.prototype,null,1);
+ var class2=function(){
+-	this.constructor();
++	trace('class2');
++	this.__proto__.constructor();
+ 	this.func1();
+ }
+-class2.prototype=class1.prototype;
+-var o2=new class2();
++class2.prototype.__proto__=class1.prototype;
++class2.prototype.constructor=class1;
++class2.prototype.func2=function(){
++	trace('func2');
++}
++ASSetPropFlags(class2.prototype,null,1);
++var class3=function(){
++	trace('class3');
++	this.__proto__.constructor();
++	this.func2();
++}
++class3.prototype.__proto__=class2.prototype;
++class3.prototype.constructor=class2;
++var o3=new class3();
+ 
+ //from asm point of view, all can be done regarding interface statement:
+ //ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
+ //at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
+ //	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
+ 
++//    3FF0000020000000->3F800001     3FF0000010000000               3810000000000000->00800000
++trace(1.00000011920928955078125+' '+ 1.000000059604644775390625+' '+0.000000000000000000000000000000000000011754943508222875079687365372222456778186655567720875215087517062784172594547271728515625)
++//                                                                  1.17549435082228750796873653722e-38
++//    3800000000000000                                                                                                                      47E0000000000000->7F000000
++trace(0.0000000000000000000000000000000000000058774717541114375398436826861112283890933277838604376075437585313920862972736358642578125+' '+170141183460469231731687303715884105728.0)
++//    5.87747175411143753984368268611e-39                                                                                                   1.70141183460469231731687303716e+38
++//    47F0000000000000                              7FF0000000000000->7f800000  FFF0000000000000->ff800000 0000000000000000->00000000  8000000000000000->80000000
++trace(340282366920938463463374607431768211456.0+' '+Infinity+' '+               -Infinity+' '+             0.0+' '+                    -0.0)
++//    3.40282366920938463463374607432e+38
++//    0008000000000000
++trace(0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011125369292536006915451163586662020321096079902311659152766637084436022174069590979271415795062555102820336698655179055025762170807767300544280061926888594105653889967660011652398050737212918180359607825234712518671041876254033253083290794743602455899842958198242503179543850591524373998904438768749747257902258025254576999282912354093225567689679024960579905428830259962166760571761950743978498047956444458014963207555317331566968317387932565146858810236628158907428321754360614143188210224234057038069557385314008449266220550120807237108092835830752700771425423583764509515806613894483648536865616670434944915875339194234630463869889864293298274705456845477030682337843511993391576453404923086054623126983642578125)
++//    1.11253692925360069154511635867e-308
++//    7FFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF
++function n(a,b){trace(a+' '+b)}
++n(-NaN,NaN)
++// https://www.omnicalculator.com/other/floating-point
++// https://baseconvert.com/ieee-754-floating-point
++//// https://www.h-schmidt.net/FloatConverter/IEEE754.html
++
+ 5,9,0009
+-1,5,
+-2,5,2,,2,,2,,
+-2,2,,2,,2,2,,
+-3,2,5,5,2,,
+-1,2,5,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2,5,2,5,
+-1,2,9,,2,2,,5,,,2,2,
+-1,2,5,,2,,2,,,2,,2,,
+-1,2,5,0006,2,,,2,5,2,,
+-1,5,5,,,2,2,,5,,5,5,,,2,2,,2,2,
+-1,5,5,,,2,2,,2
+-1,2,,,,,2,,,,,2,,,5,,
+-1,2,5,,2,2,,,,,2,,5,,,2
+-1,2,,,1,1,,2,2,2,,2
+-1,2,,5,,,1,1,,2,2,,5,2,,2
+-1,2,2,2,,2
+-1,2,,,2,2
+-2,2,5,2,,
+-1,2,,2,5,
+-1,2,,2,5,5,2,,,2,,2,,5,5,
+-1,2,,2,5,2,,
+-1,2,,2,,2,5,
+-1,2,,2,,1,,,2,,,,
+-1,2,,2,,5,,1,,,2,,,,
+-1,2,,2,,2,,1,,,2,,,5,,
+-2,2,2,,5,,2,2,,2,2,,
+-3,2,5,0006
+-1,2,
++1,5,5,
++2,7,7,,2,2,,2,2,,
++2,2,2,,2,2,,4,4,,
++3,E,E,,
++1,C,C,,5,5,,5,5,,5,5,,5,5,,5,5,,5,5,,5,5,,5,5,,5,5,,5,5,,5,5,,,5,5,,,5,5,,,5,5,,5,5,,5,5,,5,5,,5,5,,,2,5,5,2,5,5,
++1,B,B,,4,4,,5,5,,,4,4,
++1,7,7,,2,2,,2,2,,,2,2,,2,2,,
++1,2,2,5,0006,2,2,,,9,9,,
++1,A,A,,,2,2,2,,5,5,,A,A,,,2,2,2,,2,2,2,
++1,A,A,,,2,2,2,,2
++1,2,2,,,,,2,2,,,,,2,2,,,5,5,,
++1,7,7,,2,2,2,,,,,2,2,,5,5,,,2
++1,2,2,,,1,1,1,,2,4,4,,2
++1,2,2,,5,5,,,1,1,1,,2,2,2,,7,7,,2
++1,2,2,2,2,,2
++1,2,2,,,2,2
++2,9,9,,
++1,2,2,,7,7,
++1,2,2,,E,E,,,2,2,,2,2,,A,A,
++1,2,2,,9,9,,
++1,2,2,,2,2,,7,7,
++1,2,2,,2,2,,1,,,2,2,,,,
++1,2,2,,2,2,,5,5,,1,,,2,2,,,,
++1,2,2,,2,2,,2,2,,1,,,2,2,,,5,5,,
++2,4,4,,5,5,,2,2,2,,2,2,2,,
++3,2,2,5,0006
++1,2,2,
++1,
++1,2,2,,2,2,,2,2,5,0006
++1,2,2,
++1,
++1,8,8,,2,2,,7,7,,
++1,2,2,5,0030
++1,2,2,
++1,7,7,,2,2,,2,2,,
++1,7,7,,2,2,,
+ 1,
+-1,2,,2,,2,5,0006
+-1,2,
++1,2,2,,2,2,,4,4,,2,2,,
++1,2,2,,2,2,,4,4,,
++1,2,2,,2,2,,2,2,5,0006
++1,2,2,
+ 1,
+-1,2,5,002A
+-1,5,2,,2,,
+-1,5,2,,2,,
++1,8,8,,2,2,,7,7,,
++1,2,2,5,0030
++1,2,2,
++1,7,7,,2,2,,2,2,,
++1,7,7,,2,2,,
+ 1,
+-1,2,,2,2,,2,,
+-6,2,5,2,,
++1,2,2,,2,2,,4,4,,2,2,,
++1,2,2,,2,2,,4,4,,
++1,9,9,,
++8,7,7,,9,9,,2,2,,5,5,,
++3,B,B,,5,5,,
++3,B,B,,5,5,,2,2,,5,5,,2,2,,5,5,,2,2,,5,5,,
++3,9,9,
++3,A,0014,2,2,,2,2,,2,2,,,
++4,19,19,,
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,25 +1,31 @@
+-RldTCF8FAABoABQAAAUAAAACAQBDAgARAD8DPgUAAIhxAB0AdGhpcwBnZXRWZXJzaW9uAGEAQXJy
+-YXkAYgBjAGQAZQBxAGYAZwBoAGkAagBrAGwAbQBuAG8AcAAAT2JqZWN0AHcAY2xhc3MxAHByb3Rv
+-dHlwZQBmdW5jMQBjbGFzczIAY29uc3RydWN0b3IAbzIAmwkAZm4AAQBhAAkAlgUABwIAAAA+lgUA
+-BwAAAACWAgAIAByWAgAIAE6WAgAIAVIXlgIACAAclgIACABOlgIACACWAgAIABxPlgIACAKWBQAH
+-AQAAAJYFAAcBAAAAlgIACANAHZYCAAgElgUAB/7///+WBQAHAgAAAEeWBQAHAgAAAAuWBQAHAgAA
+-AAyWBQAHAgAAAA2WBQAHAgAAAD+WBQAHAgAAAGCWBQAHAgAAAGGWBQAHAgAAAGKWBQAHAgAAAEiW
+-BQAHAgAAAGeWBQAHAgAAAEmWBQAHAgAAAEkSlgUABwIAAABnEpYFAAcCAAAASBKWBQAHAgAAAGOW
+-BQAHAgAAAGSWBQAHAgAAAGWWBQAHAgAAABCWBQAHAgAAABESnQIADQCWBQAHAgAAAJkCAAgAlgUA
+-BwMAAAA8lgIACAWWCQAGMzPzPzMzMzM8lgIACAaWAgAIAhyWBQAHAAAAAE48lgIACAeWAgAICDyW
+-AgAICZYFAAcCAAAAHZYCAAgKQZYCAAgKOxeWAgAIAByWAgAICToXlgIACAubBQAAAAAGAJYCAAgC
+-QR2WAgAIDJYFAAcAAAAAlgIACAs9PJYFAAcCAAAAlgUABwIAAABJEp0CAA8AlgIACA1BlgUABwkA
+-AAA+lgUABwIAAACWBQAHAgAAAEkSnQIACwCWAgAIDkGZAgAGAJYCAAgPQZYFAAcCAAAAlgUABwIA
+-AABJEp0CAAsAlgIACBBBmQIA3v+WAgAICUwcUB2WAgAICUwcUR2WAgAICUwclgUABwIAAABHHZYC
+-AAgRlgUABwIAAAA8mQIACQCWAgAIEUwcUB2WAgAIERyWBQAHAwAAAEgSnQIAAACWAgAIAhxVhwEA
+-AJYBAAJJnQIAEACWAgAIEpYCAAQAPJkCAOL/lgIACAIclgUABwAAAABOVYcBAACWAQACSZ0CABkA
+-lgIACAIclgUABwAAAACWAgAEAE+ZAgDZ/5kCABAAmQIA9v+WAgAIE0GZAgDr/5YCAAgUHBKdAgAF
+-AJkCAO//lgIACAKWBQAHAAAAAJYCAAgVQB2WAgAIAhyWAgAIBJYFAAcDAAAAT5YCAAgCHJYCAAgF
+-lgUABwEAAACWBQAHAQAAAJYCAAgDQE+WAgAIAhyWAgAIBU6WBQAHAAAAAJYFAAcFAAAAT5YCAAgC
+-HJYCAAgGlgUABwAAAACWAgAIFUBPlgIACAIclgIACAZOlgIACAeWBQAHAgAAAE+WAgAIAhyWAgAI
+-BE2HAQAATUyWAgAEAE1OUE+WAgAIAhyWAgAIBU6WBQAHAAAAAE2HAQAATUyWAgAEAE1OUU+WAgAI
+-AhyWAgAIBk6WAgAIB02HAQAATUyWAgAEAE1OlgUABwIAAABHT5YCAAgClgIACAQclgUABwEAAABJ
+-nQIACwCWAgAICByZAgAGAJYCAAgWHB2WAgAIF5sFAAAAAAYAlgIACBcmPJYCAAgXHJYCAAgYTpYC
+-AAgZmwUAAAAABgCWAgAIGSZPlgIACBqbBQAAAAAqAJYFAAcAAAAAlgIACAAclgIACBtSF5YFAAcA
+-AAAAlgIACAAclgIACBlSFzyWAgAIGhyWAgAIGJYCAAgXHJYCAAgYTk+WAgAIHJYFAAcAAAAAlgIA
+-CBpAPAAAAA==
++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
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,4 +1,4 @@
+-+AIAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
++mAoAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+ aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
+ ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
+ AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
+@@ -9,47 +9,103 @@ ADAAAGluIGEAMAAAe313aGlsZSh0cnVlAHticmVh
+ YQBuZXcgT2JqZWN0ACk7YQBiADMAYQBjAG5ldyBBcnJheQAxADthAGMAMAAANQBhAGQAbmV3IE9i
+ amVjdAApO2EAZABlADIAYQBiACs7YQBjADAAAC07YQBkAGUAPTIAYQBiAD0xAHEAdwB2YXIgY2xh
+ c3MxAGZ1bmN0aW9uACl7dHJhY2UAJ2NsYXNzMQAAO31jbGFzczEAcHJvdG90eXBlAGZ1bmMxAGZ1
+-bmN0aW9uACl7dHJhY2UAJ2Z1bmMxAAA7fXZhciBjbGFzczIAZnVuY3Rpb24AKXt0aGlzAGNvbnN0
+-cnVjdG9yACk7dGhpcwBmdW5jMQApO31jbGFzczIAcHJvdG90eXBlAGNsYXNzMQBwcm90b3R5cGUA
+-dmFyIG8yAG5ldyBjbGFzczIAKTsAAAAAAAAAMDAD8woAAAAAAAAADQAAAAAAAAAAAAAAAAAAAD4A
+-AAAHAAAAAgAAAP////+7u7v7EBAB8SQAAAAAAAAA7u7u/hoAAAAAAAAAHwAAAAAAAAAAAAAAAAAA
+-AKqqqvpPAAAAMQAAAAAAAAA2AAAAAAAAADsAAAAAAAAAAAAAAAAAAACqqqr6HAAAAEAAAAAAAAAA
+-/////x0AAABFAAAAAAAAAEBABPRLAAAAAAAAAAcAAAABAAAA/////+7u7v4AAAAAAAAAADwAAABY
+-AAAAAAAAAICACPgHAAAA/v///0cAAAAHAAAAAgAAAAsAAAAHAAAAAgAAAAwAAAAHAAAAAgAAAA0A
+-AAAHAAAAAgAAAD8AAAAHAAAAAgAAAGAAAAAHAAAAAgAAAGEAAAAHAAAAAgAAAGIAAAAHAAAAAgAA
+-AHBwB/dIAAAAAAAAAAcAAAACAAAAcHAH92cAAAAAAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAA
+-AgAAAHBwB/dJAAAAEgAAAAcAAAACAAAAcHAH92cAAAASAAAABwAAAAIAAABwcAf3SAAAABIAAAAH
+-AAAAAgAAAGMAAAAHAAAAAgAAAGQAAAAHAAAAAgAAAGUAAAAHAAAAAgAAABAAAAAHAAAAAgAAABEA
+-AAAHAAAAAgAAANDQDf0HAAAAAgAAAP////8HAAAAAwAAAP//////////PAAAAJkAAAAAAAAABgAA
+-ADMz8z8zMzMz/////zwAAACjAAAAAAAAAE4AAAClAAAAAAAAAAAAAAAAAAAAUFAF9QcAAAAAAAAA
+-/////wAAAAAAAAAAqqqq+v////88AAAArgAAAAAAAAAIAAAAsQAAAAAAAAD/////HQAAALQAAAAA
+-AAAABwAAAAIAAAD/////QQAAALwAAAAAAAAAOwAAAMUAAAAAAAAAOgAAAM4AAAAAAAAA0wAAAAAA
+-AAAAAAAAAAAAAKqqqvodAAAA1QAAAAAAAAAwMAPz3wAAAAAAAAAAAAAAAAAAAEEAAADmAAAAAAAA
+-ALu7u/s8AAAA7QAAAAAAAAAgIALy7wAAAAAAAADu7u7+AAAAAAAAAAD/////nQAAAAcAAAACAAAA
+-cHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAAAABAAAAAAAAPgAAAAcAAAAJAAAA/////7u7u/sA
+-AABAnQAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAAB4BAAAAAAAAu7u7+wAA
+-AEBBAAAAKgEAAAAAAADMzMz8AgAAAAYGBQUHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAA////
+-/0EAAAA9AQAAAAAAAN3d3f0dAAAAQAEAAAAAAABQAAAAHQAAAEQBAAAAAAAAUQAAAB0AAABIAQAA
+-AAAAAGBgBvZHAAAABwAAAAIAAAD/////4OAO/rCwC/s8AAAAVQEAAAAAAAAHAAAAAgAAAP/////A
+-wAz8HQAAAF0BAAAAAAAAUAAAAMDADPwcAAAAWQEAAAAAAABwcAf3SAAAAAAAAAAHAAAAAwAAAP//
+-//+QkAn53d3d/eDgDv4cAAAAdgEAAAAAAAA8AAAAcQEAAAAAAACgoAr63d3d/eDgDv5OAAAAjwEA
+-AAAAAAAAAAAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAAAAAAKqqqvpPAAAAhwEAAAAAAAAAAAAA
+-AAAAAFBQBfUHAAAAAAAAAP////8AAAAAAAAAAKqqqvrd3d39BgYFBRwAAACcAQAAAAAAAP////+Q
+-kAn5oKAK+kEAAAC1AQAAAAAAAN3d3f3g4A7+sLAL+8DADPzAwAz8HAAAAL0BAAAAAAAA/////93d
+-3f0dAAAAwQEAAAAAAABAQAT0xwEAAAAAAADu7u7+AAAAAAAAAABPAAAA0AEAAAAAAADSAQAAAAAA
+-AAAAAAAAAAAAqqqq+gcAAAADAAAA/////08AAADWAQAAAAAAANgBAAAAAAAAAAAAAAAAAACqqqr6
+-QEAE9N4BAAAAAAAABwAAAAEAAAD/////7u7u/gAAAAAAAAAATwAAAOcBAAAAAAAA6QEAAAAAAAAA
+-AAAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAAAAAAKqqqvoHAAAABQAAAP////9PAAAA8AEAAAAA
+-AADyAQAAAAAAAAAAAAAAAAAAqqqq+kBABPT4AQAAAAAAAO7u7v4AAAAAAAAAAE8AAAABAgAAAAAA
+-AAMCAAAAAAAABQIAAAAAAAAAAAAAAAAAAKqqqvoHAAAAAgAAAP////9PAAAACQIAAAAAAAALAgAA
+-AAAAAAAAAAAAAAAAqqqq+lAAAABPAAAADwIAAAAAAAARAgAAAAAAAAAAAAAAAAAAUFAF9QcAAAAA
+-AAAA/////wAAAAAAAAAAqqqq+lEAAABPAAAAGAIAAAAAAAAaAgAAAAAAABwCAAAAAAAAAAAAAAAA
+-AACqqqr6YGAG9kcAAAAHAAAAAgAAAP////8dAAAAIQIAAAAAAAAcAAAAIwIAAAAAAABwcAf3SQAA
+-ABIAAAAHAAAAAQAAANDQDf0cAAAAKAIAAAAAAAD/////HAAAACoCAAAAAAAA/////zwAAAAwAgAA
+-AAAAADAwA/M/AgAAAAAAAAAAAAAAAAAAEBAB8QAAAAAAAAAAQgIAAAAAAAAIAAAASQIAAAAAAAD/
+-////7u7u/ru7u/tPAAAAUwIAAAAAAABaAgAAAAAAAGQCAAAAAAAAAAAAAAAAAACqqqr6MDAD83IC
+-AAAAAAAAAAAAAAAAAAAQEAHxAAAAAAAAAAB1AgAAAAAAAAgAAAB8AgAAAAAAAP/////u7u7+u7u7
+-+zwAAACJAgAAAAAAADAwA/OYAgAAAAAAAAAAAAAAAAAAEBAB8aACAAAAAAAA7u7u/psCAAAAAAAA
+-AAAAAAAAAACqqqr6EBAB8bMCAAAAAAAA7u7u/q4CAAAAAAAAAAAAAAAAAACqqqr6u7u7+08AAAC8
+-AgAAAAAAAMMCAAAAAAAAAAAAAAAAAACqqqr6TgAAAM0CAAAAAAAA1AIAAAAAAAAAAAAAAAAAAKqq
+-qvr/////PAAAAOICAAAAAAAAQEAE9OkCAAAAAAAA7u7u/gAAAAAAAAAA/////w==
++bmN0aW9uACl7dHJhY2UAJ2Z1bmMxAAA7fUFTU2V0UHJvcEZsYWdzAGNsYXNzMQBwcm90b3R5cGUA
++bnVsbAAxADt2YXIgY2xhc3MyAGZ1bmN0aW9uACl7dHJhY2UAJ2NsYXNzMgAAO3RoaXMAX19wcm90
++b19fAGNvbnN0cnVjdG9yACk7dGhpcwBmdW5jMQApO31jbGFzczIAcHJvdG90eXBlAF9fcHJvdG9f
++XwBjbGFzczEAcHJvdG90eXBlAGNsYXNzMgBwcm90b3R5cGUAY29uc3RydWN0b3IAY2xhc3MxAGNs
++YXNzMgBwcm90b3R5cGUAZnVuYzIAZnVuY3Rpb24AKXt0cmFjZQAnZnVuYzIAADt9QVNTZXRQcm9w
++RmxhZ3MAY2xhc3MyAHByb3RvdHlwZQBudWxsADEAO3ZhciBjbGFzczMAZnVuY3Rpb24AKXt0cmFj
++ZQAnY2xhc3MzAAA7dGhpcwBfX3Byb3RvX18AY29uc3RydWN0b3IAKTt0aGlzAGZ1bmMyACk7fWNs
++YXNzMwBwcm90b3R5cGUAX19wcm90b19fAGNsYXNzMgBwcm90b3R5cGUAY2xhc3MzAHByb3RvdHlw
++ZQBjb25zdHJ1Y3RvcgBjbGFzczIAdmFyIG8zAG5ldyBjbGFzczMAKTt0cmFjZQAxLjAwMDAwMDEx
++OTIwOTI4OTU1MDc4MTI1ACcgAAAgMS4wMDAwMDAwNTk2MDQ2NDQ3NzUzOTA2MjUAJyAAADAuMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDExNzU0OTQzNTA4MjIyODc1MDc5Njg3
++MzY1MzcyMjIyNDU2Nzc4MTg2NjU1NTY3NzIwODc1MjE1MDg3NTE3MDYyNzg0MTcyNTk0NTQ3Mjcx
++NzI4NTE1NjI1AHRyYWNlADAuMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA1
++ODc3NDcxNzU0MTExNDM3NTM5ODQzNjgyNjg2MTExMjI4Mzg5MDkzMzI3NzgzODYwNDM3NjA3NTQz
++NzU4NTMxMzkyMDg2Mjk3MjczNjM1ODY0MjU3ODEyNQAnIAAAMTcwMTQxMTgzNDYwNDY5MjMxNzMx
++Njg3MzAzNzE1ODg0MTA1NzI4LjAAdHJhY2UAMzQwMjgyMzY2OTIwOTM4NDYzNDYzMzc0NjA3NDMx
++NzY4MjExNDU2LjAAJyAAAEluZmluaXR5ACcgAAAgICAgICAgICAgICAgICAtSW5maW5pdHkAJyAA
++ACAgICAgICAgICAgICAwLjAAJyAAACAgICAgICAgICAgICAgICAgICAgLTAuMAB0cmFjZQAwLjAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAxMTEyNTM2OTI5MjUzNjAwNjkxNTQ1MTE2MzU4NjY2MjAyMDMy
++MTA5NjA3OTkwMjMxMTY1OTE1Mjc2NjYzNzA4NDQzNjAyMjE3NDA2OTU5MDk3OTI3MTQxNTc5NTA2
++MjU1NTEwMjgyMDMzNjY5ODY1NTE3OTA1NTAyNTc2MjE3MDgwNzc2NzMwMDU0NDI4MDA2MTkyNjg4
++ODU5NDEwNTY1Mzg4OTk2NzY2MDAxMTY1MjM5ODA1MDczNzIxMjkxODE4MDM1OTYwNzgyNTIzNDcx
++MjUxODY3MTA0MTg3NjI1NDAzMzI1MzA4MzI5MDc5NDc0MzYwMjQ1NTg5OTg0Mjk1ODE5ODI0MjUw
++MzE3OTU0Mzg1MDU5MTUyNDM3Mzk5ODkwNDQzODc2ODc0OTc0NzI1NzkwMjI1ODAyNTI1NDU3Njk5
++OTI4MjkxMjM1NDA5MzIyNTU2NzY4OTY3OTAyNDk2MDU3OTkwNTQyODgzMDI1OTk2MjE2Njc2MDU3
++MTc2MTk1MDc0Mzk3ODQ5ODA0Nzk1NjQ0NDQ1ODAxNDk2MzIwNzU1NTMxNzMzMTU2Njk2ODMxNzM4
++NzkzMjU2NTE0Njg1ODgxMDIzNjYyODE1ODkwNzQyODMyMTc1NDM2MDYxNDE0MzE4ODIxMDIyNDIz
++NDA1NzAzODA2OTU1NzM4NTMxNDAwODQ0OTI2NjIyMDU1MDEyMDgwNzIzNzEwODA5MjgzNTgzMDc1
++MjcwMDc3MTQyNTQyMzU4Mzc2NDUwOTUxNTgwNjYxMzg5NDQ4MzY0ODUzNjg2NTYxNjY3MDQzNDk0
++NDkxNTg3NTMzOTE5NDIzNDYzMDQ2Mzg2OTg4OTg2NDI5MzI5ODI3NDcwNTQ1Njg0NTQ3NzAzMDY4
++MjMzNzg0MzUxMTk5MzM5MTU3NjQ1MzQwNDkyMzA4NjA1NDYyMzEyNjk4MzY0MjU3ODEyNQBmdW5j
++dGlvbiBuAGEAYgB7dHJhY2UAYQAnIAAAYgB9bgAtTmFOAE5hTgAAAAAwMAPzCgAAAAAAAAANAAAA
++AAAAAAAAAAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQEAHxJAAAAAAAAADu7u7+GgAAAAAAAAAf
++AAAAAAAAAAAAAAAAAAAAqqqq+k8AAAAxAAAAAAAAADYAAAAAAAAAOwAAAAAAAAAAAAAAAAAAAKqq
++qvocAAAAQAAAAAAAAAD/////HQAAAEUAAAAAAAAAQEAE9EsAAAAAAAAABwAAAAEAAAD/////7u7u
++/gAAAAAAAAAAPAAAAFgAAAAAAAAAgIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAACAAAA
++DAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAAC
++AAAAYgAAAAcAAAACAAAAcHAH90gAAAAAAAAABwAAAAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBw
++B/dJAAAAAAAAAAcAAAACAAAAcHAH90kAAAASAAAABwAAAAIAAABwcAf3ZwAAABIAAAAHAAAAAgAA
++AHBwB/dIAAAAEgAAAAcAAAACAAAAYwAAAAcAAAACAAAAZAAAAAcAAAACAAAAZQAAAAcAAAACAAAA
++EAAAAAcAAAACAAAAEQAAAAcAAAACAAAA0NAN/QcAAAACAAAA/////wcAAAADAAAA//////////88
++AAAAmQAAAAAAAAAGAAAAMzPzPzMzMzP/////PAAAAKMAAAAAAAAATgAAAKUAAAAAAAAAAAAAAAAA
++AABQUAX1BwAAAAAAAAD/////AAAAAAAAAACqqqr6/////zwAAACuAAAAAAAAAAgAAACxAAAAAAAA
++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
++////////BgAAAP///////////////+7u7v4AAAAAAAAAAP////8=
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,4 +1,4 @@
+-/AIAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
++nAoAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
+ dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
+ ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
+ AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
+@@ -9,38 +9,88 @@ aW4gYQAwAAB7fXdoaWxlKHRydWUAe2JyZWFrO2Nv
+ dyBPYmplY3QAKTthAGIAMwBhAGMAbmV3IEFycmF5ADEAO2EAYwAwAAA1AGEAZABuZXcgT2JqZWN0
+ ACk7YQBkAGUAMgBhAGIAKzthAGMAMAAALTthAGQAZQA9MgBhAGIAPTEAcQB3AHZhciBjbGFzczEA
+ ZnVuY3Rpb24AKXt0cmFjZQAnY2xhc3MxAAA7fWNsYXNzMQBwcm90b3R5cGUAZnVuYzEAZnVuY3Rp
+-b24AKXt0cmFjZQAnZnVuYzEAADt9dmFyIGNsYXNzMgBmdW5jdGlvbgApe3RoaXMAY29uc3RydWN0
+-b3IAKTt0aGlzAGZ1bmMxACk7fWNsYXNzMgBwcm90b3R5cGUAY2xhc3MxAHByb3RvdHlwZQB2YXIg
+-bzIAbmV3IGNsYXNzMgApOwAAAAAAAAAAAAAAMDAD8woAAAANAAAAAAAAAD4AAAAHAAAAAgAAAP//
+-//+7u7v7EBAB8SQAAADu7u7+GgAAAB8AAAAAAAAAqqqq+k8AAAAxAAAANgAAADsAAAAAAAAAqqqq
+-+hwAAABAAAAA/////x0AAABFAAAAQEAE9EsAAAAHAAAAAQAAAP/////u7u7+AAAAADwAAABYAAAA
+-gIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAACAAAADAAAAAcAAAACAAAADQAAAAcAAAAC
+-AAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAACAAAAYgAAAAcAAAACAAAAcHAH90gA
+-AAAAAAAABwAAAAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAAcHAH
+-90kAAAASAAAABwAAAAIAAABwcAf3ZwAAABIAAAAHAAAAAgAAAHBwB/dIAAAAEgAAAAcAAAACAAAA
+-YwAAAAcAAAACAAAAZAAAAAcAAAACAAAAZQAAAAcAAAACAAAAEAAAAAcAAAACAAAAEQAAAAcAAAAC
+-AAAA0NAN/QcAAAACAAAA/////wcAAAADAAAA//////////88AAAAmQAAAAYAAAAzM/M/MzMzM///
+-//88AAAAowAAAE4AAAClAAAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq+v////88AAAArgAA
+-AAgAAACxAAAA/////x0AAAC0AAAABwAAAAIAAAD/////QQAAALwAAAA7AAAAxQAAADoAAADOAAAA
+-0wAAAAAAAACqqqr6HQAAANUAAAAwMAPz3wAAAAAAAABBAAAA5gAAALu7u/s8AAAA7QAAACAgAvLv
+-AAAA7u7u/gAAAAD/////nQAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAAAAB
+-AAA+AAAABwAAAAkAAAD/////u7u7+wAAAECdAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAA
+-AP////9BAAAAHgEAALu7u/sAAABAQQAAACoBAADMzMz8AgAAAAYGBQUHAAAAAgAAAHBwB/dJAAAA
+-AAAAAAcAAAACAAAA/////0EAAAA9AQAA3d3d/R0AAABAAQAAUAAAAB0AAABEAQAAUQAAAB0AAABI
+-AQAAYGAG9kcAAAAHAAAAAgAAAP/////g4A7+sLAL+zwAAABVAQAABwAAAAIAAAD/////wMAM/B0A
+-AABdAQAAUAAAAMDADPwcAAAAWQEAAHBwB/dIAAAAAAAAAAcAAAADAAAA/////5CQCfnd3d394OAO
+-/hwAAAB2AQAAPAAAAHEBAACgoAr63d3d/eDgDv5OAAAAjwEAAAAAAABQUAX1BwAAAAAAAAD/////
+-AAAAAKqqqvpPAAAAhwEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvrd3d39BgYFBRwAAACc
+-AQAA/////5CQCfmgoAr6QQAAALUBAADd3d394OAO/rCwC/vAwAz8wMAM/BwAAAC9AQAA/////93d
+-3f0dAAAAwQEAAEBABPTHAQAA7u7u/gAAAABPAAAA0AEAANIBAAAAAAAAqqqq+gcAAAADAAAA////
+-/08AAADWAQAA2AEAAAAAAACqqqr6QEAE9N4BAAAHAAAAAQAAAP/////u7u7+AAAAAE8AAADnAQAA
+-6QEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvoHAAAABQAAAP////9PAAAA8AEAAPIBAAAA
+-AAAAqqqq+kBABPT4AQAA7u7u/gAAAABPAAAAAQIAAAMCAAAFAgAAAAAAAKqqqvoHAAAAAgAAAP//
+-//9PAAAACQIAAAsCAAAAAAAAqqqq+lAAAABPAAAADwIAABECAAAAAAAAUFAF9QcAAAAAAAAA////
+-/wAAAACqqqr6UQAAAE8AAAAYAgAAGgIAABwCAAAAAAAAqqqq+mBgBvZHAAAABwAAAAIAAAD/////
+-HQAAACECAAAcAAAAIwIAAHBwB/dJAAAAEgAAAAcAAAABAAAA0NAN/RwAAAAoAgAA/////xwAAAAq
+-AgAA/////zwAAAAwAgAAMDAD8z8CAAAAAAAAEBAB8QAAAABCAgAACAAAAEkCAAD/////7u7u/ru7
+-u/tPAAAAUwIAAFoCAABkAgAAAAAAAKqqqvowMAPzcgIAAAAAAAAQEAHxAAAAAHUCAAAIAAAAfAIA
+-AP/////u7u7+u7u7+zwAAACJAgAAMDAD85gCAAAAAAAAEBAB8aACAADu7u7+mwIAAAAAAACqqqr6
+-EBAB8bMCAADu7u7+rgIAAAAAAACqqqr6u7u7+08AAAC8AgAAwwIAAAAAAACqqqr6TgAAAM0CAADU
+-AgAAAAAAAKqqqvr/////PAAAAOICAABAQAT06QIAAO7u7v4AAAAA/////w==
++b24AKXt0cmFjZQAnZnVuYzEAADt9QVNTZXRQcm9wRmxhZ3MAY2xhc3MxAHByb3RvdHlwZQBudWxs
++ADEAO3ZhciBjbGFzczIAZnVuY3Rpb24AKXt0cmFjZQAnY2xhc3MyAAA7dGhpcwBfX3Byb3RvX18A
++Y29uc3RydWN0b3IAKTt0aGlzAGZ1bmMxACk7fWNsYXNzMgBwcm90b3R5cGUAX19wcm90b19fAGNs
++YXNzMQBwcm90b3R5cGUAY2xhc3MyAHByb3RvdHlwZQBjb25zdHJ1Y3RvcgBjbGFzczEAY2xhc3My
++AHByb3RvdHlwZQBmdW5jMgBmdW5jdGlvbgApe3RyYWNlACdmdW5jMgAAO31BU1NldFByb3BGbGFn
++cwBjbGFzczIAcHJvdG90eXBlAG51bGwAMQA7dmFyIGNsYXNzMwBmdW5jdGlvbgApe3RyYWNlACdj
++bGFzczMAADt0aGlzAF9fcHJvdG9fXwBjb25zdHJ1Y3RvcgApO3RoaXMAZnVuYzIAKTt9Y2xhc3Mz
++AHByb3RvdHlwZQBfX3Byb3RvX18AY2xhc3MyAHByb3RvdHlwZQBjbGFzczMAcHJvdG90eXBlAGNv
++bnN0cnVjdG9yAGNsYXNzMgB2YXIgbzMAbmV3IGNsYXNzMwApO3RyYWNlADEuMDAwMDAwMTE5MjA5
++Mjg5NTUwNzgxMjUAJyAAACAxLjAwMDAwMDA1OTYwNDY0NDc3NTM5MDYyNQAnIAAAMC4wMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMTE3NTQ5NDM1MDgyMjI4NzUwNzk2ODczNjUz
++NzIyMjI0NTY3NzgxODY2NTU1Njc3MjA4NzUyMTUwODc1MTcwNjI3ODQxNzI1OTQ1NDcyNzE3Mjg1
++MTU2MjUAdHJhY2UAMC4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDU4Nzc0
++NzE3NTQxMTE0Mzc1Mzk4NDM2ODI2ODYxMTEyMjgzODkwOTMzMjc3ODM4NjA0Mzc2MDc1NDM3NTg1
++MzEzOTIwODYyOTcyNzM2MzU4NjQyNTc4MTI1ACcgAAAxNzAxNDExODM0NjA0NjkyMzE3MzE2ODcz
++MDM3MTU4ODQxMDU3MjguMAB0cmFjZQAzNDAyODIzNjY5MjA5Mzg0NjM0NjMzNzQ2MDc0MzE3Njgy
++MTE0NTYuMAAnIAAASW5maW5pdHkAJyAAACAgICAgICAgICAgICAgIC1JbmZpbml0eQAnIAAAICAg
++ICAgICAgICAgIDAuMAAnIAAAICAgICAgICAgICAgICAgICAgICAtMC4wAHRyYWNlADAuMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwMDAwMDAwMDExMTI1MzY5MjkyNTM2MDA2OTE1NDUxMTYzNTg2NjYyMDIwMzIxMDk2
++MDc5OTAyMzExNjU5MTUyNzY2NjM3MDg0NDM2MDIyMTc0MDY5NTkwOTc5MjcxNDE1Nzk1MDYyNTU1
++MTAyODIwMzM2Njk4NjU1MTc5MDU1MDI1NzYyMTcwODA3NzY3MzAwNTQ0MjgwMDYxOTI2ODg4NTk0
++MTA1NjUzODg5OTY3NjYwMDExNjUyMzk4MDUwNzM3MjEyOTE4MTgwMzU5NjA3ODI1MjM0NzEyNTE4
++NjcxMDQxODc2MjU0MDMzMjUzMDgzMjkwNzk0NzQzNjAyNDU1ODk5ODQyOTU4MTk4MjQyNTAzMTc5
++NTQzODUwNTkxNTI0MzczOTk4OTA0NDM4NzY4NzQ5NzQ3MjU3OTAyMjU4MDI1MjU0NTc2OTk5Mjgy
++OTEyMzU0MDkzMjI1NTY3Njg5Njc5MDI0OTYwNTc5OTA1NDI4ODMwMjU5OTYyMTY2NzYwNTcxNzYx
++OTUwNzQzOTc4NDk4MDQ3OTU2NDQ0NDU4MDE0OTYzMjA3NTU1MzE3MzMxNTY2OTY4MzE3Mzg3OTMy
++NTY1MTQ2ODU4ODEwMjM2NjI4MTU4OTA3NDI4MzIxNzU0MzYwNjE0MTQzMTg4MjEwMjI0MjM0MDU3
++MDM4MDY5NTU3Mzg1MzE0MDA4NDQ5MjY2MjIwNTUwMTIwODA3MjM3MTA4MDkyODM1ODMwNzUyNzAw
++NzcxNDI1NDIzNTgzNzY0NTA5NTE1ODA2NjEzODk0NDgzNjQ4NTM2ODY1NjE2NjcwNDM0OTQ0OTE1
++ODc1MzM5MTk0MjM0NjMwNDYzODY5ODg5ODY0MjkzMjk4Mjc0NzA1NDU2ODQ1NDc3MDMwNjgyMzM3
++ODQzNTExOTkzMzkxNTc2NDUzNDA0OTIzMDg2MDU0NjIzMTI2OTgzNjQyNTc4MTI1AGZ1bmN0aW9u
++IG4AYQBiAHt0cmFjZQBhACcgAABiAH1uAC1OYU4ATmFOAAAAAAAAAAAwMAPzCgAAAA0AAAAAAAAA
++PgAAAAcAAAACAAAA/////7u7u/sQEAHxJAAAAO7u7v4aAAAAHwAAAAAAAACqqqr6TwAAADEAAAA2
++AAAAOwAAAAAAAACqqqr6HAAAAEAAAAD/////HQAAAEUAAABAQAT0SwAAAAcAAAABAAAA/////+7u
++7v4AAAAAPAAAAFgAAACAgAj4BwAAAP7///9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAA
++AAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAA
++BwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAA
++AAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAAAHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH90gA
++AAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAABwAA
++AAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/////BwAAAAMAAAD//////////zwAAACZAAAA
++BgAAADMz8z8zMzMz/////zwAAACjAAAATgAAAKUAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAACq
++qqr6/////zwAAACuAAAACAAAALEAAAD/////HQAAALQAAAAHAAAAAgAAAP////9BAAAAvAAAADsA
++AADFAAAAOgAAAM4AAADTAAAAAAAAAKqqqvodAAAA1QAAADAwA/PfAAAAAAAAAEEAAADmAAAAu7u7
+++zwAAADtAAAAICAC8u8AAADu7u7+AAAAAP////+dAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAA
++AgAAAP////9BAAAAAAEAAD4AAAAHAAAACQAAAP////+7u7v7AAAAQJ0AAAAHAAAAAgAAAHBwB/dJ
++AAAAAAAAAAcAAAACAAAA/////0EAAAAeAQAAu7u7+wAAAEBBAAAAKgEAAMzMzPwCAAAABgYFBQcA
++AAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAAAD0BAADd3d39HQAAAEABAABQAAAAHQAA
++AEQBAABRAAAAHQAAAEgBAABgYAb2RwAAAAcAAAACAAAA/////+DgDv6wsAv7PAAAAFUBAAAHAAAA
++AgAAAP/////AwAz8HQAAAF0BAABQAAAAwMAM/BwAAABZAQAAcHAH90gAAAAAAAAABwAAAAMAAAD/
++////kJAJ+d3d3f3g4A7+HAAAAHYBAAA8AAAAcQEAAKCgCvrd3d394OAO/k4AAACPAQAAAAAAAFBQ
++BfUHAAAAAAAAAP////8AAAAAqqqq+k8AAACHAQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq
+++t3d3f0GBgUFHAAAAJwBAAD/////kJAJ+aCgCvpBAAAAtQEAAN3d3f3g4A7+sLAL+8DADPzAwAz8
++HAAAAL0BAAD/////3d3d/R0AAADBAQAAQEAE9McBAADu7u7+AAAAAE8AAADQAQAA0gEAAAAAAACq
++qqr6BwAAAAMAAAD/////TwAAANYBAADYAQAAAAAAAKqqqvpAQAT03gEAAAcAAAABAAAA/////+7u
++7v4AAAAATwAAAOcBAADpAQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAqqqq+gcAAAAFAAAA////
++/08AAADwAQAA8gEAAAAAAACqqqr6QEAE9PgBAADu7u7+AAAAAE8AAAABAgAAAwIAAAUCAAAAAAAA
++qqqq+gcAAAACAAAA/////08AAAAJAgAACwIAAAAAAACqqqr6UAAAAE8AAAAPAgAAEQIAAAAAAABQ
++UAX1BwAAAAAAAAD/////AAAAAKqqqvpRAAAATwAAABgCAAAaAgAAHAIAAAAAAACqqqr6YGAG9kcA
++AAAHAAAAAgAAAP////8dAAAAIQIAABwAAAAjAgAAcHAH90kAAAASAAAABwAAAAEAAADQ0A39HAAA
++ACgCAAD/////HAAAACoCAAD/////PAAAADACAAAwMAPzPwIAAAAAAAAQEAHxAAAAAEICAAAIAAAA
++SQIAAP/////u7u7+u7u7+08AAABTAgAAWgIAAGQCAAAAAAAAqqqq+jAwA/NyAgAAAAAAABAQAfEA
++AAAAdQIAAAgAAAB8AgAA/////+7u7v67u7v7EBAB8YUCAAAHAAAAAQAAAP////8cAAAApQIAAP//
++//9OAAAAlAIAAJsCAAAAAAAAqqqq+v/////u7u7+AAAAADwAAACxAgAAMDAD88ACAAAAAAAAEBAB
++8QAAAADDAgAACAAAAMoCAAD/////7u7u/hAQAfHiAgAA7u7u/tMCAADYAgAAAAAAAKqqqvoQEAHx
++9QIAAO7u7v7wAgAAAAAAAKqqqvq7u7v7TwAAAP4CAAAFAwAADwMAAAAAAACqqqr6TgAAABkDAAAg
++AwAAAAAAAKqqqvr/////TwAAACoDAAAxAwAAOwMAAAAAAACqqqr6HAAAAEcDAAD/////TwAAAE4D
++AABVAwAAXwMAAAAAAACqqqr6MDAD820DAAAAAAAAEBAB8QAAAABwAwAACAAAAHcDAAD/////7u7u
++/ru7u/sQEAHxgAMAAAcAAAABAAAA/////xwAAACgAwAA/////04AAACPAwAAlgMAAAAAAACqqqr6
++/////+7u7v4AAAAAPAAAAKwDAAAwMAPzuwMAAAAAAAAQEAHxAAAAAL4DAAAIAAAAxQMAAP/////u
++7u7+EBAB8d0DAADu7u7+zgMAANMDAAAAAAAAqqqq+hAQAfHwAwAA7u7u/usDAAAAAAAAqqqq+ru7
++u/tPAAAA+QMAAAAEAAAKBAAAAAAAAKqqqvpOAAAAFAQAABsEAAAAAAAAqqqq+v////9PAAAAJQQA
++ACwEAAA2BAAAAAAAAKqqqvocAAAAQgQAAP////88AAAATQQAAEBABPRUBAAA7u7u/gAAAAAQEAHx
++AAAAAF0EAAAGAAAAAADwPwAAACBHAAAACAAAAH4EAABHAAAABgAAAAAA8D8AAAAQRwAAAAgAAACe
++BAAARwAAAAYAAAAAABA4AAAAAP/////u7u7+EBAB8QAAAAAiBQAABgAAAAAAADgAAAAARwAAAAgA
++AACrBQAARwAAAAYAAAAAAOBHAAAAAP/////u7u7+EBAB8QAAAADYBQAABgAAAAAA8EcAAAAARwAA
++AAgAAAAJBgAARwAAAAYAAAAAAPB/AAAAAEcAAAAIAAAAFgYAAEcAAAAGAAAAAADw/wAAAABHAAAA
++CAAAADMGAABHAAAABgAAAAAAAAAAAAAARwAAAAgAAABIBgAARwAAAAYAAAAAAACAAAAAAP/////u
++7u7+EBAB8QAAAABkBgAABgAAAAAACAAAAAAA/////+7u7v4wMAPzdQoAAHcKAAB5CgAAAAAAABAQ
++AfEAAAAAfAoAABwAAACCCgAARwAAAAgAAACFCgAARwAAABwAAACICgAA/////+7u7v67u7v7EBAB
++8YsKAAAGAAAA////f///////////BgAAAP///////////////+7u7v4AAAAA/////w==
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -7,7 +7,7 @@ einclude "../dev/import.h"
+ 
+ include "entryraw.oc" "entry.oc"
+ 
+-sd f=debug_log|debug_x_pad
++sd f=debug_log|debug_x_pad|flag_pool_del
+ if argc=2
+ 	importx "puts" puts
+ 	call puts("flag_x")
+@@ -59,17 +59,50 @@ var class1=function(){
+ class1.prototype.func1=function(){
+ 	trace('func1');
+ }
++ASSetPropFlags(class1.prototype,null,1);
+ var class2=function(){
+-	this.constructor();
++	trace('class2');
++	this.__proto__.constructor();
+ 	this.func1();
+ }
+-class2.prototype=class1.prototype;
+-var o2=new class2();
++class2.prototype.__proto__=class1.prototype;
++class2.prototype.constructor=class1;
++class2.prototype.func2=function(){
++	trace('func2');
++}
++ASSetPropFlags(class2.prototype,null,1);
++var class3=function(){
++	trace('class3');
++	this.__proto__.constructor();
++	this.func2();
++}
++class3.prototype.__proto__=class2.prototype;
++class3.prototype.constructor=class2;
++var o3=new class3();
+ 
+ //from asm point of view, all can be done regarding interface statement:
+ //ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
+ //at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
+ //	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
++
++//    3FF0000020000000->3F800001     3FF0000010000000               3810000000000000->00800000
++trace(1.00000011920928955078125+' '+ 1.000000059604644775390625+' '+0.000000000000000000000000000000000000011754943508222875079687365372222456778186655567720875215087517062784172594547271728515625)
++//                                                                  1.17549435082228750796873653722e-38
++//    3800000000000000                                                                                                                      47E0000000000000->7F000000
++trace(0.0000000000000000000000000000000000000058774717541114375398436826861112283890933277838604376075437585313920862972736358642578125+' '+170141183460469231731687303715884105728.0)
++//    5.87747175411143753984368268611e-39                                                                                                   1.70141183460469231731687303716e+38
++//    47F0000000000000                              7FF0000000000000->7f800000  FFF0000000000000->ff800000 0000000000000000->00000000  8000000000000000->80000000
++trace(340282366920938463463374607431768211456.0+' '+Infinity+' '+               -Infinity+' '+             0.0+' '+                    -0.0)
++//    3.40282366920938463463374607432e+38
++//    0008000000000000
++trace(0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011125369292536006915451163586662020321096079902311659152766637084436022174069590979271415795062555102820336698655179055025762170807767300544280061926888594105653889967660011652398050737212918180359607825234712518671041876254033253083290794743602455899842958198242503179543850591524373998904438768749747257902258025254576999282912354093225567689679024960579905428830259962166760571761950743978498047956444458014963207555317331566968317387932565146858810236628158907428321754360614143188210224234057038069557385314008449266220550120807237108092835830752700771425423583764509515806613894483648536865616670434944915875339194234630463869889864293298274705456845477030682337843511993391576453404923086054623126983642578125)
++//    1.11253692925360069154511635867e-308
++//    7FFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF
++function n(a,b){trace(a+' '+b)}
++n(-NaN,NaN)
++// https://www.omnicalculator.com/other/floating-point
++// https://baseconvert.com/ieee-754-floating-point
++//// https://www.h-schmidt.net/FloatConverter/IEEE754.html
+ ")
+ 
+ call swf_done()
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -160,7 +160,7 @@
+ <table>
+ 	<tr><td class="green" colspan=2>RT</td></tr>
+ 	<tr><td>ap_Integer</td><td>number</td></tr>
+-	<tr><td>ap_double</td><td>scanf1</td><td>scanf2</td></tr>
++	<tr><td>ap_Double</td><td>scanf1</td><td>scanf2</td></tr>
+ 	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
+ 	<tr><td>call_action_right</td><td class="green">C</td></tr>
+ 	<tr><td>parenthesis_start</td><td class="green">RG</td><td>math_end</td></tr>

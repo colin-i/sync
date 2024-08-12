@@ -1,0 +1,524 @@
+Format ElfObj64
+
+include "../include/prog.h"
+
+#win32 with _
+importx "memcpy" memcpy
+importx "strlen" strlen
+importx "memcmp" memcmp
+
+import "swf_frames_pointer" swf_frames_pointer
+import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+
+import "button_mem" button_mem
+
+import "stack_to_word_arg" stack_to_word_arg
+import "word_arg_to_stack" word_arg_to_stack
+import "file_resources_set" file_resources_set
+import "file_resources_free" file_resources_free
+import "struct_ids" struct_ids
+import "block_get_size" block_get_size
+import "block_get_mem" block_get_mem
+import "free_sprite_id" free_sprite_id
+import "freereset" freereset   #..x with no args
+import "dtitles_conclude" dtitles_conclude
+
+
+
+import "ebase" ebase
+#aftercallimport ebool
+
+import "swf_mem" swf_mem
+import "swf_mem_add" swf_mem_add
+import "swf_actionblock" swf_actionblock
+import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+import "error" error
+import "swf_shape_simple" swf_shape_simple
+import "identifiers_get" identifiers_get
+
+functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
+valuex bp#1;base bp;call ebase(bp)
+	callg swf_new_ex_local(path,width,height,backgroundcolor,fps,(debug_none))
+endfunction
+
+import "swf_button_base" swf_button_base
+import "swf_text_initial_font_centered" swf_text_initial_font_centered
+#id
+functionX swf_button(sd width,sd height,sd ButtonData)
+base swf_new.bp;call ebase(swf_new.bp)
+data def_fill#1
+data def_line_h#1;#no pad
+data def_line#1
+
+data ov_fill#1;#no pad
+data ov_line_h#1
+data ov_line#1;#no pad
+
+data dn_fill#1;#no pad
+data dn_line_h#1
+data dn_line#1;#no pad
+
+data xcurve#1
+data ycurve#1;#no pad
+
+vstr text#1
+data font_id#1;data font_height#1;#no pad
+data font_vertical_offset#1;data font_color#1;#no pad
+
+vstr actions#1
+
+#width                  is the button width
+#height                 is the button height
+
+#def_fill               is the ButtonStateUp RGBA fill color
+#def_line_sz            line height in pixels
+#def_line               is the line RGBA
+#ov_fill                is the ButtonStateOver RGBA
+#ov_line_sz             line height
+#ov_line                RGBA
+#dn_fill                is the ButtonStateDown|ButtonStateHitTest RGBA
+#dn_line_sz             line height
+#dn_line                RGBA
+#x_curve                x curve shape value
+#y_curve                y curve shape value
+#text                   button text
+#font_id                a font created with swf_font
+#font_height            font height in pixels
+#font_vertical_offset   font y offset
+#font_color             font RGBA
+#actions                is a string with actionscript
+
+    const button_top_args=11*DWORD
+    call memcpy(#def_fill,ButtonData,(button_top_args))
+    add ButtonData (button_top_args);call memcpy(#text,ButtonData,:)
+    const button_font_args=4*DWORD
+    add ButtonData :;call memcpy(#font_id,ButtonData,(button_font_args))
+    add ButtonData (button_font_args);call memcpy(#actions,ButtonData,:)
+#
+    if font_height>height;call error("font_height>height error at button");endif
+    #
+    sd bmem
+    setcall bmem button_mem()
+    #
+    sd shape_up
+    sd shape_over
+	sd shape_down
+    setcall shape_up swf_shape_simple(width,height,def_fill,def_line_h,def_line,xcurve,ycurve)
+    setcall shape_over swf_shape_simple(width,height,ov_fill,ov_line_h,ov_line,xcurve,ycurve)
+	setcall shape_down swf_shape_simple(width,height,dn_fill,dn_line_h,dn_line,xcurve,ycurve)
+
+    set bmem# shape_up
+    add bmem (DWORD)
+    set bmem# shape_over
+    add bmem (DWORD)
+	set bmem# shape_down
+	add bmem (DWORD)
+
+    set bmem# width;add bmem (DWORD)
+    set bmem# height;add bmem (DWORD)
+
+    sd noText=FALSE;sd text_id
+    data t_null={0,0}
+    sd b;setcall b memcmp(#t_null,#text,:)
+    if b=0
+        set noText (TRUE)
+        set bmem# noText
+    else
+        sd text_y
+        set text_y height
+        sub text_y font_height
+        div text_y 2
+        add text_y font_vertical_offset
+
+        set bmem# noText;add bmem (DWORD)
+        set bmem# font_id;add bmem (DWORD)
+        set bmem# font_height;add bmem (DWORD)
+        set bmem# text_y;add bmem (DWORD)
+        set bmem# font_color
+
+        setcall text_id swf_text_initial_font_centered(width,height,text,font_id,font_height,font_color)
+    endelse
+
+    sd id
+    setcall id swf_button_base(shape_up,shape_over,shape_down,noText,text_id,text_y,actions)
+    return id
+endfunction
+#id
+functionX swf_button_last(ss newtext,ss actions)
+base swf_new.bp;call ebase(swf_new.bp)
+#ss newtext  is the new text for a new button with the attributes from the previous swf_button call
+#ss actions  button actions
+    data shape_up#1
+    data shape_over#1
+	data shape_down#1
+    data width#1
+    data height#1
+    data noText#1
+    data font_id#1
+    data font_height#1
+    data text_y#1
+    data font_color#1
+    sd bmem
+    setcall bmem button_mem()
+    call memcpy(#shape_up,bmem,(9*DWORD))
+
+    if noText=(FALSE)
+        sd newtext_id
+        setcall newtext_id swf_text_initial_font_centered(width,height,newtext,font_id,font_height,font_color)
+    endif
+
+    sd id
+    setcall id swf_button_base(shape_up,shape_over,shape_down,noText,newtext_id,text_y,actions)
+    return id
+endfunction
+
+#font
+
+#id
+import "swf_font_local" swf_font_local
+functionX swf_font(ss fontname,sd font_flags)
+	base swf_new.bp;call ebase(swf_new.bp)
+	sd id;set id swf_font_local(fontname,font_flags)
+	return id
+endfunction
+#id
+functionX swf_font_basic(ss fontname)
+base swf_new.bp;call ebase(swf_new.bp)
+#ss fontname    = a string with the browser font, for example "_sans"
+    sd id
+    setcall id swf_font_local(fontname,0)
+    return id
+endfunction
+
+#text
+
+#id
+import "swf_text_local" swf_text_local
+functionX swf_text(sd bound_width,sd bound_height,ss variablename,sd flags,sv structure)
+	base swf_new.bp;call ebase(swf_new.bp)
+	sd id;set id swf_text_local(bound_width,bound_height,variablename,flags,structure)
+	return id
+endfunction
+
+#id
+import "swf_shape_local" swf_shape_local
+functionX swf_shape(sd width,sd height,sd args)
+	base swf_new.bp;call ebase(swf_new.bp)
+	sd id;set id swf_shape_local(width,height,args)
+	return id
+endfunction
+
+#id
+functionX swf_shape_basic(sd width,sd height,sd fillcolor,sd linecolor)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd width
+#sd height
+#sd fillcolor       RGBA color to fill the shape
+#sd linecolor       RGBA line color around the shape
+    sd xcurve_value;set xcurve_value width;div xcurve_value 6
+    sd ycurve_value;set ycurve_value height;div ycurve_value 6
+    sd lineheight;set lineheight width;if lineheight>height;set lineheight height;endif;div lineheight 20
+    #xc width/6;yc..hg..;lh (min(w,h))/20
+    sd id
+    setcall id swf_shape_simple(width,height,fillcolor,lineheight,linecolor,xcurve_value,ycurve_value)
+    return id
+endfunction
+
+#id
+import "swf_shape_bitmap_local" swf_shape_bitmap_local
+functionX swf_shape_bitmap(sd bitmapId,sd width,sd height)
+	base swf_new.bp;call ebase(swf_new.bp)
+	sd id;set id swf_shape_bitmap_local(bitmapId,width,height)
+	return id
+endfunction
+#id
+functionX swf_shape_border(sd width,sd height,sd linesize,sd linecolor)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd width      border width
+#sd height     border height
+#sd linesize  line size
+#sd linecolor  0xRGBA color
+    sd shape
+    sd neg_w=-1
+    sd neg_h=-1
+    mult neg_w width
+    mult neg_h height
+    #
+    if linesize=0;call error("is useless to call shape_border with linesize=0");endif
+    data border=no_fill
+    data l_w#1
+        set l_w linesize
+    data color#1;#linesize!=0
+        set color linecolor
+    #
+    data *={0,StateLineStyle}
+    data *={1,1}
+    data est#1;data *=0
+        set est width
+    data *={1,1}
+    data *=0;data sud#1
+        set sud height
+    data *={1,1}
+    data west#1;data *=0
+        set west neg_w
+    data *={1,1}
+    data *=0;data nord#1
+        set nord neg_h
+    data *=-1
+    setcall shape swf_shape_local(width,height,#border)
+    return shape
+endfunction
+
+#id
+functionX swf_image(ss imagepath)
+base swf_new.bp;call ebase(swf_new.bp)
+#ss imagepath = path name for the dbl image
+    data width#1;data *height#1
+    sd shape_id;setcall shape_id swf_image_ex_local(imagepath,#width)
+    return shape_id
+endfunction
+#id
+import "swf_image_ex_local" swf_image_ex_local
+functionX swf_image_ex(ss imagepath,sd p_wh)
+	base swf_new.bp;call ebase(swf_new.bp)
+	sd id;set id swf_image_ex_local(imagepath,p_wh)
+	return id
+endfunction
+
+######################dbl
+#id
+functionX swf_dbl(ss imagepath)
+base swf_new.bp;call ebase(swf_new.bp)
+#ss imagepath = path name for the dbl image
+    sd id
+    setcall id swf_dbl_ex_local(imagepath,0)
+    return id
+endfunction
+#id
+import "swf_dbl_ex_local" swf_dbl_ex_local
+functionX swf_dbl_ex(ss imagepath,sd p_wh)
+	base swf_new.bp;call ebase(swf_new.bp)
+	sd id;set id swf_dbl_ex_local(imagepath,p_wh)
+	return id
+endfunction
+import "file_open" file_open
+import "file_seek" file_seek
+import "file_read" file_read
+import "filesize" filesize
+
+#width
+functionX swf_dbl_width(ss imagepath)
+base swf_new.bp;call ebase(swf_new.bp)
+#ss imagepath = path name for the dbl image
+    sd file
+    setcall file file_open(imagepath,(_open_read))
+    call file_resources_set(file)
+    sd size
+    setcall size filesize(file)
+    if size<(4+4+1+2)
+        call error("invalid dbl file")
+    endif
+    call file_seek(file,(4+4+1),(SEEK_SET))
+    sd width=0
+    call file_read(file,#width,2)
+    call file_resources_free()
+    return width
+endfunction
+#height
+functionX swf_dbl_height(ss imagepath)
+base swf_new.bp;call ebase(swf_new.bp)
+#ss imagepath = path name for the dbl image
+    sd file
+    setcall file file_open(imagepath,(_open_read))
+    call file_resources_set(file)
+    sd size
+    setcall size filesize(file)
+    if size<(4+4+1+2+2)
+        call error("invalid dbl file")
+    endif
+    call file_seek(file,(4+4+1+2),(SEEK_SET))
+    sd height=0
+    call file_read(file,#height,2)
+    call file_resources_free()
+    return height
+endfunction
+
+##############
+import "exportsId_get" exportsId_get
+functionX swf_done()
+base swf_new.bp;call ebase(swf_new.bp)
+	call swf_exports_done_local();#remaining exports?
+
+	sd p;set p swf_frames_pointer()
+	call swf_actionblock((mem_exp_part_done),(from_done),p);#in case there are remaining actions
+
+#the swf is done and the total length is wrote and the memory is freed
+    call swf_mem((mem_exp_done))
+    call freereset()
+endfunction
+
+import "swf_new_ex_local" swf_new_ex_local
+functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd add_debug)
+	base swf_new.bp;call ebase(swf_new.bp)
+	call swf_new_ex_local(path,width,height,backgroundcolor,fps,add_debug)
+endfunction
+
+import "swf_placeobject_local" swf_placeobject_local
+functionX swf_placeobject(sd refid,sd depth)
+	base swf_new.bp;call ebase(swf_new.bp)
+	call swf_placeobject_local(refid,depth)
+endfunction
+#                                                  if not data here, then will conflict at c language where we talk about int
+import "swf_placeobject_coords_local" swf_placeobject_coords_local
+functionX swf_placeobject_coords(sd refid,sd depth,datax x,datax y)
+	base swf_new.bp;call ebase(swf_new.bp)
+	call swf_placeobject_coords_local(refid,depth,x,y)
+endfunction
+import "swf_removeobject_local" swf_removeobject_local
+functionX swf_removeobject(sd depth)
+	base swf_new.bp;call ebase(swf_new.bp)
+	call swf_removeobject_local(depth)
+endfunction
+
+import "swf_showframe_base" swf_showframe_base
+
+functionX swf_showframe()
+base swf_new.bp;call ebase(swf_new.bp)
+	sd p;set p swf_frames_pointer()
+	call swf_showframe_base(p)
+endfunction
+
+######################
+
+#sprite
+
+#id
+functionX swf_sprite_done(sd spriteid)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd spriteid        pre-id created with swf_sprite_new
+    call swf_mem((mem_exp_change),spriteid)
+
+    call swf_actionblock((mem_exp_change),spriteid)
+	sd p;setcall p swf_sprite_frames_pointer(spriteid)
+	call swf_actionblock((mem_exp_part_done),(from_done),p);#in case there are remaining actions
+    call swf_actionblock((mem_exp_change_back))
+
+    import "swf_tag_end" swf_tag_end
+    call swf_tag_end()
+    call swf_mem((mem_exp_change_back))
+
+	sd id
+	setcall id identifiers_get()
+
+    sd sprite
+    setcall sprite struct_ids((ids_get),spriteid)
+    sd mem
+    setcall mem block_get_mem(sprite)
+
+	#more at dtitles
+	call dtitles_conclude(id,mem)
+
+    sd size
+    setcall size block_get_size(sprite)
+    #
+    call swf_tag_recordheader_entry((DefineSprite),size)
+    call stack_to_word_arg(id,mem)
+
+    call swf_mem_add(mem,size)
+
+    call free_sprite_id(spriteid,id)
+
+    return id
+endfunction
+import "new_sprite_id" new_sprite_id
+#pre-id
+functionX swf_sprite_new()
+base swf_new.bp;call ebase(swf_new.bp)
+#a pre-id to be used
+    sd id
+    setcall id new_sprite_id()
+    call swf_mem((mem_exp_change),id)
+    sd reserve;#set later
+    call swf_mem_add(#reserve,2)
+    sd frames=0
+    call swf_mem_add(#frames,2)
+    call swf_mem((mem_exp_change_back))
+    return id
+endfunction
+functionX swf_sprite_placeobject(sd spriteid,sd object,sd depth)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd spriteid          pre-id
+#sd object,sd depth   same as swf_placeobject
+    call swf_mem((mem_exp_change),spriteid)
+    call swf_placeobject_local(object,depth)
+    call swf_mem((mem_exp_change_back))
+endfunction
+functionX swf_sprite_placeobject_coords(sd spriteid,sd object,sd depth,sd x,sd y)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd spriteid                   pre-id
+#sd object,sd depth,sd x,sd y  same as swf_placeobject_coords
+    call swf_mem((mem_exp_change),spriteid)
+    call swf_placeobject_coords_local(object,depth,x,y)
+    call swf_mem((mem_exp_change_back))
+endfunction
+functionX swf_sprite_removeobject(sd spriteid,sd depth)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd spriteid   pre-id
+#sd depth      same as swf_removeobject
+    call swf_mem((mem_exp_change),spriteid)
+    call swf_removeobject_local(depth)
+    call swf_mem((mem_exp_change_back))
+endfunction
+functionX swf_sprite_showframe(sd spriteid)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd spriteid   pre-id
+    call swf_mem((mem_exp_change),spriteid)
+    call swf_actionblock((mem_exp_change),spriteid)
+	sd p;setcall p swf_sprite_frames_pointer(spriteid)
+	call swf_showframe_base(p)
+    call swf_actionblock((mem_exp_change_back))
+    call swf_mem((mem_exp_change_back))
+endfunction
+
+######################
+
+#exports
+
+functionX swf_exports_add(sd id,ss name)
+base swf_new.bp;call ebase(swf_new.bp)
+#sd id
+#ss name       name to be used at the actionscript
+    sd exports
+    setcall exports exportsId_get()
+    #
+    call swf_mem((mem_exp_change),exports)
+    #
+    sd block
+    setcall block struct_ids((ids_get),exports)
+    sd size
+    setcall size block_get_size(block)
+    sd counter
+    if size=0
+        set counter 1
+        call swf_mem_add(#counter,(WORD))
+    else
+        sd mem
+        setcall mem block_get_mem(block)
+        setcall counter word_arg_to_stack(mem)
+        inc counter
+        call stack_to_word_arg(counter,mem)
+    endelse
+    #
+    call swf_mem_add(#id,(WORD))
+    sd len
+    setcall len strlen(name)
+    inc len
+    call swf_mem_add(name,len)
+    #
+    call swf_mem((mem_exp_change_back))
+endfunction
+import "swf_exports_done_local" swf_exports_done_local
+functionX swf_exports_done()
+	base swf_new.bp;call ebase(swf_new.bp)
+	call swf_exports_done_local()
+endfunction
