@@ -1,0 +1,1671 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-90) bionic; urgency=medium
+ .
+   * DoInitAction
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-08-17
+
+--- actionswf-1.orig/dev/importf.h
++++ actionswf-1/dev/importf.h
+@@ -63,7 +63,9 @@ importX "action" action
+ importX "actionf" actionf
+ importX "actiond" actiond
+ importX "action_sprite" action_sprite
++importX "action_init_sprite" action_init_sprite
+ importX "actionf_sprite" actionf_sprite
++importX "actionf_init_sprite" actionf_init_sprite
+ 
+ #tool
+ 
+--- actionswf-1.orig/include/actionswf.h
++++ actionswf-1/include/actionswf.h
+@@ -165,6 +165,8 @@ void actionf(char* buffer,char* format,.
+ 
+ void action_sprite(int sprite,char* ac);
+ void actionf_sprite(int sprite,char* buffer,char* format,...);
++void action_init_sprite(int sprite,char* ac);
++void actionf_init_sprite(int sprite,char* buffer,char* format,...);
+ 
+ 
+ 
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -72,6 +72,7 @@ const DefineEditText=37
+ const DefineSprite=39
+ const DefineFont2=48
+ const ExportAssets=56
++const DoInitAction=59
+ 
+ include "action.h"
+ 
+--- actionswf-1.orig/oaalternative
++++ actionswf-1/oaalternative
+@@ -1,8 +1,9 @@
+ 
+-#1 file.swf  2 what to call (ex: ./a.out ...)  optional 3 verbose
++#1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
++#isdebug=
++#wait=
+ 
+ if [ -z "${1}" ]; then echo file path required; exit 1; fi
+-if [ -z "${2}" ]; then echo alternative path required; exit 1; fi
+ 
+ dname=`dirname ${1}`
+ cd ${dname} || exit 1
+@@ -12,16 +13,16 @@ bname=`basename ${1}`
+ log=${bname}.log
+ if [ ! -e ${log} ]; then echo no log; exit 1; fi
+ 
+-isdebug=${3}
+-
+ folder="${bname%.*}"
+ if [ -n "${isdebug}" ]; then echo ${folder}; fi
+ 
+ if [ -z "${isdebug}" ]; then
+ 	ffdec -export script ${folder} ${1} > /dev/null || exit 1  #silent somehow
+ else
++	echo ffdec -export script ${folder} ${1}
+ 	ffdec -export script ${folder} ${1} || exit 1
+ fi
++if [ -n "${wait}" ]; then read; fi
+ 
+ out=${folder}.dbg
+ mkdir -p ${out}
+@@ -34,12 +35,13 @@ if [ -n "${isdebug}" ]; then v=-v; fi
+ move () {
+ 	mv ${v} "${1}" ${2}
+ }
+-
+ doaction () {
+ 	to=${1}
+ 	shift
+-	if [ -z "$@" ]; then return 1; fi
+-	for var in "$@"; do
++	if [ ${#@} = 0 ]; then
++		return 1
++	fi
++	for var in "${@}"; do
+ 		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
+ 		f=${f::-1}
+ 		f=${to}_${f:6}
+@@ -47,40 +49,63 @@ doaction () {
+ 	done
+ 	return 0
+ }
++new_tag () {
++	s=${p}
++	t= #type
++	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
++}
++
++ainits_counter=1
++ainits=( )
+ s= #id
+ while read p; do
+ 	if [ -z "${s}" ]; then
+-		s=${p}
+-		t= #type
+-		if [ -n "${isdebug}" ]; then echo id = ${s}; fi
++		new_tag
+ 	else
+ 		if [ -z "${t}" ]; then
+ 			if [ -z "${p}" ]; then
+ 				t=1 #can be show or done
+ 			else
+ 				t=2 #action
+-				lines=${p}
+-				if [ -n "${isdebug}" ]; then echo lines = ${lines}; fi
++				at=${p}
++				lines=
++				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
++				ainits[${s}]=${at}
+ 			fi
+ 		elif [ ${t} = 1 ]; then
+ 			if [ -z "${p}" ]; then
+ 				echo show
+ 			else
++			#done
+ 				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
+-				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"` || { #else is a button
++				if [ "${ainits[${s}]}" = 1 ]; then #this sprite has a DoInitAction tag
++					if [ ${ainits_counter} != 1 ]; then
++						ainits_file="_${ainits_counter}.as"
++					else
++						ainits_file=".as"
++					fi
++					f=`find -name DoInitAction${ainits_file}`
++					move  ${f} ../${out}/${s}
++					ainits_counter=$((ainits_counter+1))
++				fi
++				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"` || {
+ 					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"` # | xargs -I {} echo "\"{}\""`; doaction ${s} "${f}" #double escape the quotes
+-					d=../${out}/${s}
+-					move "${f}" ${d}
+-					sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
++					if [ -n "${f}" ]; then #is a button
++						d=../${out}/${s}
++						move "${f}" ${d}
++						sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
++					fi #else is empty
+ 				}
+ 			fi
+ 			s=
++		elif [ -z "${lines}" ]; then
++			lines=${p}
++			if [ -n "${isdebug}" ]; then echo lines = ${lines}; fi
+ 		else
+ 			if [ ${lines} -gt 0 ]; then
+ 				lines=$((lines-1))
+ 			elif [ -z "`echo ${p} | grep ,`" ]; then
+-				s=${p}
+-				t=
++				new_tag
+ 			fi
+ 		fi
+ 	fi
+@@ -88,8 +113,11 @@ done <../${log}
+ 
+ doaction 0 `find -maxdepth 3 -name DoAction.as`
+ 
+-cd ..
+-mv ${1} ${1}.orig
+-${2} && \
+-diff ${1} ${1}.orig && \
+-rm -r ${v} ${folder}
++#part 2
++if [ -n "${2}" ]; then
++	cd ..
++	move ${1} ${1}.orig && \
++	${2} && \
++	diff ${1} ${1}.orig && \
++	rm -r ${v} ${folder}
++fi
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -7,6 +7,7 @@ The files swf.es and action.es has the m
+ When using the debug_log flag at swf_new_ex, action,action_sprite,swf_sprite_done calls are logged. The syntax is as follow:
+ 
+ SpriteId
++ActionInitBool
+ TextLinesNumber
+ TextLines
+ {NumberA,NumberB1...NumberBN}
+@@ -25,8 +26,9 @@ FinalSpriteId
+ 
+ Where:
+ SpriteId or 0 for root.
++ActionInitBool is a 0/1 digit.
+ TextLinesNumber is the number of lines that TextLines has.
+ TextLines is the text like in action[_sprite] call.
+ NumberA lines, then NumberA1+...+NumberAN=TextLinesNumber
+ NumberB1...NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+-FinalSpriteId is the if from the swf
++FinalSpriteId is the id in the swf
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -2,50 +2,33 @@ Format ElfObj64
+ 
+ include "../include/prog.h"
+ 
+-#this has throws but for mem_exp_change and back are not required
+-import "swf_actionblock" swf_actionblock
+-
+-import "alt_action" alt_action
+-import "file_get_content__resources_free" file_get_content__resources_free
+ import "for_in_ptr" for_in_ptr
++import "is_ainit" is_ainit
+ 
+ import "ebase" ebase
+ #aftercallimport ebool
+ 
+ #this/an action
+ 
+-import "action_base" action_base
+-import "action_format" action_format
+-import "debug_base" debug_base
++import "action_local" action_local
++import "actionf_local" actionf_local
+ 
+ functionX action(ss ac)
+ valuex bp#1;base bp;call ebase(bp)
+ #ss ac       actionscript string to be parsed
+-	sd alt_ac;set alt_ac alt_action(ac,0)
+-	if alt_ac!=(NULL)  #can be two action() same DoAction
+-		call debug_base(0)
+-		call action_base(alt_ac)
+-		if alt_ac!=ac
+-			call file_get_content__resources_free()
+-		end
+-	end
++	call is_ainit((FALSE))
++	callg action_local(ac)
+ endfunction
++#see at part_done functionX action_init(ss ac)
+ functionXx actionf(ss buffer,ss *format)
+ base action.bp;call ebase(action.bp)
+ #ss buffer   the buffer where to sprintf the format and the arguments
+ #ss format   the format
+ #...         % arguments here
+-	sd alt_ac;set alt_ac alt_action(buffer,0)
+-	if alt_ac!=(NULL)
+-		call debug_base(0)
+-		if buffer=alt_ac
+-			call action_format(#buffer)
+-		else
+-			call action_base(alt_ac)
+-			call file_get_content__resources_free()
+-		end
+-	end
++	call is_ainit((FALSE))
++	callg actionf_local(#buffer)
+ endfunction
++#see at part_done functionXx actionf_init(ss buffer,ss *format)
+ functionX actiond(ss ac) #deprecated
+ 	sd ptr;set ptr for_in_ptr()
+ 	sd was;set was ptr#
+@@ -62,23 +45,23 @@ functionX action_sprite(sd sprite,ss act
+ base action.bp;call ebase(action.bp)
+ #sd sprite    sprite id
+ #ss actions   same as action
+-	call action_sprite_base(sprite,actions,(TRUE))
++	call is_ainit((FALSE))
++	callg action_sprite_base(sprite,actions,(TRUE))
+ endfunction
++functionX action_init_sprite(sd sprite,ss actions)
++	call is_ainit((TRUE))
++	callg action_sprite_base(sprite,actions,(TRUE))
++end
++import "actionf_sprite_local" actionf_sprite_local
+ functionXx actionf_sprite(sd sprite,ss buffer,ss *format)
+ base action.bp;call ebase(action.bp)
+ #sd sprite    sprite id
+ #ss buffer    same as actionf
+ #ss format    same as actionf
+-	sd alt_ac;set alt_ac alt_action(buffer,sprite)
+-	if alt_ac!=(NULL)
+-		call debug_base(sprite)
+-		call swf_actionblock((mem_exp_change),sprite)   #alt action is not using actionblock, is using swfblock
+-		if buffer=alt_ac
+-			call action_format(#buffer)
+-		else
+-			call action_base(alt_ac)
+-			call file_get_content__resources_free()
+-		end
+-		call swf_actionblock((mem_exp_change_back))
+-	end
++	call is_ainit((FALSE))
++	callg actionf_sprite_local(sprite,#buffer)
+ endfunction
++functionXx actionf_init_sprite(sd sprite,ss buffer,ss *format)
++	call is_ainit((TRUE))
++	callg actionf_sprite_local(sprite,#buffer)
++end
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -117,8 +117,6 @@ end
+ const pool_cursor_size=mem_struct__size_size
+ function pool_read(sd id,sd frame_nr)
+ 	if pool_data.read!=(FALSE)
+-		inc frame_nr  ##for next frame preparation
+-
+ 		sv pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
+ 		call block_reset_size(pb#)  #if is after a read is ok, else is useless
+ 		data cursor=pool_cursor_size
+@@ -159,22 +157,31 @@ function pool_read(sd id,sd frame_nr)
+ 		call free(name)
+ 	end
+ end
++function pool_done_write(sd id,sd frame_nr)
++	sd b;set b struct_ids_actionpool_filter((ids_get),id)
++	sd sz;set sz block_get_size(b)
++	if sz!=0
++		sd mem;set mem block_get_mem(b)
++		sd name;set name pool_savepath(id,frame_nr)
++		sd f;set f f_open_mem(name,"wb")
++		call f_write(f,mem,sz)
++		call fclose(f)
++		call block_reset_size(b)
++	end
++end
+ function pool_done(sd id,sd frame_nr)
+ 	if pool_data.write!=(FALSE)
+-		sd b;set b struct_ids_actionpool_filter((ids_get),id)
+-		sd sz;set sz block_get_size(b)
+-		if sz!=0
+-			sd mem;set mem block_get_mem(b)
+-			sd name;set name pool_savepath(id,frame_nr)
+-			sd f;set f f_open_mem(name,"wb")
+-			call f_write(f,mem,sz)
+-			call fclose(f)
+-			call block_reset_size(b)
+-		end
++		callg pool_done_write(id,frame_nr)
+ 		ret
+ 	end
++	inc frame_nr
+ 	callg pool_read(id,frame_nr)
+ end
++function pool_done_one(sd id)
++	if pool_data.write!=(FALSE)
++		callg pool_done_write(id,-1)
++	end
++end
+ function pool_savepath_init(sd a)
+ 	valuex path#1;set path a
+ 	import "strlen_of" strlen_of
+@@ -182,7 +189,11 @@ function pool_savepath_init(sd a)
+ end
+ function pool_savepath(sd id,sd fr)
+ 	sd m;set m memalloc(pool_savepath_init.size)
+-	call sprintf(m,"%s.%u.%u",pool_savepath_init.path,id,fr)
++	if fr!=-1
++		call sprintf(m,"%s.%u.%u",pool_savepath_init.path,id,fr)
++	else #button initaction
++		call sprintf(m,"%s.%u",pool_savepath_init.path,id)
++	end
+ 	return m
+ end
+ 
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -343,7 +343,7 @@ import "action_code_member" action_code_
+ 
+ import "swf_actionrecordheader" swf_actionrecordheader
+ import "swf_mem_add" swf_mem_add
+-function write_action(sd id,sd frame)
++function write_action_base(sd id)
+ 	sd block
+ 	setcall block struct_ids_action((ids_get),id)
+ 	sd mem
+@@ -354,11 +354,18 @@ function write_action(sd id,sd frame)
+ 	call swf_mem_add(mem,size)
+ 	#this is ActionEndFlag after ACTIONRECORD [zero or more]
+ 	data end=0
+-	call swf_mem_add(#end,1)
+-
++	callg swf_mem_add(#end,1)
++end
++function write_action(sd id,sd frame)
++	call write_action_base(id)
+ 	import "pool_done" pool_done
+ 	callg pool_done(id,frame)
+ endfunction
++function write_action_one(sd id)
++	call write_action_base(id)
++	import "pool_done_one" pool_done_one
++	callg pool_done_one(id)
++endfunction
+ #void
+ function pool_wr(sd id)
+     sd poolblock
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -11,7 +11,6 @@ importx "access" access
+ importx "unlink" unlink
+ importx "rmdir" rmdir
+ 
+-import "swf_frames_pointer" swf_frames_pointer
+ import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+ import "word_arg_to_stack" word_arg_to_stack
+ import "mem_free" mem_free
+@@ -31,6 +30,8 @@ function alt_free()
+ 	end
+ end
+ 
++import "ainit" ainit
++
+ importx "strlen" strlen
+ 
+ #aftercallimport ebool
+@@ -67,18 +68,22 @@ function alt_action(sd orig_action,sd pr
+ end
+ function alt_action_base(sd orig_action,sd preid,sd has_frames)
+ 	if alt_join.folder!=(NULL)
+-		if has_frames=(TRUE)
+-			sw p
+-			if preid!=0
+-				set p swf_sprite_frames_pointer(preid)
+-			else
+-				set p swf_frames_pointer()
++		whiletrue
++			if has_frames=(TRUE)
++				sd ai;set ai ainit()
++				if ai=(FALSE)
++					sw p
++					#if preid!=0
++					set p swf_sprite_frames_pointer(preid)
++					#else #set p swf_frames_pointer()#end
++					sd f;set f word_arg_to_stack(p)
++					inc f  ##index 0 is frame 1 at ffdec
++					call sprintf(alt_join.concat_point,"%u_%u",preid,f)
++					break
++				end
+ 			end
+-			sd f;set f word_arg_to_stack(p)
+-			inc f  ##index 0 is frame 1 at ffdec
+-			call sprintf(alt_join.concat_point,"%u_%u",preid,f)
+-		else
+ 			call sprintf(alt_join.concat_point,"%u",preid)
++			break
+ 		end
+ 		datax int#1;set int access(alt_join.folder,(R_OK))
+ 		if int=0
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -109,9 +109,6 @@ import "matrix_translate" matrix_transla
+ 
+ import "action_size" action_size
+ 
+-
+-
+-
+ #aftercallimport ebool
+ 
+ import "swf_shape_local" swf_shape_local
+@@ -379,15 +376,20 @@ function swf_button_base(sd state_def_id
+     import "new_sprite_id" new_sprite_id
+     sd id
+     setcall id new_sprite_id()
++	import "pool_read" pool_read
++	call pool_read(id,-1)
+ 
+     call action_sprite_base(id,actions,(FALSE))
+ 
++	sd ButtonId
++	setcall ButtonId identifiers_get()  #is final at buttons
++	import "dtitles_frame_one" dtitles_frame_one
++	call dtitles_frame_one(id,ButtonId)
++
+     add size (BUTTONCONDACTION_header_size)
+     addcall size action_size(id)
+ 
+     call swf_tag_recordheader_entry((DefineButton2),size)
+-    sd ButtonId
+-    setcall ButtonId identifiers_get()
+     call swf_mem_add(#ButtonId,2)
+     char TrackAsMenu=0
+     call swf_mem_add(#TrackAsMenu,(BYTE))
+@@ -402,12 +404,12 @@ function swf_button_base(sd state_def_id
+     endif
+     char CharacterEndFlag=0
+     call swf_mem_add(#CharacterEndFlag,1)
+-    import "write_action" write_action
+     call swf_mem_add(#BUTTONCONDACTION,(BUTTONCONDACTION_header_size))
+-    call write_action(id,0)
++	import "write_action_one" write_action_one
++	call write_action_one(id)
+ 
+-    call free_sprite_id(id,ButtonId)
+-    return ButtonId
++	call free_sprite_id(id,ButtonId)
++	return ButtonId
+ endfunction
+ 
+ #size/void
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -143,6 +143,7 @@ import "block_get_mem" block_get_mem
+ import "word_arg_to_stack" word_arg_to_stack
+ import "for_in" for_in
+ import "frames_as_shows" frames_as_shows
++import "ainit" ainit
+ 
+ importx "fseek" fseek
+ importx "fread" fread
+@@ -280,6 +281,8 @@ function debug_base(sd id)
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+ 		call debug_base_core(id)
++		sd ai;set ai ainit()
++		call f_printf((fprintf_min+1),debug_data.file,"%u\n",ai)
+ 	end
+ end
+ function debug_show(sd id)
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -31,32 +31,36 @@ function dtitles_conclude(sd finalid,sd
+ 				set length mem#
+ 				add mem (DWORD)
+ 			end
+-			ss cursor
+ 			if RECORDHEADER=(DoAction)
+-				set cursor mem
+-				inc cursor           ##ACTIONRECORDHEADER ActionCode
+-				sd Length
+-				set Length word_arg_to_stack(cursor)
+-				add cursor (WORD)
+-				sd Count
+-				set Count word_arg_to_stack(cursor)
+-				add cursor (WORD)
+-				if Count!=1
+-					add cursor Length     ##now is +2 in offset [Count is u16]
+-					sub cursor (1+   4+   1+   1+   2)
+-					#           here 0000 X    null
+-					#  previous str0       XXX
+-					while cursor#!=(Nullchar)  #there are 3 more possible digits
+-						dec cursor
+-					end
+-					inc cursor
+-				end
+-				call memcpy(cursor,#store,4)
++				call dtitles_conclude_record(mem,#store)
++#			elseif RECORDHEADER=(DoInitAction) is not here anymore, see at part_done
+ 			end
+ 			add mem length
+ 		end
+ 	end
+ end
++function dtitles_conclude_record(sd mem,sd finalidstr)
++	ss cursor
++	set cursor mem
++	inc cursor           ##ACTIONRECORDHEADER ActionCode
++	sd Length
++	set Length word_arg_to_stack(cursor)
++	add cursor (WORD)
++	sd Count
++	set Count word_arg_to_stack(cursor)
++	add cursor (WORD)
++	if Count!=1
++		add cursor Length     ##now is +2 in offset [Count is u16]
++		sub cursor (1+   4+   1+   1+   2)
++		#           here 0000 X    null
++		#  previous str0       XXX
++		while cursor#!=(Nullchar)  #there are 3 more possible digits
++			dec cursor
++		end
++		inc cursor
++	end
++	call memcpy(cursor,finalidstr,4)
++end
+ 
+ function dtitles_init(sd flags)
+ 	and flags (debug_titles)
+@@ -67,11 +71,11 @@ function dtitles_init(sd flags)
+ 	set dtitles_conclude.bool (FALSE)
+ end
+ 
+-
++import "swf_actionblock" swf_actionblock
+ 
+ #aftercallimport ebool
+ 
+-
++import "actionpool_value_ex" actionpool_value_ex
+ 
+ #here adds 0000X[X[X[X]]], if is root 0000 will be final, else is dummy now and will be sprite final id at conclude function
+ function dtitles_frame(sd index)
+@@ -79,7 +83,17 @@ function dtitles_frame(sd index)
+ 		char format={_0,_0,_0,_0} #id
+ 		char frame_index#4+1      #index is uword here, is checked
+ 		call sprintf(#frame_index,"%X",index)
+-		import "actionpool_value_ex" actionpool_value_ex
+ 		call actionpool_value_ex(#format,(TRUE))  #force the write because debugger will look at the last pool constant there
+ 	end
+ end
++function dtitles_frame_one(sd preid,sd finalid) #is called at swf_sprite_done and swf_button
++	if dtitles_conclude.bool=(TRUE)
++		#finalid is u16
++		char store#5
++		call sprintf(#store,"%X",finalid)
++
++		call swf_actionblock((mem_exp_change),preid)
++		call actionpool_value_ex(#store,(TRUE))
++		call swf_actionblock((mem_exp_change_back),preid)
++	end
++end
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -20,6 +20,10 @@ import "block_get_size" block_get_size
+ import "block_get_mem" block_get_mem
+ import "block_reset_size" block_reset_size
+ 
++import "alt_action" alt_action
++#this has throws but for mem_exp_change and back are not required
++import "swf_actionblock" swf_actionblock
++
+ importx "strlen" strlen
+ importx "memcpy" memcpy
+ 
+@@ -568,3 +572,45 @@ function swf_exports_done_local()
+         call block_reset_size(block)
+     endif
+ endfunction
++
++
++
++import "debug_base" debug_base
++import "action_base" action_base
++function action_local(ss ac)
++	sd alt_ac;set alt_ac alt_action(ac,0)
++	if alt_ac!=(NULL)  #can be two action() same DoAction
++		call debug_base(0)
++		call action_base(alt_ac)
++		if alt_ac!=ac
++			call file_get_content__resources_free()
++		end
++	end
++end
++import "action_format" action_format
++function actionf_local(sv pbuffer)
++	sd alt_ac;set alt_ac alt_action(pbuffer#,0)
++	if alt_ac!=(NULL)
++		call debug_base(0)
++		if pbuffer#=alt_ac
++			call action_format(pbuffer)
++		else
++			call action_base(alt_ac)
++			call file_get_content__resources_free()
++		end
++	end
++end
++function actionf_sprite_local(sd sprite,sv pbuffer)
++	sd alt_ac;set alt_ac alt_action(pbuffer#,sprite)
++	if alt_ac!=(NULL)
++		call debug_base(sprite)
++		call swf_actionblock((mem_exp_change),sprite)   #alt action is not using actionblock, is using swfblock
++		if pbuffer#=alt_ac
++			call action_format(pbuffer)
++		else
++			call action_base(alt_ac)
++			call file_get_content__resources_free()
++		end
++		call swf_actionblock((mem_exp_change_back))
++	end
++end
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -7,6 +7,7 @@ importx "memcpy" memcpy
+ 
+ #this is throwless here
+ import "struct_ids" struct_ids
++import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+ 
+ #
+ function identifiers()
+@@ -35,19 +36,17 @@ function swf_frames_reg()
+ 	sub reg (WORD)
+ end
+ #p
+-function swf_frames_pointer()
+-	sd block
+-	set block struct_ids((ids_get),swf_frames_reg.main_id)
+-	set block block_get_mem(block)
+-	add block swf_frames_reg.reg
+-	return block
+-end
+-#p
+ function swf_sprite_frames_pointer(sd spriteid)
+ 	sd block
+-	setcall block struct_ids((ids_get),spriteid)
+-	setcall block block_get_mem(block)
+-	add block (WORD)
++	if spriteid!=swf_frames_reg.main_id
++		setcall block struct_ids((ids_get),spriteid)
++		setcall block block_get_mem(block)
++		add block (WORD)
++	else
++		set block struct_ids((ids_get),swf_frames_reg.main_id) #0
++		set block block_get_mem(block)
++		add block swf_frames_reg.reg
++	end
+ 	return block
+ end
+ 
+@@ -55,6 +54,12 @@ function frames_as_shows(datax flag)
+ 	and flag (flag_framesAsShows)
+ end
+ 
++function free_sprite_id_actions(sd id)
++	call struct_ids_actionpool_filter((ids_free),id)
++	callg struct_ids_actionpool((ids_free),id)
++	callg struct_ids_action((ids_free),id) #without g is ok here
++end
++
+ import "mem_free" mem_free
+ import "action_code_values_free" action_code_values_free
+ import "file_close" file_close
+@@ -72,12 +77,12 @@ import "actionpool_currentblock" actionp
+ import "action_size" action_size
+ import "stack_to_word_arg" stack_to_word_arg
+ import "word_arg_to_stack" word_arg_to_stack
+-
++import "is_ainit" is_ainit
+ 
+ #aftercallimport ebool
+ 
+-
+ import "dtitles_frame" dtitles_frame
++import "dtitles_frame_one" dtitles_frame_one
+ import "strlen_of" strlen_of
+ 
+ #id
+@@ -92,13 +97,8 @@ function identifiers_get()
+ endfunction
+ 
+ function free_sprite_id(sd id,sd finalId_or_containerId) #containerId for buttons
++	call free_sprite_id_actions(id)
+ 	call struct_ids((ids_free),id)
+-#these two are ok throwless
+-	callg struct_ids_action((ids_free),id)
+-	callg struct_ids_actionpool((ids_free),id)
+-	import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+-	call struct_ids_actionpool_filter((ids_free),id)
+-#
+ 	import "debug_spritedone" debug_spritedone
+ 	call debug_spritedone(id,finalId_or_containerId)
+ endfunction
+@@ -107,7 +107,6 @@ import "error" error
+ import "struct_ids_actionpool" struct_ids_actionpool
+ import "struct_ids_action" struct_ids_action
+ import "struct_ids_action_set" struct_ids_action_set
+-import "struct_ids_actionpool_set" struct_ids_actionpool_set
+ import "mem_block_add" mem_block_add
+ import "def_mem" def_mem
+ import "debug_show" debug_show
+@@ -263,7 +262,46 @@ function swf_frames_inc(sd frames,sw poi
+ 	inc frames      ##even if is not a ShowFrame in the swf, is action that resides in a frame, ffdec is saying same
+ 	call stack_to_word_arg(frames,pointer)
+ end
+-
++import "write_action" write_action
++#size
++function done_action(sd id,sd frames)
++	sv p_block
++	setcall p_block struct_ids_action((ids_get_pointer),id)
++	sd block
++	set block p_block#
++	sd size
++	setcall size block_get_size(block)
++	if size!=0  #here is an ending from show or done with size
++		sd tagsz
++		call dtitles_frame(frames)
++		setcall tagsz action_size(id)
++		call swf_tag_recordheader_entry((DoAction),tagsz)
++		call write_action(id,frames)
++		sd poolblock
++		setcall poolblock actionpool_currentblock()
++		call block_reset_size(poolblock)
++		call block_reset_size(block)
++	end
++	return size
++end
++function done_action_one(sd id,sd finalid)
++	sv p_block
++	setcall p_block struct_ids_action((ids_get_pointer),id)
++	sd block
++	set block p_block#
++	sd size
++	setcall size block_get_size(block)
++	if size!=0  #here is an ending from show or done with size
++		sd tagsz
++		call dtitles_frame_one(id,finalid)
++		setcall tagsz action_size(id)
++		add tagsz (WORD)
++		call swf_tag_recordheader_entry((DoInitAction),tagsz)
++		call swf_mem_add(#finalid,(WORD))
++		import "write_action_one" write_action_one
++		callg write_action_one(id)
++	end
++end
+ #
+ function swf_actionblock(sd proc,sd arg,sd arg2)
+     data id#1
+@@ -293,59 +331,52 @@ function swf_actionblock(sd proc,sd arg,
+ 		set id_back id
+ 		sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# id
+ 		sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# id
+-		call struct_ids_action_set(id)
+-		call struct_ids_actionpool_set(id)
+-		ret
+-	endif
+-    sv p_block
+-    setcall p_block struct_ids_action((ids_get_pointer),id)
+-    if proc=(mem_exp_add)
+-        call mem_block_add(p_block,arg,arg2)
+-    elseif proc=(mem_exp_part_done)
+-		sd frames
+-		setcall frames word_arg_to_stack(arg2)
+-
+-		sd block
+-		set block p_block#
+-		sd size
+-		setcall size block_get_size(block)
+-		if size!=0  #here is an ending from show or done with size
+-			if arg=(from_show) #example: two action() and one show here
+-				call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
+-			end
+ 
+-			#more at dtitles
+-			call dtitles_frame(frames)
++		call struct_ids_action_set(id,(FALSE)) #see at part_done call struct_ids_action_set(id,(TRUE))
++		import "pool_read" pool_read
++		callg pool_read(id,0)
+ 
+-			if frames_as_shows.flag=0
+-				call swf_frames_inc(frames,arg2)
+-			elseif arg=(from_show)
+-				call swf_frames_inc(frames,arg2)
++		ret
++	endif
++	sv p_block
++	if proc=(mem_exp_add)
++		setcall p_block struct_ids_action((ids_get_pointer),id)
++		call mem_block_add(p_block,arg,arg2)
++	elseif proc=(mem_exp_part_done)
++		sd frames;sd pframes
++		set pframes swf_sprite_frames_pointer(id)
++		set frames word_arg_to_stack(pframes)
++
++		#call is_ainit((TRUE)) this is not similiar with DoAction, has spriteid and only once per swf, and ffdec is forgetting the sprite id
++		# and, at ruffle, can add in multiple frames, but are executed all at once before any frames, and "this" is level0 for all
++		#then, this at done
++
++		sd sz
++		call is_ainit((FALSE))
++		set sz done_action(id,frames)
++
++		if arg=(from_show) #example: two action() and one show here
++			call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
++			set pframes swf_sprite_frames_pointer(id) #mem was increased, pointer (maybe) was changed
++			call swf_frames_inc(frames,pframes)
++			if sz=0 # else is an ending from show with no size
++				inc frames
++				call pool_read(id,frames)
+ 			end
+-
+-			import "write_action" write_action
+-			sd tagsz
+-			setcall tagsz action_size(id)
+-			call swf_tag_recordheader_entry((DoAction),tagsz)
+-			call write_action(id,frames)
+-			sd poolblock
+-			setcall poolblock actionpool_currentblock()
+-			call block_reset_size(poolblock)
+-			call block_reset_size(block)
+-		elseif arg=(from_show)  #here is an ending from show with no size
+-			call debug_show(id) #to keep the count of frames at debugger
+-			call swf_frames_inc(frames,arg2)
+-			import "pool_read" pool_read
+-			call pool_read(id,frames)
+-		elseif frames=0    #here is an ending from done with no size and no previous show
+-			if frames_as_shows.flag=0
+-				call swf_frames_inc(frames,arg2) #a default frame, how was before at root, and at sprite is ok
++		elseif frames_as_shows.flag=0
++			if sz!=0
++				set pframes swf_sprite_frames_pointer(id)
++				call swf_frames_inc(frames,pframes)
++			elseif frames=0 #here is an ending from done with no size and no previous show
++				set pframes swf_sprite_frames_pointer(id)
++				call swf_frames_inc(frames,pframes) #a default frame, how was before at root, and at sprite is ok, at normal there is at least one tag inside
+ 			end
+-		endelseif
+-    else
+-    #if proc==(mem_exp_get_block)
+-        return p_block#
+-    endelse
++		end
++	else
++	#if proc==(mem_exp_get_block)
++		setcall p_block struct_ids_action((ids_get_pointer),id)
++		return p_block#
++	endelse
+ endfunction
+ 
+ function swf_actionblock_add(sd value,sd size)
+@@ -376,11 +407,10 @@ endfunction
+ 
+ #preid
+ function new_sprite_id()
+-    sd id
+-    setcall id def_mem()
+-    call struct_ids_action_set(id)
+-    call struct_ids_actionpool_set(id)
+-    return id
++	sd id
++	setcall id def_mem()
++	call struct_ids_action_set(id,(FALSE)) #at button and normal sprite
++	return id
+ endfunction
+ 
+ #
+@@ -399,8 +429,8 @@ function exportsId_get()
+     return e#
+ endfunction
+ 
+-function swf_showframe_base(sd frames_pointer)
++function swf_showframe_base() #sd frames_pointer
+ #showframe tag
+-	call swf_actionblock((mem_exp_part_done),(from_show),frames_pointer)
++	call swf_actionblock((mem_exp_part_done),(from_show)) #,frames_pointer
+ 	call swf_tag_recordheader_entry((ShowFrame),0)
+ endfunction
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -7,8 +7,8 @@ importx "memcpy" memcpy
+ importx "strlen" strlen
+ importx "memcmp" memcmp
+ 
+-import "swf_frames_pointer" swf_frames_pointer
+-import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
++#import "swf_frames_pointer" swf_frames_pointer
++#import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+ 
+ import "button_mem" button_mem
+ 
+@@ -22,8 +22,8 @@ import "block_get_mem" block_get_mem
+ import "free_sprite_id" free_sprite_id
+ import "freereset" freereset   #..x with no args
+ import "dtitles_conclude" dtitles_conclude
+-
+-
++import "free_sprite_id_actions" free_sprite_id_actions
++import "is_ainit" is_ainit
+ 
+ import "ebase" ebase
+ #aftercallimport ebool
+@@ -349,8 +349,8 @@ functionX swf_done()
+ base swf_new.bp;call ebase(swf_new.bp)
+ 	call swf_exports_done_local();#remaining exports?
+ 
+-	sd p;set p swf_frames_pointer()
+-	call swf_actionblock((mem_exp_part_done),(from_done),p);#in case there are remaining actions
++#	sd p;set p swf_frames_pointer()
++	call swf_actionblock((mem_exp_part_done),(from_done)) #,p in case there are remaining actions
+ 
+ #the swf is done and the total length is wrote and the memory is freed
+     call swf_mem((mem_exp_done))
+@@ -384,8 +384,8 @@ import "swf_showframe_base" swf_showfram
+ 
+ functionX swf_showframe()
+ base swf_new.bp;call ebase(swf_new.bp)
+-	sd p;set p swf_frames_pointer()
+-	call swf_showframe_base(p) #if on error will error at unregistered input id
++#	sd p;set p swf_frames_pointer()
++	call swf_showframe_base() #p if on error will error at unregistered input id
+ endfunction
+ 
+ ######################
+@@ -399,8 +399,7 @@ base swf_new.bp;call ebase(swf_new.bp)
+     call swf_mem((mem_exp_change),spriteid)
+ 
+     call swf_actionblock((mem_exp_change),spriteid)
+-	sd p;setcall p swf_sprite_frames_pointer(spriteid)
+-	call swf_actionblock((mem_exp_part_done),(from_done),p);#in case there are remaining actions
++	call swf_actionblock((mem_exp_part_done),(from_done)) # in case there are remaining actions
+     call swf_actionblock((mem_exp_change_back))
+ 
+     import "swf_tag_end" swf_tag_end
+@@ -426,7 +425,14 @@ base swf_new.bp;call ebase(swf_new.bp)
+ 
+     call swf_mem_add(mem,size)
+ 
+-    call free_sprite_id(spriteid,id)
++	#if is, add DoInitAction in timeline
++	call is_ainit((TRUE))
++	import "done_action_one" done_action_one
++	call done_action_one(spriteid,id)
++	call free_sprite_id_actions(spriteid)
++
++	call is_ainit((FALSE))
++	call free_sprite_id(spriteid,id)
+ 
+     return id
+ endfunction
+@@ -437,6 +443,11 @@ base swf_new.bp;call ebase(swf_new.bp)
+ #a pre-id to be used
+     sd id
+     setcall id new_sprite_id()
++	import "pool_read" pool_read
++	call pool_read(id,0)
++	import "struct_ids_action_set" struct_ids_action_set
++	call struct_ids_action_set(id,(TRUE))
++	call pool_read(id,-1)
+     call swf_mem((mem_exp_change),id)
+     sd reserve;#set later
+     call swf_mem_add(#reserve,2)
+@@ -474,8 +485,8 @@ base swf_new.bp;call ebase(swf_new.bp)
+ #sd spriteid   pre-id
+     call swf_mem((mem_exp_change),spriteid)
+     call swf_actionblock((mem_exp_change),spriteid)
+-	sd p;setcall p swf_sprite_frames_pointer(spriteid)
+-	call swf_showframe_base(p)
++#	sd p;setcall p swf_sprite_frames_pointer(spriteid)
++	call swf_showframe_base() #p
+     call swf_actionblock((mem_exp_change_back))
+     call swf_mem((mem_exp_change_back))
+ endfunction
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -360,6 +360,27 @@ function mem_block_add_throwless(sv p_bl
+ 	return (TRUE)
+ end
+ 
++function struct_ids_free(sd id)
++	sv ac_ptr
++	setcall ac_ptr struct_ids_action((ids_get),id)
++	if ac_ptr!=(NULL)
++		call free(ac_ptr)
++		setcall ac_ptr struct_ids_actionpool((ids_get),id)
++		if ac_ptr!=(NULL)
++			call free(ac_ptr)
++			call pool_data(id)
++		endif
++	endif
++end
++
++function is_ainit(sd a)
++	charx b#1
++	set b a
++end
++function ainit()
++	return is_ainit.b
++end
++
+ importx "malloc" malloc
+ importx "fclose" fclose
+ 
+@@ -488,7 +509,6 @@ function struct_ids(sd proc,sd id)
+ 	vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures    ,    pool.constants
+ 	vdata strct^structures
+ 	data counter=0
+-	sv ac_ptr
+ 	sv pointer
+ 	if proc=(ids_counter)
+ 		return counter
+@@ -503,15 +523,10 @@ function struct_ids(sd proc,sd id)
+ 			sub pointer :
+ 			if pointer#!=(NULL)
+ 				call free(pointer#)
+-				setcall ac_ptr struct_ids_action((ids_get),counter)
+-				if ac_ptr!=(NULL)
+-					call free(ac_ptr)
+-					setcall ac_ptr struct_ids_actionpool((ids_get),counter)
+-					if ac_ptr!=(NULL)
+-						call free(ac_ptr)
+-						call pool_data(counter)
+-					endif
+-				endif
++				call is_ainit((FALSE)) #is first, at button is the only one
++				call struct_ids_free(counter)
++				call is_ainit((TRUE))
++				call struct_ids_free(counter)
+ 			endif
+ 		endwhile
+ 		ret
+@@ -550,6 +565,7 @@ function struct_ids(sd proc,sd id)
+ 		set pointer# newblock
+ 		#counter increment#
+ 		sd c;set c counter;inc counter
++		sv ac_ptr
+ 		setcall ac_ptr struct_ids_action((ids_get_pointer),c);set ac_ptr# (NULL)  #required for example at exports and free all
+ 		#counter increment#
+ 		return ident
+@@ -564,18 +580,36 @@ function struct_ids(sd proc,sd id)
+ 	#endelse
+ endfunction
+ function struct_ids_action(sd proc,sd id)
+-    vdatax action_structures#max_structures
+-    sd v;setcall v struct_ids_expand(proc,id,#action_structures)
+-    return v
++	sd v
++	vdatax action_structures#max_structures
++	vdatax action_structures_init#max_structures
++	if is_ainit.b=(FALSE)
++		set v struct_ids_expand(proc,id,#action_structures)
++	else
++		set v struct_ids_expand(proc,id,#action_structures_init)
++	end
++	return v
+ endfunction
+ function struct_ids_actionpool(sd proc,sd id)
+-    vdatax actionpool_structures#max_structures
+-    sd v;setcall v struct_ids_expand(proc,id,#actionpool_structures)
+-    return v
++	sd v
++	vdatax action_structures#max_structures
++	vdatax action_structures_init#max_structures
++	if is_ainit.b=(FALSE)
++		set v struct_ids_expand(proc,id,#action_structures)
++	else
++		set v struct_ids_expand(proc,id,#action_structures_init)
++	end
++	return v
+ endfunction
+ function struct_ids_actionpool_filter(sd proc,sd id)
+-	vdatax actionpool_structures#max_structures
+-	sd v;setcall v struct_ids_expand(proc,id,#actionpool_structures)
++	sd v
++	vdatax action_structures#max_structures
++	vdatax action_structures_init#max_structures
++	if is_ainit.b=(FALSE)
++		set v struct_ids_expand(proc,id,#action_structures)
++	else
++		set v struct_ids_expand(proc,id,#action_structures_init)
++	end
+ 	return v
+ endfunction
+ function struct_ids_expand(sd proc,sd id,sd p_action_structures)
+@@ -597,15 +631,15 @@ function struct_ids_expand(sd proc,sd id
+ 		call free(pointer#)
+ 	endelse
+ endfunction
+-function struct_ids_action_set(sd id)
+-	callg struct_ids_action((ids_set),id)
++function struct_ids_action_set(sd id,sd ainitvalue)
++	call is_ainit(ainitvalue)
++	call struct_ids_action((ids_set),id)
+ 	# is next and is set (NULL) inside. sv p;set p struct_ids_actionpool((ids_get_pointer),id);set p# (NULL)
++	callg struct_ids_actionpool_set(id)
+ end
+-import "pool_read" pool_read
+ function struct_ids_actionpool_set(sd id)
+ 	call struct_ids_actionpool((ids_set),id)
+-	call struct_ids_actionpool_filter((ids_set),id) #flag_pool is almost default
+-	callg pool_read(id,-1) #not 0? cheap fast way, most of them have action and will also increment there
++	callg struct_ids_actionpool_filter((ids_set),id) #flag_pool is almost default
+ end
+ 
+ #strings
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,5 +1,6 @@
+ 0
+-89
++0
++94
+ 
+ /*
+ debug_x
+@@ -89,6 +90,11 @@ n(-NaN,NaN)
+ // https://baseconvert.com/ieee-754-floating-point
+ //// https://www.h-schmidt.net/FloatConverter/IEEE754.html
+ 
++//example of extending clip symbols (and one time DoInitAction tag)
++var a=new Object();
++a.value=2;
++attachMovie('carSymbol','fastCar_mc',1,a)
++
+ 5,9,0009
+ 1,5,5,
+ 2,7,7,,2,2,,2,2,,
+@@ -146,4 +152,27 @@ n(-NaN,NaN)
+ 3,B,B,,5,5,,2,2,,5,5,,2,2,,5,5,,2,2,,5,5,,
+ 3,9,9,
+ 3,A,0014,2,2,,2,2,,2,2,,,
+-4,19,19,,
++1,19,19,,
++6,9,9,,
++1,2,2,,7,7,
++1,2,2,,10,10,,
++2
++0
++1
++trace('b'+this.value)
++1,4,4,,2,2,,,
++2
++1
++6
++
++function Vehicle(){
++	trace('a'+this.value)
++}
++Object.registerClass('carSymbol',Vehicle)
++
++2,C,0010
++1,4,4,,2,2,,,
++2,2,2,,9,9,,2,2,,
++2
++
++1
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,31 +1,36 @@
+-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
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,4 +1,4 @@
+-mAoAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
++6AoAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+ aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
+ ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
+ AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
+@@ -45,67 +45,78 @@ NDA1NzAzODA2OTU1NzM4NTMxNDAwODQ0OTI2NjIy
+ MjcwMDc3MTQyNTQyMzU4Mzc2NDUwOTUxNTgwNjYxMzg5NDQ4MzY0ODUzNjg2NTYxNjY3MDQzNDk0
+ NDkxNTg3NTMzOTE5NDIzNDYzMDQ2Mzg2OTg4OTg2NDI5MzI5ODI3NDcwNTQ1Njg0NTQ3NzAzMDY4
+ MjMzNzg0MzUxMTk5MzM5MTU3NjQ1MzQwNDkyMzA4NjA1NDYyMzEyNjk4MzY0MjU3ODEyNQBmdW5j
+-dGlvbiBuAGEAYgB7dHJhY2UAYQAnIAAAYgB9bgAtTmFOAE5hTgAAAAAwMAPzCgAAAAAAAAANAAAA
+-AAAAAAAAAAAAAAAAPgAAAAcAAAACAAAA/////7u7u/sQEAHxJAAAAAAAAADu7u7+GgAAAAAAAAAf
+-AAAAAAAAAAAAAAAAAAAAqqqq+k8AAAAxAAAAAAAAADYAAAAAAAAAOwAAAAAAAAAAAAAAAAAAAKqq
+-qvocAAAAQAAAAAAAAAD/////HQAAAEUAAAAAAAAAQEAE9EsAAAAAAAAABwAAAAEAAAD/////7u7u
+-/gAAAAAAAAAAPAAAAFgAAAAAAAAAgIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAACAAAA
+-DAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAAC
+-AAAAYgAAAAcAAAACAAAAcHAH90gAAAAAAAAABwAAAAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBw
+-B/dJAAAAAAAAAAcAAAACAAAAcHAH90kAAAASAAAABwAAAAIAAABwcAf3ZwAAABIAAAAHAAAAAgAA
+-AHBwB/dIAAAAEgAAAAcAAAACAAAAYwAAAAcAAAACAAAAZAAAAAcAAAACAAAAZQAAAAcAAAACAAAA
+-EAAAAAcAAAACAAAAEQAAAAcAAAACAAAA0NAN/QcAAAACAAAA/////wcAAAADAAAA//////////88
+-AAAAmQAAAAAAAAAGAAAAMzPzPzMzMzP/////PAAAAKMAAAAAAAAATgAAAKUAAAAAAAAAAAAAAAAA
+-AABQUAX1BwAAAAAAAAD/////AAAAAAAAAACqqqr6/////zwAAACuAAAAAAAAAAgAAACxAAAAAAAA
+-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
+-8QAAAAAAAAAAZAYAAAAAAAAGAAAAAAAIAAAAAAD/////7u7u/jAwA/N1CgAAAAAAAHcKAAAAAAAA
+-eQoAAAAAAAAAAAAAAAAAABAQAfEAAAAAAAAAAHwKAAAAAAAAHAAAAIIKAAAAAAAARwAAAAgAAACF
+-CgAAAAAAAEcAAAAcAAAAiAoAAAAAAAD/////7u7u/ru7u/sQEAHxiwoAAAAAAAAGAAAA////f///
+-////////BgAAAP///////////////+7u7v4AAAAAAAAAAP////8=
++dGlvbiBuAGEAYgB7dHJhY2UAYQAnIAAAYgB9bgAtTmFOAE5hTgB2YXIgYQBuZXcgT2JqZWN0ACk7
++YQB2YWx1ZQAyAGF0dGFjaE1vdmllACdjYXJTeW1ib2wAACdmYXN0Q2FyX21jAAAxAGEAAAAAAAAA
++AAAAAAAAADAwA/MKAAAAAAAAAA0AAAAAAAAAAAAAAAAAAAA+AAAABwAAAAIAAAD/////u7u7+xAQ
++AfEkAAAAAAAAAO7u7v4aAAAAAAAAAB8AAAAAAAAAAAAAAAAAAACqqqr6TwAAADEAAAAAAAAANgAA
++AAAAAAA7AAAAAAAAAAAAAAAAAAAAqqqq+hwAAABAAAAAAAAAAP////8dAAAARQAAAAAAAABAQAT0
++SwAAAAAAAAAHAAAAAQAAAP/////u7u7+AAAAAAAAAAA8AAAAWAAAAAAAAACAgAj4BwAAAP7///9H
++AAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIA
++AABgAAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAA
++AHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAA
++AgAAAHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIAAABk
++AAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAABwAAAAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIA
++AAD/////BwAAAAMAAAD//////////zwAAACZAAAAAAAAAAYAAAAzM/M/MzMzM/////88AAAAowAA
++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
++/wAAAABHAAAACAAAADMGAAAAAAAARwAAAAYAAAAAAAAAAAAAAEcAAAAIAAAASAYAAAAAAABHAAAA
++BgAAAAAAAIAAAAAA/////+7u7v4QEAHxAAAAAAAAAABkBgAAAAAAAAYAAAAAAAgAAAAAAP/////u
++7u7+MDAD83UKAAAAAAAAdwoAAAAAAAB5CgAAAAAAAAAAAAAAAAAAEBAB8QAAAAAAAAAAfAoAAAAA
++AAAcAAAAggoAAAAAAABHAAAACAAAAIUKAAAAAAAARwAAABwAAACICgAAAAAAAP/////u7u7+u7u7
+++xAQAfGLCgAAAAAAAAYAAAD///9///////////8GAAAA////////////////7u7u/gAAAAAAAAAA
++PAAAAJoKAAAAAAAAQEAE9KAKAAAAAAAA7u7u/gAAAAAAAAAATwAAAKkKAAAAAAAAqwoAAAAAAAAA
++AAAAAAAAAKqqqvoHAAAAAgAAAP////8QEAHxswoAAAAAAAAcAAAA2goAAAAAAAD/////BwAAAAEA
++AAD/////CAAAAMwKAAAAAAAA/////wgAAADACgAAAAAAAP/////u7u7+AAAAAAAAAAD/////IAAA
++AAAAAAB0cmFjZQAnYgAAdGhpcwB2YWx1ZQAAAAAAAAAAAAAAABAQAfEAAAAAAAAAAAEAAAAAAAAA
++CAAAAAgAAAAAAAAARwAAAE4AAAALAAAAAAAAABAAAAAAAAAAAAAAAAAAAACqqqr6/////+7u7v7/
++////WAAAAAAAAABmdW5jdGlvbiBWZWhpY2xlACl7dHJhY2UAJ2EAAHRoaXMAdmFsdWUAfU9iamVj
++dAByZWdpc3RlckNsYXNzACdjYXJTeW1ib2wAAFZlaGljbGUAAAAAAAAAMDAD8woAAAAAAAAAAAAA
++AAAAAAAQEAHxAAAAAAAAAAAUAAAAAAAAAAgAAAAbAAAAAAAAAEcAAABOAAAAHgAAAAAAAAAjAAAA
++AAAAAAAAAAAAAAAAqqqq+v/////u7u7+u7u7+xAQAfExAAAAAAAAABwAAABLAAAAAAAAAP////8I
++AAAAQAAAAAAAAAD/////7u7u/ioAAAAAAAAAAAAAAAAAAACqqqr6/////w==
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,4 +1,4 @@
+-nAoAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
++3AoAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
+ dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
+ ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
+ AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
+@@ -45,52 +45,61 @@ MDM4MDY5NTU3Mzg1MzE0MDA4NDQ5MjY2MjIwNTUw
+ NzcxNDI1NDIzNTgzNzY0NTA5NTE1ODA2NjEzODk0NDgzNjQ4NTM2ODY1NjE2NjcwNDM0OTQ0OTE1
+ ODc1MzM5MTk0MjM0NjMwNDYzODY5ODg5ODY0MjkzMjk4Mjc0NzA1NDU2ODQ1NDc3MDMwNjgyMzM3
+ ODQzNTExOTkzMzkxNTc2NDUzNDA0OTIzMDg2MDU0NjIzMTI2OTgzNjQyNTc4MTI1AGZ1bmN0aW9u
+-IG4AYQBiAHt0cmFjZQBhACcgAABiAH1uAC1OYU4ATmFOAAAAAAAAAAAwMAPzCgAAAA0AAAAAAAAA
+-PgAAAAcAAAACAAAA/////7u7u/sQEAHxJAAAAO7u7v4aAAAAHwAAAAAAAACqqqr6TwAAADEAAAA2
+-AAAAOwAAAAAAAACqqqr6HAAAAEAAAAD/////HQAAAEUAAABAQAT0SwAAAAcAAAABAAAA/////+7u
+-7v4AAAAAPAAAAFgAAACAgAj4BwAAAP7///9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAA
+-AAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAA
+-BwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAA
+-AAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAAAHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH90gA
+-AAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAABwAA
+-AAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/////BwAAAAMAAAD//////////zwAAACZAAAA
+-BgAAADMz8z8zMzMz/////zwAAACjAAAATgAAAKUAAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAACq
+-qqr6/////zwAAACuAAAACAAAALEAAAD/////HQAAALQAAAAHAAAAAgAAAP////9BAAAAvAAAADsA
+-AADFAAAAOgAAAM4AAADTAAAAAAAAAKqqqvodAAAA1QAAADAwA/PfAAAAAAAAAEEAAADmAAAAu7u7
+-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
+-AAgAAAAJBgAARwAAAAYAAAAAAPB/AAAAAEcAAAAIAAAAFgYAAEcAAAAGAAAAAADw/wAAAABHAAAA
+-CAAAADMGAABHAAAABgAAAAAAAAAAAAAARwAAAAgAAABIBgAARwAAAAYAAAAAAACAAAAAAP/////u
+-7u7+EBAB8QAAAABkBgAABgAAAAAACAAAAAAA/////+7u7v4wMAPzdQoAAHcKAAB5CgAAAAAAABAQ
+-AfEAAAAAfAoAABwAAACCCgAARwAAAAgAAACFCgAARwAAABwAAACICgAA/////+7u7v67u7v7EBAB
+-8YsKAAAGAAAA////f///////////BgAAAP///////////////+7u7v4AAAAA/////w==
++IG4AYQBiAHt0cmFjZQBhACcgAABiAH1uAC1OYU4ATmFOAHZhciBhAG5ldyBPYmplY3QAKTthAHZh
++bHVlADIAYXR0YWNoTW92aWUAJ2NhclN5bWJvbAAAJ2Zhc3RDYXJfbWMAADEAYQAAMDAD8woAAAAN
++AAAAAAAAAD4AAAAHAAAAAgAAAP////+7u7v7EBAB8SQAAADu7u7+GgAAAB8AAAAAAAAAqqqq+k8A
++AAAxAAAANgAAADsAAAAAAAAAqqqq+hwAAABAAAAA/////x0AAABFAAAAQEAE9EsAAAAHAAAAAQAA
++AP/////u7u7+AAAAADwAAABYAAAAgIAI+AcAAAD+////RwAAAAcAAAACAAAACwAAAAcAAAACAAAA
++DAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcAAAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAAC
++AAAAYgAAAAcAAAACAAAAcHAH90gAAAAAAAAABwAAAAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBw
++B/dJAAAAAAAAAAcAAAACAAAAcHAH90kAAAASAAAABwAAAAIAAABwcAf3ZwAAABIAAAAHAAAAAgAA
++AHBwB/dIAAAAEgAAAAcAAAACAAAAYwAAAAcAAAACAAAAZAAAAAcAAAACAAAAZQAAAAcAAAACAAAA
++EAAAAAcAAAACAAAAEQAAAAcAAAACAAAA0NAN/QcAAAACAAAA/////wcAAAADAAAA//////////88
++AAAAmQAAAAYAAAAzM/M/MzMzM/////88AAAAowAAAE4AAAClAAAAAAAAAFBQBfUHAAAAAAAAAP//
++//8AAAAAqqqq+v////88AAAArgAAAAgAAACxAAAA/////x0AAAC0AAAABwAAAAIAAAD/////QQAA
++ALwAAAA7AAAAxQAAADoAAADOAAAA0wAAAAAAAACqqqr6HQAAANUAAAAwMAPz3wAAAAAAAABBAAAA
++5gAAALu7u/s8AAAA7QAAACAgAvLvAAAA7u7u/gAAAAD/////nQAAAAcAAAACAAAAcHAH90kAAAAA
++AAAABwAAAAIAAAD/////QQAAAAABAAA+AAAABwAAAAkAAAD/////u7u7+wAAAECdAAAABwAAAAIA
++AABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAAHgEAALu7u/sAAABAQQAAACoBAADMzMz8AgAA
++AAYGBQUHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAA/////0EAAAA9AQAA3d3d/R0AAABAAQAA
++UAAAAB0AAABEAQAAUQAAAB0AAABIAQAAYGAG9kcAAAAHAAAAAgAAAP/////g4A7+sLAL+zwAAABV
++AQAABwAAAAIAAAD/////wMAM/B0AAABdAQAAUAAAAMDADPwcAAAAWQEAAHBwB/dIAAAAAAAAAAcA
++AAADAAAA/////5CQCfnd3d394OAO/hwAAAB2AQAAPAAAAHEBAACgoAr63d3d/eDgDv5OAAAAjwEA
++AAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvpPAAAAhwEAAAAAAABQUAX1BwAAAAAAAAD/////
++AAAAAKqqqvrd3d39BgYFBRwAAACcAQAA/////5CQCfmgoAr6QQAAALUBAADd3d394OAO/rCwC/vA
++wAz8wMAM/BwAAAC9AQAA/////93d3f0dAAAAwQEAAEBABPTHAQAA7u7u/gAAAABPAAAA0AEAANIB
++AAAAAAAAqqqq+gcAAAADAAAA/////08AAADWAQAA2AEAAAAAAACqqqr6QEAE9N4BAAAHAAAAAQAA
++AP/////u7u7+AAAAAE8AAADnAQAA6QEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAAKqqqvoHAAAA
++BQAAAP////9PAAAA8AEAAPIBAAAAAAAAqqqq+kBABPT4AQAA7u7u/gAAAABPAAAAAQIAAAMCAAAF
++AgAAAAAAAKqqqvoHAAAAAgAAAP////9PAAAACQIAAAsCAAAAAAAAqqqq+lAAAABPAAAADwIAABEC
++AAAAAAAAUFAF9QcAAAAAAAAA/////wAAAACqqqr6UQAAAE8AAAAYAgAAGgIAABwCAAAAAAAAqqqq
+++mBgBvZHAAAABwAAAAIAAAD/////HQAAACECAAAcAAAAIwIAAHBwB/dJAAAAEgAAAAcAAAABAAAA
++0NAN/RwAAAAoAgAA/////xwAAAAqAgAA/////zwAAAAwAgAAMDAD8z8CAAAAAAAAEBAB8QAAAABC
++AgAACAAAAEkCAAD/////7u7u/ru7u/tPAAAAUwIAAFoCAABkAgAAAAAAAKqqqvowMAPzcgIAAAAA
++AAAQEAHxAAAAAHUCAAAIAAAAfAIAAP/////u7u7+u7u7+xAQAfGFAgAABwAAAAEAAAD/////HAAA
++AKUCAAD/////TgAAAJQCAACbAgAAAAAAAKqqqvr/////7u7u/gAAAAA8AAAAsQIAADAwA/PAAgAA
++AAAAABAQAfEAAAAAwwIAAAgAAADKAgAA/////+7u7v4QEAHx4gIAAO7u7v7TAgAA2AIAAAAAAACq
++qqr6EBAB8fUCAADu7u7+8AIAAAAAAACqqqr6u7u7+08AAAD+AgAABQMAAA8DAAAAAAAAqqqq+k4A
++AAAZAwAAIAMAAAAAAACqqqr6/////08AAAAqAwAAMQMAADsDAAAAAAAAqqqq+hwAAABHAwAA////
++/08AAABOAwAAVQMAAF8DAAAAAAAAqqqq+jAwA/NtAwAAAAAAABAQAfEAAAAAcAMAAAgAAAB3AwAA
++/////+7u7v67u7v7EBAB8YADAAAHAAAAAQAAAP////8cAAAAoAMAAP////9OAAAAjwMAAJYDAAAA
++AAAAqqqq+v/////u7u7+AAAAADwAAACsAwAAMDAD87sDAAAAAAAAEBAB8QAAAAC+AwAACAAAAMUD
++AAD/////7u7u/hAQAfHdAwAA7u7u/s4DAADTAwAAAAAAAKqqqvoQEAHx8AMAAO7u7v7rAwAAAAAA
++AKqqqvq7u7v7TwAAAPkDAAAABAAACgQAAAAAAACqqqr6TgAAABQEAAAbBAAAAAAAAKqqqvr/////
++TwAAACUEAAAsBAAANgQAAAAAAACqqqr6HAAAAEIEAAD/////PAAAAE0EAABAQAT0VAQAAO7u7v4A
++AAAAEBAB8QAAAABdBAAABgAAAAAA8D8AAAAgRwAAAAgAAAB+BAAARwAAAAYAAAAAAPA/AAAAEEcA
++AAAIAAAAngQAAEcAAAAGAAAAAAAQOAAAAAD/////7u7u/hAQAfEAAAAAIgUAAAYAAAAAAAA4AAAA
++AEcAAAAIAAAAqwUAAEcAAAAGAAAAAADgRwAAAAD/////7u7u/hAQAfEAAAAA2AUAAAYAAAAAAPBH
++AAAAAEcAAAAIAAAACQYAAEcAAAAGAAAAAADwfwAAAABHAAAACAAAABYGAABHAAAABgAAAAAA8P8A
++AAAARwAAAAgAAAAzBgAARwAAAAYAAAAAAAAAAAAAAEcAAAAIAAAASAYAAEcAAAAGAAAAAAAAgAAA
++AAD/////7u7u/hAQAfEAAAAAZAYAAAYAAAAAAAgAAAAAAP/////u7u7+MDAD83UKAAB3CgAAeQoA
++AAAAAAAQEAHxAAAAAHwKAAAcAAAAggoAAEcAAAAIAAAAhQoAAEcAAAAcAAAAiAoAAP/////u7u7+
++u7u7+xAQAfGLCgAABgAAAP///3///////////wYAAAD////////////////u7u7+AAAAADwAAACa
++CgAAQEAE9KAKAADu7u7+AAAAAE8AAACpCgAAqwoAAAAAAACqqqr6BwAAAAIAAAD/////EBAB8bMK
++AAAcAAAA2goAAP////8HAAAAAQAAAP////8IAAAAzAoAAP////8IAAAAwAoAAP/////u7u7+AAAA
++AP////8cAAAAdHJhY2UAJ2IAAHRoaXMAdmFsdWUAAAAAAAAAABAQAfEAAAAAAQAAAAgAAAAIAAAA
++RwAAAE4AAAALAAAAEAAAAAAAAACqqqr6/////+7u7v7/////VAAAAGZ1bmN0aW9uIFZlaGljbGUA
++KXt0cmFjZQAnYQAAdGhpcwB2YWx1ZQB9T2JqZWN0AHJlZ2lzdGVyQ2xhc3MAJ2NhclN5bWJvbAAA
++VmVoaWNsZQAAADAwA/MKAAAAAAAAABAQAfEAAAAAFAAAAAgAAAAbAAAARwAAAE4AAAAeAAAAIwAA
++AAAAAACqqqr6/////+7u7v67u7v7EBAB8TEAAAAcAAAASwAAAP////8IAAAAQAAAAP/////u7u7+
++KgAAAAAAAACqqqr6/////w==
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -7,7 +7,7 @@ einclude "../dev/import.h"
+ 
+ include "entryraw.oc" "entry.oc"
+ 
+-sd f=debug_log|debug_x_pad|flag_pool
++sd f=debug_log|debug_titles|debug_x_pad|flag_pool
+ if argc=2
+ 	importx "puts" puts
+ 	call puts("flag_x flag_pool_read")
+@@ -103,7 +103,23 @@ n(-NaN,NaN)
+ // https://www.omnicalculator.com/other/floating-point
+ // https://baseconvert.com/ieee-754-floating-point
+ //// https://www.h-schmidt.net/FloatConverter/IEEE754.html
++
++//example of extending clip symbols (and one time DoInitAction tag)
++var a=new Object();
++a.value=2;
++attachMovie('carSymbol','fastCar_mc',1,a)
++")
++
++sd presprite;set presprite swf_sprite_new()
++call action_sprite(presprite,"trace('b'+this.value)")
++call action_init_sprite(presprite,"
++function Vehicle(){
++	trace('a'+this.value)
++}
++Object.registerClass('carSymbol',Vehicle)
+ ")
++sd sprite;set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"carSymbol")
+ 
+ call swf_done()
+ 
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -7,17 +7,29 @@ einclude "../../dev/import.h"
+ 
+ include "../entryraw.oc" "../entry.oc"
+ 
+-sd f=debug_log|flag_pool
+-if argc=2
++sd f=debug_titles|flag_pool
++if argc=1
++	or f (debug_log)
++else
+ 	importx "puts" puts
+ 	call puts("debug_alt flag_pool_read")
+-	set f (debug_alt|flag_pool|flag_pool_read)
++	or f (debug_alt|flag_pool_read)
+ 	sub a1# (0x30)
+ 	or f a1#
+ end
+ 
+ call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+ 
++sd fo;set fo swf_font_basic("_sans")
++char ButtonData_a="Submit"
++data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 24,24}
++vstr *^ButtonData_a
++data ButtonData_c#1;set ButtonData_c fo;data *=20
++data vert_off=-5
++data *font_color=0xff
++vstr ButtonData_d#1;set ButtonData_d "var a;a=1"
++call swf_button(150,50,#ButtonData)
++
+ call action("
+ function c(){
+ }
+@@ -75,6 +87,10 @@ for(a in b){c=1+c;}
+ #call actiond("for(a in b){c=1+c;}") will be ""b"" and here straight "b"
+ call action("return 1")
+ 
++sd id;set id swf_sprite_new()
++call action_init_sprite(id,"var a=a")
++call swf_sprite_done(id)
++
+ call swf_done()
+ 
+ call exit(0)
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -6,7 +6,8 @@ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_
+ ${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+ LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+-	if [ -z "${a}" ]; then a=0; fi
++	if [ -z "${a}" ]; then a=0
++	elif [ ${a} = -1 ]; then exit; fi
+ 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "qq ./a.out ${a}" || {
+ 		swfdump -D${1} a.swf.orig > 1
+ 		swfdump -D${1} a.swf > 2

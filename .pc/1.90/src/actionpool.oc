@@ -1,0 +1,280 @@
+Format ElfObj64
+
+include "../include/prog.h"
+
+#win32 with _
+importx "strlen" strlen
+importx "memcmp" memcmp
+
+function actionpoolid_root()
+    data id#1
+    return #id
+endfunction
+function actionpoolid()
+    data id#1
+    return #id
+endfunction
+function actionpoolid_get()
+    sd p_id
+    setcall p_id actionpoolid()
+    return p_id#
+endfunction
+
+import "struct_ids_actionpool" struct_ids_actionpool
+#block
+function actionpool_currentblock()
+    sd poolid;sd block
+    setcall poolid actionpoolid_get()
+    setcall block struct_ids_actionpool((ids_get),poolid)
+    return block
+endfunction
+
+importx "free" free
+import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+function pool_data(sd id)
+	charx write#1
+	charx read#1
+	sv block;set block struct_ids_actionpool_filter((ids_get),id)
+	if block!=(NULL)
+		call free(block) #see struct_ids set
+	end
+end
+const constpool_unique=0x00
+const  constpool_multi=0xff
+function pool_realentry(sd pos)
+	sd id;set id actionpoolid_get()
+	sd b;set b struct_ids_actionpool_filter((ids_get),id)
+	ss mem;set mem block_get_mem(b)
+	add mem pos
+	set mem# (constpool_multi)
+end
+
+importx "access" access
+importx "fseek" fseek
+importx "fread" fread
+importx "unlink" unlink
+importx "fclose" fclose
+importx "sprintf" sprintf
+importx "fopen" fopen
+importx "ftell" ftell
+
+import "stack_to_word_arg" stack_to_word_arg
+import "word_arg_to_stack" word_arg_to_stack
+import "swf_mem" swf_mem
+import "block_get_mem" block_get_mem
+import "block_get_size" block_get_size
+import "block_reset_size" block_reset_size
+import "mem_block_add_throwless" mem_block_add_throwless
+import "block_get_mem_size" block_get_mem_size
+
+#aftercallimport ebool
+
+import "f_open_mem" f_open_mem
+import "f_write" f_write
+import "memalloc" memalloc
+import "mem_block_add" mem_block_add
+
+function pool_init(sd flags)
+#when entering a frame must know what is. a frame with no savings at read will have cursor at start and later in that frame if is a pool request then will error
+	sd test=flag_pool
+	and test flags
+	if test!=0
+		and flags (flag_pool_read)
+		if flags=0
+			set pool_data.write (TRUE)
+			set pool_data.read (FALSE)  #is a read alone test case
+		else
+			set pool_data.write (FALSE) #most of are write else read
+			set pool_data.read (TRUE)
+		end
+		ret
+	end
+	set pool_data.write (FALSE)  #there are 2 write alone test cases
+	set pool_data.read (FALSE)
+end
+function pool_entry()
+	sd id;set id actionpoolid_get()
+	sd pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
+	char a=constpool_unique
+	callg mem_block_add(pb,#a,1)
+end
+function pool_reentry()
+	sd id;set id actionpoolid_get()
+	sd b;set b struct_ids_actionpool_filter((ids_get),id)
+	sd mem;sd size
+	call block_get_mem_size(b,#mem,#size)
+	sd cursor;set cursor mem#
+	if cursor<^size
+		inc mem#
+		add mem cursor
+		if mem#s=(constpool_unique)
+			return (not_an_id)
+		end
+		return (any_id)
+	end
+	callg error("error at pool read")
+end
+const pool_cursor_size=mem_struct__size_size
+function pool_read(sd id,sd frame_nr)
+	if pool_data.read!=(FALSE)
+		inc frame_nr  ##for next frame preparation
+
+		sv pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
+		call block_reset_size(pb#)  #if is after a read is ok, else is useless
+		data cursor=pool_cursor_size
+		call mem_block_add(pb,#cursor,(pool_cursor_size))  #if is first and after a read is ok, else is useless
+
+		sd name;set name pool_savepath(id,frame_nr)
+		sd a;set a access(name,(R_OK))
+		if a=0
+			sd f;set f fopen(name,"rb")
+			#call unlink(name) #"the file will remain in existence until the last file descriptor referring to it is closed"
+			#wine same thing. #include <unistd.h>#include <stdio.h>void main(){FILE*f=fopen("q","rb");unlink("q");fseek(f,0,SEEK_END);printf("%lu\n",ftell(f));}
+			#but now with java flashalizer only after fclose
+			if f=(NULL)
+				call free(name)
+				vstr er="pool read error"
+				call error(er)
+			end
+			call fseek(f,0,(SEEK_END))
+			sd sz;set sz ftell(f)
+			if sz=-1
+				call free(name)
+				call fclose(f)
+				call error(er)
+			end
+			call fseek(f,0,(SEEK_SET))
+			sd bool;set bool mem_block_add_throwless(pb,(NULL),sz)
+			if bool=(FALSE)
+				call free(name)
+				call fclose(f)
+				call error(er)
+			end
+			sd mem;set mem block_get_mem(pb#)
+			add mem (pool_cursor_size)
+			call fread(mem,sz,1,f)
+			call fclose(f)
+			call unlink(name)
+		end
+		call free(name)
+	end
+end
+function pool_done(sd id,sd frame_nr)
+	if pool_data.write!=(FALSE)
+		sd b;set b struct_ids_actionpool_filter((ids_get),id)
+		sd sz;set sz block_get_size(b)
+		if sz!=0
+			sd mem;set mem block_get_mem(b)
+			sd name;set name pool_savepath(id,frame_nr)
+			sd f;set f f_open_mem(name,"wb")
+			call f_write(f,mem,sz)
+			call fclose(f)
+			call block_reset_size(b)
+		end
+		ret
+	end
+	callg pool_read(id,frame_nr)
+end
+function pool_savepath_init(sd a)
+	valuex path#1;set path a
+	import "strlen_of" strlen_of
+	valuex size#1;set size strlen_of(path,(ext_str_len)) #size_t is ulong
+end
+function pool_savepath(sd id,sd fr)
+	sd m;set m memalloc(pool_savepath_init.size)
+	call sprintf(m,"%s.%u.%u",pool_savepath_init.path,id,fr)
+	return m
+end
+
+#pool id (U16)
+function actionpool_value(ss value)
+	sd id
+	set id actionpool_value_ex(value,(FALSE))
+	return id
+end
+#pool id
+function actionpool_value_ex(ss value,sd force)
+    sd poolid
+    setcall poolid actionpoolid_get()
+    sd nr
+    call swf_mem((mem_exp_change_pool),poolid)
+    setcall nr actionpool_getvalue_ex(value,force)
+    call swf_mem((mem_exp_change_back_pool))
+    return nr
+endfunction
+#pool id
+#function actionpool_getvalue(ss value);	sd id;	set id actionpool_getvalue_ex(value,(FALSE));	return id;end
+import "swf_mem_add" swf_mem_add
+import "error" error
+#pool id
+function actionpool_getvalue_ex(ss value,sd force)
+	sd block
+	setcall block actionpool_currentblock()
+	sd size
+	setcall size block_get_size(block)
+	sd nr
+	sd newlen
+	setcall newlen strlen(value)
+	if size=0
+	#is first value, add the pools header and count=1 , # before: actionpool_getvalue(the pool mem is already selected when it comes from the second  at push)
+		sd testid
+		if force=(FALSE)
+			if pool_data.write!=(FALSE)
+				call pool_entry()
+			elseif pool_data.read!=(FALSE)
+				set testid pool_reentry()
+				if testid=(not_an_id)
+					return (not_an_id)
+				end
+			end
+		end
+		sd onevalue=1
+		call swf_mem_add(#onevalue,2)
+		set nr 0
+	else
+		sd mem
+		sd count
+		setcall mem block_get_mem(block)
+		setcall count word_arg_to_stack(mem)
+		set nr count
+		if force=(FALSE)
+			add mem (WORD)
+			while count!=0
+				sd len
+				setcall len strlen(mem)
+				if len=newlen
+					sd comp
+					setcall comp memcmp(mem,value,len)
+					if comp=0
+						sub nr count
+						if pool_data.write!=(FALSE)
+							call pool_realentry(nr)
+						end
+						return nr
+					endif
+				endif
+				inc len
+				add mem len
+				dec count
+			endwhile
+			if pool_data.write!=(FALSE)
+				call pool_entry()
+			elseif pool_data.read!=(FALSE)
+				set testid pool_reentry()
+				if testid=(not_an_id)
+					return (not_an_id)
+				end
+			end
+			setcall mem block_get_mem(block)
+		end
+		if nr=(maxuint16)
+			call error("max uint16 at action pool") #Count  UI16  Number of constants to follow
+		end
+		set count nr
+		inc count
+		call stack_to_word_arg(count,mem)
+	endelse
+	inc newlen
+	call swf_mem_add(value,newlen)
+	return nr
+endfunction
