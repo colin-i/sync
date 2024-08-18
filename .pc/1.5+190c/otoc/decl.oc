@@ -1,0 +1,102 @@
+
+#aftercalli
+
+function functiondef_d(sv pbuffer,sd outfile)
+	datax args#1;call get_data(pbuffer,#args)
+	if args>=^1
+		charx type#1;charx field#1
+		call decl(pbuffer,outfile,#field,#type)
+		sd n=1;while n!=args
+			call writec(outfile)
+			call decl(pbuffer,outfile,#field,#type)
+			inc n
+		end
+	end
+end
+function functiondef_raw(sv pbuffer,sd outfile,sd pointer,sd sz)
+	set loop.function_start ftell(outfile)
+	if loop.function_start!=-1
+		call write_void(outfile,pointer,sz)
+		call writel(outfile)
+		call functiondef_d(pbuffer,outfile)
+		callg writer(outfile)
+		ret
+	end
+	call aftercallenable()
+end
+function functiondef_intern(sv pbuffer,sd outfile,sd pointer,sd sz)
+	charx s#1;call get_char(pbuffer,#s)
+	if s=(Xfile_function_tintern_normal)
+		call functiondef_raw(pbuffer,outfile,pointer,sz)
+	else
+		char a="struct "^
+		call write(outfile,#a,\.a)
+		call write(outfile,pointer,sz)
+		callg functiondef_d(pbuffer,outfile)
+	end
+end
+function functiondef_extern(sv pbuffer,sd outfile,sd pointer,sd sz)
+	charx e#1;call get_char(pbuffer,#e)
+	callg functiondef_raw(pbuffer,outfile,pointer,sz)
+end
+#function functiondef_entry(sv pbuffer)
+
+#D structure
+function decl(sv pbuffer,sd outfile,ss pfield,ss ptype)
+	call get_char(pbuffer,pfield)
+	if pfield#!=(Xfile_declfield_const)
+		if pfield#=(Xfile_declfield_data)
+			charx data#1;call get_char(pbuffer,#data)
+			charx sign#1;call get_char(pbuffer,#sign)
+		end
+		call get_char(pbuffer,ptype)
+		charx feature#1;call get_char(pbuffer,#feature)
+
+		value f^byte
+		value *^word
+		value *^int
+		value *^intByte
+		value *^long
+		value *^intByte  #longByte
+		value *^longWord
+		value *^longInt
+		sv fn;set fn ptype#     #type is used outside
+		mult fn :
+		add fn #f
+		set fn fn#
+		call fn(outfile)
+	else
+		char c="#define"^
+		call write(outfile,#c,\.c)
+	end
+	call writes(outfile)
+
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	callg write(outfile,pointer,sz)
+end
+function byte(sd outfile)
+	char a="char*"^
+	call write(outfile,#a,\.a-1)
+end
+function word(sd outfile)
+	char a="short*"^
+	call write(outfile,#a,\.a-1)
+end
+function int(sd outfile)
+	char a="int*"^
+	call write(outfile,#a,\.a-1)
+end
+function intByte(sd outfile)
+	call write(outfile,#byte.a,\byte.a)
+end
+function long(sd outfile)
+	call write(outfile,#write_long.a,(write_long_cast))
+end
+#function longByte()end
+function longWord(sd outfile)
+	call write(outfile,#word.a,\word.a)
+end
+function longInt(sd outfile)
+	call write(outfile,#int.a,\int.a)
+end
