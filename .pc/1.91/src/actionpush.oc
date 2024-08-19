@@ -1,0 +1,186 @@
+
+format elfobj64
+
+#ActionPush added to a query, and released at the action for them
+
+include "../include/prog.h"
+
+import "mem_free" mem_free
+
+function push()
+	value mem=NULL
+	datax size#1    #same as debug_data, and here is from x values
+	datax allsize#1
+	if mem!=(NULL)
+		call mem_free(#mem)
+	end
+end
+
+importx "memcpy" memcpy
+importx "strlen" strlen
+
+#aftercalli
+
+import "actionrecordheader_core" actionrecordheader_core
+import "swf_actionblock_add" swf_actionblock_add
+
+function actionpush()
+#allmost all before action_one, but also before actionrecordheader( two examples: a=function (){} and a=1?2:3 )
+	if push.size!=0
+		call actionrecordheader_core((ActionPush),push.size)
+		call swf_actionblock_add(push.mem,push.size)
+		import "debug_phase_code_add" debug_phase_code_add
+		call debug_phase_code_add((TRUE),#push.size)
+		set push.size 0
+	end
+end
+
+import "actionpool_value" actionpool_value
+
+import "memalloc" memalloc
+import "memrealloc" memrealloc
+import "error" error
+
+function push_init()
+	set push.allsize 1
+	set push.mem memalloc(1) #same
+	set push.size 0
+end
+function push_add_ex(sd size,sd value,sd type)
+	sd newsize
+	set newsize push.size
+	add newsize size
+	if newsize>^(maxuint16)
+		call error("actionrecordheader too big")
+	end
+	if newsize>^push.allsize
+		set push.allsize newsize
+		add push.allsize 0x100
+		set push.mem memrealloc(push.mem,push.allsize)
+	end
+	sd mem;set mem push.mem
+	add mem push.size
+	if type=0
+		call memcpy(mem,#value,size)
+	else
+		call memcpy(mem,value,size)
+	end
+	set push.size newsize
+end
+function push_add(sd size,sd value)
+	call push_add_ex(size,value,0)
+end
+
+function action_push(sd type,sd valuehigh,sd valuelow)
+	if type=(ap_Constant8)
+		#set the action pool(if isn't) and verify to add +1size if 8 will go to ap_Constant16
+		sd translated_id
+		setcall translated_id actionpool_value(valuehigh)
+		if translated_id!=(not_an_id)
+			if translated_id<=0xff
+				call push_add((BYTE),(ap_Constant8))
+				call push_add((BYTE),translated_id)
+			else
+				call push_add((BYTE),(ap_Constant16))
+				call push_add((WORD),translated_id)
+			end
+		else
+			call push_add((BYTE),(ap_String))
+			sd size=1;add size strlen(valuehigh)
+			call push_add_ex(size,valuehigh,1)
+		end
+	elseif type=(ap_Integer)
+		call push_add((BYTE),(ap_Integer))
+		call push_add((DWORD),valuehigh)
+	elseif type=(ap_Boolean)
+		call push_add((BYTE),(ap_Boolean))
+		call push_add((BYTE),valuehigh)
+	elseif type=(ap_Null)
+		call push_add((BYTE),(ap_Null))
+	elseif type=(ap_Undefined)
+		call push_add((BYTE),(ap_Undefined))
+	elseif type=(ap_RegisterNumber)
+		call push_add((BYTE),(ap_RegisterNumber))
+		call push_add((BYTE),valuehigh)
+	else #if type=(ap_Double)
+		sd f;set f float(valuehigh,valuelow)
+		if f=(float_double)
+			call push_add((BYTE),(ap_Double))
+			call push_add((DWORD),valuehigh)
+			callg push_add((DWORD),valuelow)
+		end
+	end # string literal, float
+endfunction
+
+const float_double=-1
+function float(sd h,sd l)
+	sd f;set f floatconv(h,l)
+	if f!=(float_double)
+		call push_add((BYTE),(ap_Float))
+		call push_add((DWORD),f)
+	end
+	return f
+end
+function floatconv(sd h,sd l)
+const    sign=doubleH_sign
+	sd sign=sign
+	and sign h
+	and h  ~sign
+const max_exp=doubleH_exp
+	sd exp =max_exp
+	and exp h
+	and h  ~max_exp
+	if exp=0
+		if h=0
+			if l=0
+				#+-0
+				return sign
+			end
+		end
+		#subnormal always dif, at 32 [1/2^149,1/2^126), at 64 [1/2^1074,1/2^1022)
+		return (float_double)
+	end
+	if exp=(max_exp)
+		if h=0
+			if l=0
+				#+- infinity
+				or sign (0x7f800000)
+				return sign
+			end
+		end
+		#(s/q/alt/+)Nan
+		return (float_double)
+	end
+#at 32 -126 to 127, at 64 -1022 to 1023
+#                12345678
+const to_max_exp64=0x100000
+const e64=1023
+const e32=127
+const minexp=e64-e32+1 # 897
+const maxexp=e64+e32   # 1150
+const minexp_opt=minexp*to_max_exp64
+const maxexp_opt=maxexp*to_max_exp64
+	if exp<(minexp_opt)
+		return (float_double)
+	end
+	if exp>(maxexp_opt)
+		return (float_double)
+	end
+const     f2=0xE0000000
+const f2to32=0x20000000
+	sd f2=~f2
+	and f2 l
+	if f2!=0
+		return (float_double)
+	end
+	divu l (f2to32)
+const e64to32=(minexp-1)*to_max_exp64
+	sub exp (e64to32)
+	mult exp 8   #to 32 exp bits
+	mult h 8     #same
+
+	or h exp
+	or h sign
+	or h l
+	return h
+end
