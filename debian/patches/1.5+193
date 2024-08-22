@@ -1,0 +1,82 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+193) xenial; urgency=medium
+ .
+   * .oh and sd a
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-08-22
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 12gf3By3-VLKwf5ZOxLY0Q-r1weaDLZqg
++File ID: 13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL
++<p>Found file: ./ocompiler-1-5+192.x86_64.rpm, 13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL, 2024-08-22T09:23:55.183Z, 84131, https://drive.google.com/uc?id=13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+191.x86_64.rpm, 12gf3By3-VLKwf5ZOxLY0Q-r1weaDLZqg, 2024-08-21T04:00:47.785Z, 84037, https://drive.google.com/uc?id=12gf3By3-VLKwf5ZOxLY0Q-r1weaDLZqg&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+189.x86_64.rpm, 1MZQNdWvuOvJbP-UmuPr4iiujzz_ldqQ8, 2024-08-18T09:53:18.342Z, 73650, https://drive.google.com/uc?id=1MZQNdWvuOvJbP-UmuPr4iiujzz_ldqQ8&export=download
+--- ocompiler-1.orig/otoc/ascii.h
++++ ocompiler-1/otoc/ascii.h
+@@ -24,6 +24,8 @@ const asciibs=0x5c               #\
+ const asciisquareright=0x5d      #]
+ const asciicirc=0x5e             ;#^
+ const asciic=0x63                #c
++const asciih=0x68                #h
++const asciio=0x6f                #o
+ const asciicurlyleft=0x7b        #{
+ const asciior=0x7c               ;#|
+ const asciicurlyright=0x7d       #}
+--- ocompiler-1.orig/otoc/otoc.oc
++++ ocompiler-1/otoc/otoc.oc
+@@ -18,7 +18,15 @@ function out_file(sd in)
+ 		if p!=(NULL)
+ 			#here we know there at at least two dots and of course the term null char
+ 			inc p
+-			set p# (asciic)
++			charx ext#1;set ext (asciic)
++			if p#=(asciio) #if .oh then is a header
++				ss test;set test p
++				inc test
++				if test#=(asciih)
++					set ext (asciih)
++				end
++			end
++			set p# ext
+ 			inc p
+ 			set p# (asciinul)
+ 			sd f;set f fopen(in,"wb")
+--- ocompiler-1.orig/src/files/functions/xfile_details.oc
++++ ocompiler-1/src/files/functions/xfile_details.oc
+@@ -57,8 +57,12 @@ function xfile_add_declare_if(sd decltyp
+ 					elseif sign=(pointersigndeclare)
+ 						setcall err xfile_add_char((Xfile_declsign_pointer))
+ 					else
+-					#if sign==(nosign) reserve
++					#if sign==(nosign) reserve#1 but need to add N=1
+ 						setcall err xfile_add_char((Xfile_declsign_reserve))
++						if err=(noerror)
++							char n1={Xfile_numbers_prefix_none,Xfile_numbers_type_tdecimal,1,0,0,0,asciione,Xfile_numbers_done}
++							setcall err writefile_errversion(main.xfile,#n1,\.n1)
++						endif
+ 					endelse
+ 				endif
+ 			endif
