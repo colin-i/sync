@@ -1,0 +1,102 @@
+
+#aftercalli
+
+function action1(sv act,sv pbuffer,sd outfile)
+	#a from any, t from type
+	value functions^action_areturn
+	value         *^action_aexit
+	value         *^action_tinc
+	value         *^action_tincst
+	value         *^action_tdec
+	value         *^action_tdecst
+	value         *^action_tneg
+	value         *^action_tnot
+	value         *^action_tbase
+	value         *^action_tbase #leave
+	value         *^action_tshl1
+	value         *^action_tshr1
+	value         *^action_tsar1
+	mult act :
+	add act #functions
+	set act act#
+	callg act(pbuffer,outfile)
+end
+
+function action_areturn(sv pbuffer,sd outfile)
+	if loop.function_start!=(NULL)
+		call fseek(outfile,loop.function_start,(SEEK_SET))
+		call fwrite(#write_long.a,(write_long_cast),1,outfile)
+		sd n;set n fseek(outfile,0,(SEEK_END)) #it's tested, is not 0 on that 32 app example, so the pointer is not moved
+		if n!=0
+			call aftercallenable()
+		end
+		set loop.function_start (NULL) #if is not at endfunction, is here
+	end
+	char a="return "^  #also used at ret
+	call write(outfile,#a,\.a)
+	callg arg(pbuffer,outfile)
+end
+function action_aexit(sv pbuffer,sd outfile) #this exit() an option? now only entryraw/exit case
+	callg action_areturn(pbuffer,outfile)
+end
+function action_tinc(sv pbuffer,sd outfile)
+	call varfunc(pbuffer,outfile)
+	char a={asciiplus,asciiplus}
+	callg write(outfile,#a,\.a)
+end
+function action_tincst(sv pbuffer,sd outfile)
+	call varfunc(pbuffer,outfile)
+	callg write(outfile,#action_tinc.a,\action_tinc.a)
+end
+function action_tdec(sv pbuffer,sd outfile)
+	call varfunc(pbuffer,outfile)
+	char a={asciihyphen,asciihyphen}
+	callg write(outfile,#a,\.a)
+end
+function action_tdecst(sv pbuffer,sd outfile)
+	call varfunc(pbuffer,outfile)
+	callg write(outfile,#action_tdec.a,\action_tdec.a)
+end
+function action_tneg(sv pbuffer,sd outfile)
+	char a=asciihyphen
+	callg actionsimple(pbuffer,a,outfile)
+end
+function action_tnot(sv pbuffer,sd outfile)
+	char a=asciinot
+	char *=asciihyphen   #this is fast for notneg function
+	callg actionsimple(pbuffer,a,outfile)
+end
+function action_tbase(sv pbuffer,sd outfile)
+	call unimplemented_start("base/leave",outfile)
+	call varfunc(pbuffer)
+	call unimplemented_end()
+	call backchar(outfile);call backchar(outfile) #will term nl next
+end
+function action_tshl1(sv pbuffer,sd outfile)
+	char a={asciileft,asciileft}
+	callg actionshift1(pbuffer,#a,signed,outfile)
+end
+function action_tshr1(sv pbuffer,sd outfile)
+	char a={asciiright,asciiright}
+	callg actionshift1(pbuffer,#a,unsigned,outfile)
+end
+function action_tsar1(sv pbuffer,sd outfile)
+	callg actionshift1(pbuffer,#action_tshr1.a,signed,outfile)
+end
+
+function actionsimple(sv pbuffer,sd act,sd outfile)
+	sd replay;set replay pbuffer#
+	call varfunc(pbuffer,outfile)
+	call writee(outfile)
+	call write(outfile,#act,1)
+	callg write_longcast(outfile,#replay)
+end
+function actionshift1(sv pbuffer,ss act,sd ex,sd outfile)
+	sd replay;set replay pbuffer#
+	call varfunc(pbuffer,outfile)
+	call writee(outfile)
+	call write_longcast_ex(outfile,#replay,ex)
+	call write(outfile,act,2)
+	char a="1"^
+	callg write(outfile,#a,1)
+end

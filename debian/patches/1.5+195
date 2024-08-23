@@ -1,0 +1,236 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+195) xenial; urgency=medium
+ .
+   * function_start=0 / [] and ^ / sizeof(var)
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-08-23
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL
++File ID: 1LCpb4wgabj8SlgiC8-f5Frihk6tiL-A6
++<p>Found file: ./ocompiler-1-5+194.x86_64.rpm, 1LCpb4wgabj8SlgiC8-f5Frihk6tiL-A6, 2024-08-23T11:11:29.516Z, 84219, https://drive.google.com/uc?id=1LCpb4wgabj8SlgiC8-f5Frihk6tiL-A6&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+192.x86_64.rpm, 13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL, 2024-08-22T09:23:55.183Z, 84131, https://drive.google.com/uc?id=13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+191.x86_64.rpm, 12gf3By3-VLKwf5ZOxLY0Q-r1weaDLZqg, 2024-08-21T04:00:47.785Z, 84037, https://drive.google.com/uc?id=12gf3By3-VLKwf5ZOxLY0Q-r1weaDLZqg&export=download
+--- ocompiler-1.orig/otoc/action.oc
++++ ocompiler-1/otoc/action.oc
+@@ -23,14 +23,14 @@ function action1(sv act,sv pbuffer,sd ou
+ end
+ 
+ function action_areturn(sv pbuffer,sd outfile)
+-	if loop.function_start!=(NULL)
++	if loop.function_start!=(err)
+ 		call fseek(outfile,loop.function_start,(SEEK_SET))
+ 		call fwrite(#write_long.a,(write_long_cast),1,outfile)
+ 		sd n;set n fseek(outfile,0,(SEEK_END)) #it's tested, is not 0 on that 32 app example, so the pointer is not moved
+ 		if n!=0
+ 			call aftercallenable()
+ 		end
+-		set loop.function_start (NULL) #if is not at endfunction, is here
++		set loop.function_start (err) #if is not at endfunction, is here
+ 	end
+ 	char a="return "^  #also used at ret
+ 	call write(outfile,#a,\.a)
+--- ocompiler-1.orig/otoc/decl.oc
++++ ocompiler-1/otoc/decl.oc
+@@ -16,7 +16,7 @@ function functiondef_d(sv pbuffer,sd out
+ end
+ function functiondef_r(sv pbuffer,sd outfile,sd pointer,sd sz)
+ 	set loop.function_start ftell(outfile)
+-	if loop.function_start!=-1
++	if loop.function_start!=(err)
+ 		call write_void(outfile,pointer,sz)
+ 		call writel(outfile)
+ 		sd args;set args functiondef_d(pbuffer,outfile)
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -10,6 +10,7 @@ importx "fwrite" fwrite
+ importx "strchr" strchr
+ importx "printf" printf
+ importx "fprintf" fprintf
++importx "memcmp" memcmp
+ 
+ include "xfile.h"
+ #const Xfile_last=Xfile_line
+@@ -19,6 +20,8 @@ include "ascii.h"
+ 
+ include "mem.oc"
+ 
++const err=-1
++
+ datax result#1
+ 
+ function loop(sd pointer,sd delim,sd output)
+@@ -30,11 +33,15 @@ function loop(sd pointer,sd delim,sd out
+ 	charx directwrite#1
+ 	set directwrite (TRUE)
+ 	valuex function_start#1
+-	set function_start (NULL)
++	set function_start (err)
+ 	charx indentation#1
+ 	set indentation 0
+ 	charx same_line#1
+ 	set same_line (FALSE)
++	charx hotgroup#1
++	set hotgroup 0
++	datax szfunctiondef#1
++	set szfunctiondef 0
+ 
+ 	add delim pointer
+ 	while pointer!=delim
+@@ -92,6 +99,12 @@ function loop(sd pointer,sd delim,sd out
+ 		sv dest^Xfile_comment;add dest command
+ 		set dest dest#
+ 		call dest(output,#pointer)
++
++		if hotgroup>0
++			if dest!=line
++				dec hotgroup
++			end
++		end
+ 	end
+ end
+ 
+@@ -205,6 +218,22 @@ function comment(sd outfile,sv pbuffer)
+ 	call get_string(pbuffer,#sz,#pointer)
+ 	callg writen(outfile,pointer,sz)
+ end
++function functiondef(sd outfile,sv pbuffer)
++	valuex pointer#1
++	call get_string(pbuffer,#loop.szfunctiondef,#pointer)
++
++	value intern^functiondef_intern
++	value *raw^functiondef_raw
++	value *extern^functiondef_extern
++	value *entry^functiondef_entry
++	charx type#1;call get_char(pbuffer,#type)
++	mult type :
++	sv dest^intern;add dest type
++	set dest dest#
++	call dest(pbuffer,outfile,pointer,loop.szfunctiondef)
++
++	callg writecln(outfile)
++end
+ 
+ include "action.oc"
+ include "decl.oc"
+@@ -244,28 +273,13 @@ function include(sd outfile,sv pbuffer)
+ 		call get_string(pbuffer,#sz,#pointer)
+ 	end
+ end
+-function functiondef(sd outfile,sv pbuffer)
+-	datax sz#1;valuex pointer#1
+-	call get_string(pbuffer,#sz,#pointer)
+-
+-	value intern^functiondef_intern
+-	value *raw^functiondef_raw
+-	value *extern^functiondef_extern
+-	value *entry^functiondef_entry
+-	charx type#1;call get_char(pbuffer,#type)
+-	mult type :
+-	sv dest^intern;add dest type
+-	set dest dest#
+-	call dest(pbuffer,outfile,pointer,sz)
+-
+-	callg writecln(outfile)
+-end
+ function declare(sd outfile,sv pbuffer)
+ 	charx type#1;charx field#1
+ 	call decl(pbuffer,outfile,#field,#type)
+ 	datax sz#1;valuex pointer#1
+ 	charx sign#1;call get_char(pbuffer,#sign)
+ 	if sign=(Xfile_declsign_reserve)
++		set loop.hotgroup 2
+ 		#as a special case, [1] is removed for C. and whit what replaced? const a=1 and [a]. alternatives? structure with declared vars, = at nobits vars
+ 		#this for structures, and not only because at o #1 is not [1], will make more similar
+ 		set loop.allowwrite number_allowwrite(pbuffer#)
+@@ -275,7 +289,9 @@ function declare(sd outfile,sv pbuffer)
+ 		set loop.allowwrite (TRUE)  # example: at unimplemented commands and at condition sign check is FALSE
+ 	elseif sign=(Xfile_declsign_pointer)
+ 		call writee(outfile)
+-		call write(outfile,#and.a,1)
++		if loop.hotgroup=0
++			call write(outfile,#and.a,1) #in o, #rezerve/""/{} stays at pointing on first val,modify this behaviour or keep this trick
++		end
+ 		call get_string(pbuffer,#sz,#pointer)
+ 		call write(outfile,pointer,sz)
+ 	else #Xfile_declsign_e*
+@@ -288,6 +304,7 @@ function declare(sd outfile,sv pbuffer)
+ 			end
+ 			call number(pbuffer,outfile)
+ 		elseif mode=(Xfile_declmode_group)
++			set loop.hotgroup 2
+ 			call writeslsr(outfile)
+ 			call writee(outfile)
+ 			call writecl(outfile)
+@@ -301,6 +318,7 @@ function declare(sd outfile,sv pbuffer)
+ 			call writecr(outfile)
+ 		else #Xfile_declmode_string
+ 			if type=(Xfile_decltype_byte)
++				set loop.hotgroup 2
+ 				call writeslsr(outfile)
+ 			end
+ 			call writee(outfile)
+--- ocompiler-1.orig/otoc/number.oc
++++ ocompiler-1/otoc/number.oc
+@@ -79,7 +79,17 @@ function number_func_sizex(sd outfile,sv
+ end
+ function number_var_size(sd outfile,sv pbuffer) #DoT
+ 	datax sz#1;valuex pointer#1
+-	call get_string(pbuffer,#sz,#pointer)
++	call get_string(pbuffer,#sz,#pointer) #\.a is \fn.a in .x
++	if sz=loop.szfunctiondef
++		sd cmp;set cmp memcmp(pointer,functiondef.pointer,sz)
++		if cmp=0 #here is not sizeof a struct member, is sizeof an item inside same function
++			char c="sizeof("^
++			call write(outfile,#c,\.c)
++			call var(pbuffer,outfile)
++			callg writer(outfile)
++			ret
++		end
++	end
+ 	char a="sizeof(((struct "^
+ 	call write(outfile,#a,\.a)
+ 	call write(outfile,pointer,sz)
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -11,7 +11,7 @@ char* c9="";short* ca=1;int* cb=1;
+ char cc[]={9,97,122};
+ #define a1 1
+ char a[3];
+-long* b=&a;
++long* b=a;
+ long*intern(int a,int* b,long* c,long* d){//commenting
+ 	a++;
+ 	a--;
+@@ -37,7 +37,7 @@ void f(int* dummy,...){//void f(...) was
+ 	b=((int*)a)[0];
+ 	b=((long*)a)[0];
+ 	int c;
+-	long* d=&c;
++	long* d=c;
+ 	a=((struct st*)d)->a;
+ 	if(2==2){
+ 		return;
