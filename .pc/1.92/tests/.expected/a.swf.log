@@ -1,0 +1,178 @@
+0
+0
+94
+
+/*
+debug_x
+*/
+function fn(a){
+	return 2;
+}
+this.this.getVersion();
+
+this.this.this=this;
+
+//note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+a=new Array(1);
+var b=(-2+0x2-2*2/2%2&2|2^2<2>2==2!=2<=2>=2<<2>>2>>>2&&2||2?2:3);
+var c=1.2;var d=a[0];var e='q';
+f=2;var g;delete g;delete this.f;
+h=function(){var a;}var i=h();
+if(2==2){var j;return 9;}else if(2==2){var k;}else{var l;}
+while(2==2){var m;}
+f++;f--;f+=2;
+for(var n=2;n<3;n++){break;}
+for(var o in a){continue;}
+for(a[0] in a[0]){}
+while(true){break;continue;var p;}
+for(;;){}
+
+a=new Object();
+a.b=3;
+a.c=new Array(1);a.c[0]=5;
+a.d=new Object();
+a.d.e=2;
+a.b++;
+a.c[0]--;
+a.d.e+=2;
+
+a=b!=1?q:w;
+
+//manual class extends
+var class1=function(){
+	trace('class1');
+}
+class1.prototype.func1=function(){
+	trace('func1');
+}
+ASSetPropFlags(class1.prototype,null,1);
+var class2=function(){
+	trace('class2');
+	this.__proto__.constructor();
+	this.func1();
+}
+class2.prototype.__proto__=class1.prototype;
+class2.prototype.constructor=class1;
+class2.prototype.func2=function(){
+	trace('func2');
+}
+ASSetPropFlags(class2.prototype,null,1);
+var class3=function(){
+	trace('class3');
+	this.__proto__.constructor();
+	this.func2();
+}
+class3.prototype.__proto__=class2.prototype;
+class3.prototype.constructor=class2;
+var o3=new class3();
+
+//from asm point of view, all can be done regarding interface statement:
+//ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
+//at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
+//	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
+
+//    3FF0000020000000->3F800001     3FF0000010000000               3810000000000000->00800000
+trace(1.00000011920928955078125+' '+ 1.000000059604644775390625+' '+0.000000000000000000000000000000000000011754943508222875079687365372222456778186655567720875215087517062784172594547271728515625)
+//                                                                  1.17549435082228750796873653722e-38
+//    3800000000000000                                                                                                                      47E0000000000000->7F000000
+trace(0.0000000000000000000000000000000000000058774717541114375398436826861112283890933277838604376075437585313920862972736358642578125+' '+170141183460469231731687303715884105728.0)
+//    5.87747175411143753984368268611e-39                                                                                                   1.70141183460469231731687303716e+38
+//    47F0000000000000                              7FF0000000000000->7f800000  FFF0000000000000->ff800000 0000000000000000->00000000  8000000000000000->80000000
+trace(340282366920938463463374607431768211456.0+' '+Infinity+' '+               -Infinity+' '+             0.0+' '+                    -0.0)
+//    3.40282366920938463463374607432e+38
+//    0008000000000000
+trace(0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011125369292536006915451163586662020321096079902311659152766637084436022174069590979271415795062555102820336698655179055025762170807767300544280061926888594105653889967660011652398050737212918180359607825234712518671041876254033253083290794743602455899842958198242503179543850591524373998904438768749747257902258025254576999282912354093225567689679024960579905428830259962166760571761950743978498047956444458014963207555317331566968317387932565146858810236628158907428321754360614143188210224234057038069557385314008449266220550120807237108092835830752700771425423583764509515806613894483648536865616670434944915875339194234630463869889864293298274705456845477030682337843511993391576453404923086054623126983642578125)
+//    1.11253692925360069154511635867e-308
+//    7FFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF
+function n(a,b){trace(a+' '+b)}
+n(-NaN,NaN)
+// https://www.omnicalculator.com/other/floating-point
+// https://baseconvert.com/ieee-754-floating-point
+//// https://www.h-schmidt.net/FloatConverter/IEEE754.html
+
+//example of extending clip symbols (and one time DoInitAction tag)
+var a=new Object();
+a.value=2;
+attachMovie('carSymbol','fastCar_mc',1,a)
+
+5,9,0009
+1,5,
+2,7,,2,,2,,
+2,2,,2,,4,,
+3,E,,
+1,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2,5,2,5,
+1,B,,4,,5,,,4,
+1,7,,2,,2,,,2,,2,,
+1,2,5,0006,2,,,9,,
+1,A,,,2,2,,5,,A,,,2,2,,2,2,
+1,A,,,2,2,,2
+1,2,,,,,2,,,,,2,,,5,,
+1,7,,2,2,,,,,2,,5,,,2
+1,2,,,1,1,,2,4,,2
+1,2,,5,,,1,1,,2,2,,7,,2
+1,2,2,2,,2
+1,2,,,2,2
+2,9,,
+1,2,,7,
+1,2,,E,,,2,,2,,A,
+1,2,,9,,
+1,2,,2,,7,
+1,2,,2,,1,,,2,,,,
+1,2,,2,,5,,1,,,2,,,,
+1,2,,2,,2,,1,,,2,,,5,,
+2,4,,5,,2,2,,2,2,,
+3,2,5,0006
+1,2,
+1,
+1,2,,2,,2,5,0006
+1,2,
+1,
+1,8,,2,,7,,
+1,2,5,0030
+1,2,
+1,7,,2,,2,,
+1,7,,2,,
+1,
+1,2,,2,,4,,2,,
+1,2,,2,,4,,
+1,2,,2,,2,5,0006
+1,2,
+1,
+1,8,,2,,7,,
+1,2,5,0030
+1,2,
+1,7,,2,,2,,
+1,7,,2,,
+1,
+1,2,,2,,4,,2,,
+1,2,,2,,4,,
+1,9,,
+8,7,,9,,2,,5,,
+3,B,,5,,
+3,B,,5,,2,,5,,2,,5,,2,,5,,
+3,9,
+3,A,0014,2,,2,,2,,,
+1,19,,
+6,9,,
+1,2,,7,
+1,2,,10,,
+2
+0
+1
+trace('b'+this.value)
+1,4,,2,,,
+2
+1
+6
+
+function Vehicle(){
+	trace('a'+this.value)
+}
+Object.registerClass('carSymbol',Vehicle)
+
+2,C,0010
+1,4,,2,,,
+2,2,,9,,2,,
+2
+
+1

@@ -1,0 +1,694 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-92) bionic; urgency=medium
+ .
+   * .log with branches
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-08-25
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -9,6 +9,7 @@ conv_64=0
+ endif
+ 
+ SUBDIRS := src example
++# oad
+ 
+ $(TOPTARGETS): $(SUBDIRS)
+ $(SUBDIRS):
+@@ -18,4 +19,6 @@ $(SUBDIRS):
+ test:
+ 	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && conv_64=${conv_64} /bin/bash ./as && echo tests ok
+ 
++clean:
++	cd tests; /bin/bash ./c; cd ffdec; /bin/bash ./c; cd ../data; /bin/bash ./c
+ .NOTPARALLEL:
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -32,6 +32,9 @@ else
+ 	endif
+ 	#exit_end 1 #same problem as ocompiler, even at qemu-amd64
+ 	#endif
++	ifndef _L
++		_L=../src
++	endif
+ endif
+ 
+ all: build exe
+@@ -53,11 +56,11 @@ lib:
+ link:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		if [ "${conv_64}" = "1" ]; then \
+-			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L../src -l:${libname}; \
++			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L${_L} -l:${libname}; \
+ 		elif [ -z "${ldprefer}" ]; then \
+-			$(CC) ${linkerflags} ${name}.o -o ${name} -L../src -l:${libname}; \
++			$(CC) ${linkerflags} ${name}.o -o ${name} -L${_L} -l:${libname}; \
+ 		else \
+-			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc -L../src -l:${libname}; \
++			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc -L${_L} -l:${libname}; \
+ 		fi \
+ 	else \
+ 		if [ "${conv_64}" = "1" ]; then \
+@@ -71,8 +74,8 @@ link:
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+-		LD_LIBRARY_PATH=../src ${launcher} ./${name} && \
+-		LD_LIBRARY_PATH=../src ${launcher} ./${name} x; \
++		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} && \
++		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} x; \
+ 	fi
+ #\? is 0x3f log,alt,titles,x , inside -0x30, 0 is 0x30, \; to 0xb log,alt,x , = is 0xd log,titles,x
+ 
+--- actionswf-1.orig/example/entry.oc
++++ actionswf-1/example/entry.oc
+@@ -1,5 +1,9 @@
+ 
+ entryraw main(sd argc,sd *argv0,ss *argv1)
+ sd flags=flag_pool
+-if argc!=1;or flags (flag_pool_read);end
++if argc!=1
++	or flags (flag_pool_read)
++	or flags (debug_x_pad|debug_log) #for tests/data
++	or flags (debug_titles) #on display for oadbg
++end
+ #sub argv1# 0x30
+--- actionswf-1.orig/example/entry_arg.oc
++++ actionswf-1/example/entry_arg.oc
+@@ -1,5 +1,9 @@
+ 
+ entry main(sd argc,sv *argv)
+ sd flags=flag_pool
+-if argc!=1;or flags (flag_pool_read);end
++if argc!=1
++	or flags (flag_pool_read)
++	or flags (debug_x_pad|debug_log) #for tests/data
++	or flags (debug_titles) #only to be same with entryraw
++end
+ #incst argv;ss argv1;set argv1 argv#;sub argv1# 0x30
+--- /dev/null
++++ actionswf-1/example/mrdi
+@@ -0,0 +1,2 @@
++
++_L=~/x86_64_lib ./mrd
+--- /dev/null
++++ actionswf-1/oad/Makefile
+@@ -0,0 +1,68 @@
++
++ifndef OCOMP
++OCOMP=o
++endif
++ifndef OLINK
++OLINK=ounused
++endif
++ifndef OCONV
++OCONV=otoc
++endif
++ifndef linkerflags
++linkerflags=-O3 -s
++endif
++
++OFLAGS=x_file 2
++
++libname=liboadbgdata.so
++exte=libexte.a
++
++all: ${libname} oadbgdatai.h
++re:
++	$(MAKE) clean
++	$(MAKE) all
++
++%.oh: %.h.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	cat $< >> $@
++%.h: %.oh
++	${OCOMP} $< ${OFLAGS}
++	${OCONV} $<.x
++
++${exte}: intern.o
++	$(AR) cr ${exte} $^
++
++${libname}: common.h ${exte} main.o
++	${OLINK} main.oc.log intern.oc.log
++	$(CC) ${linkerflags} -shared $(word 3,$^) -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
++	# -l:intern.o ? is ok but exclude-libs intern.o/...a will not exclude
++
++%.o: %.oc
++	${OCOMP} $< ${OFLAGS}
++	${OCONV} $<.x
++	$(CC) -c -w ${compilerflags} $*.c
++	#-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
++
++clean:
++	-rm -f common.oh.log common.oh.x common.oh common.h
++	-rm -f intern.o intern.oc.log intern.oc.x intern.c
++	-rm -f main.o main.oc.log main.oc.x main.c
++	-rm -f ${exte} ${libname}
++	-rm -f oadbgdatai.oh.log oadbgdatai.oh.x oadbgdatai.oh oadbgdatai.h
++
++distclean: clean
++
++test:
++	echo "Nothing"
++
++install-lib:
++	install -D ${libname} \
++		$(DESTDIR)$(prefix)/lib/${libname}
++
++install: all install-lib
++
++uninstall:
++	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++
++#.PHONY: all install clean distclean uninstall test
+--- /dev/null
++++ actionswf-1/oad/common.h.oh
+@@ -0,0 +1,8 @@
++
++const NULL=0
++
++const EXIT_SUCCESS=0
++const EXIT_FAILURE=-1
++
++const SEEK_SET=0
++const SEEK_END=2
+--- /dev/null
++++ actionswf-1/oad/intern.oc
+@@ -0,0 +1,31 @@
++
++format elfobj64
++
++override include_sec 1
++include "common.h" "common.h.oh"
++
++importx "fopen" fopen
++importx "fseek" fseek
++importx "ftell" ftell
++importx "malloc" malloc
++importx "fread" fread
++importx "fclose" fclose
++
++function fcontent(sd path)
++	sd f;set f fopen(path,"rb")
++	if f!=(NULL)
++		call fseek(f,0,(SEEK_END))
++		sd size;set size ftell(f)
++		if size!=-1
++			call fseek(f,0,(SEEK_SET))
++			sd mem;set mem malloc(size)
++			if mem!=(NULL)
++				call fread(mem,size,1,f)
++				call fclose(f)
++				return mem
++			end
++		end
++		call fclose(f)
++	end
++	return (NULL)
++end
+--- /dev/null
++++ actionswf-1/oad/main.oc
+@@ -0,0 +1,35 @@
++
++format elfobj64
++
++importx "strlen" strlen
++importx "malloc" malloc
++importx "free" free
++importx "memcpy" memcpy
++
++override include_sec 1
++include "common.h" "common.h.oh"
++
++import "fcontent" fcontent
++functionx oadata_make(ss swf_fullpath)
++	#.x
++	sd size;add size strlen(swf_fullpath)
++	sd allsize=2+1;add allsize size
++	sd mem;set mem malloc(allsize)
++	if mem!=(NULL)
++		call memcpy(mem,swf_fullpath,size)
++		add size mem
++		char xext=".x";vstr sxext^xext
++		call memcpy(size,sxext,\.xext)
++		sd xcontent;set xcontent fcontent(mem)
++		if xcontent!=(NULL)
++			call free(xcontent)
++		end
++		call free(mem)
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++
++#functionx oadata_ok(ss swf_fullpath)
++# move ...last.data ...data
++#end
+--- /dev/null
++++ actionswf-1/oad/md
+@@ -0,0 +1,2 @@
++
++compilerflags="-g" linkerflags=" " make $@
+--- /dev/null
++++ actionswf-1/oad/mk
+@@ -0,0 +1,3 @@
++
++if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; fi
++OCONV=~/o/ocompiler-1/otoc/otoc OCOMP=${OCOMP} make
+--- /dev/null
++++ actionswf-1/oad/oadbgdatai.h.oh
+@@ -0,0 +1,2 @@
++
++import "oadata_make" oadata_make
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -10,7 +10,7 @@ SpriteId
+ ActionInitBool
+ TextLinesNumber
+ TextLines
+-{NumberA,NumberB1...NumberBN}
++{NumberA,NumberB1-NumberBN}
+ 
+ Or:
+ 
+@@ -30,5 +30,6 @@ ActionInitBool is a 0/1 digit.
+ TextLinesNumber is the number of lines that TextLines has.
+ TextLines is the text like in action[_sprite] call.
+ NumberA lines, then NumberA1+...+NumberAN=TextLinesNumber
+-NumberB1...NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
++NumberB1-NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
++	Dots in this construct are for liboadbgdata
+ FinalSpriteId is the id in the swf
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -81,14 +81,14 @@ all: ${libname}
+ ifeq (${conv_64},1)
+ ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
+ ${libname}: ${name}
+-	cp ${name} ${libname}
++	ln -f ${name} ${libname}
+ 
+ else
+ #same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+ ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} ${L} -lc -L. -l:${exte} --exclude-libs ${exte}
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+-	cp ${name} ${libname}
++	ln -f ${name} ${libname}
+ 	#is not with ln -s because will be one file install
+ else
+ ${libname}: ${name}
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -246,6 +246,8 @@ import "brace_blocks_add_write" brace_bl
+ import "brace_blocks_add_write_offset" brace_blocks_add_write_offset
+ import "brace_blocks_remove_write" brace_blocks_remove_write
+ import "brace_blocks_remove_write_ex" brace_blocks_remove_write_ex
++import "debug_xlog" debug_xlog
++
+ #position
+ function action__code_row(sd codepointer)
+ 	charx rcb#1;set rcb (FALSE)   #at definefunction is another collision with this but is not a problem now
+@@ -281,19 +283,20 @@ function action__code_row_ex(sd codepoin
+         return codepointer
+ 	endif
+ 	if attrib=(block_end)
+-        add codepointer (DWORD)
+-        if codepointer#=(else_flag)
++		add codepointer (DWORD)
++		if codepointer#=(else_flag)
+ 			ss p;set p ret_cont_break()
+ 			if p#=(ret_cont_break_nothing)
+ 				call action_code_else_add()
+ 			else #dead jump after return/continue/break
+ 				call action_code_else_resolve((skip_flag)) #and add the condition because there is number_of_unclosed after block_else_end
+ 			end
+-            add codepointer (DWORD)
+-        else
+-            call brace_blocks_remove_write()
+-        endelse
+-        return codepointer
++			add codepointer (DWORD)
++			call debug_xlog() #here is after stepout from previous if (start of elseif or else)
++		else
++			call brace_blocks_remove_write()
++		endelse
++		return codepointer
+ 	endif
+ 	if attrib=(block_else_end)
+         setcall codepointer action_code_conditions_end(codepointer)
+@@ -456,6 +459,7 @@ function action_code_write_conditions(sd
+ 			endelse
+ 			call action_push((ap_RegisterNumber),first_reg)
+ 			call action_one(attr2)
++			call debug_xlog()
+ 			return codepointer
+ 		endif
+ 		add codepointer (DWORD)
+@@ -471,6 +475,7 @@ function action_code_write_conditions(sd
+ 		call add_while_top_off((while_marker))
+ 		#
+ 		if codepointer#!=(inter_for)
++			call debug_xlog()
+ 			setcall codepointer action_code_pack(codepointer)
+ 			import "write_forward_offset" write_forward_offset
+ 			sub sizeOff (WORD)
+@@ -497,6 +502,7 @@ function action_code_write_conditions(sd
+ 		setcall codepointer action_code_right_util_ex(codepointer,#c2)
+ 		call write_ifjump_withNot(c2)
+ 	end
++	call debug_xlog() #and infinite? .x is also not knowing about that
+ 	#return the current pointer
+ 	return codepointer
+ endfunction
+@@ -817,8 +823,10 @@ function action_code_right_util_ex(sd co
+ 			else
+ 				call write_ifjump_withNot(0)
+ 			end
++			call debug_xlog()
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			call action_code_else_add()
++			call debug_xlog()
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			import "actionpush" actionpush
+ 			call actionpush() # must release example 2:[jump 0]3 , next will correct jump 0
+@@ -911,38 +919,39 @@ endfunction
+ 
+ #codepointer
+ function action_definefunction(sd codepointer)
+-    if codepointer#!=(function_action)
+-        return codepointer
+-    endif
+-    add codepointer (DWORD)
++	if codepointer#!=(function_action)
++		return codepointer
++	endif
++	add codepointer (DWORD)
+ 
+ 	sd debug_related#3  #for debug file offset and codeSize pointer and line offset, must be recursive too
+-    setcall codepointer action_deffunction(codepointer,#debug_related)
++	setcall codepointer action_deffunction(codepointer,#debug_related)
+ 
+ 	#all previous codes must pe catched at this phase, this place for this function is tested, example: "function(){" on one row
+ 	call debug_phase_code(codepointer)
+ 
+-    #a function marker for return and for..in case
+-    sd block;setcall block cond_blocks();set block# (brace_blocks_function);call brace_blocks_counter_inc()
+-    #
+-    call brace_blocks_add_write()
+-    #
+-    sd index_atstart
+-    setcall index_atstart brace_blocks_counter()
+-    set index_atstart index_atstart#
+-    #
+-    sd index_current=0x7fFFffFF
+-    while index_atstart<=index_current
+-        setcall codepointer action__code_row(codepointer)
+-        setcall index_current brace_blocks_counter()
+-        set index_current index_current#
+-    endwhile
+-    #close function marker for return and for..in case
+-    call brace_blocks_counter_dec()
++	#a function marker for return and for..in case
++	sd block;setcall block cond_blocks();set block# (brace_blocks_function);call brace_blocks_counter_inc()
++	#
++	call brace_blocks_add_write()
++	#
++	sd index_atstart
++	setcall index_atstart brace_blocks_counter()
++	set index_atstart index_atstart#
++	#
++	call debug_xlog()
++	sd index_current=0x7fFFffFF
++	while index_atstart<=index_current
++		setcall codepointer action__code_row(codepointer)
++		setcall index_current brace_blocks_counter()
++		set index_current index_current#
++	endwhile
++	#close function marker for return and for..in case
++	call brace_blocks_counter_dec()
+ 	#for debug log codeSize
+ 	call debug_concludefunction(#debug_related)
+ 	#
+-    return codepointer
++	return codepointer
+ endfunction
+ #codepointer
+ function action_deffunction(sv codepointer,sv debug_related)
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -220,7 +220,7 @@ function action_one(sd tag)
+ 	call actionpush()
+ 	call swf_actionblock_add(#tag,(actionrecordheader_tag_size))
+ 	import "debug_phase_code_add" debug_phase_code_add
+-	call debug_phase_code_add((FALSE))
++	call debug_phase_code_add((FALSE),(Comma))
+ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -305,7 +305,7 @@ function debug_spritedone(sd p,sd i)
+ 	end
+ end
+ 
+-function debug_phase_code_add(sd is_long,ss plength)
++function debug_phase_code_add(sd is_long,ss arg2)
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+ 		call debug_phase_code_flush()
+@@ -322,24 +322,24 @@ function debug_phase_code_add(sd is_long
+ 		end
+ 		ss m;set m debug_data.mem
+ 		add m debug_data.size
+-
+-		set m# (Comma) #even if is only 1 action is lines,a1,a2...an
+-
+ 		if is_long=(TRUE)
++			set m# (Comma)
+ 			inc m
+ 			sd here_sz
+ 			ss second=1
+-			add second plength
++			add second arg2
+ 			if second#!=0
+ 				set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
+ 				add m here_sz
+ 				sub here_sz 2
+-				call md_printf(m,"%02X",plength#)
++				call md_printf(m,"%02X",arg2#)
+ 			else
+-				set here_sz md_printf(m,"%X",plength#)  #only 0 is also printed
++				set here_sz md_printf(m,"%X",arg2#)  #only 0 is also printed
+ 				sub here_sz 2+2
+ 			end
+ 			add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
++		else
++			set m# arg2 ##even if is only 1 action is lines,a1,a2...an
+ 		end
+ 		set debug_data.size sz
+ 	endif
+@@ -416,3 +416,9 @@ function debug_concludefunction(sv point
+ 		end
+ 	endif
+ end
++
++function debug_xlog()
++	if debug_mark_get.offsets!=(NULL)
++		call debug_phase_code_add((FALSE),(Period))
++	end
++end
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -96,22 +96,22 @@ a.value=2;
+ attachMovie('carSymbol','fastCar_mc',1,a)
+ 
+ 5,9,0009
+-1,5,
++1.,5,
+ 2,7,,2,,2,,
+ 2,2,,2,,4,,
+ 3,E,,
+-1,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2,5,2,5,
++1,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2.,5,2.,5,
+ 1,B,,4,,5,,,4,
+ 1,7,,2,,2,,,2,,2,,
+-1,2,5,0006,2,,,9,,
+-1,A,,,2,2,,5,,A,,,2,2,,2,2,
+-1,A,,,2,2,,2
++1,2,5,0006.,2,,,9,,
++1,A,,,2.,2,,5,.,A,,,2.,2,,2.,2,
++1,A,,,2.,2,,2
+ 1,2,,,,,2,,,,,2,,,5,,
+-1,7,,2,2,,,,,2,,5,,,2
+-1,2,,,1,1,,2,4,,2
+-1,2,,5,,,1,1,,2,2,,7,,2
+-1,2,2,2,,2
+-1,2,,,2,2
++1,7,,2.,2,,,,,2,,5,,,2.
++1,2,,,1,1,,2,4,.,2
++1,2,,5,,,1,1,,2,2,,7,.,2
++1.,2,2,2,,2
++1,2,,,2.,2
+ 2,9,,
+ 1,2,,7,
+ 1,2,,E,,,2,,2,,A,
+@@ -120,27 +120,27 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ 1,2,,2,,1,,,2,,,,
+ 1,2,,2,,5,,1,,,2,,,,
+ 1,2,,2,,2,,1,,,2,,,5,,
+-2,4,,5,,2,2,,2,2,,
++2,4,,5,,2.,2,,2.,2,,
+ 3,2,5,0006
+-1,2,
++1.,2,
+ 1,
+ 1,2,,2,,2,5,0006
+-1,2,
++1.,2,
+ 1,
+ 1,8,,2,,7,,
+ 1,2,5,0030
+-1,2,
++1.,2,
+ 1,7,,2,,2,,
+ 1,7,,2,,
+ 1,
+ 1,2,,2,,4,,2,,
+ 1,2,,2,,4,,
+ 1,2,,2,,2,5,0006
+-1,2,
++1.,2,
+ 1,
+ 1,8,,2,,7,,
+ 1,2,5,0030
+-1,2,
++1.,2,
+ 1,7,,2,,2,,
+ 1,7,,2,,
+ 1,
+@@ -151,7 +151,7 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ 3,B,,5,,
+ 3,B,,5,,2,,5,,2,,5,,2,,5,,
+ 3,9,
+-3,A,0014,2,,2,,2,,,
++3,A,0014.,2,,2,,2,,,
+ 1,19,,
+ 6,9,,
+ 1,2,,7,
+@@ -171,7 +171,7 @@ function Vehicle(){
+ Object.registerClass('carSymbol',Vehicle)
+ 
+ 2,C,0010
+-1,4,,2,,,
++1.,4,,2,,,
+ 2,2,,9,,2,,
+ 2
+ 
+--- /dev/null
++++ actionswf-1/tests/data/a
+@@ -0,0 +1,7 @@
++
++if [ -n "${1}" ]; then g="gdb"; fi
++
++o a.oc x_file 1 && \
++otoc a.oc.x && \
++cc -g a.c -L../../oad -loadbgdata && \
++LD_LIBRARY_PATH=../../oad ${g} ./a.out && echo $?
+--- /dev/null
++++ actionswf-1/tests/data/a.oc
+@@ -0,0 +1,12 @@
++
++format elfobj64
++
++override include_sec 1
++#include "../../oad/oadbgdata.h" "../../oad/oadbgdata.h.oh"
++include "../../oad/oadbgdatai.h" "../../oad/oadbgdatai.h.oh"
++
++entry main()
++
++call oadata_make("../../example/example.swf")
++
++return 0
+--- /dev/null
++++ actionswf-1/tests/data/c
+@@ -0,0 +1,2 @@
++
++rm -f a.oc.log a.oc.x a.o a.c a.out
+--- actionswf-1.orig/tests/ffdec/c
++++ actionswf-1/tests/ffdec/c
+@@ -1 +1 @@
+-rm a.o a.out a.swf a.swf.log a.swf.orig
++rm -f a.o a.out a.swf a.swf.log a.swf.orig
+--- actionswf-1.orig/translator/Makefile
++++ /dev/null
+@@ -1,37 +0,0 @@
+-
+-ifndef OCOMP
+-OCOMP=o
+-endif
+-ifndef OLINK
+-OLINK=ounused
+-endif
+-ifndef OCONV
+-OCONV=otoc
+-endif
+-ifndef linkerflags
+-linkerflags=-O3 -s
+-endif
+-
+-OFLAGS=x_file 2
+-
+-proj=oatouch
+-
+-all: ${proj}
+-
+-${proj}: main.o
+-	${OLINK} main.oc.log
+-	@echo
+-	$(CC) ${linkerflags} $< -o ${proj}
+-	# `pkg-config --libs gtk4`
+-
+-%.o: %.oc
+-	${OCOMP} $< ${OFLAGS}
+-	${OCONV} $<.x
+-	$(CC) -c $*.c
+-
+-clean:
+-	-rm -f main.o
+-	-rm -f main.oc.log
+-	-rm -f main.oc.x
+-	-rm -f main.c
+-	-rm -f ${proj}
+--- actionswf-1.orig/translator/main.oc
++++ /dev/null
+@@ -1,4 +0,0 @@
+-
+-format elfobj64
+-
+-entry main()
+--- actionswf-1.orig/translator/mk
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-OCONV=~/o/ocompiler-1/otoc/otoc make
