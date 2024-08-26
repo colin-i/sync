@@ -1,0 +1,370 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-93) bionic; urgency=medium
+ .
+   * xx for branches
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-08-26
+
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -31,5 +31,5 @@ TextLinesNumber is the number of lines t
+ TextLines is the text like in action[_sprite] call.
+ NumberA lines, then NumberA1+...+NumberAN=TextLinesNumber
+ NumberB1-NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+-	Dots in this construct are for liboadbgdata
++	Slashes in this construct are for liboadbgdata
+ FinalSpriteId is the id in the swf
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -291,8 +291,8 @@ function action__code_row_ex(sd codepoin
+ 			else #dead jump after return/continue/break
+ 				call action_code_else_resolve((skip_flag)) #and add the condition because there is number_of_unclosed after block_else_end
+ 			end
++			call debug_xlog(codepointer) #here is after stepout from previous if (start of elseif or else)
+ 			add codepointer (DWORD)
+-			call debug_xlog() #here is after stepout from previous if (start of elseif or else)
+ 		else
+ 			call brace_blocks_remove_write()
+ 		endelse
+@@ -459,7 +459,7 @@ function action_code_write_conditions(sd
+ 			endelse
+ 			call action_push((ap_RegisterNumber),first_reg)
+ 			call action_one(attr2)
+-			call debug_xlog()
++			call debug_xlog(codepointer) #stepped in for in
+ 			return codepointer
+ 		endif
+ 		add codepointer (DWORD)
+@@ -475,7 +475,7 @@ function action_code_write_conditions(sd
+ 		call add_while_top_off((while_marker))
+ 		#
+ 		if codepointer#!=(inter_for)
+-			call debug_xlog()
++			call debug_xlog(codepointer) #after jump
+ 			setcall codepointer action_code_pack(codepointer)
+ 			import "write_forward_offset" write_forward_offset
+ 			sub sizeOff (WORD)
+@@ -502,7 +502,8 @@ function action_code_write_conditions(sd
+ 		setcall codepointer action_code_right_util_ex(codepointer,#c2)
+ 		call write_ifjump_withNot(c2)
+ 	end
+-	call debug_xlog() #and infinite? .x is also not knowing about that
++	call debug_xlog(codepointer) #after jump
++	#and infinite? .x is also not knowing about that
+ 	#return the current pointer
+ 	return codepointer
+ endfunction
+@@ -823,10 +824,10 @@ function action_code_right_util_ex(sd co
+ 			else
+ 				call write_ifjump_withNot(0)
+ 			end
+-			call debug_xlog()
++			call debug_xlog(codepointer) #after jump
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			call action_code_else_add()
+-			call debug_xlog()
++			call debug_xlog(codepointer) #at start of second part and after
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			import "actionpush" actionpush
+ 			call actionpush() # must release example 2:[jump 0]3 , next will correct jump 0
+@@ -927,6 +928,8 @@ function action_definefunction(sd codepo
+ 	sd debug_related#3  #for debug file offset and codeSize pointer and line offset, must be recursive too
+ 	setcall codepointer action_deffunction(codepointer,#debug_related)
+ 
++	#this on same row with dummy at .log
++	call debug_xlog(codepointer) #after define function tag
+ 	#all previous codes must pe catched at this phase, this place for this function is tested, example: "function(){" on one row
+ 	call debug_phase_code(codepointer)
+ 
+@@ -939,7 +942,6 @@ function action_definefunction(sd codepo
+ 	setcall index_atstart brace_blocks_counter()
+ 	set index_atstart index_atstart#
+ 	#
+-	call debug_xlog()
+ 	sd index_current=0x7fFFffFF
+ 	while index_atstart<=index_current
+ 		setcall codepointer action__code_row(codepointer)
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -253,23 +253,25 @@ function debug_phase_code(sd codepointer
+ 				#do not write now, can be break;} or Not Not If  and need to truncate that
+ 				datax size#1;set size debug_data.size
+ 				set debug_data.size 0
+-				set debug_data.rows rows
++				add debug_data.rows rows  ## add? is the case with break+ret and remove them and will be an empty row and that flush was skipped, below example
++				#example, add var q , at while break below example (at debug_phase_code_flush)
+ 			end
+ 		endif
+ 	endif
+ endfunction
+ function debug_phase_code_flush()
+ 	if debug_data.rows!=0
+-		#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+-		#will not bother concludefunction where is asking with ftell
+-		sv file%p_debug_file
+-		call f_printf((fprintf_min+1),file#,"%lu",debug_data.rows)
+ 		if debug_phase_code.size!=0
+-		# while(q){break;}
++		# while(q){\nbreak;\n}  and with this example showing that previous ifs are ok also at last flush call
++		#there are rows with only one action_one, example in tests/ffdec
++			#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
++			#will not bother concludefunction where is asking with ftell
++			sv file%p_debug_file
++			call f_printf((fprintf_min+1),file#,"%lu",debug_data.rows)
+ 			call f_write(file#,debug_data.mem,debug_phase_code.size)
++			call f_write(file#,"\n",1)
++			set debug_data.rows 0
+ 		end
+-		call f_write(file#,"\n",1)
+-		set debug_data.rows 0
+ 	end
+ end
+ 
+@@ -301,14 +303,14 @@ function debug_spritedone(sd p,sd i)
+ 	if of#!=(NULL)
+ 		call debug_base_core(p)
+ 		call debug_write("\n",1)
+-		call debug_base_core(i)
++		callg debug_base_core(i)
+ 	end
+ end
+ 
+ function debug_phase_code_add(sd is_long,ss arg2)
+ 	sv of%p_offsets
+ 	if of#!=(NULL)
+-		call debug_phase_code_flush()
++		call debug_phase_code_flush()  #since Slash, function c(){\n} , will also add empty row but with one .
+ 		sd sz;set sz debug_data.size
+ 		if is_long=(TRUE)
+ 			add sz (action_debug_comma+2+2)
+@@ -417,8 +419,11 @@ function debug_concludefunction(sv point
+ 	endif
+ end
+ 
+-function debug_xlog()
++import "x_log" x_log
++function debug_xlog(sd codepointer)
+ 	if debug_mark_get.offsets!=(NULL)
+-		call debug_phase_code_add((FALSE),(Period))
++		call debug_phase_code_add((FALSE),(Slash))
++	else
++		callg x_log(codepointer)
+ 	end
+ end
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -10,10 +10,14 @@ function x_data()
+ 	value f=NULL
+ 	datax size#1
+ 	value mem=NULL
++	value flog=NULL
+ 	if f!=(NULL)
+ 		call f_close(#f)
+ 	elseif mem!=(NULL)
+ 		call mem_free(#mem)
++		if flog!=(NULL)
++			call f_close(#flog)
++		end
+ 	end
+ end
+ 
+@@ -59,6 +63,17 @@ importx "fclose" fclose
+ 
+ #aftercallimport ebool
+ 
++import "f_write" f_write
++
++function x_log(sd codepointer)
++	valuex base#1
++	if x_data.flog!=(NULL)
++#before: is visible that var a is 6 bytes in swf and 12 in x ; divu test 0x10000;call debug_phase_code_add((TRUE),#test)
++#there are more calculations if write at .log, expands comes from member(compressed)/fn/args to fn/args/member(uncompressed)
++		sub codepointer base
++		callg f_write(x_data.flog,#codepointer,(DWORD)) #DWORD like x_data.size
++	end
++end
+ 
+ import "action__code_row" action__code_row
+ import "strlen_of" strlen_of
+@@ -68,7 +83,7 @@ function actionx()
+ 	vdatax pointer#1
+ 	valuex end#1
+ 	if x_data.mem!=(NULL)
+-	#flag_x | log, alt, debug_x
++	#flag_x log(xx) | log, alt, debug_x|debug_x_pad
+ 		if end<=^pointer
+ 			call error("error at x") # and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
+ 		end
+@@ -77,6 +92,9 @@ function actionx()
+ 		incst pointer              ##here at parse was the escaped mem
+ 		set x_pointer.base pointer ##for x_pointer function
+ 		add pointer size           ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
++		if x_data.flog!=(NULL)
++			set x_log.base pointer
++		end
+ 		while pointer#!=(math_end)
+ 			set pointer action__code_row(pointer)
+ 		endwhile
+@@ -91,7 +109,6 @@ import "error" error
+ import "memalloc" memalloc
+ import "f_open_mem" f_open_mem
+ import "f_tell" f_tell
+-import "f_write" f_write
+ import "f_tell_errors" f_tell_errors
+ import "memalloc_errors" memalloc_errors
+ 
+@@ -103,7 +120,7 @@ function x_init(sd flags,sd path)
+ 		call error(err)
+ 	end
+ 	datax flag#1
+-	set flag flags  ##log is on current x, here is another x, no parse, no log
++	set flag flags  ##log is on current x, here is another x, no parse, no log/alt
+ 	and flag (flags_x)
+ 	if flag!=0
+ 		sd size;setcall size strlen_of(path,2+1)
+@@ -125,7 +142,18 @@ function x_init(sd flags,sd path)
+ 			call fclose(file)
+ 			set actionx.pointer x_data.mem
+ 			add actionx.end actionx.pointer
+-			and flags (~debug_log)
++
++			sd xx=debug_log
++			and xx flags
++			if xx!=0
++				inc size
++				set b memalloc(size)
++				call sprintf(b,"%s.xx",path)
++				set x_data.flog f_open_mem(b,"wb")
++			end
++
++			const antix_read=debug_log|debug_alt
++			and flags (~antix_read)
+ 		end
+ 	end
+ 	return flags
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -95,23 +95,23 @@ var a=new Object();
+ a.value=2;
+ attachMovie('carSymbol','fastCar_mc',1,a)
+ 
+-5,9,0009
+-1.,5,
++5,9,0009/
++1,5,
+ 2,7,,2,,2,,
+ 2,2,,2,,4,,
+ 3,E,,
+-1,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2.,5,2.,5,
++1,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2/,5,2/,5,
+ 1,B,,4,,5,,,4,
+ 1,7,,2,,2,,,2,,2,,
+-1,2,5,0006.,2,,,9,,
+-1,A,,,2.,2,,5,.,A,,,2.,2,,2.,2,
+-1,A,,,2.,2,,2
++1,2,5,0006/,2,,,9,,
++1,A,,,2/,2,,5,/,A,,,2/,2,,2/,2,
++1,A,,,2/,2,,2
+ 1,2,,,,,2,,,,,2,,,5,,
+-1,7,,2.,2,,,,,2,,5,,,2.
+-1,2,,,1,1,,2,4,.,2
+-1,2,,5,,,1,1,,2,2,,7,.,2
+-1.,2,2,2,,2
+-1,2,,,2.,2
++1,7,,2/,2,,,,,2,,5,,,2/
++1,2,,,1,1,,2,4,/,2
++1,2,,5,,,1,1,,2,2,,7,/,2
++1/,2,2,2,,2
++1,2,,,2/,2
+ 2,9,,
+ 1,2,,7,
+ 1,2,,E,,,2,,2,,A,
+@@ -120,27 +120,27 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ 1,2,,2,,1,,,2,,,,
+ 1,2,,2,,5,,1,,,2,,,,
+ 1,2,,2,,2,,1,,,2,,,5,,
+-2,4,,5,,2.,2,,2.,2,,
+-3,2,5,0006
+-1.,2,
++2,4,,5,,2/,2,,2/,2,,
++3,2,5,0006/
++1,2,
+ 1,
+-1,2,,2,,2,5,0006
+-1.,2,
++1,2,,2,,2,5,0006/
++1,2,
+ 1,
+ 1,8,,2,,7,,
+-1,2,5,0030
+-1.,2,
++1,2,5,0030/
++1,2,
+ 1,7,,2,,2,,
+ 1,7,,2,,
+ 1,
+ 1,2,,2,,4,,2,,
+ 1,2,,2,,4,,
+-1,2,,2,,2,5,0006
+-1.,2,
++1,2,,2,,2,5,0006/
++1,2,
+ 1,
+ 1,8,,2,,7,,
+-1,2,5,0030
+-1.,2,
++1,2,5,0030/
++1,2,
+ 1,7,,2,,2,,
+ 1,7,,2,,
+ 1,
+@@ -151,7 +151,7 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ 3,B,,5,,
+ 3,B,,5,,2,,5,,2,,5,,2,,5,,
+ 3,9,
+-3,A,0014.,2,,2,,2,,,
++3,A,0014/,2,,2,,2,,,
+ 1,19,,
+ 6,9,,
+ 1,2,,7,
+@@ -170,8 +170,8 @@ function Vehicle(){
+ }
+ Object.registerClass('carSymbol',Vehicle)
+ 
+-2,C,0010
+-1.,4,,2,,,
++2,C,0010/
++1,4,,2,,,
+ 2,2,,9,,2,,
+ 2
+ 
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -2,7 +2,7 @@
+ # 0 is diff and move else is diff or exit, without ${1} is clean
+ 
+ if [ -z "${1}" ]; then
+-	rm -f a.o a.out a.swf a.swf.x a.swf.log
++	rm -f a.o a.out a.swf a.swf.x a.swf.log a.swf.xx
+ 	if [ -e .expected/a.swf ]; then rm .expected/a.swf; fi
+ 	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+ 	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
