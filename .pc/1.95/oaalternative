@@ -1,0 +1,123 @@
+
+#1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
+#isdebug=
+#wait=
+
+if [ -z "${1}" ]; then echo file path required; exit 1; fi
+
+dname=`dirname ${1}`
+cd ${dname} || exit 1
+
+bname=`basename ${1}`
+
+log=${bname}.log
+if [ ! -e ${log} ]; then echo no log; exit 1; fi
+
+folder="${bname%.*}"
+if [ -n "${isdebug}" ]; then echo ${folder}; fi
+
+if [ -z "${isdebug}" ]; then
+	ffdec -export script ${folder} ${1} > /dev/null || exit 1  #silent somehow
+else
+	echo ffdec -export script ${folder} ${1}
+	ffdec -export script ${folder} ${1} || exit 1
+fi
+if [ -n "${wait}" ]; then read; fi
+
+out=${folder}.dbg
+mkdir -p ${out}
+
+cd ${folder}
+
+v=
+if [ -n "${isdebug}" ]; then v=-v; fi
+
+move () {
+	mv ${v} "${1}" ${2}
+}
+doaction () {
+	to=${1}
+	shift
+	if [ ${#@} = 0 ]; then
+		return 1
+	fi
+	for var in "${@}"; do
+		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
+		f=${f::-1}
+		f=${to}_${f:6}
+		move ${var} ../${out}/${f}
+	done
+	return 0
+}
+new_tag () {
+	s=${p}
+	t= #type
+	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
+}
+
+ainits_counter=1
+ainits=( )
+s= #id
+while read p; do
+	if [ -z "${s}" ]; then
+		new_tag
+	else
+		if [ -z "${t}" ]; then
+			if [ -z "${p}" ]; then
+				t=1 #can be show or done
+			else
+				t=2 #action
+				at=${p}
+				lines=
+				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
+				ainits[${s}]=${at}
+			fi
+		elif [ ${t} = 1 ]; then
+			if [ -z "${p}" ]; then
+				echo show
+			else
+			#done
+				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
+				if [ "${ainits[${s}]}" = 1 ]; then #this sprite has a DoInitAction tag
+					if [ ${ainits_counter} != 1 ]; then
+						ainits_file="_${ainits_counter}.as"
+					else
+						ainits_file=".as"
+					fi
+					f=`find -name DoInitAction${ainits_file}`
+					move  ${f} ../${out}/${s}
+					ainits_counter=$((ainits_counter+1))
+				fi
+				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"` || {
+					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"` # | xargs -I {} echo "\"{}\""`; doaction ${s} "${f}" #double escape the quotes
+					if [ -n "${f}" ]; then #is a button
+						d=../${out}/${s}
+						move "${f}" ${d}
+						sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
+					fi #else is empty
+				}
+			fi
+			s=
+		elif [ -z "${lines}" ]; then
+			lines=${p}
+			if [ -n "${isdebug}" ]; then echo lines = ${lines}; fi
+		else
+			if [ ${lines} -gt 0 ]; then
+				lines=$((lines-1))
+			elif [ -z "`echo ${p} | grep ,`" ] && [ -z "`echo ${p} | grep \|`" ]; then
+				new_tag
+			fi
+		fi
+	fi
+done <../${log}
+
+doaction 0 `find -maxdepth 3 -name DoAction.as`
+
+#part 2
+if [ -n "${2}" ]; then
+	cd ..
+	move ${1} ${1}.orig && \
+	${2} && \
+	diff ${1} ${1}.orig && \
+	rm -r ${v} ${folder}
+fi
