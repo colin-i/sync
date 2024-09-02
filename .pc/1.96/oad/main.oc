@@ -1,0 +1,35 @@
+
+format elfobj64
+
+importx "strlen" strlen
+importx "malloc" malloc
+importx "free" free
+importx "memcpy" memcpy
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+import "fcontent" fcontent
+functionx oadata_make(ss swf_fullpath)
+	#.x
+	sd size;add size strlen(swf_fullpath)
+	sd allsize=2+1;add allsize size
+	sd mem;set mem malloc(allsize)
+	if mem!=(NULL)
+		call memcpy(mem,swf_fullpath,size)
+		add size mem
+		char xext=".x";vstr sxext^xext
+		call memcpy(size,sxext,\.xext)
+		sd xcontent;set xcontent fcontent(mem)
+		if xcontent!=(NULL)
+			call free(xcontent)
+		end
+		call free(mem)
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+#functionx oadata_ok(ss swf_fullpath)
+# move ...last.data ...data
+#end

@@ -1,0 +1,276 @@
+
+format elfobj64
+
+include "../include/prog.h"
+
+import "f_close" f_close
+import "mem_free" mem_free
+
+function x_data()
+	value f=NULL
+	datax size#1
+	value mem=NULL
+	value flog=NULL
+	if f!=(NULL)
+		call f_close(#f)
+	elseif mem!=(NULL)
+		call mem_free(#mem)
+		if flog!=(NULL)
+			call f_close(#flog)
+		end
+	end
+end
+
+function x_pointer(sv pointer)
+	sd value
+	set value pointer#
+	if x_data.f!=(NULL)
+		import "action_debug" action_debug
+		sub pointer# action_debug((action_debug_get_mem))
+		inc pointer#  ##only to not be comparable with (no_pointer)
+	elseif x_data.mem!=(NULL) #flag_x
+		vstrx base#1
+		add value base ##reverse
+		dec value      ##same
+	end
+	return value
+end
+function x_pointer_x(sv pointer) #same as x_pointer
+	if x_data.f!=(NULL)
+		sub pointer# action_debug((action_debug_get_mem))
+		inc pointer#
+	end
+end
+function x_pointer_touchless(sv pointer)
+	sd value
+	set value pointer#
+	if x_data.mem!=(NULL)
+		add value x_pointer.base
+		dec value
+	end
+	return value
+end
+
+import "action_code_values" action_code_values
+import "action_code_get" action_code_get
+
+importx "fwrite" fwrite
+importx "sprintf" sprintf
+importx "fseek" fseek
+importx "fread" fread
+importx "fclose" fclose
+
+
+#aftercallimport ebool
+
+import "f_write" f_write
+
+function x_log(sd codepointer)
+	valuex base#1
+	if x_data.flog!=(NULL)
+#before: is visible that var a is 6 bytes in swf and 12 in x ; divu test 0x10000;call debug_phase_code_add((TRUE),#test)
+#there are more calculations if write at .log, expands comes from member(compressed)/fn/args to fn/args/member(uncompressed)
+		sub codepointer base
+		callg x_log_val((xlog_code),(DWORD),codepointer) #DWORD like x_data.size
+	end
+end
+
+import "action__code_row" action__code_row
+import "strlen_of" strlen_of
+
+#is not x or x?
+function actionx()
+	vdatax pointer#1
+	valuex end#1
+	if x_data.mem!=(NULL)
+	#flag_x log(xx) | log, alt, debug_x|debug_x_pad
+		if end<=^pointer
+			call error("error at x") # and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
+		end
+		sd size
+		set size pointer#v         ;#size of escaped block that was at parse + pad if debug_x_pad flag
+		incst pointer              ##here at parse was the escaped mem
+		set x_pointer.base pointer ##for x_pointer function
+		add pointer size           ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
+		if x_data.flog!=(NULL)
+			set x_log.base pointer
+		end
+		while pointer#!=(math_end)
+			set pointer action__code_row(pointer)
+		endwhile
+		add pointer (DWORD) #this will continue at next actionx
+		return (TRUE)
+	end
+	return (FALSE)
+end
+
+
+import "error" error
+import "memalloc" memalloc
+import "f_open_mem" f_open_mem
+import "f_tell" f_tell
+import "f_tell_errors" f_tell_errors
+import "memalloc_errors" memalloc_errors
+
+function x_init(sd flags,sd path)
+	vstr err="swf started, x not closed"
+	if x_data.f!=(NULL)
+		call error(err)
+	elseif x_data.mem!=(NULL)
+		call error(err)
+	end
+
+	sd test=flags_x
+	and test flags
+	if test!=0
+		sd size;setcall size strlen_of(path,2+1)
+		sd b;setcall b memalloc(size)
+		call sprintf(b,"%s.x",path)
+
+		and test (flag_x)
+		if test=0 #save
+			set x_data.f f_open_mem(b,"wb") #'b' on windows is not 't' that can change line ends and is working more there
+			datax flag#1
+			set flag (debug_x_pad)
+			and flag flags
+		else #restore ,no parse, no log/alt
+			sd file;set file f_open_mem(b,"rb")
+			call fseek(file,0,(SEEK_END))
+			set actionx.end f_tell_errors(file)
+			call fseek(file,0,(SEEK_SET))
+			set x_data.mem memalloc_errors(actionx.end,file)
+			call fread(x_data.mem,actionx.end,1,file)
+			call fclose(file)
+			set actionx.pointer x_data.mem
+			add actionx.end actionx.pointer
+
+			sd xx=xx_flags
+			and xx flags
+			if xx=(xx_flags)
+				inc size
+				set b memalloc(size)
+				call sprintf(b,"%s.xx",path)
+				set x_data.flog f_open_mem(b,"wb")
+			end
+			and flags (~antix_read)
+		end
+	end
+	return flags
+end
+
+function debug_x_pointers(valuex start,valuex size)
+	valuex mark#1
+	if x_data.f!=(NULL)
+		set x_data.size 0
+
+		inc size  ##is on last \0
+		sub size start
+		if x_init.flag=(debug_x_pad)
+			set mark f_tell(x_data.f) #long
+			add mark :
+			add mark size    ##overflow is same
+
+			sd pad=0xf
+			xor pad mark
+			inc pad
+			and pad 0xf
+			sd all;set all size; add all pad
+			call f_write(x_data.f,#all,:)
+		else
+			call f_write(x_data.f,#size,:)
+		end
+		set mark f_tell(x_data.f)
+		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
+		if x_init.flag=(debug_x_pad)
+			if pad!=0
+				char zero={0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0}
+				call f_write(x_data.f,#zero,pad)
+			end
+		end
+	end
+end
+
+function debug_x_base(sd mem,sd size)
+	#already wrote
+	sub size x_data.size
+	add mem x_data.size
+
+	call f_write(x_data.f,mem,size)
+	add x_data.size size
+end
+function debug_x(sd mem,sd nr)
+	if x_data.f!=(NULL)
+		mult nr (action_code_values_unit)
+		call debug_x_base(mem,nr)
+
+		call fseek(x_data.f,debug_x_pointers.mark,(SEEK_SET))
+		call fwrite(debug_x_pointers.start,debug_x_pointers.size,1,x_data.f)
+		call fseek(x_data.f,0,(SEEK_END))
+	end
+end
+
+function debug_x_preexpand(sv p_codepointer)
+	sv codepointer;set codepointer p_codepointer#
+	sd value;set value codepointer#
+	if x_data.f!=(NULL)
+		sd values;set values action_code_values()
+		sub codepointer values
+		call debug_x_base(values,codepointer)
+		incst x_data.size  ##will skip unexpanded member string at next write
+	end
+	incst p_codepointer#
+	return value
+end
+function debug_x_preexpand_inter(sd codepointer)
+	if x_data.f!=(NULL)
+		sd values;set values action_code_values()
+		sub codepointer values
+		call debug_x_base(values,codepointer)
+	end
+end
+function debug_x_expand(sd values)
+	if x_data.f!=(NULL)
+		if values!=(NULL)
+			sd size;set size action_code_get()
+			sub size values
+			call f_write(x_data.f,values,size)
+		else
+			value n=NULL
+			call f_write(x_data.f,#n,:)
+		end
+	end
+end
+
+#codepointer
+function x_call(sv pmember,sv pfname,sv codepointer)
+	if x_data.mem!=(NULL)
+		import "action_caller_right" action_caller_right
+		import "action_member_loop_right" action_member_loop_right
+		set codepointer action_caller_right(pfname,codepointer)
+		set pmember# codepointer#
+		if pmember#=(no_pointer)
+			incst codepointer ##to pass the pointer
+		else
+			set codepointer action_member_loop_right(codepointer)
+		end
+	end
+	return codepointer
+end
+
+function x_log_val(sd type,sd size,sd val)
+	call f_write(x_data.flog,#type,(BYTE))
+	if size!=0
+		callg f_write(x_data.flog,#val,size)
+	end
+end
+function x_log_val_if(sd type,sd size,sd val)
+	if x_data.flog!=(NULL)
+		callg x_log_val(type,size,val)
+	end
+end
+function x_log_const(sd offset)
+	if x_data.flog!=(NULL) #flag_pool_read is already tested
+		sub offset x_pointer.base
+		callg x_log_val((xlog_new),(QWORD),offset)
+	end
+end
