@@ -1,0 +1,146 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+196) xenial; urgency=medium
+ .
+   * second action2 can be in problem when is pointer
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-09-04
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1LCpb4wgabj8SlgiC8-f5Frihk6tiL-A6
++File ID: 1NN9b_ruE4GuFsEDeyYE9qyjXnD_2vxbs
++<p>Found file: ./ocompiler-1-5+195.x86_64.rpm, 1NN9b_ruE4GuFsEDeyYE9qyjXnD_2vxbs, 2024-09-04T08:01:29.613Z, 84436, https://drive.google.com/uc?id=1NN9b_ruE4GuFsEDeyYE9qyjXnD_2vxbs&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+194.x86_64.rpm, 1LCpb4wgabj8SlgiC8-f5Frihk6tiL-A6, 2024-08-23T11:11:29.516Z, 84219, https://drive.google.com/uc?id=1LCpb4wgabj8SlgiC8-f5Frihk6tiL-A6&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+192.x86_64.rpm, 13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL, 2024-08-22T09:23:55.183Z, 84131, https://drive.google.com/uc?id=13yUUZQuQpT_JrkO4v8a5JQfG66nmk8bL&export=download
+--- ocompiler-1.orig/ostrip/file.oc
++++ ocompiler-1/ostrip/file.oc
+@@ -146,7 +146,7 @@ function seek(sd file,sd offset,sd whenc
+ 	sd return;SetCall return fseek(file,offset,whence)
+ 	#at lseek:
+ 	#	tested again with same truncate -s ... . fseek with a decent offset is not error, at ftell will be
+-	#	with a negative offset if ftell is also wrong then fseek will error, if will overflow and ftell will end again in a good offset, then even with a negative offset, fseek will be ok
++	#	with a negative offset fseek will error if crossing through the beginning
+ 	if return!=0
+ 		call erMessage("fseek error")
+ 	endif
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -354,13 +354,17 @@ function action2(sd outfile,sv pbuffer)
+ 	if a2!=(Xfile_action2_set)
+ 		if a2=(Xfile_action2_divu)
+ 			set a2 (Xfile_action2_div)
++			call write_longcast_uns(outfile,#replay)
+ 		elseif a2=(Xfile_action2_remu)
+ 			set a2 (Xfile_action2_rem)
++			call write_longcast_uns(outfile,#replay)
++		else
++			call write_longcast(outfile,#replay)
+ 		end
+-		call write_longcast(outfile,#replay)
+ 		call write(outfile,#a2,1)
+ 	end
+ 
++	call write_longcast_simple(outfile) #(long)p-log    invalid operands to binary - (have long int and char *)
+ 	call arg(pbuffer,outfile)
+ 	callg writetn(outfile)
+ end
+@@ -547,6 +551,11 @@ function unsigned(sd outfile)
+ 	char a="unsigned "^
+ 	callg write(outfile,#a,\.a)
+ end
++function write_longcast_simple(sd outfile)
++	call writel(outfile)
++	call write(outfile,#write_long.a,\write_long.a)
++	call writer(outfile)
++end
+ function write_longcast_ex_ex(sd outfile,sd pbuffer,sv sign,sv fn)
+ 	call writel(outfile)
+ 	call sign(outfile)
+@@ -557,6 +566,9 @@ end
+ function write_longcast_ex(sd outfile,sd pbuffer,sv sign)
+ 	callg write_longcast_ex_ex(outfile,pbuffer,sign,varfunc)
+ end
++function write_longcast_uns(sd outfile,sd pbuffer)
++	callg write_longcast_ex_ex(outfile,pbuffer,unsigned,varfunc)
++end
+ function write_longcast_arg(sd outfile,sd pbuffer)
+ 	callg write_longcast_ex_ex(outfile,pbuffer,unsigned,arg)
+ end
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -30,34 +30,34 @@ struct st{
+ void f(int* dummy,...){//void f(...) was working with gcc13 but with 5 still is: ISO C requires a named argument before '...'
+ 	long* a=0;
+ 	long* b=0;
+-	a=&b;
+-	b=a[0];
+-	b=((char*)a)[0];
+-	b=((short*)a)[0];
+-	b=((int*)a)[0];
+-	b=((long*)a)[0];
++	a=(long)&b;
++	b=(long)a[0];
++	b=(long)((char*)a)[0];
++	b=(long)((short*)a)[0];
++	b=(long)((int*)a)[0];
++	b=(long)((long*)a)[0];
+ 	int c;
+ 	long* d=c;
+-	a=((struct st*)d)->a;
++	a=(long)((struct st*)d)->a;
+ 	if(2==2){
+ 		return;
+ 	};
+ };
+ long*puts();
+ long*main(int* argc,...){
+-	b=b;
+-	b=(long)b+1;
+-	b=(long)b-1;
+-	b=(long)b*1;
+-	c1=(long)c1/1;
+-	c1=(long)c1/1;
+-	c1=(long)c1%1;
+-	c1=(long)c1%1;
+-	c1=(long)c1&1;
+-	c1=(long)c1|1;
+-	b=(long)b^1;
++	b=(long)b;
++	b=(long)b+(long)1;
++	b=(long)b-(long)1;
++	b=(long)b*(long)1;
++	c1=(long)c1/(long)1;
++	c1=(unsigned long)c1/(long)1;
++	c1=(long)c1%(long)1;
++	c1=(unsigned long)c1%(long)1;
++	c1=(long)c1&(long)1;
++	c1=(long)c1|(long)1;
++	b=(long)b^(long)1;
+ 	intern(1,"q\nw\re\tr",a,a);
+-	b=puts();
++	b=(long)puts();
+ 	if(1==1){
+ 		//elseif 1!!1
+ 		//elseif 1!1
