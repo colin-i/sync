@@ -1,0 +1,31 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+importx "fopen" fopen
+importx "fseek" fseek
+importx "ftell" ftell
+importx "malloc" malloc
+importx "fread" fread
+importx "fclose" fclose
+
+function fcontent(sd path)
+	sd f;set f fopen(path,"rb")
+	if f!=(NULL)
+		call fseek(f,0,(SEEK_END))
+		sd size;set size ftell(f)
+		if size!=-1
+			call fseek(f,0,(SEEK_SET))
+			sd mem;set mem malloc(size)
+			if mem!=(NULL)
+				call fread(mem,size,1,f)
+				call fclose(f)
+				return mem
+			end
+		end
+		call fclose(f)
+	end
+	return (NULL)
+end

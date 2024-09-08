@@ -1,0 +1,445 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-97) bionic; urgency=medium
+ .
+   * - xlog_code
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-09-08
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -1,6 +1,5 @@
+ TOPTARGETS := all install clean distclean uninstall test
+-
+-#ifndef test
++#distclean is called for configures (unexistent here, then, is deprecated for us)
+ 
+ ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), i386)
+ conv_64=1
+@@ -14,7 +13,6 @@ SUBDIRS := src example
+ $(TOPTARGETS): $(SUBDIRS)
+ $(SUBDIRS):
+ 	$(MAKE) -C $@ conv_64=${conv_64} $(MAKECMDGOALS)
+-.PHONY: $(TOPTARGETS) $(SUBDIRS)
+ 
+ test:
+ 	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && conv_64=${conv_64} /bin/bash ./as && echo tests ok
+@@ -25,4 +23,5 @@ install:
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative
+ 
++.PHONY: $(TOPTARGETS) $(SUBDIRS)
+ .NOTPARALLEL:
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -13,7 +13,7 @@ const NULL=0
+ const BYTE=1
+ const WORD=2
+ const DWORD=4
+-const QWORD=8
++#const QWORD=8
+ 
+ const SEEK_SET=0
+ const SEEK_CUR=1
+@@ -146,4 +146,4 @@ const doubleH_sign=0x80000000
+ #const F_OK=0  # 0 2 4 6 are same as windows
+ const R_OK=4
+ 
+-include "xlog.h"
++include "xlog.h.oh"
+--- actionswf-1.orig/include/xlog.h
++++ /dev/null
+@@ -1,5 +0,0 @@
+-
+-const xlog_code=0
+-const xlog_unique=1
+-const xlog_new=2
+-const xlog_id=3
+--- /dev/null
++++ actionswf-1/include/xlog.h.oh
+@@ -0,0 +1,13 @@
++
++const xlog_type_size=1 #BYTE
++const xlog_code_size=4 #DWORD
++const xlog_unique=0
++const xlog_new=1
++const xlog_new_size=8 #QWORD
++const xlog_id=2
++const xlog_id_size=2 #WORD
++
++const xlog_act=0x2C
++const xlog_branch=0x2F
++const xlog_string=0x5E
++const xlog_innerbranchend=0x7C
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -22,18 +22,13 @@ re:
+ 	$(MAKE) clean
+ 	$(MAKE) all
+ 
+-%.oh: %.h.oh
+-	echo "format elfobj64" > $@
+-	echo "orphan off" >> $@
+-	cat $< >> $@
+-%.h: %.oh
+-	${OCOMP} $< ${OFLAGS}
+-	${OCONV} $<.x
++xlog=../include/xlog.
+ 
+ ${exte}: intern.o
+ 	$(AR) cr ${exte} $^
+-
+-${libname}: common.h ${exte} main.o
++objects=main.o intern.o
++${objects}: common.h
++${libname}: ${exte} main.o
+ 	${OLINK} main.oc.log intern.oc.log
+ 	$(CC) ${linkerflags} -shared $(word 3,$^) -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
+ 	# -l:intern.o ? is ok but exclude-libs intern.o/...a will not exclude
+@@ -43,9 +38,18 @@ ${libname}: common.h ${exte} main.o
+ 	${OCONV} $<.x
+ 	$(CC) -c -w ${compilerflags} $*.c
+ 	#-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
++%.oh: %.h.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	cat $< >> $@
++%.h: %.oh
++	if [ $@ = common.h ]; then $(MAKE) ${xlog}h;fi
++	${OCOMP} $< ${OFLAGS}
++	${OCONV} $<.x
+ 
+ clean:
+ 	-rm -f common.oh.log common.oh.x common.oh common.h
++	-rm -f ${xlog}oh.log ${xlog}oh.x ${xlog}oh ${xlog}h
+ 	-rm -f intern.o intern.oc.log intern.oc.x intern.c
+ 	-rm -f main.o main.oc.log main.oc.x main.c
+ 	-rm -f ${exte} ${libname}
+@@ -65,4 +69,6 @@ install: all install-lib
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
+ 
+-#.PHONY: all install clean distclean uninstall test
++#.PHONY targets are not default files, then, make will not try to test if a rule has an updated file on the disk (if has will skip that rule)
++.PHONY: all install install-lib clean distclean uninstall test re
++#tested: .NOTPARALLEL: in parent is not preserved here
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -6,3 +6,9 @@ const EXIT_FAILURE=-1
+ 
+ const SEEK_SET=0
+ const SEEK_END=2
++
++const NewLine=0xa
++const CReturn=0xd
++const ZeroChar=0x30
++
++einclude "../include/xlog.h" "../include/xlog.h.oh" #e? xlog_id is else
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -11,7 +11,7 @@ importx "malloc" malloc
+ importx "fread" fread
+ importx "fclose" fclose
+ 
+-function fcontent(sd path)
++function fcontent(sd path,sv psize)
+ 	sd f;set f fopen(path,"rb")
+ 	if f!=(NULL)
+ 		call fseek(f,0,(SEEK_END))
+@@ -22,6 +22,7 @@ function fcontent(sd path)
+ 			if mem!=(NULL)
+ 				call fread(mem,size,1,f)
+ 				call fclose(f)
++				set psize# size
+ 				return mem
+ 			end
+ 		end
+@@ -29,3 +30,124 @@ function fcontent(sd path)
+ 	end
+ 	return (NULL)
+ end
++
++function memnl(ss log,sv pnext)
++	set pnext# 1
++	if log#!=(NewLine) #emptyrow
++		inc log
++		while log#!=(NewLine)
++			inc log
++		end
++		add pnext# log
++		dec log
++		if log#!=(CReturn)  #an example: ffdec action output is \r\n
++			inc log
++		end
++	else
++		add pnext# log
++	end
++	return log
++end
++function memdec(ss start,value end)
++	sub end start
++	add start end
++	sd nr=1
++	sd n;sd val=0
++	while end>^0
++		dec start
++
++		set n start#
++		sub n (ZeroChar)
++		mult n nr
++		add val n
++
++		mult nr 10 #is ok on 32 where sizeof long is 4
++		dec end
++	end
++	return val
++end
++
++function actionrow(sd log,sd end,sv xx)
++	ss test;set test log
++	inc test    ##first is a digit
++	while test!=end
++		if test#=(xlog_act) #action
++			add xx# (xlog_code_size)
++			inc test
++			set log test
++		elseif test#=(xlog_string) #string
++			ss xxcontent;set xxcontent xx#
++			add xx# (xlog_type_size)
++			if xxcontent#=(xlog_unique)
++			elseif xxcontent#=(xlog_new)
++				add xx# (xlog_new_size)
++			else #xlog_id
++				add xx# (xlog_id_size)
++			end
++			inc test
++			set log test
++		elseif test#=(xlog_branch) #branch start
++			inc test
++			set log test
++		elseif test#=(xlog_innerbranchend) #innerbranch end
++			inc test
++			set log test
++		else
++			inc test
++		end
++	end
++	return log
++end
++
++function loop(ss log,sd *x,sd xx,sd logsize)
++	add logsize log
++	if log!=logsize  ##else no action sprites/shows
++		sd next
++		ss p;set p memnl(log,#next)
++		whiletrue
++			#[log,p)  #preid
++			set log next
++
++			set p memnl(log,#next)
++			if log=p
++				set log next
++				# empty: show/done
++				set p memnl(log,#next)
++				set log next
++				if log=logsize
++					return (EXIT_SUCCESS)
++				end
++				set p memnl(log,#next)
++			else
++				#ainit
++				set log next
++
++				#linesnr
++				set p memnl(log,#next)
++				value linesnr#1;set linesnr memdec(log,p)
++				set log next
++
++				while linesnr>^0
++					set p memnl(log,#next)
++					set log next
++					dec linesnr
++				end
++
++				#[actions]
++				whiletrue
++					if log=logsize
++						return (EXIT_SUCCESS) #no [more] actions and nothing else
++					end
++					set p memnl(log,#next)
++					sd pointer
++					set pointer actionrow(log,p,#xx)
++					if log=pointer
++						break  #[log,p) will continue at preid
++					end
++					set log next   ##was a row with actions
++				end
++			end
++		end
++	end
++	return (EXIT_SUCCESS)
++end
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -10,6 +10,8 @@ override include_sec 1
+ include "common.h" "common.h.oh"
+ 
+ import "fcontent" fcontent
++import "loop" loop
++
+ functionx oadata_make(ss swf_fullpath)
+ 	sd size;add size strlen(swf_fullpath)
+ 	char logext=".log";vstr slogext^logext
+@@ -22,15 +24,17 @@ functionx oadata_make(ss swf_fullpath)
+ 		call memcpy(mem,swf_fullpath,size)
+ 		add size mem
+ 		call memcpy(size,slogext,\.logext)
+-		sd logcontent;set logcontent fcontent(mem)
++		sd logsize
++		sd logcontent;set logcontent fcontent(mem,#logsize)
+ 		if logcontent!=(NULL)
+ 			call memcpy(size,sxext,\.xext)
+-			sd xcontent;set xcontent fcontent(mem)
++			sd dummy
++			sd xcontent;set xcontent fcontent(mem,#dummy)
+ 			if xcontent!=(NULL)
+ 				call memcpy(size,sxxext,\.xxext)
+-				sd xxcontent;set xxcontent fcontent(mem)
++				sd xxcontent;set xxcontent fcontent(mem,#dummy)
+ 				if xxcontent!=(NULL)
+-					set exit (EXIT_SUCCESS)
++					set exit loop(logcontent,xcontent,xxcontent,logsize)
+ 					call free(xxcontent)
+ 				else
+ 					set exit (EXIT_FAILURE)
+--- /dev/null
++++ actionswf-1/oad/mds
+@@ -0,0 +1,3 @@
++
++if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; fi
++OCONV=~/o/ocompiler-1/otoc/otoc OCOMP=${OCOMP} ./md
+--- actionswf-1.orig/oad/mk
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; fi
+-OCONV=~/o/ocompiler-1/otoc/otoc OCOMP=${OCOMP} make
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -156,7 +156,7 @@ install: all install-lib
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
+ 
+-.PHONY: all install clean distclean uninstall test
++.PHONY: all install install-lib clean distclean uninstall test
+ 
+ .NOTPARALLEL:
+ 
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -271,7 +271,7 @@ function actionpool_getvalue_ex(ss value
+ 							call pool_realentry(nr)
+ 							call debug_xlog_pool()
+ 						else
+-							callg x_log_val_if((xlog_id),(WORD),nr) #read and rest of xx flags
++							callg x_log_val_if((xlog_id),(xlog_id_size),nr) #read and rest of xx flags
+ 						end
+ 						return nr
+ 					endif
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -325,7 +325,7 @@ function debug_phase_code_add(sd is_long
+ 		ss m;set m debug_data.mem
+ 		add m debug_data.size
+ 		if is_long=(TRUE)
+-			set m# (Comma)
++			set m# (xlog_act)
+ 			inc m
+ 			sd here_sz
+ 			ss second=1
+@@ -429,14 +429,14 @@ function debug_xlog_ex(sd codepointer,sd
+ end
+ function debug_xlog(sd codepointer)
+ # [else loop}[ forin{[ for;;[ if/loop{[ ?[ :[ func{[ if}[
+-	callg debug_xlog_ex(codepointer,(Slash))
++	callg debug_xlog_ex(codepointer,(xlog_branch))
+ end
+ function debug_xlog_stepout(sd codepointer)
+ # for;;[| func{[}|
+-	callg debug_xlog_ex(codepointer,(Verticalbar))
++	callg debug_xlog_ex(codepointer,(xlog_innerbranchend))
+ end
+ function debug_xlog_pool() #pool_flag is already tested
+ 	if log_init.prexx=(prexx_flags)
+-		callg debug_phase_code_add((FALSE),(Caret))
++		callg debug_phase_code_add((FALSE),(xlog_string))
+ 	end
+ end
+--- actionswf-1.orig/src/mrd
++++ actionswf-1/src/mrd
+@@ -1,2 +1,2 @@
+ 
+-LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d
++LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d $@
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -73,7 +73,8 @@ function x_log(sd codepointer)
+ #before: is visible that var a is 6 bytes in swf and 12 in x ; divu test 0x10000;call debug_phase_code_add((TRUE),#test)
+ #there are more calculations if write at .log, expands comes from member(compressed)/fn/args to fn/args/member(uncompressed)
+ 		sub codepointer base
+-		callg x_log_val((xlog_code),(DWORD),codepointer) #DWORD like x_data.size
++		#callg x_log_val((xlog_code),(DWORD),codepointer) #is parallel, to add a type is extra
++		callg f_write(x_data.flog,#codepointer,(xlog_code_size)) #DWORD like x_data.size
+ 	end
+ end
+ 
+@@ -274,7 +275,7 @@ function x_call(sv pmember,sv pfname,sv
+ end
+ 
+ function x_log_val(sd type,sd size,sd val)
+-	call f_write(x_data.flog,#type,(BYTE))
++	call f_write(x_data.flog,#type,(xlog_type_size))
+ 	if size!=0
+ 		callg f_write(x_data.flog,#val,size)
+ 	end
+@@ -287,6 +288,6 @@ end
+ function x_log_const(sd offset)
+ 	if x_data.flog!=(NULL) #flag_pool_read is already tested
+ 		sub offset x_pointer.base
+-		callg x_log_val((xlog_new),(QWORD),offset)
++		callg x_log_val((xlog_new),(xlog_new_size),offset)
+ 	end
+ end
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -15,7 +15,11 @@ o a.oc logfile 0 conv_64 ${conv_64} ${in
+ 			cc a.o -L${_L}../src -lactionswf
+ 		fi
+ 	else
+-		cc a.o -L${_L}../src -lactionswf
++		if [ -z "${LD_LIBRARY_PATH}" ]; then
++			cc a.o -L${_L}../src -lactionswf
++		else
++			cc a.o -L${LD_LIBRARY_PATH} -lactionswf
++		fi
+ 	fi && {
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../src; fi
+ 		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out
