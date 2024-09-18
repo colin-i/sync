@@ -1,0 +1,233 @@
+
+#aftercalli
+
+#N structure
+
+function number(sv pbuffer,sd outfile)
+include "number.h"
+	charx item#1;call get_char(pbuffer,#item)
+	while item!=(Xfile_numbers_done)
+		#this coresponds to number.pre.oc line
+		value functions^normal;               value  *^neg;            value  *^not;            value  *^notneg;            value  *^open;                 value  *^close;                 value *^add;                value *^sub;                value *^mul;                value *^div;                value *^divu;                value *^and;                value *^or;                value *^xor;                value *^pow;                value *^rem;                value *^remu;                value *^shl;                value *^sar;                value *^shr;                value *^equal;                value *^inequal;                value *^less;                value *^greater;                value *^lessequal;                value *^greaterequal;                value *^logicaland;                value *^logicalor;                value *^unsignedless;                value *^unsignedgreater;                value *^unsignedlessequal;                value *^unsignedgreaterequal;                value *^parity;                value *^odd;
+		#if item>^(Xfile_numbers_last);callret aftercallenable();end
+		ss n;set n #data
+		add n item
+		sv f;set f n#
+		#if f=(Xfile_numbers_notmapped);callret aftercallenable();end
+		mult f :
+		add f #functions
+		set f f#
+		call f(outfile,pbuffer)
+		call get_char(pbuffer,#item)
+	end
+end
+
+function numbertype(sv pbuffer,sd outfile)
+	value functions^number_int_long
+	value         *^number_int_data
+	value         *^number_int_datax
+	value         *^number_text_dec
+	value         *^number_text_oct
+	value         *^number_text_hex
+	value         *^number_text_const
+	value         *^number_func_size
+	value         *^number_func_sizex
+	value         *^number_var_size
+	value         *^number_var_offset
+	charx type#1;call get_char(pbuffer,#type)
+	mult type :
+	sv f^functions
+	add f type
+	set f f#
+	callg f(outfile,pbuffer)
+end
+
+function number_int_long(sd outfile)
+	char a="sizeof(long)"^
+	callg write(outfile,#a,\.a)
+end
+function number_int_data()
+	callg unimplemented()
+end
+function number_int_datax()
+	callg unimplemented()
+end
+function number_text_dec(sd outfile,sv pbuffer)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	callg write(outfile,pointer,sz)
+end
+function number_text_oct(sd outfile,sv pbuffer)
+	callg number_text_dec(outfile,pbuffer)
+end
+function number_text_hex(sd outfile,sv pbuffer)
+	callg number_text_dec(outfile,pbuffer)
+end
+function number_text_const(sd outfile,sv pbuffer)
+	callg number_text_dec(outfile,pbuffer)
+end
+function number_func_size(sd outfile,sv pbuffer)
+	callg number_func_sizex(outfile,pbuffer)
+end
+function number_func_sizex(sd outfile,sv pbuffer)
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	char a="sizeof(struct "^
+	call write(outfile,#a,\.a)
+	call write(outfile,pointer,sz)
+	callg writer(outfile)
+end
+function number_var_size(sd outfile,sv pbuffer) #DoT
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer) #\.a is \fn.a in .x
+	sd cmp
+	char c="sizeof("^
+	if sz=loop.szfunctiondef
+		set cmp memcmp(pointer,functiondef.pointer,sz)
+		if cmp=0 #here is not sizeof a struct member, is sizeof an item inside same function
+			call write(outfile,#c,\.c)
+			call var(pbuffer,outfile)
+			callg writer(outfile)
+			ret
+		end
+	end
+	if sz=loop.entrystart#
+		set cmp memcmp(pointer,loop.entrychars,sz)
+		if cmp=0 #same for global variables
+			call write(outfile,#c,\.c)
+			call var(pbuffer,outfile)
+			callg writer(outfile)
+			ret
+		end
+	end
+	char a="sizeof(((struct "^
+	call write(outfile,#a,\.a)
+	call write(outfile,pointer,sz)
+	char b="*)0)->"^
+	call write(outfile,#b,\.b)
+	call var(pbuffer,outfile)
+	callg writer(outfile)
+end
+function number_var_offset(sd outfile,sv pbuffer) #DoT
+#something like this is required for offsetof macro:
+#override include_sec 1
+#include "stddef.h" "dummy.h"
+	datax sz#1;valuex pointer#1
+	call get_string(pbuffer,#sz,#pointer)
+	char a="offsetof(struct "^
+	call write(outfile,#a,\.a)
+	call write(outfile,pointer,sz)
+	call writec(outfile)
+	call var(pbuffer,outfile)
+	callg writer(outfile)
+end
+
+function normal(sd outfile,sv pbuffer)
+	callg numbertype(pbuffer,outfile)
+end
+function neg(sd outfile,sv pbuffer)
+	call write(outfile,#action_tdec.a,1)
+	callg numbertype(pbuffer,outfile)
+end
+function not(sd outfile,sv pbuffer)
+	call write(outfile,#action_tnot.a,1)
+	callg numbertype(pbuffer,outfile)
+end
+function notneg(sd outfile,sv pbuffer)
+	call write(outfile,#action_tnot.a,2)
+	callg numbertype(pbuffer,outfile)
+end
+function open(sd outfile)
+	callg writel(outfile)
+end
+function close(sd outfile)
+	callg writer(outfile)
+end
+function add(sd outfile)
+	callg write(outfile,#action_tinc.a,1)
+end
+function sub(sd outfile)
+	callg write(outfile,#action_tdec.a,1)
+end
+function mul(sd outfile)
+	callg write(outfile,#write_long.point,1)
+end
+function div(sd outfile)
+	callg write(outfile,#comment.a,1)
+end
+function divu(sd outfile)
+	callg div(outfile)
+end
+function and(sd outfile)
+	char a={asciiand,asciiand}
+	callg write(outfile,#a,1)
+end
+function or(sd outfile)
+	char a={asciior,asciior}
+	callg write(outfile,#a,1)
+end
+function xor(sd outfile)
+	char a={asciicirc,asciicirc}
+	callg write(outfile,#a,1)
+end
+function pow()
+	callg unimplemented()
+end
+function rem(sd outfile)
+	char a={asciipercent}
+	callg write(outfile,#a,1)
+end
+function remu(sd outfile)
+	callg rem(outfile)
+end
+function shl(sd outfile)
+	callg write(outfile,#action_tshl1.a,\action_tshl1.a)
+end
+function sar(sd outfile)
+	callg write(outfile,#action_tshr1.a,\action_tshr1.a)
+end
+function shr(sd outfile)
+	callg sar(outfile)
+end
+function equal(sd outfile)
+	callg write(outfile,#cond.eq,\cond.eq)
+end
+function inequal(sd outfile)
+	callg write(outfile,#cond.ne,\cond.ne)
+end
+function less(sd outfile)
+	callg write(outfile,#action_tshl1.a,1)
+end
+function greater(sd outfile)
+	callg write(outfile,#action_tshr1.a,1)
+end
+function lessequal(sd outfile)
+	callg write(outfile,#cond.le,\cond.le)
+end
+function greaterequal(sd outfile)
+	callg write(outfile,#cond.ge,\cond.ge)
+end
+function logicaland(sd outfile)
+	callg write(outfile,#and.a,\and.a)
+end
+function logicalor(sd outfile)
+	callg write(outfile,#or.a,\or.a)
+end
+function unsignedless(sd outfile)
+	callg less(outfile)
+end
+function unsignedgreater(sd outfile)
+	callg greater(outfile)
+end
+function unsignedlessequal(sd outfile)
+	callg lessequal(outfile)
+end
+function unsignedgreaterequal(sd outfile)
+	callg greaterequal(outfile)
+end
+function parity()
+	callg unimplemented()
+end
+function odd()
+	callg unimplemented()
+end
