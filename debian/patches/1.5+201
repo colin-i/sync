@@ -1,0 +1,307 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+201) xenial; urgency=medium
+ .
+   * fn fixes for .log
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-09-19
+
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,4 +1,6 @@
+-File ID: 1eKDb1yviPdf0k0-3hVKY2HkaZHs7Xves
++File ID: 15kUFXJXppl-NTSWz0hTei-iBzxg5kouP
++<p>Found file: ./ocompiler-1-5+200.x86_64.rpm, 15kUFXJXppl-NTSWz0hTei-iBzxg5kouP, 2024-09-19T11:14:45.590Z, 85299, https://drive.google.com/uc?id=15kUFXJXppl-NTSWz0hTei-iBzxg5kouP&export=download
++anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+199.x86_64.rpm, 1eKDb1yviPdf0k0-3hVKY2HkaZHs7Xves, 2024-09-18T10:13:47.815Z, 85196, https://drive.google.com/uc?id=1eKDb1yviPdf0k0-3hVKY2HkaZHs7Xves&export=download
+ anyoneWithLink</p>
+ <p>Found file: ./ocompiler-1-5+198.x86_64.rpm, 1s1qyIGsAjrx9LXaceCEszeb-dWuC5xp_, 2024-09-15T04:37:57.621Z, 85103, https://drive.google.com/uc?id=1s1qyIGsAjrx9LXaceCEszeb-dWuC5xp_&export=download
+--- ocompiler-1.orig/src/files/functions/commons/vars.oc
++++ ocompiler-1/src/files/functions/commons/vars.oc
+@@ -122,14 +122,87 @@ function vars_core_ref_scope(ss content,
+ 
+ 	sd end;set end container
+ 	add end containerReg
+-	While container!=end
+-		Set entrypoint container
+-		Add container (location)
+-		sd pmask;set pmask container
+-		Add container (masksize) #add here, not twice, inside warn_or_log and outside (since logging all variables)
+-		If warningssearch!=(NULL)
++
++	value ptrfunctions%%ptr_functions
++	sd pmask
++	sd against_idata
++	If warningssearch=(NULL)
++		if ptrstructure=ptrfunctions
++			sd position=0
++		endif
++		While container!=end
++			Set entrypoint container
++			Add container (location)
++			set pmask container
++			Add container (masksize) #add here, not twice, inside warn_or_log and outside (since logging all variables)
++
+ 			SetCall varsize strlen(container)
++			If varsize=size
++				Data cmpret#1
++				SetCall cmpret memcmp(container,content,size)
++				If cmpret=zero
++					#if set the reference is true
++					if setref=1
++						#is using another scope? for ounused. at this question, can also not ref a selfref
++						sd referenceBit=referencebit
++						and referenceBit pmask#
++						if referenceBit=0  #entries are defined with refbit
++							#can also consider where \.func, but stil tricked by localfunc.var which is not another scope
++							whiletrue
++								if ptrstructure=ptrfunctions ##scope part or not
++									vdata ptrinnerfunction%globalinnerfunction
++									if ptrinnerfunction#=(TRUE)
++										vdata ptrfunctionTagIndex%ptrfunctionTagIndex
++										if ptrfunctionTagIndex#=position
++											set against_idata (idatabitfunction) #are mixed with imports
++											and against_idata pmask#
++											if against_idata=0
++												break
++											endif
++										endif
++									endif
++									if position_pointer!=(NULL) #is about scope part
++										sd structbit=structbit
++										and structbit pmask#
++										if structbit!=0
++											call addtolog_withchar_ex_atunused(content,size,(log_import))  #structs across multiple objects at ounused
++										else #will reference the scope if the code is called
++											break
++										endelse
++									endif
++								endif
++								#change the reference bit of the mask to true
++								Or pmask# (referencebit)
++								break
++							endwhile
++						endif
++					endif
++					Return entrypoint
++				EndIf
++			EndIf
++			if ptrstructure=ptrfunctions
++				#are mixed with imports
++				set against_idata (idatabitfunction)
++				and against_idata pmask#
++				if against_idata=0
++					inc position
++					if position_pointer!=(NULL)
++						inc position_pointer#
++					endif
++				endif
++			endif
+ 
++			Add varsize blen
++			Add container varsize
++		EndWhile
++	else
++		While container!=end
++			Set entrypoint container
++			Add container (location)
++			set pmask container
++			Add container (masksize)
++
++			SetCall varsize strlen(container)
+ 			Data ReferenceBit=referencebit
+ 			Data checkvalue#1
+ 			Set checkvalue pmask#
+@@ -138,11 +211,9 @@ function vars_core_ref_scope(ss content,
+ 			If checkvalue=zero
+ 				data returnvalue#1
+ 				set returnvalue entrypoint
+-				#
+-				data ptrfunctions%%ptr_functions
+ 				if ptrfunctions=ptrstructure
+ 					Set checkvalue pmask#
+-					sd against_idata=idatabitfunction
++					set against_idata (idatabitfunction)
+ 					and against_idata checkvalue
+ 					if against_idata=0
+ 						and checkvalue (x86_64bit)
+@@ -165,39 +236,11 @@ function vars_core_ref_scope(ss content,
+ 				endif
+ 			endIf
+ 			#elseIf ptrconstants==ptrstructure 0x72
+-		Else
+-			SetCall varsize strlen(container)
+-			If varsize=size
+-				Data cmpret#1
+-				SetCall cmpret memcmp(container,content,size)
+-				If cmpret=zero
+-					#if set the reference is true
+-					if setref=1
+-						#go back from string to mask
+-						#Sub container dwlen
+ 
+-						#get the value and change the reference bit of the mask to true
+-						Data value#1
+-						Set value pmask#
+-						Data referenceBit=referencebit
+-						Or value referenceBit
+-						Set pmask# value
+-					endif
+-					Return entrypoint
+-				EndIf
+-			EndIf
+-			if position_pointer!=(NULL)
+-				#are mixed with imports
+-				sd against=idatabitfunction
+-				and against pmask#
+-				if against=0
+-					inc position_pointer#
+-				endif
+-			endif
+-		endElse
+-		Add varsize blen
+-		Add container varsize
+-	EndWhile
++			Add varsize blen
++			Add container varsize
++		EndWhile
++	endelse
+ 	Return zero
+ endfunction
+ 
+--- ocompiler-1.orig/src/files/functions/xfile_details.oc
++++ ocompiler-1/src/files/functions/xfile_details.oc
+@@ -100,7 +100,11 @@ function xfile_add_fndef_if(sd content,s
+ 									set main.xstruct_dreg main.datasecReg
+ 									if fn=(cENTRYRAW) #must remeber the offset for global sizeof at otoc
+ 										call xfile_entry_offset(sz,main.xstruct)
+-									endif
++									else #also must set structbit
++										value ptrfunctions%%ptr_functions
++										setcall main.xstruct_fn vars_ignoreref(content,sz,ptrfunctions)
++										sub main.xstruct_fn main.functions
++									endelse
+ 									setcall err xfile_add_char((Xfile_function_t_normal))
+ 								endif
+ 								break
+@@ -159,6 +163,11 @@ function xfile_fndef_structend_if(sd el_
+ 					call write(main.xfile,#a,1)
+ 					call lseek(main.xfile,0,(SEEK_END)) #what if on extra? will return -1 but will move. to test, a next SEEK_CUR will be -1, and write?
+ 					set main.xstruct (unierror)
++
++					#and structbit
++					add main.xstruct_fn main.functions
++					add main.xstruct_fn (maskoffset)
++					or main.xstruct_fn# (structbit)
+ 				else #at entryraw must be full empty(stack are not counted at this moment), only for global variables here
+ 					if main.xstruct_dregx!=main.datasecSize
+ 						if main.xstruct_dreg!=main.datasecReg
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -35,6 +35,9 @@ const suffixbit=0x100
+ #bit offset 9: sign
+ const signbit=0x200
+ 
++#bit offset 10: struct like bit
++const structbit=0x400
++
+ const dummy_mask=0
+ const valueslongmask=datapointbit|pointbit
+ const location_bits=stackbit|expandbit
+@@ -192,7 +195,7 @@ Datax *constantsReg#1
+ Const ptr_constants^constantsMax
+ 
+ Datax functionsMax#1
+-Datax *functions#1
++Datax functions#1
+ Datax *functionsReg#1
+ Const ptr_functions^functionsMax
+ 
+@@ -560,6 +563,7 @@ valuex xstruct#1
+ datax xstruct_reg#1
+ datax xstruct_dreg#1
+ datax xstruct_dregx#1
++vdatax xstruct_fn#1
+ 
+ const fsize=0
+ const fsizeX=1
+--- ocompiler-1.orig/tests/.expected/declareN.oc.log
++++ ocompiler-1/tests/.expected/declareN.oc.log
+@@ -7,4 +7,5 @@ ob.e
+ ob.aa
+ da
+ q
++fb
+ x00000023
+--- ocompiler-1.orig/tests/.expected/offsetofvar.oc.log
++++ ocompiler-1/tests/.expected/offsetofvar.oc.log
+@@ -6,4 +6,5 @@ oa.c
+ oa.d
+ o.info
+ q
++fa
+ x0000003c
+--- ocompiler-1.orig/tests/.expected/onearg.oc.log
++++ ocompiler-1/tests/.expected/onearg.oc.log
+@@ -3,4 +3,5 @@ nonearg.oc
+ ob.a
+ o.a
+ q
++ib
+ x00000016
+--- ocompiler-1.orig/tests/.expected/template.oc.log
++++ ocompiler-1/tests/.expected/template.oc.log
+@@ -15,6 +15,8 @@ o.a
+ o.aux
+ o.auxdata
+ q
++iline
+ v.x
+ v.a
++ffile
+ x00000024
+--- ocompiler-1.orig/tests/.expected/unref.oc.log
++++ ocompiler-1/tests/.expected/unref.oc.log
+@@ -6,6 +6,7 @@ oa.c
+ oa.d
+ q
+ q
++ia
+ va.c
+ cb
+ x00000000
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -26,7 +26,13 @@ switch () {
+ 							base64 ${1}
+ 							cat ${btxt}
+ 						fi
+-						exit 1
++						if [ -n "${mod_and_cont}" ]; then
++							echo y \?; read -n1 -t $((60*60*24)) ans
++							if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++							diffs=$((diffs+1))
++						else
++							exit 1
++						fi
+ 					fi
+ 				else
+ 					diffs=$((diffs+1))
