@@ -1,0 +1,153 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+importx "fopen" fopen
+importx "fseek" fseek
+importx "ftell" ftell
+importx "malloc" malloc
+importx "fread" fread
+importx "fclose" fclose
+
+function fcontent(sd path,sv psize)
+	sd f;set f fopen(path,"rb")
+	if f!=(NULL)
+		call fseek(f,0,(SEEK_END))
+		sd size;set size ftell(f)
+		if size!=-1
+			call fseek(f,0,(SEEK_SET))
+			sd mem;set mem malloc(size)
+			if mem!=(NULL)
+				call fread(mem,size,1,f)
+				call fclose(f)
+				set psize# size
+				return mem
+			end
+		end
+		call fclose(f)
+	end
+	return (NULL)
+end
+
+function memnl(ss log,sv pnext)
+	set pnext# 1
+	if log#!=(NewLine) #emptyrow
+		inc log
+		while log#!=(NewLine)
+			inc log
+		end
+		add pnext# log
+		dec log
+		if log#!=(CReturn)  #an example: ffdec action output is \r\n
+			inc log
+		end
+	else
+		add pnext# log
+	end
+	return log
+end
+function memdec(ss start,value end)
+	sub end start
+	add start end
+	sd nr=1
+	sd n;sd val=0
+	while end>^0
+		dec start
+
+		set n start#
+		sub n (ZeroChar)
+		mult n nr
+		add val n
+
+		mult nr 10 #is ok on 32 where sizeof long is 4
+		dec end
+	end
+	return val
+end
+
+function actionrow(sd log,sd end,sv xx)
+	ss test;set test log
+	inc test    ##first is a digit
+	while test!=end
+		if test#=(xlog_act) #action
+			add xx# (xlog_code_size)
+			inc test
+			set log test
+		elseif test#=(xlog_string) #string
+			ss xxcontent;set xxcontent xx#
+			add xx# (xlog_type_size)
+			if xxcontent#=(xlog_unique)
+			elseif xxcontent#=(xlog_new)
+				add xx# (xlog_new_size)
+			else #xlog_id
+				add xx# (xlog_id_size)
+			end
+			inc test
+			set log test
+		elseif test#=(xlog_branch) #branch start
+			inc test
+			set log test
+		elseif test#=(xlog_innerbranchend) #innerbranch end
+			inc test
+			set log test
+		else
+			inc test
+		end
+	end
+	return log
+end
+
+function loop(ss log,sd *x,sd xx,sd logsize)
+	add logsize log
+	if log!=logsize  ##else no action sprites/shows
+		sd next
+		ss p;set p memnl(log,#next)
+		whiletrue
+			#[log,p)  #preid
+			set log next
+
+			set p memnl(log,#next)
+			if log=p
+				set log next
+				# empty: show/done
+				set p memnl(log,#next)
+				set log next
+				if log=logsize
+					return (EXIT_SUCCESS)
+				end
+				set p memnl(log,#next)
+			else
+				#ainit
+				set log next
+
+				#linesnr
+				set p memnl(log,#next)
+				value linesnr#1;set linesnr memdec(log,p)
+				set log next
+
+				while linesnr>^0
+					set p memnl(log,#next)
+					set log next
+					dec linesnr
+				end
+
+				#[actions]
+				whiletrue
+					if log=logsize
+						return (EXIT_SUCCESS) #no [more] actions and nothing else
+					end
+					set p memnl(log,#next)
+					sd pointer
+					set pointer actionrow(log,p,#xx)
+					if log=pointer
+						break  #[log,p) will continue at preid
+					end
+					set log next   ##was a row with actions
+				end
+			end
+		end
+	end
+	return (EXIT_SUCCESS)
+end

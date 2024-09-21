@@ -1,0 +1,18 @@
+
+#1 d will be full diff
+
+if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+	if [ -z "${a}" ]; then a=0
+	elif [ ${a} = -1 ]; then exit; fi
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "qq ./a.out ${a}" || {
+		swfdump -D${1} a.swf.orig > 1
+		swfdump -D${1} a.swf > 2
+		diff 1 2 --color
+		rm 1 2
+		exit 1
+	}
+}

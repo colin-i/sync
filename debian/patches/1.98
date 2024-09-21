@@ -1,0 +1,1873 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-98) bionic; urgency=medium
+ .
+   * .log new features
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-09-21
+
+--- actionswf-1.orig/include/ascii.h
++++ actionswf-1/include/ascii.h
+@@ -43,7 +43,7 @@ Const Openparenthesis=0x28
+ Const Closeparenthesis=0x29
+ Const Asterisk=0x2A
+ Const Plus=0x2B
+-Const Comma=0x2C
++#Const Comma=0x2C
+ Const Hyphen=0x2D
+ Const Period=0x2E
+ Const Slash=0x2F
+@@ -56,7 +56,7 @@ Const _0=0x30
+ #Const _6=0x36
+ #Const _7=0x37
+ #Const _8=0x38
+-#Const _9=0x39
++Const _9=0x39
+ Const Colon=0x3A
+ Const Semicolon=0x3B
+ Const Lessthan=0x3C
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -7,7 +7,12 @@ const xlog_new_size=8 #QWORD
+ const xlog_id=2
+ const xlog_id_size=2 #WORD
+ 
+-const xlog_act=0x2C
+-const xlog_branch=0x2F
+-const xlog_string=0x5E
+-const xlog_innerbranchend=0x7C
++const xlog_jump=0x26          ;#&
++const xlog_actions=0x2A       ;#*
++const xlog_act=0x2C            #,
++const xlog_branch=0x2F        ;#/
++#0-9
++const xlog_function=0x40       #@
++#A-F
++const xlog_string=0x5E        ;#^
++const xlog_innerbranchend=0x7C;#|
+--- actionswf-1.orig/oaalternative
++++ actionswf-1/oaalternative
+@@ -34,6 +34,9 @@ if [ -n "${isdebug}" ]; then v=-v; fi
+ 
+ move () {
+ 	mv ${v} "${1}" ${2}
++	if [ -n "${isdebug}" ]; then
++		cat ${2}
++	fi
+ }
+ doaction () {
+ 	to=${1}
+@@ -68,7 +71,6 @@ while read p; do
+ 			else
+ 				t=2 #action
+ 				at=${p}
+-				lines=
+ 				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
+ 				ainits[${s}]=${at}
+ 			fi
+@@ -98,15 +100,8 @@ while read p; do
+ 				}
+ 			fi
+ 			s=
+-		elif [ -z "${lines}" ]; then
+-			lines=${p}
+-			if [ -n "${isdebug}" ]; then echo lines = ${lines}; fi
+ 		else
+-			if [ ${lines} -gt 0 ]; then
+-				lines=$((lines-1))
+-			elif [ -z "`echo ${p} | grep ,`" ]; then
+-				new_tag
+-			fi
++			new_tag
+ 		fi
+ 	fi
+ done <../${log}
+@@ -116,7 +111,7 @@ doaction 0 `find -maxdepth 3 -name DoAct
+ #part 2
+ if [ -n "${2}" ]; then
+ 	cd ..
+-	move ${1} ${1}.orig && \
++	mv ${v} ${1} ${1}.orig && \
+ 	${2} && \
+ 	diff ${1} ${1}.orig && \
+ 	rm -r ${v} ${folder}
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -24,20 +24,21 @@ re:
+ 
+ xlog=../include/xlog.
+ 
+-${exte}: intern.o
++subobjects=intern.o compare.o
++${exte}: ${subobjects}
+ 	$(AR) cr ${exte} $^
+-objects=main.o intern.o
+-${objects}: common.h
+-${libname}: ${exte} main.o
++objects=main.o ${subobjects}
++${objects}: common.h oadbgdata.h
++${libname}: main.o ${exte}
+ 	${OLINK} main.oc.log intern.oc.log
+-	$(CC) ${linkerflags} -shared $(word 3,$^) -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
+-	# -l:intern.o ? is ok but exclude-libs intern.o/...a will not exclude
++	$(CC) ${linkerflags} -shared $< -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
++# -l:intern.o ? is ok but exclude-libs intern.o/...a will not exclude
+ 
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS}
+ 	${OCONV} $<.x
+ 	$(CC) -c -w ${compilerflags} $*.c
+-	#-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
++#-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
+ %.oh: %.h.oh
+ 	echo "format elfobj64" > $@
+ 	echo "orphan off" >> $@
+@@ -50,10 +51,15 @@ ${libname}: ${exte} main.o
+ clean:
+ 	-rm -f common.oh.log common.oh.x common.oh common.h
+ 	-rm -f ${xlog}oh.log ${xlog}oh.x ${xlog}oh ${xlog}h
++
+ 	-rm -f intern.o intern.oc.log intern.oc.x intern.c
++	-rm -f compare.o compare.oc.log compare.oc.x compare.c
++
+ 	-rm -f main.o main.oc.log main.oc.x main.c
+ 	-rm -f ${exte} ${libname}
++
+ 	-rm -f oadbgdatai.oh.log oadbgdatai.oh.x oadbgdatai.oh oadbgdatai.h
++	-rm -f oadbgdata.oh.log oadbgdata.oh.x oadbgdata.oh oadbgdata.h
+ 
+ distclean: clean
+ 
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -1,6 +1,9 @@
+ 
+ const NULL=0
+ 
++const FALSE=0
++const TRUE=1
++
+ const EXIT_SUCCESS=0
+ const EXIT_FAILURE=-1
+ 
+@@ -10,5 +13,12 @@ const SEEK_END=2
+ const NewLine=0xa
+ const CReturn=0xd
+ const ZeroChar=0x30
++const NineChar=0x39
++const A=0x41
++const F=0x46
++
++const mark_nothing=-1
+ 
++override include_sec 1
+ einclude "../include/xlog.h" "../include/xlog.h.oh" #e? xlog_id is else
++include "oadbgdata.h" "oadbgdata.h.oh"
+--- /dev/null
++++ actionswf-1/oad/compare.oc
+@@ -0,0 +1,59 @@
++
++format elfobj64
++
++importx "strlen" strlen
++importx "malloc" malloc
++importx "memcpy" memcpy
++importx "fopen" fopen
++importx "free" free
++importx "fclose" fclose
++
++override include_sec 1
++include "common.h" "common.h.oh"
++
++char inter_extension_data=".data";vstr p_inter_extension_data^inter_extension_data
++function inter_extension(sv psize)
++	set psize# (\global.inter_extension_data)
++	return global.p_inter_extension_data
++end
++function compare(ss swf_fullpath)
++	sd size;set size strlen(swf_fullpath)
++	sd size1=\global.inter_extension_data
++	add size1 size
++	sd prev;set prev malloc(size1)
++	if prev!=(NULL)
++		call memcpy(prev,swf_fullpath,size)
++		sub size1 size
++		add size prev
++		call memcpy(size,global.p_inter_extension_data,size1)
++		sd file
++		set file fopen(prev,"rb")
++		call free(prev)
++		if file!=(NULL) #will mark diffs
++			call fclose(file)
++		#else will mark all
++		end
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++
++function preoadata_init(sv ppresprites)
++	set ppresprites# malloc(:)
++	sv ps;set ps ppresprites#
++	if ps!=(NULL)
++		set ps# (NULL)
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++function preoadata_free(sv presprites)
++	if presprites!=(NULL)
++		sv ps;set ps presprites
++		while ps#!=(NULL)
++		end
++		call free(presprites)
++	end
++end
++
++entryraw global()
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -66,42 +66,93 @@ function memdec(ss start,value end)
+ 	end
+ 	return val
+ end
++#end
++function memhex_parse_withinc(ss start,sd out) #will max be a jump in DoAction
++	inc start
++	ss a;set a start
++	whiletrue
++		charx c#1;set c a#
++		if c<(ZeroChar);break;end
++		if c<=(NineChar)
++		elseif c<(A);break;end
++		if c>(F);break;end
++		inc a
++	end
++	set out# 0
++	if a!=start   ##there are many ,, with no size
++		ss b;set b a
++		dataxu n#1;set n 1
++		while start!=b
++			dec b
++			dataxu nr#1
++			set nr b#
++			if nr<=(NineChar)
++				sub nr (ZeroChar)
++			else
++				sub nr (A+10)
++			end
++			mult nr n
++			add out# nr
++			mult n 0x10
++		end
++	end
++	return a
++end
+ 
+-function actionrow(sd log,sd end,sv xx)
+-	ss test;set test log
+-	inc test    ##first is a digit
+-	while test!=end
+-		if test#=(xlog_act) #action
+-			add xx# (xlog_code_size)
+-			inc test
+-			set log test
+-		elseif test#=(xlog_string) #string
+-			ss xxcontent;set xxcontent xx#
+-			add xx# (xlog_type_size)
++dataxu xoffset#1
++function newbranch(sv px,sv pxx)
++	sd xx;set xx pxx#
++	sd branchsize;set branchsize xx#
++	sub branchsize global.xoffset
++	add global.xoffset branchsize
++	add px# branchsize
++	add pxx# (xlog_code_size)
++end
++function actionrow(ss log,sd end,sv px,sv pxx)
++	inc log    ##first is a digit
++	whiletrue # break} is still with / (also resolves are there) but it is a row with \n end anyway
++		charx chr#1
++		set chr log#
++		if log<(ZeroChar)
++			break
++		end
++		if log>(NineChar)
++			break
++		end
++		inc log
++	end
++	while log!=end
++		dataxu number#1  #u16,u32,u16
++		if log#=(xlog_act) #action
++			set log memhex_parse_withinc(log,#number)
++		elseif log#=(xlog_string) #string
++			ss xxcontent;set xxcontent pxx#
++			add pxx# (xlog_type_size)
+ 			if xxcontent#=(xlog_unique)
+ 			elseif xxcontent#=(xlog_new)
+-				add xx# (xlog_new_size)
++				add pxx# (xlog_new_size)
+ 			else #xlog_id
+-				add xx# (xlog_id_size)
++				add pxx# (xlog_id_size)
+ 			end
+-			inc test
+-			set log test
+-		elseif test#=(xlog_branch) #branch start
+-			inc test
+-			set log test
+-		elseif test#=(xlog_innerbranchend) #innerbranch end
+-			inc test
+-			set log test
++			inc log
++		elseif log#=(xlog_jump)
++			set log memhex_parse_withinc(log,#number)
++		elseif log#=(xlog_branch) #branch start
++			call newbranch(px,pxx)
++			inc log
++		elseif log#=(xlog_innerbranchend) #innerbranch end
++			call newbranch(px,pxx)
++			inc log
+ 		else
+-			inc test
++		#if log#=(xlog_function)
++			set log memhex_parse_withinc(log,#number)
+ 		end
+ 	end
+-	return log
+ end
+-
+-function loop(ss log,sd *x,sd xx,sd logsize)
++function loop(ss log,sd x,sd xx,sd logsize)
+ 	add logsize log
+ 	if log!=logsize  ##else no action sprites/shows
++		set global.xoffset 0
+ 		sd next
+ 		ss p;set p memnl(log,#next)
+ 		whiletrue
+@@ -139,10 +190,11 @@ function loop(ss log,sd *x,sd xx,sd logs
+ 						return (EXIT_SUCCESS) #no [more] actions and nothing else
+ 					end
+ 					set p memnl(log,#next)
+-					sd pointer
+-					set pointer actionrow(log,p,#xx)
+-					if log=pointer
+-						break  #[log,p) will continue at preid
++					if log#=(xlog_actions)
++						inc log
++						call actionrow(log,p,#x,#xx)
++					else
++						break #[log,p) will continue at preid
+ 					end
+ 					set log next   ##was a row with actions
+ 				end
+@@ -151,3 +203,63 @@ function loop(ss log,sd *x,sd xx,sd logs
+ 	end
+ 	return (EXIT_SUCCESS)
+ end
++
++importx "strlen" strlen
++importx "memcpy" memcpy
++importx "free" free
++
++import "compare" compare
++
++char inter_last_extension_data=".last.data";vstr p_inter_last_extension_data^inter_last_extension_data
++function inter_last_extension(sv psize)
++	set psize# (\global.inter_last_extension_data)
++	return global.p_inter_last_extension_data
++end
++function inter(ss swf_fullpath)
++	sd size;set size strlen(swf_fullpath)
++	sd size1=\global.inter_last_extension_data
++	add size1 size
++	sd from;set from malloc(size1)
++	if from!=(NULL)
++		call memcpy(from,swf_fullpath,size)
++		sub size1 size
++		add size from
++		call memcpy(size,global.p_inter_last_extension_data,size1)
++		sd file
++		set file fopen(from,"wb")
++		call free(from)
++		if file!=(NULL)
++			call fclose(file)
++			sd exit;set exit compare(swf_fullpath)
++			return exit
++		end
++	end
++	return (EXIT_FAILURE)
++end
++
++function oadata_init(sv poadata)
++	set poadata# malloc(\oadata\)
++	sv a;set a poadata#
++	if a!=(NULL)
++		set a#:oadata.sprites malloc(:)
++		sv s;set s a#:oadata.sprites
++		if s!=(NULL)
++			set s# (NULL)
++			set a#:oadata.marks malloc(\mark\)
++			sd m;set m a#:oadata.marks
++			if m!=(NULL)
++				set m#:mark.prev (mark_nothing)
++				set m#:mark.next (mark_nothing)
++				set a#:oadata.functions malloc(:)
++				sv f;set f a#:oadata.functions
++				if f!=(NULL)
++					set f# (NULL)
++					return (EXIT_SUCCESS)
++				end
++			end
++		end
++	end
++	return (EXIT_FAILURE)
++end
++
++entryraw global() #this blank (an empty struct). is here only for global variables
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -11,12 +11,17 @@ include "common.h" "common.h.oh"
+ 
+ import "fcontent" fcontent
+ import "loop" loop
++import "inter" inter
++import "oadata_init" oadata_init
++import "preoadata_init" preoadata_init
++import "preoadata_free" preoadata_free
+ 
+-functionx oadata_make(ss swf_fullpath)
+-	sd size;add size strlen(swf_fullpath)
++#functions are returning 0(long) on success and != on failure (EXIT_FAILURE or another != (from extern calls))
++
++functionx oadata_make(ss swf_fullpath,sv poadata)
++	set poadata# (NULL)
++	sd size;set size strlen(swf_fullpath)
+ 	char logext=".log";vstr slogext^logext
+-	char xext=".x";vstr sxext^xext
+-	char xxext=".xx";vstr sxxext^xxext
+ 	sd allsize=\.logext;add allsize size
+ 	sd mem;set mem malloc(allsize)
+ 	if mem!=(NULL)
+@@ -27,14 +32,29 @@ functionx oadata_make(ss swf_fullpath)
+ 		sd logsize
+ 		sd logcontent;set logcontent fcontent(mem,#logsize)
+ 		if logcontent!=(NULL)
++			char xext=".x";vstr sxext^xext
+ 			call memcpy(size,sxext,\.xext)
+ 			sd dummy
+ 			sd xcontent;set xcontent fcontent(mem,#dummy)
+ 			if xcontent!=(NULL)
++				char xxext=".xx";vstr sxxext^xxext
+ 				call memcpy(size,sxxext,\.xxext)
+ 				sd xxcontent;set xxcontent fcontent(mem,#dummy)
+ 				if xxcontent!=(NULL)
+-					set exit loop(logcontent,xcontent,xxcontent,logsize)
++					set exit oadata_init(poadata)
++					if exit=(EXIT_SUCCESS)
++						sv presprites;set exit preoadata_init(#presprites)
++						if exit=(EXIT_SUCCESS)
++							set exit loop(logcontent,xcontent,xxcontent,logsize)
++							if exit=(EXIT_SUCCESS)
++								set exit inter(swf_fullpath)
++							end
++						end
++						call preoadata_free(presprites)
++					end
++					if exit!=(EXIT_SUCCESS)
++						call oadata_free(poadata#,(FALSE)) #there are multiple mallocs in outinit
++					end
+ 					call free(xxcontent)
+ 				else
+ 					set exit (EXIT_FAILURE)
+@@ -53,6 +73,84 @@ functionx oadata_make(ss swf_fullpath)
+ 	return (EXIT_FAILURE)
+ end
+ 
+-#functionx oadata_ok(ss swf_fullpath)
++importx "rename" rename
++import "inter_extension" inter_extension
++import "inter_last_extension" inter_last_extension
++
++functionx oadata_ok(ss swf_fullpath)
+ # move ...last.data ...data
+-#end
++	sd size;set size strlen(swf_fullpath)
++	ss slastinter;sd size1
++	set slastinter inter_last_extension(#size1)
++	add size1 size
++	sd from;set from malloc(size1)
++	if from!=(NULL)
++		ss sinterfinal;sd size2
++		set sinterfinal inter_extension(#size2)
++		add size2 size
++		sd to;set to malloc(size2)
++		if to!=(NULL)
++			call memcpy(from,swf_fullpath,size)
++			call memcpy(to,swf_fullpath,size)
++			sub size1 size
++			add size from
++			call memcpy(size,slastinter,size1)
++			sub size from
++			sub size2 size
++			add size to
++			call memcpy(size,sinterfinal,size2)
++
++			sd r ;#same 0/-1
++			set r rename(from,to)
++
++			call free(from)
++			call free(to)
++			return r
++		end
++		call free(from)
++	end
++	return (EXIT_FAILURE)
++end
++
++importx "puts" puts
++importx "printf" printf
++
++functionx oadata_free(sv data,charx log)
++	if data!=(NULL)
++		sv sprites;set sprites data#:oadata.sprites
++		if sprites!=(NULL)
++			sv s;set s sprites
++			while s#!=(NULL)
++			end
++			call free(sprites)
++
++			sv marks;set marks data#:oadata.marks
++			if marks!=(NULL)
++				if log=(TRUE)
++					call puts("mark struct:")
++					sd m;set m marks
++					datau i=0
++					whiletrue
++						datax next#1;set next m#:mark.next
++						call printf("\t%u\n\t\t%d\n\t\t%d\n",i,m#:mark.prev,next)
++						if next=(mark_nothing)
++							break
++						end
++						#add m \mark\
++						#inc i
++					end
++				end
++				call free(marks)
++
++				sv fns;set fns data#:oadata.functions
++				if fns!=(NULL)
++					sv f;set f fns
++					while f#!=(NULL)
++					end
++					call free(fns)
++				end
++			end
++		end
++		call free(data)
++	end
++end
+--- actionswf-1.orig/oad/mds
++++ actionswf-1/oad/mds
+@@ -1,3 +1,11 @@
+ 
+-if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; fi
+-OCONV=~/o/ocompiler-1/otoc/otoc OCOMP=${OCOMP} ./md
++if [ -n "${1}" ]; then
++	OCOMP="q ~/o/ocompiler-1/src/o";
++	if [ ${1} = 0 ]; then
++		shift
++		OCOMP=${OCOMP} ./md $@
++		exit
++	fi
++	shift
++fi
++OCONV=~/o/ocompiler-1/otoc/otoc OCOMP=${OCOMP} ./md $@
+--- /dev/null
++++ actionswf-1/oad/oadbgdata.h.oh
+@@ -0,0 +1,48 @@
++
++function oadata()
++	valuexu sprites#1
++	valuexu marks#1
++	valuexu functions#1
++end
++#function sprite()
++#	valuexu frame#1
++#	valuexu frames#1
++#end
++#function frame()
++#	valueu total#1
++#	valuexu lines#1
++#end
++#function line()
++#	valueu index#1
++#	valuexu actions#1
++#end
++#function action()
++#	valuexu next#1
++#	datax mark#1
++#end
++function mark()
++	datax prev#1
++	datax next#1
++end
++
++#function presprite()
++#	valuexu preframe#1
++#	valuexu preframes#1
++#end
++#function preframe()
++#	valuexu branch#1
++#	valuexu strings#1
++#end
++#function branch()
++#	dataxu size#1
++#	vdataxu x#1
++#	valuexu subbranches#1
++
++#	dataxu offset#1
++#	valuexu action#1
++#end
++#function string()
++#	vstrxu text#1
++
++#	valuexu branches#1
++#end
+--- actionswf-1.orig/oad/oadbgdatai.h.oh
++++ actionswf-1/oad/oadbgdatai.h.oh
+@@ -1,2 +1,4 @@
+ 
+ import "oadata_make" oadata_make
++import "oadata_free" oadata_free
++import "oadata_ok" oadata_ok
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -10,7 +10,7 @@ SpriteId
+ ActionInitBool
+ TextLinesNumber
+ TextLines
+-{NumberAN,NumberB1-NumberBN}
++{*NumberAXsNumberB1-NumberBN}
+ 
+ Or:
+ 
+@@ -27,9 +27,9 @@ FinalSpriteId
+ Where:
+ SpriteId or 0 for root.
+ ActionInitBool is a 0/1 digit.
+-TextLinesNumber is the number of lines that TextLines has.
+-TextLines is the text like in action[_sprite] call.
+-NumberA1-NumberAN lines from TextLinesNumber
+-NumberB1-NumberBN: example 1F,,0F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+-	Slashes in this construct are for liboadbgdata
+ FinalSpriteId is the id in the swf
++these are at prexx_flags:
++	TextLinesNumber is the number of lines that TextLines has.
++	TextLines is the text like in action[_sprite] call.
++	* NumberA1-NumberAN lines from TextLinesNumber
++	s is ,/|^*@ and NumberBX: example 1F,,F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -294,14 +294,14 @@ function action__code_row_ex(sd codepoin
+ 			call debug_xlog(codepointer) #here is after stepout from previous if (start of elseif or else)
+ 			add codepointer (DWORD)
+ 		else
+-			call brace_blocks_remove_write()
++			call brace_blocks_remove_write((FALSE))
+ 			call debug_xlog(codepointer) #simple if}[
+ 		endelse
+ 		return codepointer
+ 	endif
+ 	if attrib=(function_marker) #block_end
+ 		add codepointer (DWORD)
+-		call brace_blocks_remove_write()
++		call brace_blocks_remove_write((TRUE))
+ 		return codepointer
+ 	end
+ 	if attrib=(block_else_end)
+@@ -323,7 +323,7 @@ function action__code_row_ex(sd codepoin
+ 		return codepointer
+ 	endif
+ 	if attrib=(continue_flag)
+-        call action_code_continue()
++		call action_code_continue()
+ 		add codepointer (DWORD)
+ 		set action__code_row.rcb (ret_cont_break_something)
+ 		return codepointer
+@@ -632,10 +632,10 @@ function action_code_else_add()
+ 	call action_code_else_resolve((no_flag))
+ end
+ function action_code_else_resolve(sd flag)
+-    #end previous if
+-    call brace_blocks_remove_write()
+-    #add current offset
+-    call brace_blocks_add_write_offset((smallbackjump),flag)
++	#end previous if
++	call brace_blocks_remove_write((FALSE))
++	#add current offset
++	call brace_blocks_add_write_offset((smallbackjump),flag)
+ endfunction
+ function action_code_conditions_end(sd codepointer)
+     add codepointer (DWORD)
+@@ -840,7 +840,7 @@ function action_code_right_util_ex(sd co
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			import "actionpush" actionpush
+ 			call actionpush() # must release example 2:[jump 0]3 , next will correct jump 0
+-			call brace_blocks_remove_write()
++			call brace_blocks_remove_write((FALSE))
+ 			return codepointer
+ 		endelseif
+ 		setcall codepointer action_code_right_number(codepointer)
+@@ -950,9 +950,11 @@ function action_definefunction(sd codepo
+ 	sd index_atstart
+ 	setcall index_atstart brace_blocks_counter()
+ 	set index_atstart index_atstart#
++	sd index_current=0xffFFffFF
+ 	#
+-	sd index_current=0x7fFFffFF
+-	while index_atstart<=index_current
++	import "dtitles_func" dtitles_func
++	call dtitles_func()
++	while index_atstart<=^index_current
+ 		setcall codepointer action__code_row(codepointer)
+ 		setcall index_current brace_blocks_counter()
+ 		set index_current index_current#
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -1124,10 +1124,10 @@ function brace_blocks_add_write_offset(s
+     call brace_blocks_counter_inc()
+ endfunction
+ #
+-function brace_blocks_remove_write()
+-    sd offset
+-    setcall offset brace_blocks_remove_write_offset()
+-    call write_forward_offset(offset)
++function brace_blocks_remove_write(sd is_from_function)
++	sd offset
++	setcall offset brace_blocks_remove_write_offset()
++	call write_forward_offset_ex(offset,is_from_function)
+ endfunction
+ function brace_blocks_remove_write_ex()
+ 	sd offset
+@@ -1139,22 +1139,29 @@ function brace_blocks_remove_write_ex()
+ 	end
+ endfunction
+ function write_forward_offset(sd offset)
+-    sd mem
+-    sd size
+-    sd memblock
+-    setcall memblock brace_blocks_get_memblock()
+-    call block_get_mem_size(memblock,#mem,#size)
+-    #
+-    add mem offset
+-    add offset (WORD)
+-    sub size offset
+-    #
+-    if size>^0x7fFF
+-        call error("offset>(signed word size) error")
+-    endif
+-    #
+-    import "stack_to_word_arg" stack_to_word_arg
+-    call stack_to_word_arg(size,mem)
++	callg write_forward_offset_ex(offset,(FALSE))
++end
++function write_forward_offset_ex(sd offset,sd is_from_function)
++	sd mem
++	sd size
++	sd memblock
++	setcall memblock brace_blocks_get_memblock()
++	call block_get_mem_size(memblock,#mem,#size)
++	#
++	add mem offset
++	add offset (WORD)
++	sub size offset
++	#
++	if size>^0x7fFF
++		call error("offset>(signed word size) error")
++	endif
++	#
++	import "stack_to_word_arg" stack_to_word_arg
++	call stack_to_word_arg(size,mem)
++	if is_from_function=(FALSE)
++		import "debug_phase_code_add_long_if" debug_phase_code_add_long_if
++		callg debug_phase_code_add_long_if(mem)
++	end
+ endfunction
+ #offset
+ function brace_blocks_remove_write_offset()
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -219,8 +219,8 @@ function action_one(sd tag)
+ 	import "actionpush" actionpush
+ 	call actionpush()
+ 	call swf_actionblock_add(#tag,(actionrecordheader_tag_size))
+-	import "debug_phase_code_add" debug_phase_code_add
+-	call debug_phase_code_add((FALSE),(Comma))
++	import "debug_phase_code_add_if" debug_phase_code_add_if
++	callg debug_phase_code_add_if((FALSE),(xlog_act))
+ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -17,7 +17,6 @@ function debug_mark_add()
+ endfunction
+ function debug_mark_get()
+ 	value offsets=NULL
+-	const p_offsets^offsets
+ 
+ 	sv a;setcall a debug_mark()
+ 	sv b;set b a#
+@@ -39,6 +38,9 @@ import "mem_free" mem_free
+ import "f_close" f_close
+ 
+ function debug_data()
++	value file=NULL
++	const p_debug_file^file
++
+ 	#now is a string #datax a#1  #65535
+ 	value mem=NULL
+ 	#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
+@@ -50,13 +52,11 @@ function debug_data()
+ 
+ 	import "x_data" x_data
+ 	call x_data()
+-	sv of%p_offsets
+-	if of#!=(NULL)
+-		call mem_free(of)
+-		value file=NULL
+-		const p_debug_file^file
+-		if file!=(NULL)
+-			call f_close(#file)
++
++	if file!=(NULL)
++		call f_close(#file)
++		if debug_mark_get.offsets!=(NULL)
++			call mem_free(#debug_mark_get.offsets)
+ 			if mem!=(NULL)
+ 				call mem_free(#mem)
+ 			end
+@@ -67,16 +67,14 @@ function debug_data()
+ endfunction
+ 
+ function debug_phase_init(ss pointer)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_mark_get.offsets!=(NULL)
+ 		sv a;setcall a debug_mark_get()
+ 		set a# pointer
+ 		call debug_mark_add()
+ 	endif
+ endfunction
+ function debug_phase_parse(ss pointer)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_mark_get.offsets!=(NULL)
+ 		sv a
+ 		sv start;setcall start debug_mark_get()
+ 		sv target;setcall target debug_target()
+@@ -107,20 +105,21 @@ function debug_phase_parse(ss pointer)
+ 	endif
+ endfunction
+ function debug_phase_parse_end() #for the case when last rows are blank
+-	sd x;setcall x action_code_get()
+-	sv start
+-	set start debug_mark_get()
+-	sv end;setcall end debug_end()
+-	while start<^end#
+-		set start# x
+-		call debug_mark_add()
+-		setcall start debug_mark_get()
+-	endwhile
++	if debug_mark_get.offsets!=(NULL)
++		sd x;setcall x action_code_get()
++		sv start
++		set start debug_mark_get()
++		sv end;setcall end debug_end()
++		while start<^end#
++			set start# x
++			call debug_mark_add()
++			setcall start debug_mark_get()
++		endwhile
++	end
+ end
+ 
+ function debug_action_phase()
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_mark_get.offsets!=(NULL)
+ 		call debug_mark_start()  #second and third iteration
+ 	endif
+ endfunction
+@@ -171,26 +170,29 @@ function flags_init(sd flags,sd path)
+ endfunction
+ 
+ function log_init(datax prexx,sd path)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_data.file!=(NULL)
+ 		call error("swf started, log not closed")
+ 	end
+ 	sd test=debug_log
+ 	and test prexx
+ 	if test=(debug_log)
+-		setcall of# memalloc(1)  #0 on some systems can be NULL return
+-
+ 		sd size;setcall size strlen_of(path,4+1)
+ 		sd b;setcall b memalloc(size)
+ 		call sprintf(b,"%s.log",path)
+ 		sv file%p_debug_file
+-		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for comma character
++		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character
+ 
+-		setcall debug_data.mem memalloc(1)
+-		#this is later #set debug_data.size 0
+-		set debug_data.all_size 1
++		and prexx (prexx_flags)
++		if prexx=(prexx_flags)
++			setcall debug_mark_get.offsets memalloc(1)  #0 on some systems can be NULL return
++			#
++			setcall debug_data.mem memalloc(1)
++			#this is later #set debug_data.size 0
++			set debug_data.all_size 1
++		end
++	else
++		and prexx (prexx_flags)
+ 	end
+-	and prexx (prexx_flags)
+ end
+ 
+ import "f_printf" f_printf
+@@ -198,44 +200,44 @@ import "f_write" f_write
+ import "f_tell" f_tell
+ 
+ function debug_action_init(ss ac)
+-	sv of%p_offsets
+-	if of#!=(NULL)
+-		sd start;set start ac
+-
+-		sd row=1     #at least one row, example: row 1,3 actions
+-		while ac#!=0
+-			call row_termination(#ac,#row)
+-			inc ac
+-		endwhile
++	if debug_data.file!=(NULL)
++		set debug_data.rows 0 #for fast check
++		if log_init.prexx=(prexx_flags)
++			sd start;set start ac
++
++			sd row=1     #at least one row, example: row 1,3 actions
++			while ac#!=0
++				call row_termination(#ac,#row)
++				inc ac
++			endwhile
+ 
+-		#out rows\nac\n
+-		sv file%p_debug_file
+-		char f={Percent,l,u,LineFeed,Percent,s,LineFeed,Nullchar}
+-		call f_printf((fprintf_min+2),file#,#f,row,start)
++			#out rows\nac\n
++			sv file%p_debug_file
++			char f={Percent,l,u,LineFeed,Percent,s,LineFeed,Nullchar}
++			call f_printf((fprintf_min+2),file#,#f,row,start)
+ 
+-		mult row :
+-		import "memrealloc" memrealloc
+-		setcall of# memrealloc(of#,row)
++			mult row :
++			import "memrealloc" memrealloc
++			setcall debug_mark_get.offsets memrealloc(debug_mark_get.offsets,row)
+ 
+-		call debug_mark_start()  #prepare for first iteration
++			call debug_mark_start()  #prepare for first iteration
+ 
+-		#set target to 0, for recognizing blank rows at second iteration
+-		sv target;setcall target debug_target()
+-		set target# (NULL)
++			#set target to 0, for recognizing blank rows at second iteration
++			sv target;setcall target debug_target()
++			set target# (NULL)
+ 
+-		add row of#
+-		sv end;setcall end debug_end()   #at third iteration
+-		decst row   ##must be last entry not after
+-		set end# row
++			add row debug_mark_get.offsets
++			sv end;setcall end debug_end()   #at third iteration
++			decst row   ##must be last entry not after
++			set end# row
+ 
+-		set debug_data.size 0
+-		set debug_data.rows 0
++			set debug_data.size 0
++		end
+ 	endif
+ endfunction
+ 
+ function debug_phase_code(sd codepointer)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if log_init.prexx=(prexx_flags)
+ 		sv a;setcall a debug_mark_get()
+ 		if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+ 			if debug_data.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+@@ -267,7 +269,8 @@ function debug_phase_code_flush()
+ 			#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+ 			#will not bother concludefunction where is asking with ftell
+ 			sv file%p_debug_file
+-			call f_printf((fprintf_min+1),file#,"%lu",debug_data.rows)
++			char format=xlog_actions;char *="%lu"
++			call f_printf((fprintf_min+1),file#,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
+ 			call f_write(file#,debug_data.mem,debug_phase_code.size)
+ 			call f_write(file#,"\n",1)
+ 			set debug_data.rows 0
+@@ -280,16 +283,14 @@ function debug_base_core(sd id)
+ 	call f_printf((fprintf_min+1),file#,"%u\n",id) #swf_button is calling action_sprite
+ end
+ function debug_base(sd id)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_data.file!=(NULL)
+ 		call debug_base_core(id)
+ 		sd ai;set ai ainit()
+ 		call f_printf((fprintf_min+1),debug_data.file,"%u\n",ai)
+ 	end
+ end
+ function debug_show(sd id)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_data.file!=(NULL)
+ 		call debug_base_core(id)
+ 		call debug_write("\n\n",2)
+ 	end
+@@ -299,51 +300,60 @@ function debug_write(ss s,sd d)
+ 	call f_write(file#,s,d)
+ end
+ function debug_spritedone(sd p,sd i)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if debug_data.file!=(NULL)
+ 		call debug_base_core(p)
+ 		call debug_write("\n",1)
+ 		callg debug_base_core(i)
+ 	end
+ end
+ 
+-function debug_phase_code_add(sd is_long,ss arg2)
+-	sv of%p_offsets
+-	if of#!=(NULL)
+-		call debug_phase_code_flush()  #since Slash, function c(){\n} , will also add empty row but with one .
+-		sd sz;set sz debug_data.size
+-		if is_long=(TRUE)
+-			add sz (action_debug_comma+2+2)
+-		else
+-			add sz (action_debug_comma)
+-		end
+-		if sz>^debug_data.all_size
+-			set debug_data.all_size sz
+-			add debug_data.all_size 0x1000
+-			set debug_data.mem memrealloc(debug_data.mem,debug_data.all_size)
+-		end
+-		ss m;set m debug_data.mem
+-		add m debug_data.size
+-		if is_long=(TRUE)
+-			set m# (xlog_act)
+-			inc m
+-			sd here_sz
+-			ss second=1
+-			add second arg2
+-			if second#!=0
+-				set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
+-				add m here_sz
+-				sub here_sz 2
+-				call md_printf(m,"%02X",arg2#)
+-			else
+-				set here_sz md_printf(m,"%X",arg2#)  #only 0 is also printed
+-				sub here_sz 2+2
+-			end
+-			add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
++function debug_phase_code_add(sd is_long,ss arg2,sd delim)
++	call debug_phase_code_flush()  #since Slash, function c(){\n} , will also add empty row but with one .
++	sd sz;set sz debug_data.size
++	if is_long=(TRUE)
++		add sz (action_debug_comma+2+2)
++	else
++		add sz (action_debug_comma)
++	end
++	if sz>^debug_data.all_size
++		set debug_data.all_size sz
++		add debug_data.all_size 0x1000
++		set debug_data.mem memrealloc(debug_data.mem,debug_data.all_size)
++	end
++	ss m;set m debug_data.mem
++	add m debug_data.size
++	if is_long=(TRUE)
++		set m# delim
++		inc m
++		sd here_sz
++		ss second=1
++		add second arg2
++		if second#!=0
++			set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
++			add m here_sz
++			sub here_sz 2
++			call md_printf(m,"%02X",arg2#)
+ 		else
+-			set m# arg2 ##even if is only 1 action is lines,a1,a2...an
++			set here_sz md_printf(m,"%X",arg2#)  #only 0 is also printed
++			sub here_sz 2+2
+ 		end
+-		set debug_data.size sz
++		add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
++	else
++		set m# arg2 ##even if is only 1 action is lines,a1,a2...an
++	end
++	set debug_data.size sz
++end
++function debug_phase_code_add_long_if(ss arg2)
++	if log_init.prexx=(prexx_flags)
++		callg debug_phase_code_add((TRUE),arg2,(xlog_jump))
++	end
++end
++function debug_phase_code_add_one(ss arg2)
++	callg debug_phase_code_add((FALSE),arg2,(xlog_act))
++endfunction
++function debug_phase_code_add_if(sd is_long,ss arg2)
++	if log_init.prexx=(prexx_flags) #at oalt no action sizes
++		callg debug_phase_code_add(is_long,arg2,(xlog_act))
+ 	endif
+ endfunction
+ function debug_phase_code_remove(sd swflength,sd length)
+@@ -351,17 +361,18 @@ function debug_phase_code_remove(sd swfl
+ 	sd p;set p block_get_psize(memblock)
+ 	sub p# swflength
+ 
+-	if debug_data.size=0 #was last command on previous row
+-		sub debug_phase_code.size length
+-		#and let the empty row if is the case, then still can break there
+-		ret
++	if log_init.prexx=(prexx_flags)
++		if debug_data.size=0 #was last command on previous row
++			sub debug_phase_code.size length
++			#and let the empty row if is the case, then still can break there
++			ret
++		end
++		sub debug_data.size length
+ 	end
+-	sub debug_data.size length
+ end
+ 
+ function debug_definefunction(sv pointers)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if log_init.prexx=(prexx_flags) #at oalt no action sizes
+ 		set pointers# f_tell(debug_data.file)
+ 		incst pointers
+ 
+@@ -372,15 +383,14 @@ function debug_definefunction(sv pointer
+ 		sd offset
+ 		set offset debug_data.size
+ 		char dummy={0xff,0xff} #0,0 is not ok inside
+-		call debug_phase_code_add((TRUE),#dummy)
++		call debug_phase_code_add((TRUE),#dummy,(xlog_function))
+ 		#inc offset ##to skip Comma  #but at fseek is not needed because fread is already skipping that
+ 		set pointers#d^ offset
+ 	endif
+ end
+ import "error" error
+ function debug_concludefunction(sv pointers)
+-	sv of%p_offsets
+-	if of#!=(NULL)
++	if log_init.prexx=(prexx_flags) #at oalt no action sizes
+ 		sd prev_fileoffset;set prev_fileoffset pointers#
+ 		sd now;set now f_tell(debug_data.file)
+ 		incst pointers
+@@ -394,15 +404,19 @@ function debug_concludefunction(sv point
+ 		sd offset;set offset pointers#d^
+ 		vstr format="%04X"
+ 		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
++			add prev_fileoffset 2 # * from the start of the row and first digit
+ 			call fseek(debug_data.file,prev_fileoffset,(SEEK_SET))
+ 			#now need to skip first number that is the number of rows
+ 			whiletrue
+ 				char a#1
+ 				sd ret
+ 				set ret fread(#a,1,1,debug_data.file)
+-				if a=(Comma)  #there is a comma from here
++				if a<(_0)  #there is a delimiter from here
+ 					break
+ 				endif
++				if a>(_9) #many are starting with string delim
++					break
++				end
+ 				if ret!=1
+ 					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
+ 				end
+@@ -412,7 +426,7 @@ function debug_concludefunction(sv point
+ 			call fseek(debug_data.file,0,(SEEK_END))
+ 		else #on mem
+ 			sd c;set c debug_data.mem
+-			inc offset ##to skip Comma
++			inc offset ##to skip delimiter
+ 			add c offset
+ 			call md_printf(c,format,size)
+ 		end
+@@ -422,21 +436,22 @@ end
+ import "x_log" x_log
+ function debug_xlog_ex(sd codepointer,sd type)
+ 	if log_init.prexx=(prexx_flags)
+-		call debug_phase_code_add((FALSE),type)
++		call debug_phase_code_add_one(type)
+ 	else
+ 		callg x_log(codepointer)
+ 	end
+ end
+-function debug_xlog(sd codepointer)
+-# [else loop}[ forin{[ for;;[ if/loop{[ ?[ :[ func{[ if}[
++function debug_xlog(sd codepointer) #/
++# forin{[ for;;[ if/loop{[ ?[ func{[   [else :[   loop}[ if}[
++#not all &jump will start a new branch: if else/...&resolvingIfEnd...
+ 	callg debug_xlog_ex(codepointer,(xlog_branch))
+ end
+-function debug_xlog_stepout(sd codepointer)
+-# for;;[| func{[}|
++function debug_xlog_stepout(sd codepointer) #|
++# for;;[ func}[
+ 	callg debug_xlog_ex(codepointer,(xlog_innerbranchend))
+ end
+ function debug_xlog_pool() #pool_flag is already tested
+ 	if log_init.prexx=(prexx_flags)
+-		callg debug_phase_code_add((FALSE),(xlog_string))
++		callg debug_phase_code_add_one((xlog_string))
+ 	end
+ end
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -66,6 +66,8 @@ function dtitles_init(sd flags)
+ 	and flags (debug_titles)
+ 	if flags!=0
+ 		set dtitles_conclude.bool (TRUE)
++		dataxu func#1 #like ui32 swf size
++		set func 0
+ 		ret
+ 	end
+ 	set dtitles_conclude.bool (FALSE)
+@@ -97,3 +99,17 @@ function dtitles_frame_one(sd preid,sd f
+ 		call swf_actionblock((mem_exp_change_back),preid)
+ 	end
+ end
++
++import "action_push" action_push
++import "actionpush" actionpush
++import "action_one" action_one
++
++function dtitles_func()
++	if dtitles_conclude.bool=(TRUE)
++		#this will not be sync'ed with prev log @ & if on xx_flags
++		call action_push((ap_Integer),dtitles_init.func)
++		call actionpush()
++		inc dtitles_init.func
++		callg action_one((ActionPop))
++	end
++end
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -61,22 +61,14 @@ importx "free" free
+ import "error" error
+ 
+ #file
+-function f_open(sd path,sd format)
++function f_open_mem(sd path,sd format)
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
++		call free(path)
+ 		char a="fopen error"
+ 		vstr e^a
+ 		call error(e)
+ 	endif
+-	return f
+-endfunction
+-#file
+-function f_open_mem(sd path,sd format)
+-	sd f;setcall f fopen(path,format)
+-	if f=(NULL)
+-		call free(path)
+-		call error(f_open.e)
+-	endif
+ 	call free(path)
+ 	return f
+ endfunction
+--- /dev/null
++++ actionswf-1/src/mrds
+@@ -0,0 +1,2 @@
++
++OCOMP="q ~/o/ocompiler-1/src/o" ./mrd $@
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -388,8 +388,8 @@ function actionrecordheader_core(sd tag,
+ 	set t tag
+ 	call stack_to_word_arg(size,#length)
+ 	call swf_actionblock_add(#t,(actionrecordheader_size))
+-	import "debug_phase_code_add" debug_phase_code_add
+-	call debug_phase_code_add((TRUE),#length)
++	import "debug_phase_code_add_if" debug_phase_code_add_if
++	callg debug_phase_code_add_if((TRUE),#length)
+ end
+ function actionrecordheader(sd tag,sd size)
+ #push pool dummy_jump( },for(a;,continue ) store(mixt,enum) if(remForIns) write_jump(breakW,breakForIn) writeif_jump(_add(forin,ifwithnot),break) jump(else) goto definef
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -95,73 +95,73 @@ var a=new Object();
+ a.value=2;
+ attachMovie('carSymbol','fastCar_mc',1,a)
+ 
+-5,9,0009/
+-1,5,
+-1|
+-1^,7,^,2,^,2,,
+-2^,2,^,2,^^,4,,
+-3^^,E,,
+-1^,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2/,5,2/,5,
+-1^,B,^^,4,,5,,^^,4,
+-1^,7,^,2,^,2,,^,2,^,2,,
+-1^,2,5,0006/^,2,|,^^,9,,
+-1,A,,,2/^,2,,5,/,A,,,2/^,2,,2/^,2,,A,,,2//
+-1,A,,,2/^,2,,2/
+-1^,2,,,,^,2,,,,^,2,,,5,,
+-1^,7,,2/^,2,,,,|^,2,,5,,,2//
+-1^,2,,,1,1,,2^,4,/,2/
+-1^,2,,5,,,1,1,,2^,2,,7,/,2/
+-1,2,2^,2,,2/
+-1^,2,,,2/,2/
+-2^^,9,,
+-1^,2,^,7,
+-1^,2,^^,E,,^,2,^,2,,A,
+-1^,2,^^,9,,
+-1^,2,^,2,^,7,
+-1^,2,^,2,,1,,,2,,,,
+-1^,2,^,2,,5,,1,,,2,,,,
+-1^,2,^,2,^,2,,1,,,2,,,5,,
+-2^^,4,,5,,2/^,2,,2/^,2,,
+-3^,2,5,F0006
+-1^,2,
+-1|,
+-1^,2,^,2,^,2,5,F0006
+-1^,2,
+-1|,
+-1^,8,^,2,^,7,,
+-1^,2,5,F0030
+-1^,2,
+-1^,7,^,2,^,2,,
+-1^,7,^,2,,
+-1|,
+-1^,2,^,2,^^,4,^,2,,
+-1^,2,^,2,^^,4,,
+-1^,2,^,2,^,2,5,F0006
+-1^,2,
+-1|,
+-1^,8,^,2,^,7,,
+-1^,2,5,F0030
+-1^,2,
+-1^,7,^,2,^,2,,
+-1^,7,^,2,,
+-1|,
+-1^,2,^,2,^^,4,^,2,,
+-1^,2,^,2,^^,4,,
+-1^^,9,,
+-8^,7,,9,^,2,,5,,
+-3^,B,,5,,
+-3^,B,,5,^,2,,5,^,2,,5,^,2,,5,,
+-3,9,
+-3,A,0014/^,2,^,2,^,2,,,
+-1|^,19,,
+-6^^,9,,
+-1^,2,^,7,
+-1^,2,^^^,10,,
++*5,9F0009/
++*1,5,
++*1|
++*1^,7,^,2,^,2,,
++*2^,2,^,2,^^,4,,
++*3^^,E,,
++*1^,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2/,5,2&D/,5&8,
++*1^,B,^^,4,,5,,^^,4,
++*1^,7,^,2,^,2,,^,2,^,2,,
++*1^,2,5F0006/^,2,|,^^,9,,
++*1,A,,,2/^,2,,5,&F/,A,,,2/^,2,,2&B/^,2,&6,A,,,2/&0/
++*1,A,,,2/^,2,,2&B/
++*1^,2,,,,^,2,,,,^,2,,,5,,
++*1^,7,,2/^,2,,,,&9|^,2,,5,,,2/&0/
++*1^,2,,,1,1,,2^,4,/,2&D/
++*1^,2,,5,,,1,1,,2^,2,,7,/,2&16/
++*1,2,2^,2,,2&10/
++*1^,2,,,2/,2&5/
++*2^^,9,,
++*1^,2,^,7,
++*1^,2,^^,E,,^,2,^,2,,A,
++*1^,2,^^,9,,
++*1^,2,^,2,^,7,
++*1^,2,^,2,,1,,,2,,,,
++*1^,2,^,2,,5,,1,,,2,,,,
++*1^,2,^,2,^,2,,1,,,2,,,5,,
++*2^^,4,,5,,2/^,2,,2&B/^,2,&6,
++*3^,2,5F0006/
++*1^,2,
++*1|,
++*1^,2,^,2,^,2,5F0006/
++*1^,2,
++*1|,
++*1^,8,^,2,^,7,,
++*1^,2,5F0030/
++*1^,2,
++*1^,7,^,2,^,2,,
++*1^,7,^,2,,
++*1|,
++*1^,2,^,2,^^,4,^,2,,
++*1^,2,^,2,^^,4,,
++*1^,2,^,2,^,2,5F0006/
++*1^,2,
++*1|,
++*1^,8,^,2,^,7,,
++*1^,2,5F0030/
++*1^,2,
++*1^,7,^,2,^,2,,
++*1^,7,^,2,,
++*1|,
++*1^,2,^,2,^^,4,^,2,,
++*1^,2,^,2,^^,4,,
++*1^^,9,,
++*8^,7,,9,^,2,,5,,
++*3^,B,,5,,
++*3^,B,,5,^,2,,5,^,2,,5,^,2,,5,,
++*3,9,
++*3,AF0014/^,2,^,2,^,2,,,
++*1|^,19,,
++*6^^,9,,
++*1^,2,^,7,
++*1^,2,^^^,10,,
+ 2
+ 0
+ 1
+ trace('b'+this.value)
+-1^^,4,^,2,,,
++*1^^,4,^,2,,,
+ 2
+ 1
+ 6
+@@ -171,10 +171,10 @@ function Vehicle(){
+ }
+ Object.registerClass('carSymbol',Vehicle)
+ 
+-2,C,0010/
+-1^^,4,^,2,,,
+-1|
+-1^,2,^^,9,^,2,,
++*2,CF0010/
++*1^^,4,^,2,,,
++*1|
++*1^,2,^^,9,^,2,,
+ 2
+ 
+ 1
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,36 +1,38 @@
+-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
+-R5YFAAEAAIB/R5YCAAgWR5YFAAEAAID/R5YCAAgWR5YFAAEAAAAAR5YCAAgWR5YFAAEAAACARyaW
+-CQAGAAAIAAAAAAAmmwoAbgACAGEAYgAUAJYCAAgBHJYCAAgWR5YCAAgDHEcmlhkABv///3//////
+-Bv//////////BwIAAAAICz0XlgkACAEHAAAAAAgMQDyWAgAIARyWDAAAdmFsdWUABwIAAABPlgIA
+-CAEcli4ABwEAAAAAZmFzdENhcl9tYwAAY2FyU3ltYm9sAAcEAAAAAGF0dGFjaE1vdmllAD0XAAAA
++RldTCFUIAABoABQAAAUAAAACAQBDAgARAO4JAQABACYDiAgAAQAwMDAxMACWCQAAYgAAdGhpcwAc
++lgcAAHZhbHVlAE5HJgAAAP8OeQAAAAEAiAQAAQAxAJsMAFZlaGljbGUAAAAjAJYFAAcIAAAAF5YJ
++AABhAAB0aGlzAByWBwAAdmFsdWUATkcmlgkAAFZlaGljbGUAHJYYAABjYXJTeW1ib2wABwIAAAAA
++T2JqZWN0AByWDwAAcmVnaXN0ZXJDbGFzcwBSFwAODgEAAQBjYXJTeW1ib2wAPwN1BwAAiIAAGAB0
++aGlzAGEAQXJyYXkAYgBjAGQAZQBxAGYAZwBoAG4AT2JqZWN0AGNsYXNzMQBwcm90b3R5cGUAZnVu
++YzEAQVNTZXRQcm9wRmxhZ3MAY2xhc3MyAF9fcHJvdG9fXwBjb25zdHJ1Y3RvcgBmdW5jMgBjbGFz
++czMAIAAwMDAwMACbCQBmbgABAGEAEgCWBQAHAAAAABeWBQAHAgAAAD6WBwAHAAAAAAgAHJYCAAgA
++TpYMAABnZXRWZXJzaW9uAFIXlgIACAAclgIACABOlgQACAAIABxPlg4ACAEHAQAAAAcBAAAACAJA
++HZYMAAgDB/7///8HAgAAAEeWBQAHAgAAAAuWBQAHAgAAAAyWBQAHAgAAAA2WBQAHAgAAAD+WBQAH
++AgAAAGCWBQAHAgAAAGGWBQAHAgAAAGKWBQAHAgAAAEiWBQAHAgAAAGeWBQAHAgAAAEmWBQAHAgAA
++AEkSlgUABwIAAABnEpYFAAcCAAAASBKWBQAHAgAAAGOWBQAHAgAAAGSWBQAHAgAAAGWWBQAHAgAA
++ABCWBQAHAgAAABESnQIADQCWBQAHAgAAAJkCAAgAlgUABwMAAAA8lgsACAQGMzPzPzMzMzM8lgQA
++CAUIARyWBQAHAAAAAE48lgQACAYIBzyWBwAICAcCAAAAHZYCAAgJQZYCAAgJOxeWAgAIAByWAgAI
++CDoXlgIACAqbBQAAAAAPAJYFAAcBAAAAF5YCAAgBQR2WCgAAaQAHAAAAAAgKPTyWCgAHAgAAAAcC
++AAAASRKdAgAQAJYDAABqAEGWBQAHCQAAAD6WCgAHAgAAAAcCAAAASRKdAgAMAJYDAABrAEGZAgAH
++AJYDAABsAEGWCgAHAwAAAAcDAAAASRKdAgAAAJYKAAcCAAAABwIAAABJEp0CAAwAlgMAAG0AQZkC
++AOD/lgIACAhMHFAdlgIACAhMHFEdlgIACAhMHJYFAAcCAAAARx2WBwAICwcCAAAAPJkCAAkAlgIA
++CAtMHFAdlgIACAsclgUABwMAAABIEp0CAAAAlgIACAEcVYcBAACWAQACSZ0CAA4AlgUAAG8ABAA8
++mQIA5P+WAgAIARyWBQAHAAAAAE5VhwEAAJYBAAJJnQIAFgCWAgAIARyWBwAHAAAAAAQAT5kCANz/
++mQIAEQCZAgD2/5YDAABwAEGZAgDq/5YCAAAAHBKdAgAFAJkCAO//lgkACAEHAAAAAAgMQB2WAgAI
++ARyWBwAIAwcDAAAAT5YCAAgBHJYOAAgEBwEAAAAHAQAAAAgCQE+WAgAIARyWAgAIBE6WCgAHAAAA
++AAcFAAAAT5YCAAgBHJYJAAgFBwAAAAAIDEBPlgIACAEclgIACAVOlgcACAYHAgAAAE+WAgAIARyW
++AgAIA02HAQAATUyWAgAEAE1OUE+WAgAIARyWAgAIBE6WBQAHAAAAAE2HAQAATUyWAgAEAE1OUU+W
++AgAIARyWAgAIBU6WAgAIBk2HAQAATUyWAgAEAE1OlgUABwIAAABHT5YEAAgBCAMclgUABwEAAABJ
++nQIACwCWAgAIBxyZAgAHAJYDAAB3ABwdlgIACA2bBQAAAAAPAJYFAAcCAAAAF5YCAAgNJjyWAgAI
++DRyWAgAIDk6WAgAID5sFAAAAAA8AlgUABwMAAAAXlgIACA8mT5YIAAcBAAAAAggNHJYCAAgOTpYH
++AAcDAAAACBA9F5YCAAgRmwUAAAAAOQCWBQAHBAAAABeWAgAIESaWBwAHAAAAAAgAHJYCAAgSTpYC
++AAgTUheWBwAHAAAAAAgAHJYCAAgPUhc8lgIACBEclgIACA5OlgQACBIIDRyWAgAIDk5PlgIACBEc
++lgIACA5OlgQACBMIDRxPlgIACBEclgIACA5OlgIACBSbBQAAAAAPAJYFAAcFAAAAF5YCAAgUJk+W
++CAAHAQAAAAIIERyWAgAIDk6WBwAHAwAAAAgQPReWAgAIFZsFAAAAADkAlgUABwYAAAAXlgIACBUm
++lgcABwAAAAAIAByWAgAIEk6WAgAIE1IXlgcABwAAAAAIAByWAgAIFFIXPJYCAAgVHJYCAAgOTpYE
++AAgSCBEclgIACA5OT5YCAAgVHJYCAAgOTpYEAAgTCBEcT5YLAABvMwAHAAAAAAgVQDyWBwABAQCA
++PwgWR5YJAAYAAPA/AAAAEEeWAgAIFkeWBQABAACAAEcmlgsABgAAADgAAAAACBZHlgUAAQAAAH9H
++JpYLAAYAAPBHAAAAAAgWR5YFAAEAAIB/R5YCAAgWR5YFAAEAAID/R5YCAAgWR5YFAAEAAAAAR5YC
++AAgWR5YFAAEAAACARyaWCQAGAAAIAAAAAAAmmwoAbgACAGEAYgAdAJYFAAcHAAAAF5YCAAgBHJYC
++AAgWR5YCAAgDHEcmlhkABv///3//////Bv//////////BwIAAAAICz0XlgkACAEHAAAAAAgMQDyW
++AgAIARyWDAAAdmFsdWUABwIAAABPlgIACAEcli4ABwEAAAAAZmFzdENhcl9tYwAAY2FyU3ltYm9s
++AAcEAAAAAGF0dGFjaE1vdmllAD0XAAAA
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,106 +1,123 @@
+-7AoAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
+-dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
+-ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
+-AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
+-e3ZhciBhAH12YXIgaQBoACkAaWYoMgA9MgB7dmFyIGoAcmV0dXJuIDkAfWVsc2UgaWYoMgA9MgB7
+-dmFyIGsAfWVsc2V7dmFyIGwAfWlmKDMAPTMAe313aGlsZSgyAD0yAHt2YXIgbQB9ZgArO2YALTtm
+-AD0yAGZvcih2YXIgbgAyAG4AMwBuACspe2JyZWFrO31mb3IodmFyIG8AaW4gYQB7Y29udGludWU7
+-fWZvcihhADAAAGluIGEAMAAAe313aGlsZSh0cnVlAHticmVhaztjb250aW51ZTt2YXIgcAB9Zm9y
+-KDsAKXt9YQBuZXcgT2JqZWN0ACk7YQBiADMAYQBjAG5ldyBBcnJheQAxADthAGMAMAAANQBhAGQA
+-bmV3IE9iamVjdAApO2EAZABlADIAYQBiACs7YQBjADAAAC07YQBkAGUAPTIAYQBiAD0xAHEAdwB2
+-YXIgY2xhc3MxAGZ1bmN0aW9uACl7dHJhY2UAJ2NsYXNzMQAAO31jbGFzczEAcHJvdG90eXBlAGZ1
+-bmMxAGZ1bmN0aW9uACl7dHJhY2UAJ2Z1bmMxAAA7fUFTU2V0UHJvcEZsYWdzAGNsYXNzMQBwcm90
+-b3R5cGUAbnVsbAAxADt2YXIgY2xhc3MyAGZ1bmN0aW9uACl7dHJhY2UAJ2NsYXNzMgAAO3RoaXMA
+-X19wcm90b19fAGNvbnN0cnVjdG9yACk7dGhpcwBmdW5jMQApO31jbGFzczIAcHJvdG90eXBlAF9f
+-cHJvdG9fXwBjbGFzczEAcHJvdG90eXBlAGNsYXNzMgBwcm90b3R5cGUAY29uc3RydWN0b3IAY2xh
+-c3MxAGNsYXNzMgBwcm90b3R5cGUAZnVuYzIAZnVuY3Rpb24AKXt0cmFjZQAnZnVuYzIAADt9QVNT
+-ZXRQcm9wRmxhZ3MAY2xhc3MyAHByb3RvdHlwZQBudWxsADEAO3ZhciBjbGFzczMAZnVuY3Rpb24A
+-KXt0cmFjZQAnY2xhc3MzAAA7dGhpcwBfX3Byb3RvX18AY29uc3RydWN0b3IAKTt0aGlzAGZ1bmMy
+-ACk7fWNsYXNzMwBwcm90b3R5cGUAX19wcm90b19fAGNsYXNzMgBwcm90b3R5cGUAY2xhc3MzAHBy
+-b3RvdHlwZQBjb25zdHJ1Y3RvcgBjbGFzczIAdmFyIG8zAG5ldyBjbGFzczMAKTt0cmFjZQAxLjAw
+-MDAwMDExOTIwOTI4OTU1MDc4MTI1ACcgAAAgMS4wMDAwMDAwNTk2MDQ2NDQ3NzUzOTA2MjUAJyAA
+-ADAuMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDExNzU0OTQzNTA4MjIyODc1
+-MDc5Njg3MzY1MzcyMjIyNDU2Nzc4MTg2NjU1NTY3NzIwODc1MjE1MDg3NTE3MDYyNzg0MTcyNTk0
+-NTQ3MjcxNzI4NTE1NjI1AHRyYWNlADAuMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+-MDAwMDA1ODc3NDcxNzU0MTExNDM3NTM5ODQzNjgyNjg2MTExMjI4Mzg5MDkzMzI3NzgzODYwNDM3
+-NjA3NTQzNzU4NTMxMzkyMDg2Mjk3MjczNjM1ODY0MjU3ODEyNQAnIAAAMTcwMTQxMTgzNDYwNDY5
+-MjMxNzMxNjg3MzAzNzE1ODg0MTA1NzI4LjAAdHJhY2UAMzQwMjgyMzY2OTIwOTM4NDYzNDYzMzc0
+-NjA3NDMxNzY4MjExNDU2LjAAJyAAAEluZmluaXR5ACcgAAAgICAgICAgICAgICAgICAtSW5maW5p
+-dHkAJyAAACAgICAgICAgICAgICAwLjAAJyAAACAgICAgICAgICAgICAgICAgICAgLTAuMAB0cmFj
+-ZQAwLjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++6AoAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
++aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
++ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
++AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
++b24AKXt2YXIgYQB9dmFyIGkAaAApAGlmKDIAPTIAe3ZhciBqAHJldHVybiA5AH1lbHNlIGlmKDIA
++PTIAe3ZhciBrAH1lbHNle3ZhciBsAH1pZigzAD0zAHt9d2hpbGUoMgA9MgB7dmFyIG0AfWYAKztm
++AC07ZgA9MgBmb3IodmFyIG4AMgBuADMAbgArKXticmVhazt9Zm9yKHZhciBvAGluIGEAe2NvbnRp
++bnVlO31mb3IoYQAwAABpbiBhADAAAHt9d2hpbGUodHJ1ZQB7YnJlYWs7Y29udGludWU7dmFyIHAA
++fWZvcig7ACl7fWEAbmV3IE9iamVjdAApO2EAYgAzAGEAYwBuZXcgQXJyYXkAMQA7YQBjADAAADUA
++YQBkAG5ldyBPYmplY3QAKTthAGQAZQAyAGEAYgArO2EAYwAwAAAtO2EAZABlAD0yAGEAYgA9MQBx
++AHcAdmFyIGNsYXNzMQBmdW5jdGlvbgApe3RyYWNlACdjbGFzczEAADt9Y2xhc3MxAHByb3RvdHlw
++ZQBmdW5jMQBmdW5jdGlvbgApe3RyYWNlACdmdW5jMQAAO31BU1NldFByb3BGbGFncwBjbGFzczEA
++cHJvdG90eXBlAG51bGwAMQA7dmFyIGNsYXNzMgBmdW5jdGlvbgApe3RyYWNlACdjbGFzczIAADt0
++aGlzAF9fcHJvdG9fXwBjb25zdHJ1Y3RvcgApO3RoaXMAZnVuYzEAKTt9Y2xhc3MyAHByb3RvdHlw
++ZQBfX3Byb3RvX18AY2xhc3MxAHByb3RvdHlwZQBjbGFzczIAcHJvdG90eXBlAGNvbnN0cnVjdG9y
++AGNsYXNzMQBjbGFzczIAcHJvdG90eXBlAGZ1bmMyAGZ1bmN0aW9uACl7dHJhY2UAJ2Z1bmMyAAA7
++fUFTU2V0UHJvcEZsYWdzAGNsYXNzMgBwcm90b3R5cGUAbnVsbAAxADt2YXIgY2xhc3MzAGZ1bmN0
++aW9uACl7dHJhY2UAJ2NsYXNzMwAAO3RoaXMAX19wcm90b19fAGNvbnN0cnVjdG9yACk7dGhpcwBm
++dW5jMgApO31jbGFzczMAcHJvdG90eXBlAF9fcHJvdG9fXwBjbGFzczIAcHJvdG90eXBlAGNsYXNz
++MwBwcm90b3R5cGUAY29uc3RydWN0b3IAY2xhc3MyAHZhciBvMwBuZXcgY2xhc3MzACk7dHJhY2UA
++MS4wMDAwMDAxMTkyMDkyODk1NTA3ODEyNQAnIAAAIDEuMDAwMDAwMDU5NjA0NjQ0Nzc1MzkwNjI1
++ACcgAAAwLjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMTc1NDk0MzUwODIy
++Mjg3NTA3OTY4NzM2NTM3MjIyMjQ1Njc3ODE4NjY1NTU2NzcyMDg3NTIxNTA4NzUxNzA2Mjc4NDE3
++MjU5NDU0NzI3MTcyODUxNTYyNQB0cmFjZQAwLjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
++MDAwMDAwMDAwNTg3NzQ3MTc1NDExMTQzNzUzOTg0MzY4MjY4NjExMTIyODM4OTA5MzMyNzc4Mzg2
++MDQzNzYwNzU0Mzc1ODUzMTM5MjA4NjI5NzI3MzYzNTg2NDI1NzgxMjUAJyAAADE3MDE0MTE4MzQ2
++MDQ2OTIzMTczMTY4NzMwMzcxNTg4NDEwNTcyOC4wAHRyYWNlADM0MDI4MjM2NjkyMDkzODQ2MzQ2
++MzM3NDYwNzQzMTc2ODIxMTQ1Ni4wACcgAABJbmZpbml0eQAnIAAAICAgICAgICAgICAgICAgLUlu
++ZmluaXR5ACcgAAAgICAgICAgICAgICAgMC4wACcgAAAgICAgICAgICAgICAgICAgICAgIC0wLjAA
++dHJhY2UAMC4wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+ MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+ MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+ MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+ MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAw
+-MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAxMTEyNTM2OTI5MjUzNjAwNjkxNTQ1MTE2MzU4NjY2
+-MjAyMDMyMTA5NjA3OTkwMjMxMTY1OTE1Mjc2NjYzNzA4NDQzNjAyMjE3NDA2OTU5MDk3OTI3MTQx
+-NTc5NTA2MjU1NTEwMjgyMDMzNjY5ODY1NTE3OTA1NTAyNTc2MjE3MDgwNzc2NzMwMDU0NDI4MDA2
+-MTkyNjg4ODU5NDEwNTY1Mzg4OTk2NzY2MDAxMTY1MjM5ODA1MDczNzIxMjkxODE4MDM1OTYwNzgy
+-NTIzNDcxMjUxODY3MTA0MTg3NjI1NDAzMzI1MzA4MzI5MDc5NDc0MzYwMjQ1NTg5OTg0Mjk1ODE5
+-ODI0MjUwMzE3OTU0Mzg1MDU5MTUyNDM3Mzk5ODkwNDQzODc2ODc0OTc0NzI1NzkwMjI1ODAyNTI1
+-NDU3Njk5OTI4MjkxMjM1NDA5MzIyNTU2NzY4OTY3OTAyNDk2MDU3OTkwNTQyODgzMDI1OTk2MjE2
+-Njc2MDU3MTc2MTk1MDc0Mzk3ODQ5ODA0Nzk1NjQ0NDQ1ODAxNDk2MzIwNzU1NTMxNzMzMTU2Njk2
+-ODMxNzM4NzkzMjU2NTE0Njg1ODgxMDIzNjYyODE1ODkwNzQyODMyMTc1NDM2MDYxNDE0MzE4ODIx
+-MDIyNDIzNDA1NzAzODA2OTU1NzM4NTMxNDAwODQ0OTI2NjIyMDU1MDEyMDgwNzIzNzEwODA5Mjgz
+-NTgzMDc1MjcwMDc3MTQyNTQyMzU4Mzc2NDUwOTUxNTgwNjYxMzg5NDQ4MzY0ODUzNjg2NTYxNjY3
+-MDQzNDk0NDkxNTg3NTMzOTE5NDIzNDYzMDQ2Mzg2OTg4OTg2NDI5MzI5ODI3NDcwNTQ1Njg0NTQ3
+-NzAzMDY4MjMzNzg0MzUxMTk5MzM5MTU3NjQ1MzQwNDkyMzA4NjA1NDYyMzEyNjk4MzY0MjU3ODEy
+-NQBmdW5jdGlvbiBuAGEAYgB7dHJhY2UAYQAnIAAAYgB9bgAtTmFOAE5hTgB2YXIgYQBuZXcgT2Jq
+-ZWN0ACk7YQB2YWx1ZQAyAGF0dGFjaE1vdmllACdjYXJTeW1ib2wAACdmYXN0Q2FyX21jAAAxAGEA
+-AAAAAAAAAFgLAAAwMAPzCgAAAA0AAAAAAAAAPgAAAAcAAAACAAAA/////wgIBwcQEAHxJAAAAO7u
+-7v4aAAAAHwAAAAAAAAC7u7v7TwAAADEAAAA2AAAAOwAAAAAAAAC7u7v7HAAAAEAAAAD/////HQAA
+-AEUAAABAQAT0SwAAAAcAAAABAAAA/////+7u7v4AAAAAPAAAAFgAAACAgAj4BwAAAP7///9HAAAA
+-BwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABg
+-AAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBw
+-B/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAA
+-AHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAA
+-BwAAAAIAAABlAAAABwAAAAIAAAAQAAAABwAAAAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/
+-////BwAAAAMAAAD//////////zwAAACZAAAABgAAADMz8z8zMzMz/////zwAAACjAAAATgAAAKUA
+-AAAAAAAAUFAF9QcAAAAAAAAA/////wAAAAC7u7v7/////zwAAACuAAAACAAAALEAAAD/////HQAA
+-ALQAAAAHAAAAAgAAAP////9BAAAAvAAAADsAAADFAAAAOgAAAM4AAADTAAAAAAAAALu7u/sdAAAA
+-1QAAADAwA/PfAAAAAAAAAEEAAADmAAAACAgHBzwAAADtAAAAICAC8u8AAADu7u7+AAAAAP////+d
+-AAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////9BAAAAAAEAAD4AAAAHAAAACQAAAP//
+-//8EBAMDAAAAQJ0AAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAA/////0EAAAAeAQAABAQD
+-AwAAAEBBAAAAKgEAAMzMzPwCAAAAnQAAAAcAAAADAAAAcHAH90kAAAAAAAAABwAAAAMAAAD/////
+-BAQDAwYGBQUHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAA/////0EAAABHAQAA3d3d/R0AAABK
+-AQAAUAAAAB0AAABOAQAAUQAAAB0AAABSAQAAYGAG9kcAAAAHAAAAAgAAAP/////g4A7+sLAL+zwA
+-AABfAQAABwAAAAIAAAD/////wMAM/B0AAABnAQAAUAAAAMDADPwcAAAAYwEAAHBwB/dIAAAAAAAA
+-AAcAAAADAAAA/////5CQCfnd3d394OAO/hwAAACAAQAAPAAAAHsBAACgoAr63d3d/eDgDv5OAAAA
+-mQEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAALu7u/tPAAAAkQEAAAAAAABQUAX1BwAAAAAAAAD/
+-////AAAAALu7u/vd3d39BgYFBRwAAACmAQAA/////5CQCfmgoAr6QQAAAL8BAADd3d394OAO/rCw
+-C/vAwAz8wMAM/BwAAADHAQAA/////93d3f0dAAAAywEAAEBABPTRAQAA7u7u/gAAAABPAAAA2gEA
+-ANwBAAAAAAAAu7u7+wcAAAADAAAA/////08AAADgAQAA4gEAAAAAAAC7u7v7QEAE9OgBAAAHAAAA
+-AQAAAP/////u7u7+AAAAAE8AAADxAQAA8wEAAAAAAABQUAX1BwAAAAAAAAD/////AAAAALu7u/sH
+-AAAABQAAAP////9PAAAA+gEAAPwBAAAAAAAAu7u7+0BABPQCAgAA7u7u/gAAAABPAAAACwIAAA0C
+-AAAPAgAAAAAAALu7u/sHAAAAAgAAAP////9PAAAAEwIAABUCAAAAAAAAu7u7+1AAAABPAAAAGQIA
+-ABsCAAAAAAAAUFAF9QcAAAAAAAAA/////wAAAAC7u7v7UQAAAE8AAAAiAgAAJAIAACYCAAAAAAAA
+-u7u7+2BgBvZHAAAABwAAAAIAAAD/////HQAAACsCAAAcAAAALQIAAHBwB/dJAAAAEgAAAAcAAAAB
+-AAAA0NAN/RwAAAAyAgAA/////xwAAAA0AgAA/////zwAAAA6AgAAMDAD80kCAAAAAAAAEBAB8QAA
+-AABMAgAACAAAAFMCAAD/////7u7u/ggIBwdPAAAAXQIAAGQCAABuAgAAAAAAALu7u/swMAPzfAIA
+-AAAAAAAQEAHxAAAAAH8CAAAIAAAAhgIAAP/////u7u7+CAgHBxAQAfGPAgAABwAAAAEAAAD/////
+-HAAAAK8CAAD/////TgAAAJ4CAAClAgAAAAAAALu7u/v/////7u7u/gAAAAA8AAAAuwIAADAwA/PK
+-AgAAAAAAABAQAfEAAAAAzQIAAAgAAADUAgAA/////+7u7v4QEAHx7AIAAO7u7v7dAgAA4gIAAAAA
+-AAC7u7v7EBAB8f8CAADu7u7++gIAAAAAAAC7u7v7CAgHB08AAAAIAwAADwMAABkDAAAAAAAAu7u7
+-+04AAAAjAwAAKgMAAAAAAAC7u7v7/////08AAAA0AwAAOwMAAEUDAAAAAAAAu7u7+xwAAABRAwAA
+-/////08AAABYAwAAXwMAAGkDAAAAAAAAu7u7+zAwA/N3AwAAAAAAABAQAfEAAAAAegMAAAgAAACB
+-AwAA/////+7u7v4ICAcHEBAB8YoDAAAHAAAAAQAAAP////8cAAAAqgMAAP////9OAAAAmQMAAKAD
+-AAAAAAAAu7u7+//////u7u7+AAAAADwAAAC2AwAAMDAD88UDAAAAAAAAEBAB8QAAAADIAwAACAAA
+-AM8DAAD/////7u7u/hAQAfHnAwAA7u7u/tgDAADdAwAAAAAAALu7u/sQEAHx+gMAAO7u7v71AwAA
+-AAAAALu7u/sICAcHTwAAAAMEAAAKBAAAFAQAAAAAAAC7u7v7TgAAAB4EAAAlBAAAAAAAALu7u/v/
+-////TwAAAC8EAAA2BAAAQAQAAAAAAAC7u7v7HAAAAEwEAAD/////PAAAAFcEAABAQAT0XgQAAO7u
+-7v4AAAAAEBAB8QAAAABnBAAABgAAAAAA8D8AAAAgRwAAAAgAAACIBAAARwAAAAYAAAAAAPA/AAAA
+-EEcAAAAIAAAAqAQAAEcAAAAGAAAAAAAQOAAAAAD/////7u7u/hAQAfEAAAAALAUAAAYAAAAAAAA4
+-AAAAAEcAAAAIAAAAtQUAAEcAAAAGAAAAAADgRwAAAAD/////7u7u/hAQAfEAAAAA4gUAAAYAAAAA
+-APBHAAAAAEcAAAAIAAAAEwYAAEcAAAAGAAAAAADwfwAAAABHAAAACAAAACAGAABHAAAABgAAAAAA
+-8P8AAAAARwAAAAgAAAA9BgAARwAAAAYAAAAAAAAAAAAAAEcAAAAIAAAAUgYAAEcAAAAGAAAAAAAA
+-gAAAAAD/////7u7u/hAQAfEAAAAAbgYAAAYAAAAAAAgAAAAAAP/////u7u7+MDAD838KAACBCgAA
+-gwoAAAAAAAAQEAHxAAAAAIYKAAAcAAAAjAoAAEcAAAAIAAAAjwoAAEcAAAAcAAAAkgoAAP/////u
+-7u7+CAgHBxAQAfGVCgAABgAAAP///3///////////wYAAAD////////////////u7u7+AAAAADwA
+-AACkCgAAQEAE9KoKAADu7u7+AAAAAE8AAACzCgAAtQoAAAAAAAC7u7v7BwAAAAIAAAD/////EBAB
+-8b0KAAAcAAAA5AoAAP////8HAAAAAQAAAP////8IAAAA1goAAP////8IAAAAygoAAP/////u7u7+
+-AAAAAP////8gAAAAdHJhY2UAJ2IAAHRoaXMAdmFsdWUAAAAAAAAAAAAAAAA4AAAAEBAB8QAAAAAB
+-AAAACAAAAAgAAABHAAAATgAAAAsAAAAQAAAAAAAAALu7u/v/////7u7u/v////9gAAAAZnVuY3Rp
+-b24gVmVoaWNsZQApe3RyYWNlACdhAAB0aGlzAHZhbHVlAH1PYmplY3QAcmVnaXN0ZXJDbGFzcwAn
+-Y2FyU3ltYm9sAABWZWhpY2xlAAAAAAAAAAAAAAAAAAAAeAAAADAwA/MKAAAAAAAAABAQAfEAAAAA
+-FAAAAAgAAAAbAAAARwAAAE4AAAAeAAAAIwAAAAAAAAC7u7v7/////+7u7v4ICAcHEBAB8TEAAAAc
+-AAAASwAAAP////8IAAAAQAAAAP/////u7u7+KgAAAAAAAAC7u7v7/////w==
++MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMTExMjUzNjkyOTI1MzYwMDY5MTU0NTExNjM1
++ODY2NjIwMjAzMjEwOTYwNzk5MDIzMTE2NTkxNTI3NjY2MzcwODQ0MzYwMjIxNzQwNjk1OTA5Nzky
++NzE0MTU3OTUwNjI1NTUxMDI4MjAzMzY2OTg2NTUxNzkwNTUwMjU3NjIxNzA4MDc3NjczMDA1NDQy
++ODAwNjE5MjY4ODg1OTQxMDU2NTM4ODk5Njc2NjAwMTE2NTIzOTgwNTA3MzcyMTI5MTgxODAzNTk2
++MDc4MjUyMzQ3MTI1MTg2NzEwNDE4NzYyNTQwMzMyNTMwODMyOTA3OTQ3NDM2MDI0NTU4OTk4NDI5
++NTgxOTgyNDI1MDMxNzk1NDM4NTA1OTE1MjQzNzM5OTg5MDQ0Mzg3Njg3NDk3NDcyNTc5MDIyNTgw
++MjUyNTQ1NzY5OTkyODI5MTIzNTQwOTMyMjU1Njc2ODk2NzkwMjQ5NjA1Nzk5MDU0Mjg4MzAyNTk5
++NjIxNjY3NjA1NzE3NjE5NTA3NDM5Nzg0OTgwNDc5NTY0NDQ0NTgwMTQ5NjMyMDc1NTUzMTczMzE1
++NjY5NjgzMTczODc5MzI1NjUxNDY4NTg4MTAyMzY2MjgxNTg5MDc0MjgzMjE3NTQzNjA2MTQxNDMx
++ODgyMTAyMjQyMzQwNTcwMzgwNjk1NTczODUzMTQwMDg0NDkyNjYyMjA1NTAxMjA4MDcyMzcxMDgw
++OTI4MzU4MzA3NTI3MDA3NzE0MjU0MjM1ODM3NjQ1MDk1MTU4MDY2MTM4OTQ0ODM2NDg1MzY4NjU2
++MTY2NzA0MzQ5NDQ5MTU4NzUzMzkxOTQyMzQ2MzA0NjM4Njk4ODk4NjQyOTMyOTgyNzQ3MDU0NTY4
++NDU0NzcwMzA2ODIzMzc4NDM1MTE5OTMzOTE1NzY0NTM0MDQ5MjMwODYwNTQ2MjMxMjY5ODM2NDI1
++NzgxMjUAZnVuY3Rpb24gbgBhAGIAe3RyYWNlAGEAJyAAAGIAfW4ALU5hTgBOYU4AdmFyIGEAbmV3
++IE9iamVjdAApO2EAdmFsdWUAMgBhdHRhY2hNb3ZpZQAnY2FyU3ltYm9sAAAnZmFzdENhcl9tYwAA
++MQBhAAAAANAOAAAwMAPzCgAAAAAAAAANAAAAAAAAAAAAAAAAAAAAPgAAAAcAAAACAAAA/////wgI
++BwcQEAHxJAAAAAAAAADu7u7+GgAAAAAAAAAfAAAAAAAAAAAAAAAAAAAAu7u7+08AAAAxAAAAAAAA
++ADYAAAAAAAAAOwAAAAAAAAAAAAAAAAAAALu7u/scAAAAQAAAAAAAAAD/////HQAAAEUAAAAAAAAA
++QEAE9EsAAAAAAAAABwAAAAEAAAD/////7u7u/gAAAAAAAAAAPAAAAFgAAAAAAAAAgIAI+AcAAAD+
++////RwAAAAcAAAACAAAACwAAAAcAAAACAAAADAAAAAcAAAACAAAADQAAAAcAAAACAAAAPwAAAAcA
++AAACAAAAYAAAAAcAAAACAAAAYQAAAAcAAAACAAAAYgAAAAcAAAACAAAAcHAH90gAAAAAAAAABwAA
++AAIAAABwcAf3ZwAAAAAAAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAAcHAH90kAAAASAAAA
++BwAAAAIAAABwcAf3ZwAAABIAAAAHAAAAAgAAAHBwB/dIAAAAEgAAAAcAAAACAAAAYwAAAAcAAAAC
++AAAAZAAAAAcAAAACAAAAZQAAAAcAAAACAAAAEAAAAAcAAAACAAAAEQAAAAcAAAACAAAA0NAN/QcA
++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
++AAD/////7u7u/hAQAfEAAAAAAAAAAOIFAAAAAAAABgAAAAAA8EcAAAAARwAAAAgAAAATBgAAAAAA
++AEcAAAAGAAAAAADwfwAAAABHAAAACAAAACAGAAAAAAAARwAAAAYAAAAAAPD/AAAAAEcAAAAIAAAA
++PQYAAAAAAABHAAAABgAAAAAAAAAAAAAARwAAAAgAAABSBgAAAAAAAEcAAAAGAAAAAAAAgAAAAAD/
++////7u7u/hAQAfEAAAAAAAAAAG4GAAAAAAAABgAAAAAACAAAAAAA/////+7u7v4wMAPzfwoAAAAA
++AACBCgAAAAAAAIMKAAAAAAAAAAAAAAAAAAAQEAHxAAAAAAAAAACGCgAAAAAAABwAAACMCgAAAAAA
++AEcAAAAIAAAAjwoAAAAAAABHAAAAHAAAAJIKAAAAAAAA/////+7u7v4ICAcHEBAB8ZUKAAAAAAAA
++BgAAAP///3///////////wYAAAD////////////////u7u7+AAAAAAAAAAA8AAAApAoAAAAAAABA
++QAT0qgoAAAAAAADu7u7+AAAAAAAAAABPAAAAswoAAAAAAAC1CgAAAAAAAAAAAAAAAAAAu7u7+wcA
++AAACAAAA/////xAQAfG9CgAAAAAAABwAAADkCgAAAAAAAP////8HAAAAAQAAAP////8IAAAA1goA
++AAAAAAD/////CAAAAMoKAAAAAAAA/////+7u7v4AAAAAAAAAAP////8kAAAAAAAAAHRyYWNlACdi
++AAB0aGlzAHZhbHVlAAAAAAAAAAAAAAAAAAAAAFAAAAAQEAHxAAAAAAAAAAABAAAAAAAAAAgAAAAI
++AAAAAAAAAEcAAABOAAAACwAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAu7u7+//////u7u7+/////1QA
++AAAAAAAAZnVuY3Rpb24gVmVoaWNsZQApe3RyYWNlACdhAAB0aGlzAHZhbHVlAH1PYmplY3QAcmVn
++aXN0ZXJDbGFzcwAnY2FyU3ltYm9sAABWZWhpY2xlAAAArAAAADAwA/MKAAAAAAAAAAAAAAAAAAAA
++EBAB8QAAAAAAAAAAFAAAAAAAAAAIAAAAGwAAAAAAAABHAAAATgAAAB4AAAAAAAAAIwAAAAAAAAAA
++AAAAAAAAALu7u/v/////7u7u/ggIBwcQEAHxMQAAAAAAAAAcAAAASwAAAAAAAAD/////CAAAAEAA
++AAAAAAAA/////+7u7v4qAAAAAAAAAAAAAAAAAAAAu7u7+/////8=
+--- /dev/null
++++ actionswf-1/tests/.expected/data.txt
+@@ -0,0 +1,5 @@
++mark struct:
++	0
++		-1
++		-1
++ok
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -1,7 +1,11 @@
+ 
+-if [ -n "${1}" ]; then g="gdb"; fi
++if [ -n "${1}" ]; then g="gdb --args"; fi
++
++f=../../example/example.swf
+ 
+ o a.oc x_file 1 && \
+ otoc a.oc.x && \
+-cc -g a.c -L../../oad -loadbgdata && \
+-LD_LIBRARY_PATH=../../oad ${g} ./a.out && echo $?
++cc -w -g a.c -L../../oad -loadbgdata && \
++LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} && \
++echo ok && \
++rm ${f}.data
+--- actionswf-1.orig/tests/data/a.oc
++++ actionswf-1/tests/data/a.oc
+@@ -5,8 +5,13 @@ override include_sec 1
+ #include "../../oad/oadbgdata.h" "../../oad/oadbgdata.h.oh"
+ include "../../oad/oadbgdatai.h" "../../oad/oadbgdatai.h.oh"
+ 
+-entry main()
++entry main(data srgc,sv argv)
+ 
+-call oadata_make("../../example/example.swf")
+-
+-return 0
++incst argv
++ss path;set path argv#
++sd oadata
++sd a;set a oadata_make(path,#oadata)
++if a!=0;return a;end
++call oadata_free(oadata,1)
++set a oadata_ok(path)
++return a
+--- /dev/null
++++ actionswf-1/tests/data/test
+@@ -0,0 +1,11 @@
++
++set -o pipefail && ./a | tee data.txt || exit 1
++diff ../.expected/data.txt data.txt
++if [ $? = 0 ]; then
++	rm data.txt
++	exit 0
++fi
++if [ -n "${1}" ]; then exit 1; fi
++echo y \?; read -n1 -t $((60*60*24)) ans
++if [ "${ans}" != "y" ]; then exit 1; fi
++mv data.txt ../.expected/data.txt
+--- actionswf-1.orig/tests/ffdec/as
++++ actionswf-1/tests/ffdec/as
+@@ -1,3 +1,3 @@
+ 
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+-_L=../ /bin/bash ../asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} /bin/bash ../../oaalternative a.swf "./a.out 1" && cat a.swf.log
++isdebug=x _L=../ /bin/bash ../asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} /bin/bash ../../oaalternative a.swf "./a.out 1" && cat a.swf.log
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -8,7 +8,7 @@ LD_LIBRARY_PATH=/home/bc/before/lib /hom
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+ 	if [ -z "${a}" ]; then a=0
+ 	elif [ ${a} = -1 ]; then exit; fi
+-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "qq ./a.out ${a}" || {
++	isdebug=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "qq ./a.out ${a}" || {
+ 		swfdump -D${1} a.swf.orig > 1
+ 		swfdump -D${1} a.swf > 2
+ 		diff 1 2 --color
