@@ -1,0 +1,452 @@
+/*
+ *  Copyright (C) 2010-2023 JPEXS, All rights reserved.
+ * 
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3.0 of the License, or (at your option) any later version.
+ * 
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library.
+ */
+package com.jpexs.decompiler.flash.abc.types.traits;
+
+import com.jpexs.decompiler.flash.abc.ABC;
+import com.jpexs.decompiler.flash.abc.avm2.model.CallPropertyAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.model.ClassAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.model.FullMultinameAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.model.GetLexAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.model.GetPropertyAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.model.IntegerValueAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.model.ThisAVM2Item;
+import com.jpexs.decompiler.flash.abc.avm2.parser.script.AbcIndexing;
+import com.jpexs.decompiler.flash.abc.types.ClassInfo;
+import com.jpexs.decompiler.flash.abc.types.ConvertData;
+import com.jpexs.decompiler.flash.abc.types.InstanceInfo;
+import com.jpexs.decompiler.flash.abc.types.MethodBody;
+import com.jpexs.decompiler.flash.abc.types.Multiname;
+import com.jpexs.decompiler.flash.abc.types.Namespace;
+import com.jpexs.decompiler.flash.exporters.modes.ScriptExportMode;
+import com.jpexs.decompiler.flash.exporters.script.Dependency;
+import com.jpexs.decompiler.flash.exporters.script.DependencyParser;
+import com.jpexs.decompiler.flash.exporters.script.DependencyType;
+import com.jpexs.decompiler.flash.helpers.GraphTextWriter;
+import com.jpexs.decompiler.flash.helpers.NulWriter;
+import com.jpexs.decompiler.flash.helpers.hilight.HighlightSpecialType;
+import com.jpexs.decompiler.flash.search.MethodId;
+import com.jpexs.decompiler.flash.tags.DefineBinaryDataTag;
+import com.jpexs.decompiler.flash.tags.DefineFont4Tag;
+import com.jpexs.decompiler.flash.tags.base.CharacterTag;
+import com.jpexs.decompiler.flash.tags.base.ImageTag;
+import com.jpexs.decompiler.graph.DottedChain;
+import com.jpexs.decompiler.graph.GraphTargetItem;
+import com.jpexs.decompiler.graph.ScopeStack;
+import com.jpexs.decompiler.graph.TypeItem;
+import com.jpexs.helpers.Helper;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+
+/**
+ *
+ * @author JPEXS
+ */
+public class TraitClass extends Trait implements TraitWithSlot {
+
+    public int slot_id;
+
+    public int class_info;
+
+    private boolean classInitializerIsEmpty;
+
+    private List<String> frameTraitNames = new ArrayList<>();
+
+    @Override
+    public void delete(ABC abc, boolean d) {
+        super.delete(abc, d);
+        abc.deleteClass(class_info, d);
+        abc.constants.getMultiname(name_index).deleted = d;
+    }
+
+    @Override
+    public int getSlotIndex() {
+        return slot_id;
+    }
+
+    
+
+    @Override
+    public void getDependencies(AbcIndexing abcIndex, int scriptIndex, int classIndex, boolean isStatic, String customNs, ABC abc, List<Dependency> dependencies, DottedChain ignorePackage, List<DottedChain> fullyQualifiedNames, List<String> uses) throws InterruptedException {
+        super.getDependencies(abcIndex, scriptIndex, -1, false, customNs, abc, dependencies, ignorePackage == null ? getPackage(abc) : ignorePackage, fullyQualifiedNames, uses);
+        ClassInfo classInfo = abc.class_info.get(class_info);
+        InstanceInfo instanceInfo = abc.instance_info.get(class_info);
+        DottedChain packageName = instanceInfo.getName(abc.constants).getNamespace(abc.constants).getName(abc.constants); //assume not null name
+
+        //DependencyParser.parseDependenciesFromMultiname(customNs, abc, dependencies, uses, abc.constants.getMultiname(instanceInfo.name_index), packageName, fullyQualifiedNames);
+        if (instanceInfo.super_index > 0) {
+            DependencyParser.parseDependenciesFromMultiname(abcIndex, customNs, abc, dependencies, abc.constants.getMultiname(instanceInfo.super_index), packageName, fullyQualifiedNames, DependencyType.INHERITANCE, uses);
+        }
+        for (int i : instanceInfo.interfaces) {
+            DependencyParser.parseDependenciesFromMultiname(abcIndex, customNs, abc, dependencies, abc.constants.getMultiname(i), packageName, fullyQualifiedNames, DependencyType.INHERITANCE, uses);
+        }
+
+        //static
+        classInfo.static_traits.getDependencies(abcIndex, scriptIndex, class_info, true, customNs, abc, dependencies, packageName, fullyQualifiedNames, uses);
+
+        //static initializer
+        DependencyParser.parseDependenciesFromMethodInfo(abcIndex, null, scriptIndex, class_info, true, customNs, abc, classInfo.cinit_index, dependencies, packageName, fullyQualifiedNames, new ArrayList<>(), uses);
+
+        //instance
+        instanceInfo.instance_traits.getDependencies(abcIndex, scriptIndex, class_info, false, customNs, abc, dependencies, packageName, fullyQualifiedNames, uses);
+
+        //instance initializer
+        DependencyParser.parseDependenciesFromMethodInfo(abcIndex, null, scriptIndex, class_info, false, customNs, abc, instanceInfo.iinit_index, dependencies, packageName, fullyQualifiedNames, new ArrayList<>(), uses);
+    }
+
+    @Override
+    public GraphTextWriter toStringHeader(Trait parent, ConvertData convertData, String path, ABC abc, boolean isStatic, ScriptExportMode exportMode, int scriptIndex, int classIndex, GraphTextWriter writer, List<DottedChain> fullyQualifiedNames, boolean parallel, boolean insideInterface) {
+        abc.instance_info.get(class_info).getClassHeaderStr(writer, abc, fullyQualifiedNames, false, false /*??*/);
+        return writer;
+    }
+
+    @Override
+    public void convertHeader(Trait parent, ConvertData convertData, String path, ABC abc, boolean isStatic, ScriptExportMode exportMode, int scriptIndex, int classIndex, NulWriter writer, List<DottedChain> fullyQualifiedNames, boolean parallel) {
+    }
+
+    @Override
+    public String toString(ABC abc, List<DottedChain> fullyQualifiedNames) {
+        return "Class " + abc.constants.getMultiname(name_index).toString(abc.constants, fullyQualifiedNames) + " slot=" + slot_id + " class_info=" + class_info + " metadata=" + Helper.intArrToString(metadata);
+    }
+    
+    @Override
+    public GraphTextWriter toString(AbcIndexing abcIndex, Trait parent, ConvertData convertData, String path, ABC abc, boolean isStatic, ScriptExportMode exportMode, int scriptIndex, int classIndex, GraphTextWriter writer, List<DottedChain> fullyQualifiedNames, boolean parallel, boolean insideInterface) throws InterruptedException {
+
+        InstanceInfo instanceInfo = abc.instance_info.get(class_info);
+
+        boolean isInterface = instanceInfo.isInterface();
+
+        Multiname instanceInfoMultiname = instanceInfo.getName(abc.constants);
+        DottedChain packageName = instanceInfoMultiname.getNamespace(abc.constants).getName(abc.constants); //assume not null name
+
+        fullyQualifiedNames = new ArrayList<>();
+        writeImports(abcIndex, scriptIndex, classIndex, false, abc, writer, packageName, fullyQualifiedNames);
+
+        String instanceInfoName = instanceInfoMultiname.getName(abc.constants, fullyQualifiedNames, false, true);
+
+        getMetaData(parent, convertData, abc, writer);
+
+        boolean allowEmbed = true;
+
+        if (convertData.exportEmbedFlaMode) {
+            allowEmbed = false;
+            if (abc.getSwf() != null) {
+                CharacterTag ct = abc.getSwf().getCharacterByClass(instanceInfoMultiname.getNameWithNamespace(abc.constants, false).toRawString());
+                if (ct == null) {
+                    allowEmbed = false;
+                } else {
+                    if (ct instanceof DefineBinaryDataTag) {
+                        allowEmbed = true;
+                    }
+
+                    if (ct instanceof ImageTag) {
+                        allowEmbed = true;
+                        if (abcIndex.isInstanceOf(abc, class_info, DottedChain.parseNoSuffix("flash.display.BitmapData"))) {
+                            allowEmbed = false;
+                        }
+                    }
+
+                    if (ct instanceof DefineFont4Tag) {
+                        allowEmbed = true;
+                    }
+
+                    if (ct.getClassNames().size() > 1) {
+                        allowEmbed = true;
+                    }
+                }
+            }
+        }
+
+        //class header
+        instanceInfo.getClassHeaderStr(writer, abc, fullyQualifiedNames, false, allowEmbed);
+        writer.endTrait();
+        writer.startBlock();
+        writer.startClass(class_info);
+
+        //static variables & constants
+        ClassInfo classInfo = abc.class_info.get(class_info);
+        classInfo.static_traits.toString(abcIndex, new Class[]{TraitSlotConst.class}, this, convertData, path + "/" + instanceInfoName, abc, true, exportMode, false, scriptIndex, class_info, writer, fullyQualifiedNames, parallel, new ArrayList<>(), isInterface);
+
+        //static initializer
+        int bodyIndex = abc.findBodyIndex(classInfo.cinit_index);
+        if (bodyIndex != -1) {
+            writer.startTrait(GraphTextWriter.TRAIT_CLASS_INITIALIZER);
+            writer.startMethod(classInfo.cinit_index, "cinit");
+            if (exportMode != ScriptExportMode.AS_METHOD_STUBS) {
+                if (!classInitializerIsEmpty) {
+                    writer.startBlock();
+                    List<MethodBody> callStack = new ArrayList<>();
+                    callStack.add(abc.bodies.get(bodyIndex));
+                    abc.bodies.get(bodyIndex).toString(callStack, abcIndex, path + "/" + instanceInfoName + ".staticinitializer", exportMode, abc, this, writer, fullyQualifiedNames, new HashSet<>());
+                    writer.endBlock();
+                } else {
+                    //Note: There must be trait/method highlight even if the initializer is empty to TraitList in GUI to work correctly
+                    //TODO: handle this better in GUI(?)
+                    writer.append(" ").newLine();
+                }
+            }
+            writer.endMethod();
+            writer.endTrait();
+            if (!classInitializerIsEmpty) {
+                writer.newLine();
+            }
+        } else {
+            //"/*classInitializer*/";
+        }
+
+        //instance variables
+        instanceInfo.instance_traits.toString(abcIndex, new Class[]{TraitSlotConst.class}, this, convertData, path + "/" + instanceInfoName, abc, false, exportMode, false, scriptIndex, class_info, writer, fullyQualifiedNames, parallel, new ArrayList<>(), isInterface);
+
+        //instance initializer - constructor
+        if (!instanceInfo.isInterface()) {
+            String modifier = "public ";
+            Multiname m = abc.constants.getMultiname(instanceInfo.name_index);
+
+            writer.newLine();
+            writer.startTrait(GraphTextWriter.TRAIT_INSTANCE_INITIALIZER);
+            writer.startMethod(instanceInfo.iinit_index, "iinit");
+            writer.appendNoHilight(modifier);
+            writer.appendNoHilight("function ");
+            writer.appendNoHilight(m.getName(abc.constants, null/*do not want full names here*/, false, true));
+            writer.appendNoHilight("(");
+            bodyIndex = abc.findBodyIndex(instanceInfo.iinit_index);
+            MethodBody body = bodyIndex == -1 ? null : abc.bodies.get(bodyIndex);
+            abc.method_info.get(instanceInfo.iinit_index).getParamStr(writer, abc.constants, body, abc, fullyQualifiedNames);
+            writer.appendNoHilight(")").startBlock();
+            if (exportMode != ScriptExportMode.AS_METHOD_STUBS) {
+                if (body != null) {
+                    List<MethodBody> callStack = new ArrayList<>();
+                    callStack.add(body);
+                    body.toString(callStack, abcIndex, path + "/" + instanceInfoName + ".initializer", exportMode, abc, this, writer, fullyQualifiedNames, new HashSet<>());
+                }
+            }
+
+            writer.endBlock().newLine();
+            writer.endMethod();
+            writer.endTrait();
+        }
+
+        //static methods
+        classInfo.static_traits.toString(abcIndex, new Class[]{TraitClass.class, TraitFunction.class, TraitMethodGetterSetter.class}, this, convertData, path + "/" + instanceInfoName, abc, true, exportMode, false, scriptIndex, class_info, writer, fullyQualifiedNames, parallel, new ArrayList<>(), isInterface);
+
+        //instance methods
+        instanceInfo.instance_traits.toString(abcIndex, new Class[]{TraitClass.class, TraitFunction.class, TraitMethodGetterSetter.class}, this, convertData, path + "/" + instanceInfoName, abc, false, exportMode, false, scriptIndex, class_info, writer, fullyQualifiedNames, parallel, convertData.ignoreFrameScripts ? frameTraitNames : new ArrayList<>(), isInterface);
+
+        writer.endClass();
+        writer.endBlock(); // class
+        writer.newLine();
+        return writer;
+    }
+
+    @Override
+    public void convert(AbcIndexing abcIndex, Trait parent, ConvertData convertData, String path, ABC abc, boolean isStatic, ScriptExportMode exportMode, int scriptIndex, int classIndex, NulWriter writer, List<DottedChain> fullyQualifiedNames, boolean parallel, ScopeStack scopeStack) throws InterruptedException {
+
+        fullyQualifiedNames = new ArrayList<>();
+
+        InstanceInfo instanceInfo = abc.instance_info.get(class_info);
+        String instanceInfoName = instanceInfo.getName(abc.constants).getName(abc.constants, fullyQualifiedNames, false, true);
+        ClassInfo classInfo = abc.class_info.get(class_info);
+
+        AbcIndexing index = new AbcIndexing(abc.getSwf());
+        //for simplification of String(this)
+        int sIndex = abc.constants.getStringId("", false);
+        if (sIndex > -1) {
+            int nsIndex = abc.constants.getNamespaceId(Namespace.KIND_PACKAGE, DottedChain.TOPLEVEL, sIndex, false);
+            if (nsIndex > -1) {
+                convertData.thisHasDefaultToPrimitive = null == index.findProperty(new AbcIndexing.PropertyDef("toString", new TypeItem(instanceInfo.getName(abc.constants).getNameWithNamespace(abc.constants, true)), abc, nsIndex), false, true, false);
+            } else {
+                convertData.thisHasDefaultToPrimitive = true;
+            }
+        } else {
+            convertData.thisHasDefaultToPrimitive = true;
+        }
+        ScopeStack newScopeStack = (ScopeStack) scopeStack.clone();
+        //class initializer
+        int bodyIndex = abc.findBodyIndex(classInfo.cinit_index);
+        if (bodyIndex != -1) {
+            writer.mark();
+            List<MethodBody> callStack = new ArrayList<>();
+            callStack.add(abc.bodies.get(bodyIndex));
+
+            if (!abc.instance_info.get(class_info).isInterface()) {
+                AbcIndexing.ClassIndex cls = abcIndex.findClass(AbcIndexing.multinameToType(abc.instance_info.get(class_info).name_index, abc.constants), abc, scriptIndex);
+                List<AbcIndexing.ClassIndex> clsList = new ArrayList<>();
+                cls = cls.parent;
+                while (cls != null) {
+                    clsList.add(0, cls);
+                    cls = cls.parent;
+                }
+                for (AbcIndexing.ClassIndex cls2 : clsList) {
+                    newScopeStack.push(new ClassAVM2Item(cls2.abc.instance_info.get(cls2.index).getName(cls2.abc.constants).getNameWithNamespace(cls2.abc.constants, true)));
+                }
+            }
+
+            abc.bodies.get(bodyIndex).convert(callStack, abcIndex, convertData, path + "/" + instanceInfoName + ".staticinitializer", exportMode, true, classInfo.cinit_index, scriptIndex, class_info, abc, this, newScopeStack, GraphTextWriter.TRAIT_CLASS_INITIALIZER, writer, fullyQualifiedNames, classInfo.static_traits, true, new HashSet<>());
+
+            newScopeStack.push(new ClassAVM2Item(abc.instance_info.get(class_info).getName(abc.constants)));
+            classInitializerIsEmpty = !writer.getMark();
+        }
+
+        //constructor - instance initializer
+        if (!instanceInfo.isInterface()) {
+            bodyIndex = abc.findBodyIndex(instanceInfo.iinit_index);
+            if (bodyIndex != -1) {
+                MethodBody constructorBody = abc.bodies.get(bodyIndex);
+                List<MethodBody> callStack = new ArrayList<>();
+                callStack.add(constructorBody);
+                constructorBody.convert(callStack, abcIndex, convertData, path + "/" + instanceInfoName + ".initializer", exportMode, false, instanceInfo.iinit_index, scriptIndex, class_info, abc, this, new ScopeStack(), GraphTextWriter.TRAIT_INSTANCE_INITIALIZER, writer, fullyQualifiedNames, instanceInfo.instance_traits, true, new HashSet<>());
+
+                if (convertData.ignoreFrameScripts) {
+                    //find all addFrameScript(xx,this.method) in constructor
+                    /*
+                It looks like this:
+                CallPropertyAVM2Item
+                ->propertyName == FullMultinameAVM2Item
+                        -> resolvedMultinameName (String) "addFrameScript"
+                ->arguments
+                        ->0 IntegerValueAVM2Item
+                                ->value (Long) 0    - zero based
+                        ->1 GetPropertyAVM2Item
+                                ->object (ThisAVM2Item)
+                                ->propertyName (FullMultinameAvm2Item)
+                                        ->multinameIndex
+                                        ->resolvedMultinameName (String) "frame1"
+                     */
+                    if (constructorBody.convertedItems != null) {
+                        for (int j = 0; j < constructorBody.convertedItems.size(); j++) {
+                            GraphTargetItem ti = constructorBody.convertedItems.get(j);
+                            if (ti instanceof CallPropertyAVM2Item) {
+                                CallPropertyAVM2Item callProp = (CallPropertyAVM2Item) ti;
+                                if (callProp.propertyName instanceof FullMultinameAVM2Item) {
+                                    FullMultinameAVM2Item propName = (FullMultinameAVM2Item) callProp.propertyName;
+                                    if ("addFrameScript".equals(propName.resolvedMultinameName)) {
+                                        for (int i = 0; i < callProp.arguments.size(); i += 2) {
+                                            if (callProp.arguments.get(i) instanceof IntegerValueAVM2Item) {
+                                                if (callProp.arguments.get(i + 1) instanceof GetLexAVM2Item) {
+                                                    GetLexAVM2Item lex = (GetLexAVM2Item) callProp.arguments.get(i + 1);
+                                                    frameTraitNames.add(lex.propertyName.getName(abc.constants, new ArrayList<>(), false, true));
+                                                } else if (callProp.arguments.get(i + 1) instanceof GetPropertyAVM2Item) {
+                                                    GetPropertyAVM2Item getProp = (GetPropertyAVM2Item) callProp.arguments.get(i + 1);
+                                                    if (getProp.object instanceof ThisAVM2Item) {
+                                                        if (getProp.propertyName instanceof FullMultinameAVM2Item) {
+                                                            FullMultinameAVM2Item framePropName = (FullMultinameAVM2Item) getProp.propertyName;
+                                                            int multinameIndex = framePropName.multinameIndex;
+                                                            frameTraitNames.add(abc.constants.getMultiname(multinameIndex).getName(abc.constants, new ArrayList<>(), false, true));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        constructorBody.convertedItems.remove(j);
+                                        j--;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //static variables,constants & methods
+        classInfo.static_traits.convert(abcIndex, this, convertData, path + "/" + instanceInfoName, abc, true, exportMode, false, scriptIndex, class_info, writer, fullyQualifiedNames, parallel, newScopeStack);
+
+        instanceInfo.instance_traits.convert(abcIndex, this, convertData, path + "/" + instanceInfoName, abc, false, exportMode, false, scriptIndex, class_info, writer, fullyQualifiedNames, parallel, newScopeStack);
+    }
+
+    @Override
+    public int removeTraps(int scriptIndex, int classIndex, boolean isStatic, ABC abc, String path) throws InterruptedException {
+        ClassInfo classInfo = abc.class_info.get(class_info);
+        InstanceInfo instanceInfo = abc.instance_info.get(class_info);
+        int iInitializer = abc.findBodyIndex(instanceInfo.iinit_index);
+        int ret = 0;
+        if (iInitializer != -1) {
+            ret += abc.bodies.get(iInitializer).removeTraps(abc, this, scriptIndex, class_info, false, path);
+        }
+        int sInitializer = abc.findBodyIndex(classInfo.cinit_index);
+        if (sInitializer != -1) {
+            ret += abc.bodies.get(sInitializer).removeTraps(abc, this, scriptIndex, class_info, true, path);
+        }
+        ret += instanceInfo.instance_traits.removeTraps(scriptIndex, class_info, false, abc, path);
+        ret += classInfo.static_traits.removeTraps(scriptIndex, class_info, true, abc, path);
+        return ret;
+    }
+
+    @Override
+    public TraitClass clone() {
+        TraitClass ret = (TraitClass) super.clone();
+        return ret;
+    }
+
+    @Override
+    public GraphTextWriter convertTraitHeader(ABC abc, GraphTextWriter writer) {
+        convertCommonHeaderFlags("class", abc, writer);
+        writer.newLine();
+        writer.appendNoHilight("slotid ");
+        writer.hilightSpecial(Integer.toString(slot_id), HighlightSpecialType.SLOT_ID);
+        writer.newLine();
+        writer.appendNoHilight("class").newLine();
+        writer.indent();
+        InstanceInfo ii = abc.instance_info.get(class_info);
+        writer.appendNoHilight("instance ").hilightSpecial(abc.constants.multinameToString(ii.name_index), HighlightSpecialType.INSTANCE_NAME).newLine();
+        writer.indent();
+        writer.appendNoHilight("extends ").hilightSpecial(abc.constants.multinameToString(ii.super_index), HighlightSpecialType.EXTENDS).newLine();
+        for (int iface : ii.interfaces) {
+            writer.appendNoHilight("implements ").hilightSpecial(abc.constants.multinameToString(iface), HighlightSpecialType.IMPLEMENTS).newLine();
+        }
+        if ((ii.flags & InstanceInfo.CLASS_SEALED) == InstanceInfo.CLASS_SEALED) {
+            writer.appendNoHilight("flag SEALED").newLine();
+        }
+        if ((ii.flags & InstanceInfo.CLASS_FINAL) == InstanceInfo.CLASS_FINAL) {
+            writer.appendNoHilight("flag FINAL").newLine();
+        }
+        if ((ii.flags & InstanceInfo.CLASS_INTERFACE) == InstanceInfo.CLASS_INTERFACE) {
+            writer.appendNoHilight("flag INTERFACE").newLine();
+        }
+        if ((ii.flags & InstanceInfo.CLASS_PROTECTEDNS) == InstanceInfo.CLASS_PROTECTEDNS) {
+            writer.appendNoHilight("flag PROTECTEDNS").newLine();
+        }
+        if ((ii.flags & InstanceInfo.CLASS_NON_NULLABLE) == InstanceInfo.CLASS_NON_NULLABLE) {
+            writer.appendNoHilight("flag NON_NULLABLE").newLine();
+        }
+        if ((ii.flags & InstanceInfo.CLASS_PROTECTEDNS) == InstanceInfo.CLASS_PROTECTEDNS) {
+            writer.appendNoHilight("protectedns ").hilightSpecial(Multiname.namespaceToString(abc.constants, ii.protectedNS), HighlightSpecialType.PROTECTEDNS).newLine();
+        }
+        writer.unindent();
+        writer.appendNoHilight("end ; instance").newLine();
+        writer.unindent();
+        writer.appendNoHilight("end ; class").newLine();
+        return writer;
+    }
+
+    @Override
+    public void getMethodInfos(ABC abc, int traitId, int classIndex, List<MethodId> methodInfos) {
+        InstanceInfo instanceInfo = abc.instance_info.get(class_info);
+        ClassInfo classInfo = abc.class_info.get(class_info);
+
+        //class initializer
+        methodInfos.add(new MethodId(GraphTextWriter.TRAIT_CLASS_INITIALIZER, class_info, classInfo.cinit_index));
+
+        //constructor - instance initializer
+        methodInfos.add(new MethodId(GraphTextWriter.TRAIT_INSTANCE_INITIALIZER, class_info, instanceInfo.iinit_index));
+
+        //static variables,constants & methods
+        classInfo.static_traits.getMethodInfos(abc, true, class_info, methodInfos);
+
+        instanceInfo.instance_traits.getMethodInfos(abc, false, class_info, methodInfos);
+    }
+}
