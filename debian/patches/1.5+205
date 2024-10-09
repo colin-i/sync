@@ -1,0 +1,76 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+205) xenial; urgency=medium
+ .
+   * same(with test fix)
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-10-09
+
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -1,6 +1,7 @@
+ 
+ #1 msg
+ 
++./test32 && \
+ if [ -z "${msg}" ]; then # more at test/publ
+ 	msg="${1}"
+ fi
+--- /dev/null
++++ ocompiler-1/localtest
+@@ -0,0 +1 @@
++1-5+204
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -106,13 +106,14 @@ test:
+ 	echo "test"
+ 	cd linux; ../o o.oc nul_res_pref 1; mv o z; \
+ 	if [ -z "${testlinker}" ]; then \
+-		./z o.oc nul_res_pref 1; \
++		cd ../../; ./test32; \
+ 	else \
+ 		LD_LIBRARY_PATH=${testlinker} ${testlinker}/ld-linux.so.2 ./z o.oc nul_res_pref 1; \
+-	fi; \
+-	diff o z
++		diff o z; \
++	fi
+ #cannot extern LD_LIBRARY_PATH, will wrong between them
+ #use ./test32
+ #there is a backport in ppa-stagging for jammy
++#still at xenial/bionic but launchpad stop working for ./z . solution? local test
+ 
+ .PHONY: all install install-proj clean clean-compile clean-link clean-test distclean uninstall test
+--- ocompiler-1.orig/src/test32
++++ ocompiler-1/src/test32
+@@ -1,3 +1,6 @@
+ 
+-testlinker=/home/bc/Desktop/out/libc6/lib32 make test
+-echo $?
++testlinker=/home/bc/Desktop/out/libc6/lib32 make test && \
++if [ $? = 0 ]; then
++	cat ../debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))" > ../localtest && \
++	cat ../localtest
++fi
+--- /dev/null
++++ ocompiler-1/test32
+@@ -0,0 +1,2 @@
++
++test `cat debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"` = `cat localtest`
