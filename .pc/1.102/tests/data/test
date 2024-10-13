@@ -1,0 +1,11 @@
+
+set -o pipefail && ./a | tee data.txt || exit 1
+diff ../.expected/data.txt data.txt
+if [ $? = 0 ]; then
+	rm data.txt
+	exit 0
+fi
+if [ -n "${1}" ]; then exit 1; fi
+echo y \?; read -n1 -t $((60*60*24)) ans
+if [ "${ans}" != "y" ]; then exit 1; fi
+mv data.txt ../.expected/data.txt
