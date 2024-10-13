@@ -1,0 +1,59 @@
+
+format elfobj64
+
+importx "strlen" strlen
+importx "malloc" malloc
+importx "memcpy" memcpy
+importx "fopen" fopen
+importx "free" free
+importx "fclose" fclose
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+char inter_extension_data=".data";vstr p_inter_extension_data^inter_extension_data
+function inter_extension(sv psize)
+	set psize# (\global.inter_extension_data)
+	return global.p_inter_extension_data
+end
+function compare(ss swf_fullpath)
+	sd size;set size strlen(swf_fullpath)
+	sd size1=\global.inter_extension_data
+	add size1 size
+	sd prev;set prev malloc(size1)
+	if prev!=(NULL)
+		call memcpy(prev,swf_fullpath,size)
+		sub size1 size
+		add size prev
+		call memcpy(size,global.p_inter_extension_data,size1)
+		sd file
+		set file fopen(prev,"rb")
+		call free(prev)
+		if file!=(NULL) #will mark diffs
+			call fclose(file)
+		#else will mark all
+		end
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+function preoadata_init(sv ppresprites)
+	set ppresprites# malloc(:)
+	sv ps;set ps ppresprites#
+	if ps!=(NULL)
+		set ps# (NULL)
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+function preoadata_free(sv presprites)
+	if presprites!=(NULL)
+		sv ps;set ps presprites
+		while ps#!=(NULL)
+		end
+		call free(presprites)
+	end
+end
+
+entryraw global()

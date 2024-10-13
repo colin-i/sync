@@ -1,0 +1,156 @@
+
+format elfobj64
+
+importx "strlen" strlen
+importx "malloc" malloc
+importx "free" free
+importx "memcpy" memcpy
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+import "fcontent" fcontent
+import "loop" loop
+import "inter" inter
+import "oadata_init" oadata_init
+import "preoadata_init" preoadata_init
+import "preoadata_free" preoadata_free
+
+#functions are returning 0(long) on success and != on failure (EXIT_FAILURE or another != (from extern calls))
+
+functionx oadata_make(ss swf_fullpath,sv poadata)
+	set poadata# (NULL)
+	sd size;set size strlen(swf_fullpath)
+	char logext=".log";vstr slogext^logext
+	sd allsize=\.logext;add allsize size
+	sd mem;set mem malloc(allsize)
+	if mem!=(NULL)
+		sd exit
+		call memcpy(mem,swf_fullpath,size)
+		add size mem
+		call memcpy(size,slogext,\.logext)
+		sd logsize
+		sd logcontent;set logcontent fcontent(mem,#logsize)
+		if logcontent!=(NULL)
+			char xext=".x";vstr sxext^xext
+			call memcpy(size,sxext,\.xext)
+			sd dummy
+			sd xcontent;set xcontent fcontent(mem,#dummy)
+			if xcontent!=(NULL)
+				char xxext=".xx";vstr sxxext^xxext
+				call memcpy(size,sxxext,\.xxext)
+				sd xxcontent;set xxcontent fcontent(mem,#dummy)
+				if xxcontent!=(NULL)
+					set exit oadata_init(poadata)
+					if exit=(EXIT_SUCCESS)
+						sv presprites;set exit preoadata_init(#presprites)
+						if exit=(EXIT_SUCCESS)
+							set exit loop(logcontent,xcontent,xxcontent,logsize)
+							if exit=(EXIT_SUCCESS)
+								set exit inter(swf_fullpath)
+							end
+						end
+						call preoadata_free(presprites)
+					end
+					if exit!=(EXIT_SUCCESS)
+						call oadata_free(poadata#,(FALSE)) #there are multiple mallocs in outinit
+					end
+					call free(xxcontent)
+				else
+					set exit (EXIT_FAILURE)
+				end
+				call free(xcontent)
+			else
+				set exit (EXIT_FAILURE)
+			end
+			call free(logcontent)
+		else
+			set exit (EXIT_FAILURE)
+		end
+		call free(mem)
+		return exit
+	end
+	return (EXIT_FAILURE)
+end
+
+importx "rename" rename
+import "inter_extension" inter_extension
+import "inter_last_extension" inter_last_extension
+
+functionx oadata_ok(ss swf_fullpath)
+# move ...last.data ...data
+	sd size;set size strlen(swf_fullpath)
+	ss slastinter;sd size1
+	set slastinter inter_last_extension(#size1)
+	add size1 size
+	sd from;set from malloc(size1)
+	if from!=(NULL)
+		ss sinterfinal;sd size2
+		set sinterfinal inter_extension(#size2)
+		add size2 size
+		sd to;set to malloc(size2)
+		if to!=(NULL)
+			call memcpy(from,swf_fullpath,size)
+			call memcpy(to,swf_fullpath,size)
+			sub size1 size
+			add size from
+			call memcpy(size,slastinter,size1)
+			sub size from
+			sub size2 size
+			add size to
+			call memcpy(size,sinterfinal,size2)
+
+			sd r ;#same 0/-1
+			set r rename(from,to)
+
+			call free(from)
+			call free(to)
+			return r
+		end
+		call free(from)
+	end
+	return (EXIT_FAILURE)
+end
+
+importx "puts" puts
+importx "printf" printf
+
+functionx oadata_free(sv data,charx log)
+	if data!=(NULL)
+		sv sprites;set sprites data#:oadata.sprites
+		if sprites!=(NULL)
+			sv s;set s sprites
+			while s#!=(NULL)
+			end
+			call free(sprites)
+
+			sv marks;set marks data#:oadata.marks
+			if marks!=(NULL)
+				if log=(TRUE)
+					call puts("mark struct:")
+					sd m;set m marks
+					datau i=0
+					whiletrue
+						datax next#1;set next m#:mark.next
+						call printf("\t%u\n\t\t%d\n\t\t%d\n",i,m#:mark.prev,next)
+						if next=(mark_nothing)
+							break
+						end
+						#add m \mark\
+						#inc i
+					end
+				end
+				call free(marks)
+
+				sv fns;set fns data#:oadata.functions
+				if fns!=(NULL)
+					sv f;set f fns
+					while f#!=(NULL)
+					end
+					call free(fns)
+				end
+			end
+		end
+		call free(data)
+	end
+end
