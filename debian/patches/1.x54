@@ -1,0 +1,55 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x54) focal; urgency=medium
+ .
+   * when bcsp/del with tabs at end ( at rowfixdel )
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-10-16
+
+--- edor-1.orig/Makefile.old
++++ edor-1/Makefile.old
+@@ -38,4 +38,4 @@ distclean: clean
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/edor
+ 
+-.PHONY: all install clean distclean uninstall
+\ No newline at end of file
++.PHONY: all install clean clean-compile clean-link distclean uninstall
+--- edor-1.orig/arh/pub
++++ edor-1/arh/pub
+@@ -22,3 +22,6 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp x && \
+ ~/test/keyring && \
+ ~/test/arh2 ${last} 0
++
++#titles for fast going: a(){  ...  n(){ ...
++#2 code separation: o_code("|||actionscript code file|||") a temp file that is split saving the code
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -1529,7 +1529,7 @@ static void rowfixdel(WINDOW*w,int r,int
+ 			c+=tab_sz;wmove(w,r,c);
+ 		}
+ 		i++;
+-		if(c==wd){
++		if(c>=wd){ //here == is not ok, if c+=tab_sz goes > then will be wrong (also, visible on display)
+ 			if(i<mx)content_at_right(r);
+ 			break;
+ 		}
