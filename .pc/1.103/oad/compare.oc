@@ -1,0 +1,273 @@
+
+format elfobj64
+
+importx "strlen" strlen
+importx "malloc" malloc
+importx "memcpy" memcpy
+importx "fopen" fopen
+importx "free" free
+importx "fclose" fclose
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+#multithread unsafe
+valueu presprites_size#1  #same as sprites_size, but add 4 more for less calculation
+#
+
+char inter_extension_data=".data";vstr p_inter_extension_data^inter_extension_data
+function inter_extension(sv psize)
+	set psize# (\global.inter_extension_data)
+	return global.p_inter_extension_data
+end
+function compare(ss swf_fullpath)
+	sd size;set size strlen(swf_fullpath)
+	sd size1=\global.inter_extension_data
+	add size1 size
+	sd prev;set prev malloc(size1)
+	if prev!=(NULL)
+		call memcpy(prev,swf_fullpath,size)
+		sub size1 size
+		add size prev
+		call memcpy(size,global.p_inter_extension_data,size1)
+		sd file
+		set file fopen(prev,"rb")
+		call free(prev)
+		if file!=(NULL) #will mark diffs
+			call fclose(file)
+		#else will mark all
+		end
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+function sprite_free(sv s,sv start)
+	sv sp;set sp s#
+	if sp!=(NULL)
+		if start!=(NULL)
+			sub s start
+			divu s :
+			call printf("\tid=%hu\n",s)
+		end
+		if sp#:sprite.aframe!=(NULL)
+			call free(sp#:sprite.aframe)
+		end
+		if sp#:sprite.frames!=(NULL)
+			sv pointer;sd end
+			set pointer sp#:sprite.frames
+			set end sp#:sprite.size
+			add end pointer
+			while pointer!=end
+				if pointer#!=(NULL)
+				end
+				incst pointer
+			end
+			call free(sp#:sprite.frames)
+		end
+		call free(sp)
+	end
+end
+
+function preoadata_init(sv ppresprites,sv psprites)
+	set ppresprites# malloc((sprites_realloc_onepart))
+	if ppresprites#!=(NULL)
+		set psprites# malloc((sprites_realloc_onepart))
+		if psprites#!=(NULL)
+			set global.presprites_size 0
+			return (EXIT_SUCCESS)
+		end
+	end
+	return (EXIT_FAILURE)
+end
+
+importx "puts" puts
+importx "printf" printf
+
+import "preframe_free" preframe_free
+
+function preoadata_free(sv presprites,sv sprites,charx log)
+	if presprites!=(NULL)
+		if sprites!=(NULL)
+			wordxu preid#1
+			if log=(TRUE)
+				set preid 0 #0root 1-FFFF sprite/button
+				call puts("presprites:")
+			end
+			add global.presprites_size presprites
+			sv ps;set ps presprites
+			sv s;set s sprites
+			while ps!=global.presprites_size
+				sv pres;set pres ps#
+				if pres!=(NULL)
+					if log=(TRUE)
+						call printf("\t%hu\n",preid)
+						dataxu frames#1;set frames pres#:presprite.size
+						divu frames :
+						call printf("\t\tframes=%hu\n",frames)
+					end
+					if pres#:presprite.apreframe!=(NULL)
+						call preframe_free(pres#:presprite.apreframe)
+					end
+					if pres#:presprite.preframes!=(NULL) #not making a template free because preframe is different than frame
+						sv pointer;set pointer pres#:presprite.preframes
+						sd end;set end pres#:presprite.size
+						add end pointer
+						while pointer!=end
+							if pointer#!=(NULL)
+							end
+							incst pointer
+						end
+						call free(pres#:presprite.preframes)
+
+						call sprite_free(s,(NULL)) #and unfinished sprites, here is after an error
+					end
+					call free(pres)
+				end
+				if log=(TRUE)
+					inc preid
+				end
+				incst ps
+				incst s
+			end
+			call free(sprites)
+			call free(presprites)
+		end
+	end
+end
+
+import "re_alloc" re_alloc
+import "preframe_init" preframe_init
+
+#                       wordxu preid
+function presprite_init(svu newpointer,sv ppresprites,sv psprites,charx type,charx ainit)
+	mult newpointer :
+	dataxu newsize#1;set newsize newpointer
+	add newsize :
+	charx ok#1
+	if global.presprites_size<^newsize   ##else example: preid 0 after a sprite preid 2
+		set ok re_alloc(ppresprites,global.presprites_size,newsize)
+		if ok!=(EXIT_SUCCESS)
+			return (EXIT_FAILURE)
+		end
+		set ok re_alloc(psprites,global.presprites_size,newsize) #and for sprites, but before sprite_done, with a preid
+		if ok!=(EXIT_SUCCESS)
+			return (EXIT_FAILURE)
+		end
+		set global.presprites_size newsize
+	end
+	sv ps;sv pf
+	sv s;sv f
+	add newpointer ppresprites#
+	if newpointer#!=(NULL) #already opened this sprite
+		if type=(from_show)
+			set ps newpointer#
+			set pf ps#:presprite.preframes
+			set newsize ps#:presprite.size
+			add newsize :
+			set ok re_alloc(#ps#:presprite.preframes,ps#:presprite.size,newsize)
+			if ok!=(EXIT_SUCCESS)
+				return (EXIT_FAILURE)
+			end
+			set ps#:presprite.size newsize
+
+			sub newpointer ppresprites#
+			add newpointer psprites#
+			set s newpointer# #is not done and moved, normally
+			set f s#:sprite.frames
+			set ok re_alloc(#s#:sprite.frames,s#:sprite.size,newsize)
+			if ok!=(EXIT_SUCCESS)
+				return (EXIT_FAILURE)
+			end
+			set s#:sprite.size newsize  ##set this size at move time? still extra code to reset ps size if not ok at s
+		else
+			if ainit=(xlog_ainit_true) #ainit/button , here is multiple action call, not after oalt
+			end
+		end
+		return (EXIT_SUCCESS)
+	end
+	set ps malloc(\presprite\)
+	if ps!=(NULL)
+		set newpointer# ps
+		set ps#:presprite.apreframe (NULL)
+		set ps#:presprite.preframes (NULL)
+		if type=(from_action)
+			if ainit=(xlog_ainit_true) #ainit/button
+				set ps#:presprite.apreframe preframe_init()
+				if ps#:presprite.apreframe=(NULL)
+					return (EXIT_FAILURE)
+				end
+			end
+		end
+		set ps#:presprite.preframes malloc((sprites_realloc_onepart))
+		set pf ps#:presprite.preframes
+		if pf!=(NULL)
+			set pf# (NULL)
+			set ps#:presprite.size :
+
+			#and for sprites
+			set s malloc(\sprite\)
+			if s!=(NULL)
+				sub newpointer ppresprites#
+				add newpointer psprites#
+				set newpointer# s
+				set s#:sprite.aframe (NULL)
+				set s#:sprite.frames (NULL)
+				if type=(from_action)
+					if ainit=(xlog_ainit_true) #ainit/button
+						set s#:sprite.aframe malloc((\frame\))
+						if s#:sprite.aframe=(NULL)
+							return (EXIT_FAILURE)
+						end
+					end
+				end
+				set s#:sprite.frames malloc((sprites_realloc_onepart))
+				set f s#:sprite.frames
+				if f!=(NULL)
+					set f# (NULL)
+					set s#:sprite.size :
+
+					if type=(from_show)
+						incst pf
+						set pf# (NULL)
+						add ps#:presprite.size :
+
+						incst f
+						set f# (NULL)
+						add s#:sprite.size :
+					end
+					return (EXIT_SUCCESS)
+				end
+			end
+		end
+	end
+	return (EXIT_FAILURE)
+end
+
+function presprite_done(sv sprites,wordxu preid,wordxu id,sv data)
+	sv pointer=:
+	mult pointer preid
+	if pointer<^global.presprites_size  ##can be a done with no action/show
+		add pointer sprites
+		if pointer#!=(NULL)     #same
+			sv destination=:
+			mult destination id
+			add destination :   #for size comparison
+			if destination>^data#:oadata.sprites_size
+				charx ok#1
+				set ok re_alloc(#data#:oadata.sprites,data#:oadata.sprites_size,destination)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+				set data#:oadata.sprites_size destination
+			end
+			sub destination :
+			add destination data#:oadata.sprites
+			set destination# pointer#
+			set pointer# (NULL)
+		end
+	end
+	return (EXIT_SUCCESS)
+end
+
+entryraw global()

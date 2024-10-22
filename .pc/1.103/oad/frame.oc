@@ -1,0 +1,66 @@
+
+format elfobj64
+
+importx "realloc" realloc
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+function re_alloc(sv pmem,svu size,valueu newsize) #big at lines
+	valueu currentmaxsize#1;set currentmaxsize size
+	divu currentmaxsize ((sprites_realloc_onepart))
+	mult currentmaxsize ((sprites_realloc_onepart))
+	add currentmaxsize ((sprites_realloc_onepart))
+	if newsize>^currentmaxsize
+		set currentmaxsize newsize
+		divu currentmaxsize ((sprites_realloc_onepart))
+		mult currentmaxsize ((sprites_realloc_onepart))
+		add currentmaxsize ((sprites_realloc_onepart))
+		sv newmem;set newmem realloc(pmem#,currentmaxsize)
+		if newmem=(NULL);return (EXIT_FAILURE);end
+		set pmem# newmem
+	end
+	add size pmem#
+	add newsize pmem#
+	while size!=newsize
+		set size# (NULL)
+		add size :
+	end
+	return (EXIT_SUCCESS)
+end
+
+importx "malloc" malloc
+importx "free" free
+
+function preframe_init()
+	sv pf;set pf malloc((\preframe\))
+	if pf!=(NULL)
+		valueu bra#1
+		set bra malloc((\branch\))
+		if bra!=(NULL)
+			sv strings
+			set strings malloc((sprites_realloc_onepart))
+			if strings!=(NULL)
+				set pf#:preframe.abranch bra
+				set pf#:preframe.strings strings
+				set pf#:preframe.size 0
+				return pf
+			end
+			call free(bra)
+		end
+		call free(pf)
+	end
+	return (NULL)
+end
+function preframe_free(sv pf)
+	call free(pf#:preframe.abranch)
+	sv strings;set strings pf#:preframe.strings
+	sv s;set s strings
+	sv end;set end pf#:preframe.size
+	mult end :
+	add end s
+	while s!=end
+	end
+	call free(strings)
+	call free(pf)
+end

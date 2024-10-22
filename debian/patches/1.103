@@ -1,0 +1,500 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-103) bionic; urgency=medium
+ .
+   * ustrings
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-10-22
+
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -35,23 +35,28 @@ end
+ function preframe()
+ 	valuexu abranch#1
+ 
+-	wordxu size#1  ;#Count=ui16
++	dataxu size#1  ;#Count=ui16 * :
+ 	valuexu strings#1
++	dataxu usize#1  ;#Count=ui16 * :
++	valuexu ustrings#1
+ end
+ function branch()
+-	dataxu *size#1
+-	vdataxu *x#1
++#	dataxu *size#1
++#	vdataxu *x#1
+ 
+-	valuexu *subbranches#1
++#	valuexu *subbranch#1
+ 
+-	dataxu *offset#1
+-	valuexu *action#1
++#	dataxu *offset#1
++	valuexu *action#1   #for mark, after compare
+ end
+ #function string()
+ #	vstrxu text#1
+-
+ #	valuexu branches#1
+ #end
++#function ustring()
++#	vstrxu text#1
++#	valueu branch#1
++#end
+ 
+ const from_action=0
+ const from_show=1
+--- actionswf-1.orig/oad/compare.oc
++++ actionswf-1/oad/compare.oc
+@@ -42,7 +42,9 @@ function compare(ss swf_fullpath)
+ 	return (EXIT_FAILURE)
+ end
+ 
+-function sprite_free(sv s,sv start)
++import "frame_free" frame_free
++
++function sprite_free(sv s,sv start) #log is start != null
+ 	sv sp;set sp s#
+ 	if sp!=(NULL)
+ 		if start!=(NULL)
+@@ -51,7 +53,7 @@ function sprite_free(sv s,sv start)
+ 			call printf("\tid=%hu\n",s)
+ 		end
+ 		if sp#:sprite.aframe!=(NULL)
+-			call free(sp#:sprite.aframe)
++			call frame_free(sp#:sprite.aframe,start,(xlog_ainit_true))
+ 		end
+ 		if sp#:sprite.frames!=(NULL)
+ 			sv pointer;sd end
+@@ -60,6 +62,7 @@ function sprite_free(sv s,sv start)
+ 			add end pointer
+ 			while pointer!=end
+ 				if pointer#!=(NULL)
++					call frame_free(pointer#,start,(xlog_ainit_false))
+ 				end
+ 				incst pointer
+ 			end
+@@ -107,7 +110,7 @@ function preoadata_free(sv presprites,sv
+ 						call printf("\t\tframes=%hu\n",frames)
+ 					end
+ 					if pres#:presprite.apreframe!=(NULL)
+-						call preframe_free(pres#:presprite.apreframe)
++						call preframe_free(pres#:presprite.apreframe,log,(xlog_ainit_true))
+ 					end
+ 					if pres#:presprite.preframes!=(NULL) #not making a template free because preframe is different than frame
+ 						sv pointer;set pointer pres#:presprite.preframes
+@@ -115,6 +118,7 @@ function preoadata_free(sv presprites,sv
+ 						add end pointer
+ 						while pointer!=end
+ 							if pointer#!=(NULL)
++								call preframe_free(pointer#,log,(xlog_ainit_false))
+ 							end
+ 							incst pointer
+ 						end
+@@ -137,10 +141,10 @@ function preoadata_free(sv presprites,sv
+ end
+ 
+ import "re_alloc" re_alloc
+-import "preframe_init" preframe_init
++import "nframe_init" nframe_init
+ 
+ #                       wordxu preid
+-function presprite_init(svu newpointer,sv ppresprites,sv psprites,charx type,charx ainit)
++function presprite_init(svu newpointer,sv ppresprites,sv psprites,charx type,charx ainit,valueu linestotal)
+ 	mult newpointer :
+ 	dataxu newsize#1;set newsize newpointer
+ 	add newsize :
+@@ -160,10 +164,12 @@ function presprite_init(svu newpointer,s
+ 	sv s;sv f
+ 	add newpointer ppresprites#
+ 	if newpointer#!=(NULL) #already opened this sprite
++		set ps newpointer#
++		sub newpointer ppresprites#
++		add newpointer psprites#
++		set s newpointer# #is not done and moved, normally
++		set newsize ps#:presprite.size
+ 		if type=(from_show)
+-			set ps newpointer#
+-			set pf ps#:presprite.preframes
+-			set newsize ps#:presprite.size
+ 			add newsize :
+ 			set ok re_alloc(#ps#:presprite.preframes,ps#:presprite.size,newsize)
+ 			if ok!=(EXIT_SUCCESS)
+@@ -171,17 +177,26 @@ function presprite_init(svu newpointer,s
+ 			end
+ 			set ps#:presprite.size newsize
+ 
+-			sub newpointer ppresprites#
+-			add newpointer psprites#
+-			set s newpointer# #is not done and moved, normally
+-			set f s#:sprite.frames
+ 			set ok re_alloc(#s#:sprite.frames,s#:sprite.size,newsize)
+ 			if ok!=(EXIT_SUCCESS)
+ 				return (EXIT_FAILURE)
+ 			end
+ 			set s#:sprite.size newsize  ##set this size at move time? still extra code to reset ps size if not ok at s
+-		else
+-			if ainit=(xlog_ainit_true) #ainit/button , here is multiple action call, not after oalt
++		else #from action
++			if ainit=(xlog_ainit_false)
++				sub newsize :  #to point at last
++				set pf ps#:presprite.preframes
++				set f s#:sprite.frames
++				add pf newsize
++				add f newsize
++				if pf#=(NULL) #is after a show
++					set f# nframe_init(pf,linestotal)
++					if f#=(NULL)
++						return (EXIT_FAILURE)
++					end
++				#else is multiple action call
++				end
++			#else #if ainit=(xlog_ainit_true) #ainit/button , here is multiple action call, not after oalt
+ 			end
+ 		end
+ 		return (EXIT_SUCCESS)
+@@ -190,15 +205,6 @@ function presprite_init(svu newpointer,s
+ 	if ps!=(NULL)
+ 		set newpointer# ps
+ 		set ps#:presprite.apreframe (NULL)
+-		set ps#:presprite.preframes (NULL)
+-		if type=(from_action)
+-			if ainit=(xlog_ainit_true) #ainit/button
+-				set ps#:presprite.apreframe preframe_init()
+-				if ps#:presprite.apreframe=(NULL)
+-					return (EXIT_FAILURE)
+-				end
+-			end
+-		end
+ 		set ps#:presprite.preframes malloc((sprites_realloc_onepart))
+ 		set pf ps#:presprite.preframes
+ 		if pf!=(NULL)
+@@ -212,15 +218,6 @@ function presprite_init(svu newpointer,s
+ 				add newpointer psprites#
+ 				set newpointer# s
+ 				set s#:sprite.aframe (NULL)
+-				set s#:sprite.frames (NULL)
+-				if type=(from_action)
+-					if ainit=(xlog_ainit_true) #ainit/button
+-						set s#:sprite.aframe malloc((\frame\))
+-						if s#:sprite.aframe=(NULL)
+-							return (EXIT_FAILURE)
+-						end
+-					end
+-				end
+ 				set s#:sprite.frames malloc((sprites_realloc_onepart))
+ 				set f s#:sprite.frames
+ 				if f!=(NULL)
+@@ -235,6 +232,18 @@ function presprite_init(svu newpointer,s
+ 						incst f
+ 						set f# (NULL)
+ 						add s#:sprite.size :
++					else #from_action
++						if ainit=(xlog_ainit_false)  #here is the case when first frame has action (a popular case)
++							set f# nframe_init(pf,linestotal)
++							if f#=(NULL)
++								return (EXIT_FAILURE)
++							end
++						else #ainit true
++							set s#:sprite.aframe nframe_init(#ps#:presprite.apreframe,linestotal)
++							if s#:sprite.aframe=(NULL)
++								return (EXIT_FAILURE)
++							end
++						end
+ 					end
+ 					return (EXIT_SUCCESS)
+ 				end
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -41,10 +41,17 @@ function preframe_init()
+ 			sv strings
+ 			set strings malloc((sprites_realloc_onepart))
+ 			if strings!=(NULL)
+-				set pf#:preframe.abranch bra
+-				set pf#:preframe.strings strings
+-				set pf#:preframe.size 0
+-				return pf
++				sv ustrings
++				set ustrings malloc((sprites_realloc_onepart))
++				if ustrings!=(NULL)
++					set pf#:preframe.abranch bra
++					set pf#:preframe.strings strings
++					set pf#:preframe.size 0
++					set pf#:preframe.ustrings ustrings
++					set pf#:preframe.usize 0
++					return pf
++				end
++				call free(strings)
+ 			end
+ 			call free(bra)
+ 		end
+@@ -52,15 +59,79 @@ function preframe_init()
+ 	end
+ 	return (NULL)
+ end
+-function preframe_free(sv pf)
++function preframe_free(sv pf,charx log,charx ainit)
++	if log=(TRUE)
++		call frame_print_top(ainit)
++	end
+ 	call free(pf#:preframe.abranch)
++
+ 	sv strings;set strings pf#:preframe.strings
+ 	sv s;set s strings
+ 	sv end;set end pf#:preframe.size
+-	mult end :
+ 	add end s
+ 	while s!=end
+ 	end
+ 	call free(strings)
++
++	#is a different free than strings, will have one branch vs multiple
++	sv ustrings;set ustrings pf#:preframe.ustrings
++	set s ustrings
++	set end pf#:preframe.usize
++	add end s
++	while s!=end
++	end
++	call free(ustrings)
++
+ 	call free(pf)
+ end
++
++importx "printf" printf
++
++function frame_init(valueu total)
++	sv f;set f malloc((\frame\))
++	if f!=(NULL)
++		valueu size#1;set size (\line\)
++		mult size (\line\)
++		sv lines;set lines malloc(size)
++		if lines!=(NULL)
++			set f#:frame.lines lines
++			set f#:frame.total total
++			return f
++		end
++		call free(f)
++	end
++	return (NULL)
++end
++function frame_free(sv f,valueu pointer_is_log,charx ainit)
++	sv lines;set lines f#:frame.lines
++	sv pointer;set pointer lines
++	valueu end#1;set end f#:frame.total
++	if pointer_is_log!=(NULL)
++		call frame_print_top(ainit)
++		call printf("\t\t\tlines=%lu\n",end)
++	end
++	mult end (\line\)
++	add end pointer
++	while pointer!=end
++		add pointer (\line\)
++	end
++	call free(lines)
++	call free(f)
++end
++
++function frame_print_top(charx ainit)
++	if ainit=(xlog_ainit_false)
++		call printf("\t\tframe\n")
++	else
++		call printf("\t\tinit\n")
++	end
++end
++
++function nframe_init(sv pf,valueu total)
++	set pf# preframe_init()
++	if pf#!=(NULL)
++		valueu f#1;set f frame_init(total)
++		return f
++	end
++	return (NULL)
++end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -131,8 +131,7 @@ function actionrow(ss log,sd end,sv px,s
+ 		elseif log#=(xlog_string) #string
+ 			ss xxcontent;set xxcontent pxx#
+ 			add pxx# (xlog_type_size)
+-			if xxcontent#=(xlog_unique)
+-			elseif xxcontent#=(xlog_new)
++			if xxcontent#!=(xlog_id) # xlog_new xlog_unique , unique also here because .x is not storing unique strings in branch
+ 				add pxx# (xlog_new_size)
+ 			else #xlog_id
+ 				add pxx# (xlog_id_size)
+@@ -196,16 +195,16 @@ function loop(ss log,sd x,sd xx,sd logsi
+ 				charx ainit#1;set ainit memdec(log,p) #[log,p) 0/1
+ 				set log next
+ 
+-				set ok presprite_init(preid,ppresprites,psprites,(from_action),ainit)
+-				if ok!=(EXIT_SUCCESS)
+-					return (EXIT_FAILURE)
+-				end
+-
+ 				#linesnr
+ 				set p memnl(log,#next)
+-				value linesnr#1;set linesnr memdec(log,p)
++				valueu linesnr#1;set linesnr memdec(log,p)
+ 				set log next
+ 
++				set ok presprite_init(preid,ppresprites,psprites,(from_action),ainit,linesnr)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
++
+ 				while linesnr>^0
+ 					set p memnl(log,#next)
+ 					set log next
+--- actionswf-1.orig/oad/oadbgdata.h.oh
++++ actionswf-1/oad/oadbgdata.h.oh
+@@ -6,22 +6,22 @@ function oadata()
+ 	valuexu marks#1
+ 
+ 	dataxu functions_size#1  #anyway is using a counter at appending (preferred instead of null), DefineFunction is at minimum 8 like 64 :, anyway swfsize is ui32(that minus some tags)
+-	valuexu functions#1
++	valuexu functions#1   #is this in conflict with for3 same sign? no, there will be another offset, remembering that offset at functions is at start
+ end
+ function sprite()
+ 	valuexu aframe#1
+ 
+-	dataxu size#1    #same as presprite. for free
++	dataxu size#1    #same as presprite. for free, and when adding at last frame
+ 	valuexu frames#1
+ end
+ function frame()
+-	valueu *total#1    #big blank lines group
+-	valuexu *lines#1
++	valueu total#1    #if outside is command like, break 100 from only 50 will fast tell if is an error. and with this occasion, for free
++	valuexu lines#1
++end
++function line()
++	valueu *index#1    #same as lines total
++	valuexu *actions#1
+ end
+-#function line()
+-#	valueu index#1    #same as lines total
+-#	valuexu actions#1
+-#end
+ #function action()
+ #	valuexu next#1
+ #	datax mark#1
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -103,7 +103,7 @@ function pool_entry()
+ 	import "debug_xlog_pool" debug_xlog_pool
+ 	callg debug_xlog_pool()
+ end
+-function pool_reentry()
++function pool_reentry(sd offset)
+ 	sd id;set id actionpoolid_get()
+ 	sd b;set b struct_ids_actionpool_filter((ids_get),id)
+ 	sd mem;sd size
+@@ -113,8 +113,8 @@ function pool_reentry()
+ 		inc mem#
+ 		add mem cursor
+ 		if mem#s=(constpool_unique)
+-			import "x_log_val_if" x_log_val_if
+-			callg x_log_val_if((xlog_unique),0)
++			import "x_log_string" x_log_string
++			callg x_log_string((xlog_unique),offset)
+ 			return (not_an_id)
+ 		end
+ 		return (any_id)
+@@ -240,7 +240,7 @@ function actionpool_getvalue_ex(ss value
+ 			if pool_data.write!=(FALSE)
+ 				call pool_entry()
+ 			elseif pool_data.read!=(FALSE)
+-				set testid pool_reentry()
++				set testid pool_reentry(value)
+ 				if testid=(not_an_id)
+ 					return (not_an_id)
+ 				end
+@@ -271,7 +271,8 @@ function actionpool_getvalue_ex(ss value
+ 							call pool_realentry(nr)
+ 							call debug_xlog_pool()
+ 						else
+-							callg x_log_val_if((xlog_id),(xlog_id_size),nr) #read and rest of xx flags
++							import "x_log_id" x_log_id
++							callg x_log_id((xlog_id),nr) #read and rest of xx flags
+ 						end
+ 						return nr
+ 					endif
+@@ -283,7 +284,7 @@ function actionpool_getvalue_ex(ss value
+ 			if pool_data.write!=(FALSE)
+ 				call pool_entry()
+ 			elseif pool_data.read!=(FALSE)
+-				set testid pool_reentry()
++				set testid pool_reentry(value)
+ 				if testid=(not_an_id)
+ 					return (not_an_id)
+ 				end
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -280,14 +280,17 @@ function x_log_val(sd type,sd size,sd va
+ 		callg f_write(x_data.flog,#val,size)
+ 	end
+ end
+-function x_log_val_if(sd type,sd size,sd val)
++function x_log_id(sd type,sd val)
+ 	if x_data.flog!=(NULL)
+-		callg x_log_val(type,size,val)
++		callg x_log_val(type,(xlog_id_size),val)
+ 	end
+ end
+ function x_log_const(sd offset)
++	callg x_log_string((xlog_new),offset)
++end
++function x_log_string(sd type,sd offset)
+ 	if x_data.flog!=(NULL) #flag_pool_read is already tested
+ 		sub offset x_pointer.base
+-		callg x_log_val((xlog_new),(xlog_new_size),offset)
++		callg x_log_val(type,(xlog_new_size),offset)
+ 	end
+ end
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -1,14 +1,26 @@
+ presprites:
+ 	0
+ 		frames=2
++		frame
+ 	2
+ 		frames=3
++		init
++		frame
+ 	3
+ 		frames=1
++		init
+ sprites:
+ 	id=0
++		frame
++			lines=10
+ 	id=2
++		init
++			lines=1
++		frame
++			lines=1
+ 	id=8
++		init
++			lines=6
+ mark struct:
+ 	0
+ 		-1
