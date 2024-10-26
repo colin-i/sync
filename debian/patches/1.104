@@ -1,0 +1,273 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-104) bionic; urgency=medium
+ .
+   * 32bit xx pointer
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-10-26
+
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -28,3 +28,6 @@ last=$(curl https://api.github.com/repos
+ #"a=function(){}+1"
+ #"new Array()"
+ #"a"
++
++#part isn't
++#a=a[3[2]]
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -3,7 +3,7 @@ const xlog_type_size=1 #BYTE
+ const xlog_code_size=4 #DWORD
+ const xlog_unique=0
+ const xlog_new=1
+-const xlog_new_size=8 #QWORD
++const xlog_new_size=: ;#DWORD/QWORD
+ const xlog_id=2
+ const xlog_id_size=2 #WORD
+ 
+@@ -20,3 +20,6 @@ const xlog_innerbranchend=0x7C;#|
+ #note: oaalternative is using ainit
+ const xlog_ainit_false=0
+ const xlog_ainit_true=1
++
++const xlog_strings_size=:
++const xlog_xcode_size=4   #DWORD
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -24,7 +24,7 @@ re:
+ 
+ xlog=../include/xlog.
+ 
+-items=intern compare frame
++items=intern compare frame string
+ #$(eval subobjects = )
+ $(foreach var,$(items),$(eval subobjects += ${var}.o))
+ #$(eval sublogs = )
+--- actionswf-1.orig/oad/compare.oc
++++ actionswf-1/oad/compare.oc
+@@ -12,7 +12,7 @@ override include_sec 1
+ include "common.h" "common.h.oh"
+ 
+ #multithread unsafe
+-valueu presprites_size#1  #same as sprites_size, but add 4 more for less calculation
++dataxu presprites_size#1  #same as sprites_size
+ #
+ 
+ char inter_extension_data=".data";vstr p_inter_extension_data^inter_extension_data
+@@ -97,10 +97,11 @@ function preoadata_free(sv presprites,sv
+ 				set preid 0 #0root 1-FFFF sprite/button
+ 				call puts("presprites:")
+ 			end
+-			add global.presprites_size presprites
+ 			sv ps;set ps presprites
++			valueu pend#1;set pend presprites
++			add pend global.presprites_size
+ 			sv s;set s sprites
+-			while ps!=global.presprites_size
++			while ps!=pend
+ 				sv pres;set pres ps#
+ 				if pres!=(NULL)
+ 					if log=(TRUE)
+@@ -114,7 +115,7 @@ function preoadata_free(sv presprites,sv
+ 					end
+ 					if pres#:presprite.preframes!=(NULL) #not making a template free because preframe is different than frame
+ 						sv pointer;set pointer pres#:presprite.preframes
+-						sd end;set end pres#:presprite.size
++						valueu end#1;set end pres#:presprite.size
+ 						add end pointer
+ 						while pointer!=end
+ 							if pointer#!=(NULL)
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -135,3 +135,18 @@ function nframe_init(sv pf,valueu total)
+ 	end
+ 	return (NULL)
+ end
++
++function get_preframe(sv presprites,wordxu preid,charx ainit)
++	sv ps=:
++	mult ps preid
++	add ps presprites
++	set ps ps#
++	if ainit=(xlog_ainit_false)
++		sv pf
++		set pf ps#:presprite.preframes
++		add pf ps#:presprite.size
++		decst pf
++		return pf#
++	end
++	return ps#:presprite.apreframe
++end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -111,7 +111,10 @@ function newbranch(sv px,sv pxx)
+ 	add px# branchsize
+ 	add pxx# (xlog_code_size)
+ end
+-function actionrow(ss log,sd end,sv px,sv pxx)
++
++import "string_add" string_add
++
++function actionrow(ss log,sd end,sv px,sv pxx,sv prefr)
+ 	inc log    ##first is a digit
+ 	whiletrue # break} is still with / (also resolves are there) but it is a row with \n end anyway
+ 		charx chr#1
+@@ -132,6 +135,7 @@ function actionrow(ss log,sd end,sv px,s
+ 			ss xxcontent;set xxcontent pxx#
+ 			add pxx# (xlog_type_size)
+ 			if xxcontent#!=(xlog_id) # xlog_new xlog_unique , unique also here because .x is not storing unique strings in branch
++				call string_add(prefr,pxx#)
+ 				add pxx# (xlog_new_size)
+ 			else #xlog_id
+ 				add pxx# (xlog_id_size)
+@@ -155,10 +159,9 @@ end
+ import "presprite_init" presprite_init
+ import "presprite_done" presprite_done
+ 
+-function loop(ss log,sd x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data)
++function loop(ss log,sv x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data)
+ 	add logsize log
+ 	if log!=logsize  ##else no action sprites/shows
+-		set global.xoffset 0
+ 		sd next
+ 		ss p;set p memnl(log,#next)
+ 		whiletrue
+@@ -191,6 +194,17 @@ function loop(ss log,sd x,sd xx,sd logsi
+ 				end
+ 				set p memnl(log,#next)
+ 			else
++				valueu strings_size#1
++				set strings_size x#
++				add x (xlog_strings_size)
++				add x strings_size
++				dataxu xcode_size#1
++				set xcode_size x#
++				add x (xlog_xcode_size)
++				valueu xcode#1;set xcode x
++				add x xcode_size
++				set global.xoffset 0
++
+ 				#ainit
+ 				charx ainit#1;set ainit memdec(log,p) #[log,p) 0/1
+ 				set log next
+@@ -211,6 +225,8 @@ function loop(ss log,sd x,sd xx,sd logsi
+ 					dec linesnr
+ 				end
+ 
++				import "get_preframe" get_preframe
++				sv pf;set pf get_preframe(ppresprites#,preid,ainit)
+ 				#[actions]
+ 				whiletrue
+ 					if log=logsize
+@@ -219,7 +235,7 @@ function loop(ss log,sd x,sd xx,sd logsi
+ 					set p memnl(log,#next)
+ 					if log#=(xlog_actions)
+ 						inc log
+-						call actionrow(log,p,#x,#xx)
++						call actionrow(log,p,#xcode,#xx,pf)
+ 					else
+ 						break #[log,p) will continue at preid
+ 					end
+--- /dev/null
++++ actionswf-1/oad/string.oc
+@@ -0,0 +1,5 @@
++
++format elfobj64
++
++function string_add(sv *pf,sv *p_string_off) #xlog_new_size
++end
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -9,8 +9,8 @@ import "mem_free" mem_free
+ function x_data()
+ 	value f=NULL
+ 	datax size#1   #there was a debate on this
+-	#size here is on small mem xcode. but there are 2 sizes(at xx and at xstart) that are on large xcode. multiple expands on same word size?
+-	#anyway, for example var a=a[0]; is 0x40 in x, 0x12 in swf, and will error there because actionrecordheader is uint16 maximum
++	#size here is on small mem xcode. but there are 2 sizes(at xx and at xstart) that are on large xcode. doaction is ui32
++	#anyway, totalvalues is ui16*4. expands? 32...left 32...right, right 0x8000*4=0x20000,left at i386 0x8000/4 parts, sum 0x40...., still a quarter of ui32
+ 	value mem=NULL
+ 	value flog=NULL
+ 	if f!=(NULL)
+@@ -91,11 +91,11 @@ function actionx()
+ 			call error("error at x") # and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
+ 		end
+ 		sd size
+-		set size pointer#v         ;#size of escaped block that was at parse + pad if debug_x_pad flag
+-		incst pointer              ##here at parse was the escaped mem
+-		set x_pointer.base pointer ##for x_pointer function
+-		add pointer size           ##and add DWORD since liboadata read size without parse
+-		add pointer (DWORD)        ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
++		set size pointer#v            ;#size of escaped block that was at parse + pad if debug_x_pad flag . xlog_strings_size
++		incst pointer                 ##here at parse was the escaped mem
++		set x_pointer.base pointer    ##for x_pointer function
++		add pointer size              ##and add DWORD since liboadata read size without parse
++		add pointer (xlog_xcode_size) ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
+ 		if x_data.flog!=(NULL)
+ 			set x_log.base pointer
+ 		end
+@@ -171,7 +171,7 @@ function debug_x_pointers(valuex start,v
+ 		sub size start
+ 		if x_init.flag=(debug_x_pad)
+ 			set mark f_tell(x_data.f) #long
+-			add mark :
++			add mark (xlog_strings_size)
+ 			add mark size    ##overflow is same
+ 
+ 			sd pad=0xf
+@@ -179,9 +179,9 @@ function debug_x_pointers(valuex start,v
+ 			inc pad
+ 			and pad 0xf
+ 			sd all;set all size; add all pad
+-			call f_write(x_data.f,#all,:)
++			call f_write(x_data.f,#all,(xlog_strings_size))
+ 		else
+-			call f_write(x_data.f,#size,:)
++			call f_write(x_data.f,#size,(xlog_strings_size))
+ 		end
+ 		set mark f_tell(x_data.f)
+ 		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
+@@ -193,7 +193,7 @@ function debug_x_pointers(valuex start,v
+ 		end
+ 		#and need to write x size to fast grab at liboadata branches without x parse
+ 		valuex xmark#1
+-		call f_write(x_data.f,#zero,(DWORD)) #write something dummy here, size is DWORD like like x_data.size
++		call f_write(x_data.f,#zero,(xlog_xcode_size)) #write something dummy here, size is DWORD like like x_data.size
+ 		set xmark f_tell(x_data.f)
+ 	end
+ end
+@@ -214,13 +214,13 @@ function debug_x(sd mem,sd nr)
+ 		valuex current#1
+ 		set current f_tell(x_data.f)
+ 		sub current debug_x_pointers.xmark
+-		sub debug_x_pointers.xmark (DWORD)
++		sub debug_x_pointers.xmark (xlog_xcode_size)
+ 
+ 		call fseek(x_data.f,debug_x_pointers.mark,(SEEK_SET))
+ 		call fwrite(debug_x_pointers.start,debug_x_pointers.size,1,x_data.f)
+ 
+ 		call fseek(x_data.f,debug_x_pointers.xmark,(SEEK_SET))
+-		call fwrite(#current,(DWORD),1,x_data.f)
++		call fwrite(#current,(xlog_xcode_size),1,x_data.f)
+ 
+ 		call fseek(x_data.f,0,(SEEK_END)) #for next writes
+ 	end
