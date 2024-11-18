@@ -1,0 +1,163 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-108) bionic; urgency=medium
+ .
+   * i386 oadata test
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-11-18
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -15,7 +15,7 @@ $(SUBDIRS):
+ 
+ test:
+ 	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && conv_64=${conv_64} /bin/bash ./as && \
+-	cd ../data && /bin/bash ./test x && echo tests ok
++	cd ../data && conv_64=${conv_64} /bin/bash ./test x && echo tests ok
+ clean:
+ 	cd tests; /bin/bash ./c; cd ffdec; /bin/bash ./c; cd ../data; /bin/bash ./c
+ install:
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -11,6 +11,11 @@ endif
+ ifndef linkerflags
+ linkerflags=-O3 -s
+ endif
++ifeq (${conv_64},1) #to cross compile
++	model=-m32
++else
++	model=
++endif
+ 
+ OFLAGS=x_file 2
+ 
+@@ -41,13 +46,13 @@ ${exte}: ${subobjects}
+ 	$(AR) cr ${exte} $^
+ ${libname}: main.o ${exte}
+ 	${OLINK} main.oc.log ${sublogs}
+-	$(CC) ${linkerflags} -shared $< -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
++	$(CC) ${model} ${linkerflags} -shared $< -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
+ # -l:intern.o ? is ok but exclude-libs intern.o/...a will not exclude
+ 
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS}
+ 	${OCONV} $<.x
+-	$(CC) -c -w -fPIC ${compilerflags} $*.c
++	$(CC) ${model} -c -w -fPIC ${compilerflags} $*.c
+ #-fPIC since launchpad bionic build
+ #-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
+ %.oh: %.h.oh
+--- /dev/null
++++ actionswf-1/oad/m32d
+@@ -0,0 +1 @@
++conv_64=1 ./md
+--- /dev/null
++++ actionswf-1/tests/.expected/data32.txt
+@@ -0,0 +1,46 @@
++presprites:
++	0
++		frames=1
++		frame 1
++			ustrings: x_coef y_coef movie attachMovie _x _y test
++			strings: _movie
++			branch: size=20 code:
++				........ ........ ........ ........ ........ ........ ........ ........ 101001F1 68000000 EEEEEEFE 00000000 FFFFFFFF
++	2
++		init
++			ustrings: _root tog
++			strings:
++			branch: size=36 code:
++				........ 4F000000 01000000 07000000 00000000 BBBBBBFB 07000000 01000000 FFFFFFFF FFFFFFFF
++		frames=2
++		frame 2
++			ustrings:
++			strings: move width height lat left top right bottom this _x _root x_coef _y y_coef
++			branch: size=92 code:
++				........ CCCCCCFC 01000000 4F000000 E7000000 EC000000 00000000 BBBBBBFB 1C000000 EF000000 0C000000 4E000000 F4000000
++				FA000000 00000000 BBBBBBFB 47000000 4E000000 01010000 06010000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
++	3
++		init
++			ustrings: stop play
++			strings: _root tog _movie
++			branch: size=76 code:
++				........ ........ ........ ........ ........ 00000040 4F000000 37000000 3D000000 00000000 BBBBBBFB 07000000 01000000 FFFFFFFF 101001F1 50000000 EEEEEEFE
++				43000000 49000000 00000000 BBBBBBFB CCCCCCFC 01000000 FFFFFFFF
++		frames=0
++sprites:
++	id=0
++		frame 1
++			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
++	id=2
++		init
++			lines=1 1,4
++		frame 2
++			lines=8 1,32 3,35 1,15 2,35 1,15
++	id=8
++		init
++			lines=6 2,8 1,11 1,1 1,11 1,0
++mark struct:
++	0
++		-1
++		-1
++ok
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -1,11 +1,14 @@
+ 
+ if [ -n "${1}" ]; then g="gdb --args"; fi
+ 
++model=
++if [ ${conv_64} = 1 ]; then model=-m32; fi
++
+ f=../../example/example.swf
+ 
+ o a.oc x_file 1 && \
+ otoc a.oc.x && \
+-cc -w -g a.c -L../../oad -loadbgdata && \
+-LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} && \
+-echo ok && \
++cc ${model} -w -g a.c -L../../oad -loadbgdata && \
++LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} || { echo a.out error; exit 1; }
++echo ok
+ rm ${f}.data
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -1,6 +1,9 @@
+ 
++e=
++if [ ${conv_64} = 1 ]; then e=32; fi
++
+ set -o pipefail && /bin/bash ./a | tee data.txt || exit 1
+-diff ../.expected/data.txt data.txt
++diff ../.expected/data${e}.txt data.txt
+ if [ $? = 0 ]; then
+ 	rm data.txt
+ 	exit 0
+@@ -8,4 +11,4 @@ fi
+ if [ -n "${1}" ]; then exit 1; fi
+ echo y \?; read -n1 -t $((60*60*24)) ans
+ if [ "${ans}" != "y" ]; then exit 1; fi
+-mv data.txt ../.expected/data.txt
++mv data.txt ../.expected/data${e}.txt
+--- /dev/null
++++ actionswf-1/tests/data/test32
+@@ -0,0 +1 @@
++conv_64=1 ./test
