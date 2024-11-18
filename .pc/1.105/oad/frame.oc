@@ -1,0 +1,152 @@
+
+format elfobj64
+
+importx "realloc" realloc
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+function re_alloc(sv pmem,svu size,valueu newsize) #big at lines
+	valueu currentmaxsize#1;set currentmaxsize size
+	divu currentmaxsize ((sprites_realloc_onepart))
+	mult currentmaxsize ((sprites_realloc_onepart))
+	add currentmaxsize ((sprites_realloc_onepart))
+	if newsize>^currentmaxsize
+		set currentmaxsize newsize
+		divu currentmaxsize ((sprites_realloc_onepart))
+		mult currentmaxsize ((sprites_realloc_onepart))
+		add currentmaxsize ((sprites_realloc_onepart))
+		sv newmem;set newmem realloc(pmem#,currentmaxsize)
+		if newmem=(NULL);return (EXIT_FAILURE);end
+		set pmem# newmem
+	end
+	add size pmem#
+	add newsize pmem#
+	while size!=newsize
+		set size# (NULL)
+		add size :
+	end
+	return (EXIT_SUCCESS)
+end
+
+importx "malloc" malloc
+importx "free" free
+
+function preframe_init()
+	sv pf;set pf malloc((\preframe\))
+	if pf!=(NULL)
+		valueu bra#1
+		set bra malloc((\branch\))
+		if bra!=(NULL)
+			sv strings
+			set strings malloc((sprites_realloc_onepart))
+			if strings!=(NULL)
+				sv ustrings
+				set ustrings malloc((sprites_realloc_onepart))
+				if ustrings!=(NULL)
+					set pf#:preframe.abranch bra
+					set pf#:preframe.strings strings
+					set pf#:preframe.size 0
+					set pf#:preframe.ustrings ustrings
+					set pf#:preframe.usize 0
+					return pf
+				end
+				call free(strings)
+			end
+			call free(bra)
+		end
+		call free(pf)
+	end
+	return (NULL)
+end
+function preframe_free(sv pf,charx log,charx ainit)
+	if log=(TRUE)
+		call frame_print_top(ainit)
+	end
+	call free(pf#:preframe.abranch)
+
+	sv strings;set strings pf#:preframe.strings
+	sv s;set s strings
+	sv end;set end pf#:preframe.size
+	add end s
+	while s!=end
+	end
+	call free(strings)
+
+	#is a different free than strings, will have one branch vs multiple
+	sv ustrings;set ustrings pf#:preframe.ustrings
+	set s ustrings
+	set end pf#:preframe.usize
+	add end s
+	while s!=end
+	end
+	call free(ustrings)
+
+	call free(pf)
+end
+
+importx "printf" printf
+
+function frame_init(valueu total)
+	sv f;set f malloc((\frame\))
+	if f!=(NULL)
+		valueu size#1;set size (\line\)
+		mult size (\line\)
+		sv lines;set lines malloc(size)
+		if lines!=(NULL)
+			set f#:frame.lines lines
+			set f#:frame.total total
+			return f
+		end
+		call free(f)
+	end
+	return (NULL)
+end
+function frame_free(sv f,valueu pointer_is_log,charx ainit)
+	sv lines;set lines f#:frame.lines
+	sv pointer;set pointer lines
+	valueu end#1;set end f#:frame.total
+	if pointer_is_log!=(NULL)
+		call frame_print_top(ainit)
+		call printf("\t\t\tlines=%lu\n",end)
+	end
+	mult end (\line\)
+	add end pointer
+	while pointer!=end
+		add pointer (\line\)
+	end
+	call free(lines)
+	call free(f)
+end
+
+function frame_print_top(charx ainit)
+	if ainit=(xlog_ainit_false)
+		call printf("\t\tframe\n")
+	else
+		call printf("\t\tinit\n")
+	end
+end
+
+function nframe_init(sv pf,valueu total)
+	set pf# preframe_init()
+	if pf#!=(NULL)
+		valueu f#1;set f frame_init(total)
+		return f
+	end
+	return (NULL)
+end
+
+function get_preframe(sv presprites,wordxu preid,charx ainit)
+	sv ps=:
+	mult ps preid
+	add ps presprites
+	set ps ps#
+	if ainit=(xlog_ainit_false)
+		sv pf
+		set pf ps#:presprite.preframes
+		add pf ps#:presprite.size
+		decst pf
+		return pf#
+	end
+	return ps#:presprite.apreframe
+end

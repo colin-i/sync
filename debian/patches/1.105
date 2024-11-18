@@ -1,0 +1,1193 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-105) bionic; urgency=medium
+ .
+   * changing x pad and sync it with oad
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-11-18
+
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -23,3 +23,5 @@ const xlog_ainit_true=1
+ 
+ const xlog_strings_size=:
+ const xlog_xcode_size=4   #DWORD
++
++const xlog_pad_default=0x30
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -24,7 +24,7 @@ re:
+ 
+ xlog=../include/xlog.
+ 
+-items=intern compare frame string
++items=intern compare frame string branch
+ #$(eval subobjects = )
+ $(foreach var,$(items),$(eval subobjects += ${var}.o))
+ #$(eval sublogs = )
+--- /dev/null
++++ actionswf-1/oad/branch.oc
+@@ -0,0 +1,81 @@
++
++format elfobj64
++
++override include_sec 1
++include "common.h" "common.h.oh"
++
++function branch_done(sv pf,dataxu size,dataxu offset,valueu code)
++	sub size offset
++	sv br;set br pf#:preframe.abranch
++	set br#:branch.size size
++	set br#:branch.x code
++end
++
++importx "free" free
++importx "printf" printf
++
++import "print" print
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++import "print_inline_start_value" print_inline_start_value
++import "print_inline_done" print_inline_done
++
++function branch_code(ss code,valueu end,charx a,charx b,ss form)
++	add end code
++	while code!=end
++	#best view command is same as in src/x.oc debug_x_pad
++		if b=0
++			if a=0
++				call print_inline_start_value(form,code#)
++				inc a;inc b;inc code
++				continue
++			end
++		end
++		if a<4
++			call printf(form,code#)
++			inc a
++		elseif b<12
++			call printf(" ")
++			call printf(form,code#)
++			set a 1;inc b
++		else
++			call print_inline_done()
++			set a 0;set b 0
++			continue
++		end
++		inc code
++	end
++end
++function branch_free(sv br,valueu start,charx log) #this will be recursive
++	if log=(TRUE)
++		dataxu sz#1;set sz br#:branch.size
++		call print("branch: size=%u code:",sz)
++		call print_indent()
++		ss code;set code br#:branch.x
++
++		charx a#1;charx b#1
++		set a 0;set b 0
++
++		valueu pad_sz#1;set pad_sz code
++		sub pad_sz start
++		dataxu strip_pad_sz#1;set strip_pad_sz pad_sz
++		div strip_pad_sz (xlog_pad_default)
++		mult strip_pad_sz (xlog_pad_default)
++		sub pad_sz strip_pad_sz
++		char pad_minus_one="..............................................."^
++			#for branches with holes(like a function def there) a full 48 row is required
++			#here is the initial pad, that can be full row - 4 bytes. but if not padded can be - 1 byte, then, 47
++		call branch_code(#pad_minus_one,pad_sz,0,0,"..")
++
++		vstr form="%02X"
++		call branch_code(code,sz,pad_sz,0,form)
++
++		call print_inline_done()
++
++		#subbranch
++	end
++	call free(br)
++	if log=(TRUE)
++		call print_unindent()
++	end
++end
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -22,6 +22,7 @@ einclude "../include/xlog.h" "../include
+ include "oadbgdata.h" "oadbgdata.h.oh"
+ 
+ const mark_nothing=-1
++const no_index=-1
+ 
+ const sprites_realloc_onepart=10*:
+ #to be at least 2, for presprites_init; and 1 for sprite_done (root 0 move to final)
+@@ -33,30 +34,31 @@ function presprite() #presprites_size is
+ 	valuexu preframes#1
+ end
+ function preframe()
+-	valuexu abranch#1
+-
+ 	dataxu size#1  ;#Count=ui16 * :
+ 	valuexu strings#1
+ 	dataxu usize#1  ;#Count=ui16 * :
+ 	valuexu ustrings#1
++
++	valuexu abranch#1
++	valueu logstart#1  #branch start, to calculate ... only at log
+ end
+ function branch()
+-#	dataxu *size#1
+-#	vdataxu *x#1
+-
+-#	valuexu *subbranch#1
++	dataxu size#1
++	vdataxu x#1   #ints everywhere and pointers for strings, will not memcpy
+ 
+ #	dataxu *offset#1
+-	valuexu *action#1   #for mark, after compare
++#	valuexu *action#1   #for mark, after compare
++
++#	valuexu *subbranch#1
++end
++function string()
++	vstrxu text#1
++	valuexu branches#1
++end
++function ustring()
++	vstrxu text#1
++	valueu *branch#1
+ end
+-#function string()
+-#	vstrxu text#1
+-#	valuexu branches#1
+-#end
+-#function ustring()
+-#	vstrxu text#1
+-#	valueu branch#1
+-#end
+ 
+ const from_action=0
+ const from_show=1
+--- actionswf-1.orig/oad/compare.oc
++++ actionswf-1/oad/compare.oc
+@@ -44,16 +44,26 @@ end
+ 
+ import "frame_free" frame_free
+ 
++import "print" print
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++
+ function sprite_free(sv s,sv start) #log is start != null
+ 	sv sp;set sp s#
+ 	if sp!=(NULL)
++		datax frame_index#1
+ 		if start!=(NULL)
+ 			sub s start
+ 			divu s :
+-			call printf("\tid=%hu\n",s)
++			call print_indent()
++			call print("id=%hu",s)
++			call print_indent()
++			set frame_index 1
++		else
++			set frame_index (no_index)
+ 		end
+ 		if sp#:sprite.aframe!=(NULL)
+-			call frame_free(sp#:sprite.aframe,start,(xlog_ainit_true))
++			call frame_free(sp#:sprite.aframe,(xlog_ainit_true),frame_index)
+ 		end
+ 		if sp#:sprite.frames!=(NULL)
+ 			sv pointer;sd end
+@@ -62,13 +72,20 @@ function sprite_free(sv s,sv start) #log
+ 			add end pointer
+ 			while pointer!=end
+ 				if pointer#!=(NULL)
+-					call frame_free(pointer#,start,(xlog_ainit_false))
++					call frame_free(pointer#,(xlog_ainit_false),frame_index)
+ 				end
+ 				incst pointer
++				if frame_index!=(no_index)
++					inc frame_index
++				end
+ 			end
+ 			call free(sp#:sprite.frames)
+ 		end
+ 		call free(sp)
++		if frame_index!=(no_index)
++			call print_unindent()
++			call print_unindent()
++		end
+ 	end
+ end
+ 
+@@ -85,7 +102,6 @@ function preoadata_init(sv ppresprites,s
+ end
+ 
+ importx "puts" puts
+-importx "printf" printf
+ 
+ import "preframe_free" preframe_free
+ 
+@@ -104,30 +120,45 @@ function preoadata_free(sv presprites,sv
+ 			while ps!=pend
+ 				sv pres;set pres ps#
+ 				if pres!=(NULL)
++					datax frame_index#1;dataxu frames#1
+ 					if log=(TRUE)
+-						call printf("\t%hu\n",preid)
+-						dataxu frames#1;set frames pres#:presprite.size
++						call print_indent()
++						call print("%hu",preid)
++						call print_indent()
++						set frame_index 1
++						set frames pres#:presprite.size
+ 						divu frames :
+-						call printf("\t\tframes=%hu\n",frames)
++					else
++						set frame_index (no_index)
+ 					end
+ 					if pres#:presprite.apreframe!=(NULL)
+-						call preframe_free(pres#:presprite.apreframe,log,(xlog_ainit_true))
++						call preframe_free(pres#:presprite.apreframe,(xlog_ainit_true),frame_index)
+ 					end
+ 					if pres#:presprite.preframes!=(NULL) #not making a template free because preframe is different than frame
++						if log=(TRUE)
++							dec frames
++							call print("frames=%hu",frames)
++						end
+ 						sv pointer;set pointer pres#:presprite.preframes
+ 						valueu end#1;set end pres#:presprite.size
+ 						add end pointer
+ 						while pointer!=end
+ 							if pointer#!=(NULL)
+-								call preframe_free(pointer#,log,(xlog_ainit_false))
++								call preframe_free(pointer#,(xlog_ainit_false),frame_index)
+ 							end
+ 							incst pointer
++							if log=(TRUE)
++								inc frame_index
++							end
+ 						end
+ 						call free(pres#:presprite.preframes)
+ 
+ 						call sprite_free(s,(NULL)) #and unfinished sprites, here is after an error
+ 					end
+ 					call free(pres)
++					if log=(TRUE)
++						call print_unindent();call print_unindent()
++					end
+ 				end
+ 				if log=(TRUE)
+ 					inc preid
+@@ -141,21 +172,23 @@ function preoadata_free(sv presprites,sv
+ 	end
+ end
+ 
+-import "re_alloc" re_alloc
++import "re_calloc" re_calloc
++import "re_calloc_size" re_calloc_size
+ import "nframe_init" nframe_init
++import "frame_expand" frame_expand
+ 
+ #                       wordxu preid
+-function presprite_init(svu newpointer,sv ppresprites,sv psprites,charx type,charx ainit,valueu linestotal)
++function presprite_init(svu newpointer,sv ppresprites,sv psprites,charx type,charx ainit,valueu linestotal) #,sv p_linestotal)
+ 	mult newpointer :
+ 	dataxu newsize#1;set newsize newpointer
+ 	add newsize :
+ 	charx ok#1
+ 	if global.presprites_size<^newsize   ##else example: preid 0 after a sprite preid 2
+-		set ok re_alloc(ppresprites,global.presprites_size,newsize)
++		set ok re_calloc(ppresprites,global.presprites_size,newsize)
+ 		if ok!=(EXIT_SUCCESS)
+ 			return (EXIT_FAILURE)
+ 		end
+-		set ok re_alloc(psprites,global.presprites_size,newsize) #and for sprites, but before sprite_done, with a preid
++		set ok re_calloc(psprites,global.presprites_size,newsize) #and for sprites, but before sprite_done, with a preid
+ 		if ok!=(EXIT_SUCCESS)
+ 			return (EXIT_FAILURE)
+ 		end
+@@ -172,17 +205,15 @@ function presprite_init(svu newpointer,s
+ 		set newsize ps#:presprite.size
+ 		if type=(from_show)
+ 			add newsize :
+-			set ok re_alloc(#ps#:presprite.preframes,ps#:presprite.size,newsize)
++			set ok re_calloc_size(#ps#:presprite.preframes,#ps#:presprite.size,newsize)
+ 			if ok!=(EXIT_SUCCESS)
+ 				return (EXIT_FAILURE)
+ 			end
+-			set ps#:presprite.size newsize
+ 
+-			set ok re_alloc(#s#:sprite.frames,s#:sprite.size,newsize)
++			set ok re_calloc_size(#s#:sprite.frames,#s#:sprite.size,newsize) #set size at move time? still extra code to reset ps size if not ok at s
+ 			if ok!=(EXIT_SUCCESS)
+ 				return (EXIT_FAILURE)
+ 			end
+-			set s#:sprite.size newsize  ##set this size at move time? still extra code to reset ps size if not ok at s
+ 		else #from action
+ 			if ainit=(xlog_ainit_false)
+ 				sub newsize :  #to point at last
+@@ -195,7 +226,12 @@ function presprite_init(svu newpointer,s
+ 					if f#=(NULL)
+ 						return (EXIT_FAILURE)
+ 					end
+-				#else is multiple action call
++					#set p_linestotal# 0
++				else #is multiple action call
++					set ok frame_expand(f#,linestotal) #,p_linestotal)
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
+ 				end
+ 			#else #if ainit=(xlog_ainit_true) #ainit/button , here is multiple action call, not after oalt
+ 			end
+@@ -245,6 +281,7 @@ function presprite_init(svu newpointer,s
+ 								return (EXIT_FAILURE)
+ 							end
+ 						end
++						#set p_linestotal# 0
+ 					end
+ 					return (EXIT_SUCCESS)
+ 				end
+@@ -265,11 +302,10 @@ function presprite_done(sv sprites,wordx
+ 			add destination :   #for size comparison
+ 			if destination>^data#:oadata.sprites_size
+ 				charx ok#1
+-				set ok re_alloc(#data#:oadata.sprites,data#:oadata.sprites_size,destination)
++				set ok re_calloc_size(#data#:oadata.sprites,#data#:oadata.sprites_size,destination)
+ 				if ok!=(EXIT_SUCCESS)
+ 					return (EXIT_FAILURE)
+ 				end
+-				set data#:oadata.sprites_size destination
+ 			end
+ 			sub destination :
+ 			add destination data#:oadata.sprites
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -6,32 +6,52 @@ importx "realloc" realloc
+ override include_sec 1
+ include "common.h" "common.h.oh"
+ 
+-function re_alloc(sv pmem,svu size,valueu newsize) #big at lines
+-	valueu currentmaxsize#1;set currentmaxsize size
++function re_alloc(sv pmem,dataxu size) #only dataxu external sizes, and +1 increments
++	dataxu currentmaxsize#1;set currentmaxsize size
+ 	divu currentmaxsize ((sprites_realloc_onepart))
+ 	mult currentmaxsize ((sprites_realloc_onepart))
+-	add currentmaxsize ((sprites_realloc_onepart))
+-	if newsize>^currentmaxsize
+-		set currentmaxsize newsize
+-		divu currentmaxsize ((sprites_realloc_onepart))
+-		mult currentmaxsize ((sprites_realloc_onepart))
++	if size=currentmaxsize   ##is not on the edge
+ 		add currentmaxsize ((sprites_realloc_onepart))
+ 		sv newmem;set newmem realloc(pmem#,currentmaxsize)
+-		if newmem=(NULL);return (EXIT_FAILURE);end
+-		set pmem# newmem
+-	end
+-	add size pmem#
+-	add newsize pmem#
+-	while size!=newsize
+-		set size# (NULL)
+-		add size :
++		if newmem!=(NULL)
++			set pmem# newmem
++			return (EXIT_SUCCESS)
++		end
++		return (EXIT_FAILURE)
+ 	end
+ 	return (EXIT_SUCCESS)
+ end
++function re_calloc(sv pmem,svu size,valueu newsize)
++	charx ok#1;set ok re_alloc(pmem,size)
++	if ok=(EXIT_SUCCESS)
++		add size pmem#
++		add newsize pmem#
++		while size!=newsize
++			set size# (NULL)
++			add size :
++		end
++	end
++	return ok
++end
++function re_calloc_size(sv pmem,sdu psize,dataxu newsize)
++	charx ok#1;set ok re_calloc(pmem,psize#,newsize)
++	if ok=(EXIT_SUCCESS)
++		set psize# newsize
++	end
++	return ok
++end
+ 
+ importx "malloc" malloc
+ importx "free" free
+ 
++import "print_inline_start" print_inline_start
++import "print_inline_start_value" print_inline_start_value
++import "print_inline" print_inline
++import "print_inline_done" print_inline_done
++import "print" print
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++
+ function preframe_init()
+ 	sv pf;set pf malloc((\preframe\))
+ 	if pf!=(NULL)
+@@ -59,72 +79,131 @@ function preframe_init()
+ 	end
+ 	return (NULL)
+ end
+-function preframe_free(sv pf,charx log,charx ainit)
+-	if log=(TRUE)
+-		call frame_print_top(ainit)
++
++import "branch_free" branch_free
++
++function preframe_free(sv pf,charx ainit,datax log_index)
++	charx log#1
++	if log_index!=(no_index)
++		call frame_print_top(ainit,log_index)
++
++		call print_inline_start("ustrings:")
++		set log (TRUE)
++	else
++		set log (FALSE)
++	end
++	valueu str#1
++	#is a different free than strings, will have one branch vs multiple
++	sv ustrings;set ustrings pf#:preframe.ustrings
++	sv s;set s ustrings
++	sv end;set end pf#:preframe.usize
++	add end s
++	while s!=end
++		set str s#
++		if log=(TRUE)
++			call print_inline("%s",str#:ustring.text)
++		end
++		call free(str)
++		incst s
+ 	end
+-	call free(pf#:preframe.abranch)
++	call free(ustrings)
++	if log=(TRUE)
++		call print_inline_done()
+ 
++		call print_inline_start("strings:")
++	end
+ 	sv strings;set strings pf#:preframe.strings
+-	sv s;set s strings
+-	sv end;set end pf#:preframe.size
++	set s strings
++	set end pf#:preframe.size
+ 	add end s
+ 	while s!=end
++		set str s#
++		if log=(TRUE)
++			call print_inline("%s",str#:string.text)
++		end
++		call free(str#:string.branches)
++		call free(str)
++		incst s
+ 	end
+ 	call free(strings)
++	if log=(TRUE)
++		call print_inline_done()
++	end
+ 
+-	#is a different free than strings, will have one branch vs multiple
+-	sv ustrings;set ustrings pf#:preframe.ustrings
+-	set s ustrings
+-	set end pf#:preframe.usize
+-	add end s
+-	while s!=end
++	call branch_free(pf#:preframe.abranch,pf#:preframe.logstart,log)
++	if log=(TRUE)
++		call print_unindent()
+ 	end
+-	call free(ustrings)
+ 
+ 	call free(pf)
+ end
+ 
+-importx "printf" printf
+-
+ function frame_init(valueu total)
+ 	sv f;set f malloc((\frame\))
+ 	if f!=(NULL)
+ 		valueu size#1;set size (\line\)
+-		mult size (\line\)
++		mult size total
+ 		sv lines;set lines malloc(size)
+ 		if lines!=(NULL)
+ 			set f#:frame.lines lines
+-			set f#:frame.total total
++			set f#:frame.total 0
++			#this is at end because can be truncated on last blank lines: set f#:frame.total total
+ 			return f
+ 		end
+ 		call free(f)
+ 	end
+ 	return (NULL)
+ end
+-function frame_free(sv f,valueu pointer_is_log,charx ainit)
+-	sv lines;set lines f#:frame.lines
+-	sv pointer;set pointer lines
++
++import "print_inline2" print_inline2
++
++function frame_free(sv f,charx ainit,datax log_index)
+ 	valueu end#1;set end f#:frame.total
+-	if pointer_is_log!=(NULL)
+-		call frame_print_top(ainit)
+-		call printf("\t\t\tlines=%lu\n",end)
++	valueu ix#1;valueu n#1
++	sv lines;set lines f#:frame.lines
++	valueu nr_actions#1
++	if log_index!=(no_index)
++		call frame_print_top(ainit,log_index)
++		call print_inline_start_value("lines=%lu",end)
++		set ix 0;set n 0
++		set nr_actions lines#:line.total
+ 	end
+ 	mult end (\line\)
++	sv pointer;set pointer lines
+ 	add end pointer
+ 	while pointer!=end
++		if log_index!=(no_index)
++			valueu i#1;set i pointer#:line.index
++			if i!=ix
++				call print_inline2("%u,%u",n,nr_actions)
++				set ix i;set n 1
++				set nr_actions pointer#:line.total
++			else
++				inc n
++			end
++		end
++		if pointer#:line.actions!=(NULL)
++			call free(pointer#:line.actions)
++		end
+ 		add pointer (\line\)
+ 	end
++	if log_index!=(no_index)
++		call print_inline2("%u,%u",n,nr_actions)
++		call print_inline_done()
++		call print_unindent()
++	end
+ 	call free(lines)
+ 	call free(f)
+ end
+ 
+-function frame_print_top(charx ainit)
++import "prints" prints
++function frame_print_top(charx ainit,datax log_index)
+ 	if ainit=(xlog_ainit_false)
+-		call printf("\t\tframe\n")
++		call print("frame %u",log_index)
+ 	else
+-		call printf("\t\tinit\n")
++		call prints("init")
+ 	end
++	call print_indent()
+ end
+ 
+ function nframe_init(sv pf,valueu total)
+@@ -136,17 +215,87 @@ function nframe_init(sv pf,valueu total)
+ 	return (NULL)
+ end
+ 
+-function get_preframe(sv presprites,wordxu preid,charx ainit)
++function get_nframe(sv presprites,sv sprites,wordxu preid,charx ainit,sv ppf)
+ 	sv ps=:
+ 	mult ps preid
++	sv s;set s ps
++
+ 	add ps presprites
+ 	set ps ps#
++
++	add s sprites
++	set s s#
++
+ 	if ainit=(xlog_ainit_false)
+ 		sv pf
+ 		set pf ps#:presprite.preframes
+ 		add pf ps#:presprite.size
+ 		decst pf
+-		return pf#
++		set ppf# pf#
++
++		sv f
++		set f s#:sprite.frames
++		add f s#:sprite.size
++		decst f
++		return f#
++	end
++	set ppf# ps#:presprite.apreframe
++	return s#:sprite.aframe
++end
++
++function frame_actions(valueu fr,valueu lines,ss log,valueu end) #,charx blog)
++	valueu current#1;set current fr#:frame.total
++
++	valueu p_lines=\line\
++	mult p_lines current
++	add p_lines fr#:frame.lines
++
++	#test how many actions to alloc
++	valueu nr_of_actions#1;set nr_of_actions 0 #not needing to null end because has "next". action struct has a long and an int
++	while log!=end
++		if log#=(xlog_act)
++			inc nr_of_actions
++		end
++		inc log
++	end
++	set p_lines#:line.index current  ##there is no 0 lines per row
++	#if blog=(TRUE)
++	set p_lines#:line.total nr_of_actions
++	#end
++	mult nr_of_actions \action\
++	set p_lines#:line.actions malloc(nr_of_actions)
++	if p_lines#:line.actions!=(NULL)
++		add fr#:frame.total lines
++
++		mult lines \line\
++		add lines p_lines
++		add p_lines \line\
++
++		while p_lines!=lines
++			set p_lines#:line.index current
++			set p_lines#:line.actions (NULL)
++			add p_lines (\line\)
++		end
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++function frame_expand(valueu fr,valueu lines) #,sv p_totallines)
++	add lines fr#:frame.total
++	valueu alloc#1;set alloc \line\
++	mult alloc lines
++	valueu re#1
++	set re realloc(fr#:frame.lines,alloc)
++	if re!=(NULL)
++		set fr#:frame.lines re
++		#set p_totallines# fr#:frame.total
++		#this is at end because can be truncated on last blank lines: set fr#:frame.total lines
++		return (EXIT_SUCCESS)
+ 	end
+-	return ps#:presprite.apreframe
++	return (EXIT_FAILURE)
+ end
++#function frame_expected(valueu fr,valueu lines)
++#	#if lines!=totallines
++#	set fr#:frame.total lines
++#	#end #there is nothing at those last lines, also, was allocated there, ignoring
++#end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -107,14 +107,19 @@ function newbranch(sv px,sv pxx)
+ 	sd xx;set xx pxx#
+ 	sd branchsize;set branchsize xx#
+ 	sub branchsize global.xoffset
++
++	#do something with the branchsize
++
+ 	add global.xoffset branchsize
+ 	add px# branchsize
+ 	add pxx# (xlog_code_size)
+ end
+ 
+ import "string_add" string_add
++import "frame_actions" frame_actions
+ 
+-function actionrow(ss log,sd end,sv px,sv pxx,sv prefr)
++function actionrow(ss log,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base) #,charx blog)
++	ss start;set start log
+ 	inc log    ##first is a digit
+ 	whiletrue # break} is still with / (also resolves are there) but it is a row with \n end anyway
+ 		charx chr#1
+@@ -127,39 +132,51 @@ function actionrow(ss log,sd end,sv px,s
+ 		end
+ 		inc log
+ 	end
+-	while log!=end
+-		dataxu number#1  #u16,u32,u16
+-		if log#=(xlog_act) #action
+-			set log memhex_parse_withinc(log,#number)
+-		elseif log#=(xlog_string) #string
+-			ss xxcontent;set xxcontent pxx#
+-			add pxx# (xlog_type_size)
+-			if xxcontent#!=(xlog_id) # xlog_new xlog_unique , unique also here because .x is not storing unique strings in branch
+-				call string_add(prefr,pxx#)
+-				add pxx# (xlog_new_size)
+-			else #xlog_id
+-				add pxx# (xlog_id_size)
++	valueu number_of_lines#1;set number_of_lines memdec(start,log)
++	charx ok#1
++	set ok frame_actions(fr,number_of_lines,log,end) #,blog)
++	if ok=(EXIT_SUCCESS)
++		while log!=end
++			dataxu number#1  #u16,u32,u16
++			if log#=(xlog_act) #action
++				set log memhex_parse_withinc(log,#number)
++			elseif log#=(xlog_string) #string
++				ss xxcontent;set xxcontent pxx#
++				add pxx# (xlog_type_size)
++				if xxcontent#!=(xlog_id) # xlog_new xlog_unique , unique also here because .x is not storing unique strings in branch
++					set ok string_add(prefr,pxx#,strings_base,xxcontent#)
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
++					add pxx# (xlog_new_size)
++				else #xlog_id
++					add pxx# (xlog_id_size)
++				end
++				inc log
++			elseif log#=(xlog_jump)
++				set log memhex_parse_withinc(log,#number)
++			elseif log#=(xlog_branch) #branch start
++				call newbranch(px,pxx)
++				inc log
++			elseif log#=(xlog_innerbranchend) #innerbranch end
++				call newbranch(px,pxx)
++				inc log
++			else
++			#if log#=(xlog_function)
++				set log memhex_parse_withinc(log,#number)
+ 			end
+-			inc log
+-		elseif log#=(xlog_jump)
+-			set log memhex_parse_withinc(log,#number)
+-		elseif log#=(xlog_branch) #branch start
+-			call newbranch(px,pxx)
+-			inc log
+-		elseif log#=(xlog_innerbranchend) #innerbranch end
+-			call newbranch(px,pxx)
+-			inc log
+-		else
+-		#if log#=(xlog_function)
+-			set log memhex_parse_withinc(log,#number)
+ 		end
++		return (EXIT_SUCCESS)
+ 	end
++	return (EXIT_FAILURE)
+ end
+ 
+ import "presprite_init" presprite_init
+ import "presprite_done" presprite_done
++import "get_nframe" get_nframe
++import "branch_done" branch_done
+ 
+-function loop(ss log,sv x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data)
++function loop(ss log,sv x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data,charx blog)
+ 	add logsize log
+ 	if log!=logsize  ##else no action sprites/shows
+ 		sd next
+@@ -190,20 +207,17 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 				end
+ 				set log next
+ 				if log=logsize
+-					return (EXIT_SUCCESS)
++					return (EXIT_SUCCESS) #exit 2
+ 				end
+ 				set p memnl(log,#next)
+ 			else
+ 				valueu strings_size#1
+ 				set strings_size x#
+ 				add x (xlog_strings_size)
++				valueu strings_base#1;set strings_base x
+ 				add x strings_size
+ 				dataxu xcode_size#1
+ 				set xcode_size x#
+-				add x (xlog_xcode_size)
+-				valueu xcode#1;set xcode x
+-				add x xcode_size
+-				set global.xoffset 0
+ 
+ 				#ainit
+ 				charx ainit#1;set ainit memdec(log,p) #[log,p) 0/1
+@@ -214,6 +228,7 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 				valueu linesnr#1;set linesnr memdec(log,p)
+ 				set log next
+ 
++				#valueu lines#1
+ 				set ok presprite_init(preid,ppresprites,psprites,(from_action),ainit,linesnr)
+ 				if ok!=(EXIT_SUCCESS)
+ 					return (EXIT_FAILURE)
+@@ -225,18 +240,31 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 					dec linesnr
+ 				end
+ 
+-				import "get_preframe" get_preframe
+-				sv pf;set pf get_preframe(ppresprites#,preid,ainit)
++				sv pf;sv f;set f get_nframe(ppresprites#,psprites#,preid,ainit,#pf) #and from sprites since total lines sum, but will be needed at more, anyway
++
++				if blog=(TRUE)
++					set pf#:preframe.logstart x
++				end
++				add x (xlog_xcode_size)
++				valueu xcode#1;set xcode x
++				add x xcode_size
++				set global.xoffset 0
++
+ 				#[actions]
+ 				whiletrue
+ 					if log=logsize
+-						return (EXIT_SUCCESS) #no [more] actions and nothing else
++						call branch_done(pf,xcode_size,global.xoffset,xcode)
++						return (EXIT_SUCCESS) #no [more] actions and nothing else. exit 3
+ 					end
+ 					set p memnl(log,#next)
+ 					if log#=(xlog_actions)
+ 						inc log
+-						call actionrow(log,p,#xcode,#xx,pf)
++						set ok actionrow(log,p,#xcode,#xx,pf,f,strings_base) #,blog)
++						if ok!=(EXIT_SUCCESS)
++							return (EXIT_FAILURE)
++						end
+ 					else
++						call branch_done(pf,xcode_size,global.xoffset,xcode)
+ 						break #[log,p) will continue at preid
+ 					end
+ 					set log next   ##was a row with actions
+@@ -244,7 +272,7 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 			end
+ 		end
+ 	end
+-	return (EXIT_SUCCESS)
++	return (EXIT_SUCCESS) #exit 1
+ end
+ 
+ importx "strlen" strlen
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -48,7 +48,7 @@ functionx oadata_make(ss swf_fullpath,sv
+ 						sv sprites   ;#these will be filled before sprite done
+ 						set exit preoadata_init(#presprites,#sprites)
+ 						if exit=(EXIT_SUCCESS)
+-							set exit loop(logcontent,xcontent,xxcontent,logsize,#presprites,#sprites,poadata#)
++							set exit loop(logcontent,xcontent,xxcontent,logsize,#presprites,#sprites,poadata#,log)
+ 							if exit=(EXIT_SUCCESS)
+ 								call presprite_done(sprites,0,0,poadata#) #root has not a done(0 to 0) in .log
+ 								set exit inter(swf_fullpath)
+@@ -117,10 +117,13 @@ functionx oadata_ok(ss swf_fullpath)
+ end
+ 
+ importx "puts" puts
+-importx "printf" printf
+ 
+ import "sprite_free" sprite_free
+ 
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++import "print" print
++
+ functionx oadata_free(sv data,charx log)
+ 	if data!=(NULL)
+ 		sv sprites;set sprites data#:oadata.sprites
+@@ -132,7 +135,7 @@ functionx oadata_free(sv data,charx log)
+ 				call puts("sprites:")
+ 			end
+ 			while s!=end
+-				if log=(FALSE)
++				if log!=(TRUE)
+ 					call sprite_free(s,(NULL))
+ 				else
+ 					call sprite_free(s,sprites)
+@@ -149,7 +152,13 @@ functionx oadata_free(sv data,charx log)
+ 					dataxu i#1;set i 0
+ 					whiletrue
+ 						datax next#1;set next m#:mark.next
+-						call printf("\t%u\n\t\t%d\n\t\t%d\n",i,m#:mark.prev,next)
++						call print_indent()
++						call print("%u",i)
++						call print_indent()
++						call print("%d",m#:mark.prev)
++						call print("%d",next)
++						call print_unindent()
++						call print_unindent()
+ 						if next=(mark_nothing)
+ 							break
+ 						end
+--- actionswf-1.orig/oad/oadbgdata.h.oh
++++ actionswf-1/oad/oadbgdata.h.oh
+@@ -19,13 +19,14 @@ function frame()
+ 	valuexu lines#1
+ end
+ function line()
+-	valueu *index#1    #same as lines total
+-	valuexu *actions#1
++	valueu index#1    #same as lines total
++	valuexu actions#1
++	dataxu total#1   #nr of actions, used for log, set anyway, fastest
++end
++function action()
++	valuexu *next#1
++	datax *mark#1
+ end
+-#function action()
+-#	valuexu next#1
+-#	datax mark#1
+-#end
+ function mark()
+ 	datax prev#1
+ 	datax next#1
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -1,5 +1,103 @@
+ 
+ format elfobj64
+ 
+-function string_add(sv *pf,sv *p_string_off) #xlog_new_size
++override include_sec 1
++include "common.h" "common.h.oh"
++
++import "re_alloc" re_alloc
++
++importx "malloc" malloc
++importx "printf" printf
++importx "free" free
++
++#multithread unsafe
++char indents=0
++#
++
++#                            # is xlog_new_size
++function string_add(sv pf,sv p_string_off,valueu strings_base,charx type)
++	sv pto;sd psize
++	if type=(xlog_new)
++		set pto #pf#:preframe.strings
++		set psize #pf#:preframe.size
++	else #xlog_unique
++		set pto #pf#:preframe.ustrings
++		set psize #pf#:preframe.usize
++	end
++	charx ok#1
++	set ok re_alloc(pto,psize#)
++	if ok=(EXIT_SUCCESS)
++		valueu str#1
++		if type=(xlog_new)
++			set str malloc((\string\))
++			if str!=(NULL)
++				valueu branches#1
++				set branches malloc((sprites_realloc_onepart))
++				if branches=(NULL)
++					call free(str)
++					return (EXIT_FAILURE)
++				end
++				set str#:string.branches branches
++			end
++		else
++			set str malloc((\ustring\))
++		end
++		if str!=(NULL)
++			sv dest;set dest pto#
++			add dest psize#
++			set dest# str
++			add psize# :
++
++			add strings_base p_string_off#
++			set str#:string.text strings_base
++		end
++	end
++	return ok
++end
++
++function indent()
++	charx i#1
++	set i global.indents
++	while i>0
++		call printf("\t")
++		dec i
++	end
++end
++
++function print_indent()
++	inc global.indents
+ end
++function print_unindent()
++	dec global.indents
++end
++function print(ss format,valueu value)
++	call indent()
++	call printf(format,value)
++	call print_inline_done()
++end
++function prints(ss format)
++	call indent()
++	call printf(format)
++	call print_inline_done()
++end
++function print_inline_start(ss str)
++	call indent()
++	call printf(str)
++end
++function print_inline_start_value(ss format,valueu value)
++	call indent()
++	call printf(format,value)
++end
++function print_inline(ss format,valueu value)
++	call printf(" ")
++	call printf(format,value)
++end
++function print_inline2(ss format,valueu value,valueu v2)
++	call printf(" ")
++	call printf(format,value,v2)
++end
++function print_inline_done()
++	call printf("\n")
++end
++
++entryraw global()
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -174,11 +174,28 @@ function debug_x_pointers(valuex start,v
+ 			add mark (xlog_strings_size)
+ 			add mark size    ##overflow is same
+ 
+-			sd pad=0xf
+-			xor pad mark
+-			inc pad
+-			and pad 0xf
+-			sd all;set all size; add all pad
++			sd pad;sd all
++			#this in case pad is straight: 0xf 0x1f, but best pad for 1920x1080 is xxd -c 48 -g 4 . 48 is 0x30, 0x3f will be too much
++			#set pad 0xf
++			#xor pad mark
++			#inc pad
++			#and pad 0xf
++
++			sd aux
++			set aux mark
++			divu aux (xlog_pad_default)
++			mult aux (xlog_pad_default)
++			if aux!=mark
++				sd aux2
++				set aux2 mark
++				sub aux2 aux
++				set pad (xlog_pad_default)
++				sub pad aux2
++			else
++				set pad 0
++			end
++
++			set all size; add all pad
+ 			call f_write(x_data.f,#all,(xlog_strings_size))
+ 		else
+ 			call f_write(x_data.f,#size,(xlog_strings_size))
+@@ -187,7 +204,7 @@ function debug_x_pointers(valuex start,v
+ 		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
+ 		if x_init.flag=(debug_x_pad)
+ 			if pad!=0
+-				char zero={0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0}
++				char zero={0,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0,   0,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0,   0,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0} #47 pad is maximum
+ 				call f_write(x_data.f,#zero,pad)
+ 			end
+ 		end
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -1,26 +1,46 @@
+ presprites:
+ 	0
+-		frames=2
+-		frame
++		frames=1
++		frame 1
++			ustrings: x_coef y_coef movie attachMovie _x _y test
++			strings: _movie
++			branch: size=28 code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 101001F1 68000000 00000000 EEEEEEFE 00000000 00000000 FFFFFFFF
+ 	2
+-		frames=3
+ 		init
+-		frame
++			ustrings: _root tog
++			strings:
++			branch: size=48 code:
++				........ 4F000000 01000000 00000000 07000000 00000000 00000000 00000000 BBBBBBFB 07000000 01000000 FFFFFFFF FFFFFFFF
++		frames=2
++		frame 2
++			ustrings:
++			strings: move width height lat left top right bottom this _x _root x_coef _y y_coef
++			branch: size=132 code:
++				........ ........ ........ CCCCCCFC 01000000 4F000000 E7000000 00000000 EC000000 00000000 00000000 00000000 BBBBBBFB 1C000000 EF000000
++				00000000 0C000000 4E000000 F4000000 00000000 FA000000 00000000 00000000 00000000 BBBBBBFB 47000000 4E000000
++				01010000 00000000 06010000 00000000 00000000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+ 	3
+-		frames=1
+ 		init
++			ustrings: stop play
++			strings: _root tog _movie
++			branch: size=104 code:
++				........ ........ ........ 00000040 4F000000 37000000 00000000 3D000000 00000000 00000000 00000000 BBBBBBFB 07000000 01000000 FFFFFFFF
++				101001F1 50000000 00000000 EEEEEEFE 43000000 00000000 49000000 00000000 00000000 00000000 BBBBBBFB CCCCCCFC
++				01000000 FFFFFFFF
++		frames=0
+ sprites:
+ 	id=0
+-		frame
+-			lines=10
++		frame 1
++			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
+ 	id=2
+ 		init
+-			lines=1
+-		frame
+-			lines=1
++			lines=1 1,4
++		frame 2
++			lines=8 1,32 3,35 1,15 2,35 1,15
+ 	id=8
+ 		init
+-			lines=6
++			lines=6 2,8 1,11 1,1 1,11 1,0
+ mark struct:
+ 	0
+ 		-1
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -7,6 +7,7 @@ if [ -z "${1}" ]; then
+ 	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+ 	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
+ else
++xxd_args=" -c 48 -g 4 "
+ smart_diff () {
+ 	diff ${1} ${2}
+ 	if [ $? = 0 ]; then
+@@ -22,8 +23,8 @@ smart_diff () {
+ 	if [ ${a} = ${b} ]; then
+ 		echo size equal ${a}
+ 		if [ -n "`which xxd`" ]; then
+-			xxd ${1} > 1
+-			xxd ${2} > 2
++			xxd${xxd_args}${1} > 1
++			xxd${xxd_args}${2} > 2
+ 			diff 1 2
+ 			rm 1 2
+ 		fi
+@@ -39,8 +40,8 @@ smart_ask () {
+ 			swfdump -D .expected/a.swf${1} > 1
+ 			swfdump -D a.swf${2} > 2
+ 		else
+-			xxd .expected/a.swf${1} > 1
+-			xxd a.swf${2} > 2
++			xxd${xxd_args}.expected/a.swf${1} > 1
++			xxd${xxd_args}a.swf${2} > 2
+ 		fi
+ 		diff 1 2
+ 		rm 1 2
