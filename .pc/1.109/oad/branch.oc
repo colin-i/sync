@@ -1,0 +1,81 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+function branch_done(sv pf,dataxu size,dataxu offset,valueu code)
+	sub size offset
+	sv br;set br pf#:preframe.abranch
+	set br#:branch.size size
+	set br#:branch.x code
+end
+
+importx "free" free
+importx "printf" printf
+
+import "print" print
+import "print_indent" print_indent
+import "print_unindent" print_unindent
+import "print_inline_start_value" print_inline_start_value
+import "print_inline_done" print_inline_done
+
+function branch_code(ssu code,valueu end,charx a,charx b,ss form)
+	add end code
+	while code!=end
+	#best view command is same as in src/x.oc debug_x_pad
+		if b=0
+			if a=0
+				call print_inline_start_value(form,code#)
+				inc a;inc b;inc code
+				continue
+			end
+		end
+		if a<4
+			call printf(form,code#)
+			inc a
+		elseif b<12
+			call printf(" ")
+			call printf(form,code#)
+			set a 1;inc b
+		else
+			call print_inline_done()
+			set a 0;set b 0
+			continue
+		end
+		inc code
+	end
+end
+function branch_free(sv br,valueu start,charx log) #this will be recursive
+	if log=(TRUE)
+		dataxu sz#1;set sz br#:branch.size
+		call print("branch: size=%u code:",sz)
+		call print_indent()
+		ss code;set code br#:branch.x
+
+		charx a#1;charx b#1
+		set a 0;set b 0
+
+		valueu pad_sz#1;set pad_sz code
+		sub pad_sz start
+		dataxu strip_pad_sz#1;set strip_pad_sz pad_sz
+		div strip_pad_sz (xlog_pad_default)
+		mult strip_pad_sz (xlog_pad_default)
+		sub pad_sz strip_pad_sz
+		char pad_minus_one="..............................................."^
+			#for branches with holes(like a function def there) a full 48 row is required
+			#here is the initial pad, that can be full row - 4 bytes. but if not padded can be - 1 byte, then, 47
+		call branch_code(#pad_minus_one,pad_sz,0,0,"..")
+
+		vstr form="%02X"
+		call branch_code(code,sz,pad_sz,0,form)
+
+		call print_inline_done()
+
+		#subbranch
+	end
+	call free(br)
+	if log=(TRUE)
+		call print_unindent()
+	end
+end

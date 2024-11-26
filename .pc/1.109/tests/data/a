@@ -1,0 +1,14 @@
+
+if [ -n "${1}" ]; then g="gdb --args"; fi
+
+model=
+if [ ${conv_64} = 1 ]; then model=-m32; fi
+
+f=../../example/example.swf
+
+o a.oc x_file 1 && \
+otoc a.oc.x && \
+cc ${model} -w -g a.c -L../../oad -loadbgdata && \
+LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} || { echo a.out error; exit 1; }
+echo ok
+rm ${f}.data

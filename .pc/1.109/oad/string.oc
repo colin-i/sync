@@ -1,0 +1,103 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+import "re_alloc" re_alloc
+
+importx "malloc" malloc
+importx "printf" printf
+importx "free" free
+
+#multithread unsafe
+char indents=0
+#
+
+#                            # is xlog_new_size
+function string_add(sv pf,sv p_string_off,valueu strings_base,charx type)
+	sv pto;sd psize
+	if type=(xlog_new)
+		set pto #pf#:preframe.strings
+		set psize #pf#:preframe.size
+	else #xlog_unique
+		set pto #pf#:preframe.ustrings
+		set psize #pf#:preframe.usize
+	end
+	charx ok#1
+	set ok re_alloc(pto,psize#)
+	if ok=(EXIT_SUCCESS)
+		valueu str#1
+		if type=(xlog_new)
+			set str malloc((\string\))
+			if str!=(NULL)
+				valueu branches#1
+				set branches malloc((sprites_realloc_onepart))
+				if branches=(NULL)
+					call free(str)
+					return (EXIT_FAILURE)
+				end
+				set str#:string.branches branches
+			end
+		else
+			set str malloc((\ustring\))
+		end
+		if str!=(NULL)
+			sv dest;set dest pto#
+			add dest psize#
+			set dest# str
+			add psize# :
+
+			add strings_base p_string_off#
+			set str#:string.text strings_base
+		end
+	end
+	return ok
+end
+
+function indent()
+	charx i#1
+	set i global.indents
+	while i>0
+		call printf("\t")
+		dec i
+	end
+end
+
+function print_indent()
+	inc global.indents
+end
+function print_unindent()
+	dec global.indents
+end
+function print(ss format,valueu value)
+	call indent()
+	call printf(format,value)
+	call print_inline_done()
+end
+function prints(ss format)
+	call indent()
+	call printf(format)
+	call print_inline_done()
+end
+function print_inline_start(ss str)
+	call indent()
+	call printf(str)
+end
+function print_inline_start_value(ss format,valueu value)
+	call indent()
+	call printf(format,value)
+end
+function print_inline(ss format,valueu value)
+	call printf(" ")
+	call printf(format,value)
+end
+function print_inline2(ss format,valueu value,valueu v2)
+	call printf(" ")
+	call printf(format,value,v2)
+end
+function print_inline_done()
+	call printf("\n")
+end
+
+entryraw global()
