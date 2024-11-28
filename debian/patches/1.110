@@ -1,0 +1,663 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-110) bionic; urgency=medium
+ .
+   * at log actions: {} and after else
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-11-28
+
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -15,7 +15,8 @@ const xlog_branch=0x2F        ;#/
+ const xlog_function=0x40       #@
+ #A-F
+ const xlog_string=0x5E        ;#^
+-const xlog_innerbranchend=0x7C;#|
++const xlog_innerbranch=0x7B    #{
++const xlog_innerbranchend=0x7D #}
+ 
+ #note: oaalternative is using ainit
+ const xlog_ainit_false=0
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -159,6 +159,7 @@ function preframe_free(sv pf,charx ainit
+ 	call free(pf)
+ end
+ 
++const frame_text_allocpart=0x100
+ function frame_init(valueu total)
+ 	sv f;set f malloc((\frame\))
+ 	if f!=(NULL)
+@@ -166,10 +167,15 @@ function frame_init(valueu total)
+ 		mult size total
+ 		sv lines;set lines malloc(size)
+ 		if lines!=(NULL)
+-			set f#:frame.lines lines
+-			set f#:frame.total 0
+-			#this is at end because can be truncated on last blank lines: set f#:frame.total total
+-			return f
++			sv text;set text malloc((frame_text_allocpart))
++			if text!=(NULL)
++				set f#:frame.lines lines
++				set f#:frame.total 0
++				set f#:frame.text text
++				set f#:frame.size 0
++				return f
++			end
++			call free(lines)
+ 		end
+ 		call free(f)
+ 	end
+@@ -177,6 +183,12 @@ function frame_init(valueu total)
+ end
+ 
+ import "print_inline2" print_inline2
++import "prints" prints
++import "memnl" memnl
++import "indent" indent
++
++importx "stdout" stdout
++importx "fwrite" fwrite
+ 
+ function frame_free(sv f,charx ainit,datax log_index)
+ 	valueu end#1;set end f#:frame.total
+@@ -211,13 +223,30 @@ function frame_free(sv f,charx ainit,dat
+ 	if log_index!=(no_index)
+ 		call print_inline2("%u,%u",n,nr_actions)
+ 		call print_inline_done()
++		call print("text: size=%lu <<<",f#:frame.size)
++		sv so^stdout
++
++		ss a#1;set a f#:frame.text;ss b
++		valueu c#1;set c f#:frame.size
++		valueu d#1
++		add c a
++		while a!=c
++			set d memnl(a,#b) #more in the function, \r\n example
++			sub d a
++			call indent()
++			call fwrite(a,d,1,so#)
++			call print_inline_done()
++			set a b
++		end
++
++		call prints("<<<")
+ 		call print_unindent()
+ 	end
+ 	call free(lines)
++	call free(f#:frame.text)
+ 	call free(f)
+ end
+ 
+-import "prints" prints
+ function frame_print_top(charx ainit,datax log_index)
+ 	if ainit=(xlog_ainit_false)
+ 		call print("frame %u",log_index)
+@@ -264,40 +293,79 @@ function get_nframe(sv presprites,sv spr
+ 	return s#:sprite.aframe
+ end
+ 
+-function frame_actions(valueu fr,valueu lines,ss log,valueu end) #,charx blog)
+-	valueu current#1;set current fr#:frame.total
+-
+-	valueu p_lines=\line\
+-	mult p_lines current
+-	add p_lines fr#:frame.lines
+-
+-	#test how many actions to alloc
+-	valueu nr_of_actions#1;set nr_of_actions 0 #not needing to null end because has "next". action struct has a long and an int
+-	while log!=end
+-		if log#=(xlog_act)
+-			inc nr_of_actions
+-		end
+-		inc log
+-	end
+-	set p_lines#:line.index current  ##there is no 0 lines per row
+-	#if blog=(TRUE)
+-	set p_lines#:line.total nr_of_actions
+-	#end
+-	mult nr_of_actions \action\
+-	set p_lines#:line.actions malloc(nr_of_actions)
+-	if p_lines#:line.actions!=(NULL)
+-		add fr#:frame.total lines
+-
+-		mult lines \line\
+-		add lines p_lines
+-		add p_lines \line\
+-
+-		while p_lines!=lines
+-			set p_lines#:line.index current
+-			set p_lines#:line.actions (NULL)
+-			add p_lines (\line\)
++const frame_text_allocpart_=frame_text_allocpart-1
++const _frame_text_allocpart_=~frame_text_allocpart_
++import "text_after_nlines" text_after_nlines
++
++importx "memcpy" memcpy
++
++function frame_text_add(valueu fr,svu _text,valueu lines)
++	valueu starttext#1;set starttext _text#
++	valueu endtext#1;set endtext text_after_nlines(starttext,lines)
++	set _text# endtext
++	sub endtext starttext
++
++	valueu test#1;set test (_frame_text_allocpart_)
++	and test fr#:frame.size
++	valueu test3#1;set test3 fr#:frame.size
++	add test3 endtext
++	valueu test2#1;set test2 (_frame_text_allocpart_)
++	and test2 test3
++	valueu mem#1
++	if test!=test2
++		add test2 (frame_text_allocpart)
++		#only drawback: if on edge will still go one more part
++		set mem realloc(fr#:frame.text,test2)
++		if mem=(NULL)
++			return (EXIT_FAILURE)
++		end
++		set fr#:frame.text mem
++	else
++		set mem fr#:frame.text
++	end
++	add mem fr#:frame.size
++	call memcpy(mem,starttext,endtext)
++	add fr#:frame.size endtext
++	return (EXIT_SUCCESS)
++end
++
++function frame_actions(valueu fr,valueu lines,ss log,valueu end,svu _text)
++	charx ok#1;set ok frame_text_add(fr,_text,lines)
++	if ok=(EXIT_SUCCESS)
++		valueu current#1;set current fr#:frame.total
++
++		valueu p_lines=\line\
++		mult p_lines current
++		add p_lines fr#:frame.lines
++
++		#test how many actions to alloc
++		valueu nr_of_actions#1;set nr_of_actions 0 #not needing to null end because has "next". action struct has a long and an int
++		while log!=end
++			if log#=(xlog_act)
++				inc nr_of_actions
++			end
++			inc log
++		end
++		set p_lines#:line.index current  ##there is no 0 lines per row
++		#if blog=(TRUE)
++		set p_lines#:line.total nr_of_actions
++		#end
++		mult nr_of_actions \action\
++		set p_lines#:line.actions malloc(nr_of_actions)  #space was reserved at start knowing log total lines
++		if p_lines#:line.actions!=(NULL)
++			add fr#:frame.total lines
++
++			mult lines \line\
++			add lines p_lines
++			add p_lines \line\
++
++			while p_lines!=lines
++				set p_lines#:line.index current
++				set p_lines#:line.actions (NULL)
++				add p_lines (\line\)
++			end
++			return (EXIT_SUCCESS)
+ 		end
+-		return (EXIT_SUCCESS)
+ 	end
+ 	return (EXIT_FAILURE)
+ end
+@@ -315,8 +383,3 @@ function frame_expand(valueu fr,valueu l
+ 	end
+ 	return (EXIT_FAILURE)
+ end
+-#function frame_expected(valueu fr,valueu lines)
+-#	#if lines!=totallines
+-#	set fr#:frame.total lines
+-#	#end #there is nothing at those last lines, also, was allocated there, ignoring
+-#end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -130,7 +130,7 @@ import "frame_actions" frame_actions
+ import "string_add" string_add
+ import "string_id" string_id
+ 
+-function actionrow(ss log,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data)
++function actionrow(ss log,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data,svu _text)
+ 	ss start;set start log
+ 	inc log    ##first is a digit
+ 	whiletrue # break} is still with / (also resolves are there) but it is a row with \n end anyway
+@@ -146,7 +146,7 @@ function actionrow(ss log,sd end,sv px,s
+ 	end
+ 	valueu number_of_lines#1;set number_of_lines memdec(start,log)
+ 	charx ok#1
+-	set ok frame_actions(fr,number_of_lines,log,end)
++	set ok frame_actions(fr,number_of_lines,log,end,_text)
+ 	if ok=(EXIT_SUCCESS)
+ 		datax recalculation#1 #int? 16 to 8 can be almost on full ui32. a push inside an action is limited by maxuint16 totalvalues
+ 			#not outside actionrow? 'a','a' on multiple rows is still on same row
+@@ -187,6 +187,9 @@ function actionrow(ss log,sd end,sv px,s
+ 			elseif log#=(xlog_branch) #branch start
+ 				call newbranch(px,pxx)
+ 				inc log
++			elseif log#=(xlog_innerbranch)
++				call newbranch(px,pxx)
++				inc log
+ 			elseif log#=(xlog_innerbranchend) #innerbranch end
+ 				call newbranch(px,pxx)
+ 				inc log
+@@ -207,6 +210,16 @@ function actionrow(ss log,sd end,sv px,s
+ 	return (EXIT_FAILURE)
+ end
+ 
++function text_after_nlines(ss inlog,valueu linesnr)
++	ss next
++	while linesnr>^0
++		call memnl(inlog,#next)
++		set inlog next
++		dec linesnr
++	end
++	return inlog
++end
++
+ import "presprite_init" presprite_init
+ import "presprite_done" presprite_done
+ import "get_nframe" get_nframe
+@@ -261,11 +274,8 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 					return (EXIT_FAILURE)
+ 				end
+ 
+-				while linesnr>^0
+-					set p memnl(log,#next)
+-					set log next
+-					dec linesnr
+-				end
++				valueu text#1;set text log
++				set log text_after_nlines(log,linesnr)
+ 
+ 				sv pf;sv f;set f get_nframe(ppresprites#,psprites#,preid,ainit,#pf) #and from sprites since total lines sum, but will be needed at more, anyway
+ 
+@@ -293,7 +303,7 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 					set p memnl(log,#next)
+ 					if log#=(xlog_actions)
+ 						inc log
+-						set ok actionrow(log,p,#xcode,#xx,pf,f,strings_base,data)
++						set ok actionrow(log,p,#xcode,#xx,pf,f,strings_base,data,#text)
+ 						if ok!=(EXIT_SUCCESS)
+ 							return (EXIT_FAILURE)
+ 						end
+--- actionswf-1.orig/oad/oadbgdata.h.oh
++++ actionswf-1/oad/oadbgdata.h.oh
+@@ -20,7 +20,9 @@ function sprite()
+ end
+ function frame()
+ 	valuexu lines#1
+-	valueu total#1    #if outside is command like, break 100 from only 50 will fast tell if is an error. and with this occasion, for free
++	valueu total#1  #if outside is command like, break 100 from only 50 will fast tell if is an error. and with this occasion, for free
++	vstrx text#1    #not null ended text
++	valueu size#1   #for fast
+ end
+ function line()
+ 	valueu index#1    #same as lines total
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -40,6 +40,13 @@ function action_code_get()
+     return pointer
+ endfunction
+ 
++function action_code_values_action()
++	set action_code_values_index.nr 0
++	valuexu is_else_next_mark#1
++	set is_else_next_mark (NULL)
++	return #action_code_values_index.nr
++end
++
+ import "brace_blocks_get_memblock" brace_blocks_get_memblock
+ import "block_get_size" block_get_size
+ 
+@@ -247,6 +254,7 @@ import "brace_blocks_add_write_offset" b
+ import "brace_blocks_remove_write" brace_blocks_remove_write
+ import "brace_blocks_remove_write_ex" brace_blocks_remove_write_ex
+ import "debug_xlog" debug_xlog
++import "debug_xlog_stepin" debug_xlog_stepin
+ import "debug_xlog_stepout" debug_xlog_stepout
+ 
+ #position
+@@ -295,7 +303,8 @@ function action__code_row_ex(sd codepoin
+ 			add codepointer (DWORD)
+ 		else
+ 			call brace_blocks_remove_write((FALSE))
+-			call debug_xlog(codepointer) #simple if}[
++			call debug_xlog(codepointer) #simple if}[ but can also be the last if from elseif
++			set action_code_values_action.is_else_next_mark codepointer
+ 		endelse
+ 		return codepointer
+ 	endif
+@@ -305,7 +314,17 @@ function action__code_row_ex(sd codepoin
+ 		return codepointer
+ 	end
+ 	if attrib=(block_else_end)
++		charx test#1
++		if codepointer=action_code_values_action.is_else_next_mark
++			set test (FALSE)
++		else
++			set test (TRUE)
++		end
+ 		setcall codepointer action_code_conditions_end(codepointer)
++		if test=(TRUE) #only at else, at elseif was done in another way
++			call debug_xlog(codepointer) #can be a return inside else. then next code is not 100% from this branch
++			#and we are not branching at return/continue/break, will be a logical error to write dead code after that
++		end
+ 		return codepointer
+ 	endif
+ 	if attrib=(whileblock_end)
+@@ -483,7 +502,7 @@ function action_code_write_conditions(sd
+ 		call add_while_top_off((while_marker))
+ 		#
+ 		if codepointer#!=(inter_for)
+-			call debug_xlog(codepointer) #after jump
++			call debug_xlog_stepin(codepointer) #after jump here is having right part of the for
+ 			setcall codepointer action_code_pack(codepointer)
+ 			import "write_forward_offset" write_forward_offset
+ 			sub sizeOff (WORD)
+@@ -833,7 +852,7 @@ function action_code_right_util_ex(sd co
+ 			else
+ 				call write_ifjump_withNot(0)
+ 			end
+-			call debug_xlog(codepointer) #after jump
++			call debug_xlog_stepin(codepointer) #after jump, is stepping in ?: and will return and continue the branch
+ 			setcall codepointer action_code_right_util(codepointer)
+ 			call action_code_else_add()
+ 			call debug_xlog(codepointer) #at start of second part and after.stepout, but if before was a return? this is a new branch
+@@ -841,6 +860,7 @@ function action_code_right_util_ex(sd co
+ 			import "actionpush" actionpush
+ 			call actionpush() # must release example 2:[jump 0]3 , next will correct jump 0
+ 			call brace_blocks_remove_write((FALSE))
++			call debug_xlog_stepout(codepointer) #and continue after :]|
+ 			return codepointer
+ 		endelseif
+ 		setcall codepointer action_code_right_number(codepointer)
+@@ -938,7 +958,7 @@ function action_definefunction(sd codepo
+ 	setcall codepointer action_deffunction(codepointer,#debug_related)
+ 
+ 	#this on same row with dummy at .log
+-	call debug_xlog(codepointer) #after define function tag
++	call debug_xlog_stepin(codepointer) #after define function tag
+ 	#all previous codes must pe catched at this phase, this place for this function is tested, example: "function(){" on one row
+ 	call debug_phase_code(codepointer)
+ 
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -445,12 +445,16 @@ function debug_xlog_ex(sd codepointer,sd
+ 	end
+ end
+ function debug_xlog(sd codepointer) #/
+-# forin{[ for;;[ if/loop{[ ?[ func{[   [else :[   loop}[ if}[
++# forin{[ if/loop{[  [else :[  loop}[ if}[ else}[
+ #not all &jump will start a new branch, example continue and break
+ 	callg debug_xlog_ex(codepointer,(xlog_branch))
+ end
+-function debug_xlog_stepout(sd codepointer) #|
+-# for;;[ func}[
++function debug_xlog_stepin(sd codepointer) #{
++#for;;[ ?[ func{[
++	callg debug_xlog_ex(codepointer,(xlog_innerbranch))
++end
++function debug_xlog_stepout(sd codepointer) #}
++# for;;[ func}[ :}[
+ 	callg debug_xlog_ex(codepointer,(xlog_innerbranchend))
+ end
+ function debug_xlog_pool(sd nr) #pool_flag is already tested
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -5,7 +5,7 @@ include "../include/prog.h"
+ import "action_debug" action_debug
+ import "action_data" action_data
+ import "action_code_values" action_code_values
+-import "action_code_values_index" action_code_values_index
++import "action_code_values_action" action_code_values_action
+ import "escape_action" escape_action
+ import "action_debug_free" action_debug_free
+ import "debug_phase_parse_end" debug_phase_parse_end
+@@ -28,8 +28,7 @@ function action_base(ss ac)
+ 	if p_values=(NULL);call error("Don't call the action now.");endif
+ 	#
+ 	sd nr
+-	setcall nr action_code_values_index()
+-	set nr# 0
++	setcall nr action_code_values_action()
+ 	call action_data()
+ 
+ 	import "actionx" actionx
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -95,20 +95,20 @@ var a=new Object();
+ a.value=2;
+ attachMovie('carSymbol','fastCar_mc',1,a)
+ 
+-*5,9@0009/
++*5,9@0009{
+ *1,5,
+-*1|
++*1}
+ *1^0,7,^0,2,^0,2,,
+ *2^0,2,^0,2,^0^0,4,,
+ *3^0^0,E,,
+-*1^0,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2/,5,2&D/,5&8,
++*1^0,C,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,5,,,5,,,5,,,5,,5,,5,,5,,5,,,2{,5,2&D/,5&8},
+ *1^0,B,^0^0,4,,5,,^0^0,4,
+ *1^0,7,^0,2,^0,2,,^0,2,^0,2,,
+-*1^0,2,5@0006/^0,2,|,^0^0,9,,
+-*1,A,,,2/^0,2,,5,&F/,A,,,2/^0,2,,2&B/^0,2,&6,A,,,2/&0/
++*1^0,2,5@0006{^0,2,},^0^0,9,,
++*1,A,,,2/^0,2,,5,&F/,A,,,2/^0,2,,2&B/^0,2,&6/,A,,,2/&0/
+ *1,A,,,2/^0,2,,2&B/
+ *1^0,2,,,,^0,2,,,,^0,2,,,5,,
+-*1^0,7,,2/^0,2,,,,&9|^0,2,,5,,,2/&0/
++*1^0,7,,2{^0,2,,,,&9}^0,2,,5,,,2/&0/
+ *1^0,2,,,1,1,,2^0,4,/,2&D/
+ *1^0,2,,5,,,1,1,,2^0,2,,7,/,2&16/
+ *1,2,2^0,2,,2&10/
+@@ -121,30 +121,30 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ *1^0,2,^0,2,,1,,,2,,,,
+ *1^0,2,^0,2,,5,,1,,,2,,,,
+ *1^0,2,^0,2,^0,2,,1,,,2,,,5,,
+-*2^0^0,4,,5,,2/^0,2,,2&B/^0,2,&6,
+-*3^0,2,5@0006/
++*2^0^0,4,,5,,2{^0,2,,2&B/^0,2,&6},
++*3^0,2,5@0006{
+ *1^0,2,
+-*1|,
+-*1^0,2,^0,2,^0,2,5@0006/
++*1},
++*1^0,2,^0,2,^0,2,5@0006{
+ *1^0,2,
+-*1|,
++*1},
+ *1^0,8,^0,2,^0,7,,
+-*1^0,2,5@0030/
++*1^0,2,5@0030{
+ *1^0,2,
+ *1^0,7,^0,2,^0,2,,
+ *1^0,7,^0,2,,
+-*1|,
++*1},
+ *1^0,2,^0,2,^0^0,4,^0,2,,
+ *1^0,2,^0,2,^0^0,4,,
+-*1^0,2,^0,2,^0,2,5@0006/
++*1^0,2,^0,2,^0,2,5@0006{
+ *1^0,2,
+-*1|,
++*1},
+ *1^0,8,^0,2,^0,7,,
+-*1^0,2,5@0030/
++*1^0,2,5@0030{
+ *1^0,2,
+ *1^0,7,^0,2,^0,2,,
+ *1^0,7,^0,2,,
+-*1|,
++*1},
+ *1^0,2,^0,2,^0^0,4,^0,2,,
+ *1^0,2,^0,2,^0^0,4,,
+ *1^0^0,9,,
+@@ -152,8 +152,8 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ *3^0,B,,5,,
+ *3^0,B,,5,^0,2,,5,^0,2,,5,^0,2,,5,,
+ *3,9,
+-*3,A@0014/^0,2,^0,2,^0,2,,,
+-*1|^0,19,,
++*3,A@0014{^0,2,^0,2,^0,2,,,
++*1}^0,19,,
+ *6^0^0,9,,
+ *1^0,2,^0,7,
+ *1^0,2,^0^0^0,10,,
+@@ -171,9 +171,9 @@ function Vehicle(){
+ }
+ Object.registerClass('carSymbol',Vehicle)
+ 
+-*2,C@0010/
++*2,C@0010{
+ *1^0^0,4,^0,2,,,
+-*1|
++*1}
+ *1^0,2,^0^0,9,^0,2,,
+ 2
+ 
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -37,23 +37,54 @@ presprites:
+ 			ustrings: stop=2B play=50
+ 			strings: _root=4 tog=A _movie=24
+ 			size=0x72, final size=0x7A
+-			branch: size=0x68 code:
+-				........ ........ ........ 00000040 4F000000 37000000 00000000 3D000000 00000000 00000000 00000000 BBBBBBFB
+-				07000000 01000000 FFFFFFFF 101001F1 50000000 00000000 EEEEEEFE 43000000 00000000 49000000 00000000 00000000
+-				00000000 BBBBBBFB CCCCCCFC 01000000 FFFFFFFF
++			branch: size=0x4 code:
++				........ ........ ........ ........ FFFFFFFF
+ 		frames=0
+ sprites:
+ 	id=0
+ 		frame 1
+ 			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
++			text: size=121 <<<
++
++var x_coef=1;
++var y_coef=1;
++function test(){
++	attachMovie('movie','_movie',1);
++	_movie._x=100;
++	_movie._y=100;
++}
++test()
++			<<<
+ 	id=2
+ 		init
+ 			lines=2 1,4 1,12
++			text: size=24 <<<
++_root.tog=0
++_root.tog++
++			<<<
+ 		frame 2
+ 			lines=8 1,32 3,35 1,15 2,35 1,15
++			text: size=402 <<<
++var move=20;var width=640;var height=480;var lat=40;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move
++
++if(this._x>=right)_root.x_coef=_root.x_coef*-1;
++else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
++this._x=move*_root.x_coef+this._x;
++if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;
++else if(this._y<=top)_root.y_coef=_root.y_coef*-1;
++this._y=move*_root.y_coef+this._y;
++			<<<
+ 	id=8
+ 		init
+ 			lines=6 2,8 1,11 1,1 1,11 1,0
++			text: size=94 <<<
++
++if(_root.tog==1){
++	_root.tog=0;_root._movie.stop()
++}else{
++	_root.tog=1;_root._movie.play()
++}
++			<<<
+ functions: 1
+ mark struct:
+ 	0
+--- actionswf-1.orig/tests/.expected/data32.txt
++++ actionswf-1/tests/.expected/data32.txt
+@@ -34,22 +34,54 @@ presprites:
+ 			ustrings: stop=2B play=50
+ 			strings: _root=4 tog=A _movie=24
+ 			size=0x72, final size=0x7A
+-			branch: size=0x4C code:
+-				........ ........ ........ ........ ........ 00000040 4F000000 37000000 3D000000 00000000 BBBBBBFB 07000000
+-				01000000 FFFFFFFF 101001F1 50000000 EEEEEEFE 43000000 49000000 00000000 BBBBBBFB CCCCCCFC 01000000 FFFFFFFF
++			branch: size=0x4 code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 		frames=0
+ sprites:
+ 	id=0
+ 		frame 1
+ 			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
++			text: size=121 <<<
++			
++			var x_coef=1;
++			var y_coef=1;
++			function test(){
++				attachMovie('movie','_movie',1);
++				_movie._x=100;
++				_movie._y=100;
++			}
++			test()
++			<<<
+ 	id=2
+ 		init
+ 			lines=2 1,4 1,12
++			text: size=24 <<<
++			_root.tog=0
++			_root.tog++
++			<<<
+ 		frame 2
+ 			lines=8 1,32 3,35 1,15 2,35 1,15
++			text: size=402 <<<
++			var move=20;var width=640;var height=480;var lat=40;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move
++			
++			if(this._x>=right)_root.x_coef=_root.x_coef*-1;
++			else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
++			this._x=move*_root.x_coef+this._x;
++			if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;
++			else if(this._y<=top)_root.y_coef=_root.y_coef*-1;
++			this._y=move*_root.y_coef+this._y;
++			<<<
+ 	id=8
+ 		init
+ 			lines=6 2,8 1,11 1,1 1,11 1,0
++			text: size=94 <<<
++			
++			if(_root.tog==1){
++				_root.tog=0;_root._movie.stop()
++			}else{
++				_root.tog=1;_root._movie.play()
++			}
++			<<<
+ functions: 1
+ mark struct:
+ 	0
