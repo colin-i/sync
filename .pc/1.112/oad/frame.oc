@@ -1,0 +1,385 @@
+
+format elfobj64
+
+importx "realloc" realloc
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+function re_alloc(sv pmem,dataxu size) #only dataxu external sizes, and +1 increments
+	if size!=0
+		dataxu currentmaxsize#1;set currentmaxsize size
+		divu currentmaxsize ((sprites_realloc_onepart))
+		mult currentmaxsize ((sprites_realloc_onepart))
+		if size=currentmaxsize
+			add currentmaxsize ((sprites_realloc_onepart))
+			sv newmem;set newmem realloc(pmem#,currentmaxsize)
+			if newmem!=(NULL)
+				set pmem# newmem
+				return (EXIT_SUCCESS)
+			end
+			return (EXIT_FAILURE)
+		end # else is not on the edge
+	#else can be at presprite_init x2, string_add presprite_done function
+	end
+	return (EXIT_SUCCESS)
+end
+function re_calloc(sv pmem,svu size,valueu newsize)
+	charx ok#1;set ok re_alloc(pmem,size)
+	if ok=(EXIT_SUCCESS)
+		add size pmem#
+		add newsize pmem#
+		while size!=newsize
+			set size# (NULL)
+			add size :
+		end
+	end
+	return ok
+end
+function re_calloc_size(sv pmem,sdu psize,dataxu newsize)
+	charx ok#1;set ok re_calloc(pmem,psize#,newsize)
+	if ok=(EXIT_SUCCESS)
+		set psize# newsize
+	end
+	return ok
+end
+
+importx "malloc" malloc
+importx "free" free
+
+import "print_inline_start" print_inline_start
+import "print_inline_start_value" print_inline_start_value
+import "print_inline_done" print_inline_done
+import "print" print
+import "print_indent" print_indent
+import "print_unindent" print_unindent
+
+function preframe_init()
+	sv pf;set pf malloc((\preframe\))
+	if pf!=(NULL)
+		sv ustrings
+		set ustrings malloc((sprites_realloc_onepart))
+		if ustrings!=(NULL)
+			sv strings
+			set strings malloc((sprites_realloc_onepart))
+			if strings!=(NULL)
+				valueu bra#1
+				set bra malloc((\branch\))
+				if bra!=(NULL)
+					sv cuts;set cuts malloc(1) #symbolic, null malloc can be null return
+					if cuts!=(NULL)
+						set pf#:preframe.ustrings ustrings
+						set pf#:preframe.ussize 0
+						set pf#:preframe.strings strings
+						set pf#:preframe.ssize 0
+						set bra#:branch.cuts cuts
+						set bra#:branch.size 0
+						set pf#:preframe.abranch bra
+						set pf#:preframe.size 0
+						set pf#:preframe.recalculation 0
+						return pf
+					end
+					call free(bra)
+				end
+				call free(strings)
+			end
+			call free(ustrings)
+		end
+		call free(pf)
+	end
+	return (NULL)
+end
+
+import "branch_log" branch_log
+import "string_log" string_log
+import "branch_free" branch_free
+import "print2" print2
+
+function preframe_free(sv pf,charx ainit,datax log_index,valueu logstart)
+	charx log#1
+	#valuexu stroff#1
+	if log_index!=(no_index)
+		call frame_print_top(ainit,log_index)
+		#set stroff pf#:preframe.logstrstart
+		#add stroff pf#:preframe.logstrstart_index
+		#set stroff stroff#
+		#incst pf#:preframe.logstrstart_index
+
+		call print_inline_start("ustrings:")
+		set log (TRUE)
+	else
+		set log (FALSE)
+	end
+	valueu str#1
+	#is a different free than strings, will have one branch vs multiple
+	sv ustrings;set ustrings pf#:preframe.ustrings
+	sv s;set s ustrings
+	sv end;set end pf#:preframe.ussize
+	add end s
+	while s!=end
+		set str s#
+		if log=(TRUE)
+			call string_log(str#:ustring.base,str#:ustring.off)
+		end
+		call free(str)
+		incst s
+	end
+	call free(ustrings)
+	if log=(TRUE)
+		call print_inline_done()
+
+		call print_inline_start("strings:")
+	end
+	sv strings;set strings pf#:preframe.strings
+	set s strings
+	set end pf#:preframe.ssize
+	add end s
+	while s!=end
+		set str s#
+		if log=(TRUE)
+			call string_log(str#:string.base,str#:string.off)
+		end
+		call free(str#:string.branches)
+		call free(str)
+		incst s
+	end
+	call free(strings)
+	if log=(TRUE)
+		call print_inline_done()
+
+		dataxu finalsize#1;set finalsize pf#:preframe.size
+		add finalsize pf#:preframe.recalculation
+		call print2("size=0x%X, final size=0x%X",pf#:preframe.size,finalsize) #these sizes are without pool and end tag
+
+		call branch_log(pf#:preframe.abranch,logstart)
+		call print_unindent()
+	end
+	call branch_free(pf#:preframe.abranch)
+
+	call free(pf)
+end
+
+const frame_text_allocpart=0x100
+function frame_init(valueu total)
+	sv f;set f malloc((\frame\))
+	if f!=(NULL)
+		valueu size#1;set size (\line\)
+		mult size total
+		sv lines;set lines malloc(size)
+		if lines!=(NULL)
+			sv text;set text malloc((frame_text_allocpart))
+			if text!=(NULL)
+				set f#:frame.lines lines
+				set f#:frame.total 0
+				set f#:frame.text text
+				set f#:frame.size 0
+				return f
+			end
+			call free(lines)
+		end
+		call free(f)
+	end
+	return (NULL)
+end
+
+import "print_inline2" print_inline2
+import "prints" prints
+import "memnl" memnl
+import "indent" indent
+
+importx "stdout" stdout
+importx "fwrite" fwrite
+
+function frame_free(sv f,charx ainit,datax log_index)
+	valueu end#1;set end f#:frame.total
+	valueu ix#1;valueu n#1
+	sv lines;set lines f#:frame.lines
+	valueu nr_actions#1
+	if log_index!=(no_index)
+		call frame_print_top(ainit,log_index)
+		call print_inline_start_value("lines=%lu",end)
+		set ix 0;set n 0
+		set nr_actions lines#:line.total
+	end
+	mult end (\line\)
+	sv pointer;set pointer lines
+	add end pointer
+	while pointer!=end
+		if log_index!=(no_index)
+			valueu i#1;set i pointer#:line.index
+			if i!=ix
+				call print_inline2("%u,%u",n,nr_actions)
+				set ix i;set n 1
+				set nr_actions pointer#:line.total
+			else
+				inc n
+			end
+		end
+		if pointer#:line.actions!=(NULL)
+			call free(pointer#:line.actions)
+		end
+		add pointer (\line\)
+	end
+	if log_index!=(no_index)
+		call print_inline2("%u,%u",n,nr_actions)
+		call print_inline_done()
+		call print("text: size=%lu <<<",f#:frame.size)
+		sv so^stdout
+
+		ss a#1;set a f#:frame.text;ss b
+		valueu c#1;set c f#:frame.size
+		valueu d#1
+		add c a
+		while a!=c
+			set d memnl(a,#b) #more in the function, \r\n example
+			sub d a
+			call indent()
+			call fwrite(a,d,1,so#)
+			call print_inline_done()
+			set a b
+		end
+
+		call prints("<<<")
+		call print_unindent()
+	end
+	call free(lines)
+	call free(f#:frame.text)
+	call free(f)
+end
+
+function frame_print_top(charx ainit,datax log_index)
+	if ainit=(xlog_ainit_false)
+		call print("frame %u",log_index)
+	else
+		call prints("init")
+	end
+	call print_indent()
+end
+
+function nframe_init(sv pf,valueu total)
+	set pf# preframe_init()
+	if pf#!=(NULL)
+		valueu f#1;set f frame_init(total)
+		return f
+	end
+	return (NULL)
+end
+
+function get_nframe(sv presprites,sv sprites,wordxu preid,charx ainit,sv ppf)
+	sv ps=:
+	mult ps preid
+	sv s;set s ps
+
+	add ps presprites
+	set ps ps#
+
+	add s sprites
+	set s s#
+
+	if ainit=(xlog_ainit_false)
+		sv pf
+		set pf ps#:presprite.preframes
+		add pf ps#:presprite.size
+		decst pf
+		set ppf# pf#
+
+		sv f
+		set f s#:sprite.frames
+		add f s#:sprite.size
+		decst f
+		return f#
+	end
+	set ppf# ps#:presprite.apreframe
+	return s#:sprite.aframe
+end
+
+const frame_text_allocpart_=frame_text_allocpart-1
+const _frame_text_allocpart_=~frame_text_allocpart_
+import "text_after_nlines" text_after_nlines
+
+importx "memcpy" memcpy
+
+function frame_text_add(valueu fr,svu _text,valueu lines)
+	valueu starttext#1;set starttext _text#
+	valueu endtext#1;set endtext text_after_nlines(starttext,lines)
+	set _text# endtext
+	sub endtext starttext
+
+	valueu test#1;set test (_frame_text_allocpart_)
+	and test fr#:frame.size
+	valueu test3#1;set test3 fr#:frame.size
+	add test3 endtext
+	valueu test2#1;set test2 (_frame_text_allocpart_)
+	and test2 test3
+	valueu mem#1
+	if test!=test2
+		add test2 (frame_text_allocpart)
+		#only drawback: if on edge will still go one more part
+		set mem realloc(fr#:frame.text,test2)
+		if mem=(NULL)
+			return (EXIT_FAILURE)
+		end
+		set fr#:frame.text mem
+	else
+		set mem fr#:frame.text
+	end
+	add mem fr#:frame.size
+	call memcpy(mem,starttext,endtext)
+	add fr#:frame.size endtext
+	return (EXIT_SUCCESS)
+end
+
+function frame_actions(valueu fr,valueu lines,ss log,valueu end,svu _text)
+	charx ok#1;set ok frame_text_add(fr,_text,lines)
+	if ok=(EXIT_SUCCESS)
+		valueu current#1;set current fr#:frame.total
+
+		valueu p_lines=\line\
+		mult p_lines current
+		add p_lines fr#:frame.lines
+
+		#test how many actions to alloc
+		valueu nr_of_actions#1;set nr_of_actions 0 #not needing to null end because has "next". action struct has a long and an int
+		while log!=end
+			if log#=(xlog_act)
+				inc nr_of_actions
+			end
+			inc log
+		end
+		set p_lines#:line.index current  ##there is no 0 lines per row
+		#if blog=(TRUE)
+		set p_lines#:line.total nr_of_actions
+		#end
+		mult nr_of_actions \action\
+		set p_lines#:line.actions malloc(nr_of_actions)  #space was reserved at start knowing log total lines
+		if p_lines#:line.actions!=(NULL)
+			add fr#:frame.total lines
+
+			mult lines \line\
+			add lines p_lines
+			add p_lines \line\
+
+			while p_lines!=lines
+				set p_lines#:line.index current
+				set p_lines#:line.actions (NULL)
+				add p_lines (\line\)
+			end
+			return (EXIT_SUCCESS)
+		end
+	end
+	return (EXIT_FAILURE)
+end
+function frame_expand(valueu fr,valueu lines) #,sv p_totallines)
+	add lines fr#:frame.total
+	valueu alloc#1;set alloc \line\
+	mult alloc lines
+	valueu re#1
+	set re realloc(fr#:frame.lines,alloc)
+	if re!=(NULL)
+		set fr#:frame.lines re
+		#set p_totallines# fr#:frame.total
+		#this is at end because can be truncated on last blank lines: set fr#:frame.total lines
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end

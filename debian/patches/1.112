@@ -1,0 +1,345 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-112) bionic; urgency=medium
+ .
+   * xlog_pad_get/xlog_pad_set
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-12-07
+
+--- actionswf-1.orig/dev/importf.h
++++ actionswf-1/dev/importf.h
+@@ -67,8 +67,10 @@ importX "action_init_sprite" action_init
+ importX "actionf_sprite" actionf_sprite
+ importX "actionf_init_sprite" actionf_init_sprite
+ 
+-#tool
++#tool -  there are some ..x with no args but anyway we are using otoc OR the c header file OR preferring for importers to not make weak symbols in .o
+ 
+ importx "erbool_get" erbool_get
+ importx "erbool_reset" erbool_reset
+ importx "freereset" freereset
++importx "xlog_pad_get" xlog_pad_get
++importx "xlog_pad_set" xlog_pad_set
+--- actionswf-1.orig/include/actionswf.h
++++ actionswf-1/include/actionswf.h
+@@ -160,6 +160,7 @@ void swf_exports_done();
+ 
+ void action(char* ac);
+ void actionf(char* buffer,char* format,...);
++void actiond(char* ac);
+ 
+ //action at sprite
+ 
+@@ -175,6 +176,8 @@ void actionf_init_sprite(int sprite,char
+ char erbool_get();
+ void erbool_reset();
+ void freereset();
++unsigned char xlog_pad_get();
++void xlog_pad_set(unsigned char new_pad);
+ 
+ 
+ 
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -87,7 +87,7 @@ function branch_log(sv br,valueu start)
+ 			valueu pad_sz#1;set pad_sz code
+ 			sub pad_sz start
+ 			dataxu strip_pad_sz#1;set strip_pad_sz pad_sz
+-			div strip_pad_sz (xlog_pad_default)
++			divu strip_pad_sz (xlog_pad_default)
+ 			mult strip_pad_sz (xlog_pad_default)
+ 			sub pad_sz strip_pad_sz
+ 			charx pad_minus_one#47
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -43,7 +43,8 @@ function preframe()
+ 	dataxu size#1  #DoAction has ui32 but overall also is a ui32
+ 	value recalculation#1 #can be in ui32, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
+ 
+-	valuexu abranch#1
++	valueu abranch#1
++	valueu branchpointer#1  #starting from abranch and descending
+ end
+ function branch()
+ 	valueu cuts#1
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -224,7 +224,7 @@ function frame_free(sv f,charx ainit,dat
+ 		call print_inline2("%u,%u",n,nr_actions)
+ 		call print_inline_done()
+ 		call print("text: size=%lu <<<",f#:frame.size)
+-		sv so^stdout
++		sv so^stdout  #isn't at c an extra step? who cares, at o is not possible without this
+ 
+ 		ss a#1;set a f#:frame.text;ss b
+ 		valueu c#1;set c f#:frame.size
+@@ -232,9 +232,11 @@ function frame_free(sv f,charx ainit,dat
+ 		add c a
+ 		while a!=c
+ 			set d memnl(a,#b) #more in the function, \r\n example
+-			sub d a
+-			call indent()
+-			call fwrite(a,d,1,so#)
++			if d!=a  #why to write a whitespaces row?
++				sub d a
++				call indent()
++				call fwrite(a,d,1,so#)
++			end
+ 			call print_inline_done()
+ 			set a b
+ 		end
+@@ -293,25 +295,29 @@ function get_nframe(sv presprites,sv spr
+ 	return s#:sprite.aframe
+ end
+ 
+-const frame_text_allocpart_=frame_text_allocpart-1
++#with () for c
++const frame_text_allocpart_=(frame_text_allocpart-1)
+ const _frame_text_allocpart_=~frame_text_allocpart_
+ import "text_after_nlines" text_after_nlines
++import "memnlcr" memnlcr
+ 
+ importx "memcpy" memcpy
+ 
+ function frame_text_add(valueu fr,svu _text,valueu lines)
+ 	valueu starttext#1;set starttext _text#
+-	valueu endtext#1;set endtext text_after_nlines(starttext,lines)
+-	set _text# endtext
+-	sub endtext starttext
++	valueu number_of_crnl#1;set number_of_crnl 0
++	valueu endtext#1;set endtext text_after_nlines(starttext,lines,#number_of_crnl)
++	valueu size#1;set size endtext
++	sub size starttext
++	sub size number_of_crnl
+ 
+ 	valueu test#1;set test (_frame_text_allocpart_)
+ 	and test fr#:frame.size
+ 	valueu test3#1;set test3 fr#:frame.size
+-	add test3 endtext
++	add test3 size
+ 	valueu test2#1;set test2 (_frame_text_allocpart_)
+ 	and test2 test3
+-	valueu mem#1
++	ss mem
+ 	if test!=test2
+ 		add test2 (frame_text_allocpart)
+ 		#only drawback: if on edge will still go one more part
+@@ -323,9 +329,22 @@ function frame_text_add(valueu fr,svu _t
+ 	else
+ 		set mem fr#:frame.text
+ 	end
++
++	#out text will be with nl
+ 	add mem fr#:frame.size
+-	call memcpy(mem,starttext,endtext)
+-	add fr#:frame.size endtext
++	ss next;valueu p#1
++	while starttext!=endtext
++		set p memnlcr(starttext,#next,(NULL))
++		sub p starttext
++		call memcpy(mem,starttext,p)
++		add mem p
++		set mem# (NewLine)
++		inc mem
++		set starttext next
++	end
++
++	set _text# endtext
++	add fr#:frame.size size
+ 	return (EXIT_SUCCESS)
+ end
+ 
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -35,7 +35,38 @@ function fcontent(sd path,sv psize)
+ 	return (NULL)
+ end
+ 
+-function memnl(ss log,sv pnext)
++#at these memnl the last row is ending in nl from src
++function memnlcr(ss log,sv pnext,sv _cr) #here is moving through text, an example with cr: ffdec action output is \r\n
++	set pnext# 1
++	if log#!=(NewLine) #empty row / last row
++		whiletrue
++			if log#=(NewLine)
++				add pnext# log
++				dec log
++				if log#!=(CReturn)
++					inc log
++				end
++				break
++			end
++			if log#=(CReturn)
++				add pnext# log
++				ss next;set next pnext#
++				if next#=(NewLine)
++					add pnext# 1
++					if _cr!=(NULL)
++						add _cr# 1
++					end
++				end
++				break
++			end
++			inc log
++		end
++	else
++		add pnext# log
++	end
++	return log
++end
++function memnl(ss log,sv pnext) #here is moving only on nl from src
+ 	set pnext# 1
+ 	if log#!=(NewLine) #emptyrow
+ 		inc log
+@@ -43,10 +74,6 @@ function memnl(ss log,sv pnext)
+ 			inc log
+ 		end
+ 		add pnext# log
+-		dec log
+-		if log#!=(CReturn)  #an example: ffdec action output is \r\n
+-			inc log
+-		end
+ 	else
+ 		add pnext# log
+ 	end
+@@ -210,10 +237,10 @@ function actionrow(ss log,sd end,sv px,s
+ 	return (EXIT_FAILURE)
+ end
+ 
+-function text_after_nlines(ss inlog,valueu linesnr)
++function text_after_nlines(ss inlog,valueu linesnr,valueu crs)
+ 	ss next
+ 	while linesnr>^0
+-		call memnl(inlog,#next)
++		call memnlcr(inlog,#next,crs)
+ 		set inlog next
+ 		dec linesnr
+ 	end
+@@ -275,7 +302,7 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 				end
+ 
+ 				valueu text#1;set text log
+-				set log text_after_nlines(log,linesnr)
++				set log text_after_nlines(log,linesnr,(NULL))
+ 
+ 				sv pf;sv f;set f get_nframe(ppresprites#,psprites#,preid,ainit,#pf) #and from sprites since total lines sum, but will be needed at more, anyway
+ 
+@@ -290,6 +317,7 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 				valueu xcode#1;set xcode x
+ 				add x xcode_size
+ 				set global.xoffset 0
++				set pf#:preframe.branchpointer pf#:preframe.abranch
+ 
+ 				#[actions]
+ 				whiletrue
+--- actionswf-1.orig/src/tool.e.oc
++++ actionswf-1/src/tool.e.oc
+@@ -22,3 +22,11 @@ functionx freereset()
+ 	import "swf_mem" swf_mem
+ 	call swf_mem((mem_exp_free))
+ endfunction
++
++functionx xlog_pad_get()
++	char pad=xlog_pad_default
++	return pad
++endfunction
++functionx xlog_pad_set(sd new_pad)
++	set xlog_pad_get.pad new_pad
++endfunction
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -183,13 +183,15 @@ function debug_x_pointers(valuex start,v
+ 
+ 			sd aux
+ 			set aux mark
+-			divu aux (xlog_pad_default)
+-			mult aux (xlog_pad_default)
++			import "xlog_pad_get" xlog_pad_get #this is a functionx, but no args, then, no aligns at pass_call for this
++			sd pad_value#1;set pad_value xlog_pad_get()
++			divu aux pad_value
++			mult aux pad_value
+ 			if aux!=mark
+ 				sd aux2
+ 				set aux2 mark
+ 				sub aux2 aux
+-				set pad (xlog_pad_default)
++				set pad pad_value
+ 				sub pad aux2
+ 			else
+ 				set pad 0
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -45,7 +45,7 @@ sprites:
+ 		frame 1
+ 			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
+ 			text: size=121 <<<
+-			
++
+ 			var x_coef=1;
+ 			var y_coef=1;
+ 			function test(){
+@@ -66,7 +66,7 @@ sprites:
+ 			lines=8 1,32 3,35 1,15 2,35 1,15
+ 			text: size=402 <<<
+ 			var move=20;var width=640;var height=480;var lat=40;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move
+-			
++
+ 			if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+ 			else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
+ 			this._x=move*_root.x_coef+this._x;
+@@ -78,7 +78,7 @@ sprites:
+ 		init
+ 			lines=6 2,8 1,11 1,1 1,11 1,0
+ 			text: size=94 <<<
+-			
++
+ 			if(_root.tog==1){
+ 				_root.tog=0;_root._movie.stop()
+ 			}else{
+--- actionswf-1.orig/tests/.expected/data32.txt
++++ actionswf-1/tests/.expected/data32.txt
+@@ -42,7 +42,7 @@ sprites:
+ 		frame 1
+ 			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
+ 			text: size=121 <<<
+-			
++
+ 			var x_coef=1;
+ 			var y_coef=1;
+ 			function test(){
+@@ -63,7 +63,7 @@ sprites:
+ 			lines=8 1,32 3,35 1,15 2,35 1,15
+ 			text: size=402 <<<
+ 			var move=20;var width=640;var height=480;var lat=40;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move
+-			
++
+ 			if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+ 			else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
+ 			this._x=move*_root.x_coef+this._x;
+@@ -75,7 +75,7 @@ sprites:
+ 		init
+ 			lines=6 2,8 1,11 1,1 1,11 1,0
+ 			text: size=94 <<<
+-			
++
+ 			if(_root.tog==1){
+ 				_root.tog=0;_root._movie.stop()
+ 			}else{
