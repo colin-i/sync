@@ -1,0 +1,646 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-114) bionic; urgency=medium
+ .
+   * backjump at src/oad
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2024-12-09
+
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -78,7 +78,15 @@ function test(){
+ 	_movie._x=100;
+ 	_movie._y=100;
+ }
+-test()
++var this_is_just_a_test=0;
++while(true){
++	if(this_is_just_a_test==0){
++		this_is_just_a_test=1;
++		continue;
++	}
++	test();
++	break;
++}
+ ")
+ 
+ call swf_showframe()
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -7,6 +7,7 @@ const xlog_unique_new_size=: ;#DWORD/QWO
+ const xlog_id=2
+ const xlog_id_size=2 #WORD
+ 
++const xlog_jumpback=0x24      ;#$
+ const xlog_jump=0x26          ;#&
+ const xlog_actions=0x2A       ;#*
+ const xlog_act=0x2C            #,
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -29,7 +29,7 @@ re:
+ 
+ xlog=../include/xlog.
+ 
+-items=intern compare frame string branch
++items=intern compare frame string branch ibranch
+ #$(eval subobjects = )
+ $(foreach var,$(items),$(eval subobjects += ${var}.o))
+ #$(eval sublogs = )
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -4,10 +4,38 @@ format elfobj64
+ override include_sec 1
+ include "common.h" "common.h.oh"
+ 
++importx "malloc" malloc
++#branch pointer
++function branch_init(valueu pf)
++	valueu bra#1
++	set bra malloc((\branch\))
++	if bra!=(NULL)
++		valueu inners#1
++		set inners malloc((sprites_realloc_onepart))
++		if inners!=(NULL)
++			sv cuts;set cuts malloc(1) #symbolic, null malloc can be null return
++			if cuts!=(NULL)
++				set bra#:branch.cuts cuts
++				set bra#:branch.size 0
++
++				set bra#:branch.innerbranches inners
++				set bra#:branch.isize 0
++				set bra#:branch.subbranch (NULL)
++
++				set pf#:preframe.branchpointer bra
++				return bra
++			end
++			call free(inners)
++		end
++		call free(bra)
++	end
++	return (NULL)
++end
++
+ importx "realloc" realloc
+ function branch_done(sv pf,dataxu size,dataxu offset,valueu code)
+ 	sub size offset
+-	sv br;set br pf#:preframe.abranch
++	sv br;set br pf#:preframe.branchpointer
+ 
+ 	valueu sz#1;set sz br#:branch.size
+ 	add sz \branchcut\
+@@ -109,7 +137,14 @@ function branch_log(sv br,valueu start)
+ end
+ 
+ importx "free" free
+-function branch_free(sv br)
++function branch_free(valueu br,valueu logstart)
++	if logstart!=(NULL)
++		call branch_log(br,logstart)
++	end
+ 	call free(br#:branch.cuts)
++	call free(br#:branch.innerbranches)
++	if br#:branch.subbranch!=(NULL)
++		call branch_free(br#:branch.subbranch,logstart)
++	end
+ 	call free(br)
+ end
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -44,16 +44,19 @@ function preframe()
+ 	value recalculation#1 #can be in ui32, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
+ 
+ 	valueu abranch#1
++
+ 	valueu branchpointer#1  #starting from abranch and descending
+ end
+ function branch()
+ 	valueu cuts#1
+ 	valueu size#1  #here a return undefined DoAction has 8 and a branchcut has 12(16 if aligned), there are no 3 size(tag+end) DoAction from actionswf lib
+ 
+-#	dataxu *offset#1
+-#	valuexu *action#1   #for mark, after compare
++	valuexu innerbranches#1 #for define functions and for 3rd part
++	dataxu isize#1  #same as oadata functions plus for 3rd that is bigger, a jump,push,define at least
+ 
+-#	valuexu *subbranch#1
++	valueu subbranch#1
++
++#	valuexu *action#1   #for mark, after compare
+ end
+ function branchcut()
+ 	vdataxu x#1   #ints everywhere and pointers for strings, will not memcpy
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -47,13 +47,7 @@ end
+ importx "malloc" malloc
+ importx "free" free
+ 
+-import "print_inline_start" print_inline_start
+-import "print_inline_start_value" print_inline_start_value
+-import "print_inline_done" print_inline_done
+-import "print" print
+-import "print_indent" print_indent
+-import "print_unindent" print_unindent
+-
++import "branch_init" branch_init
+ function preframe_init()
+ 	sv pf;set pf malloc((\preframe\))
+ 	if pf!=(NULL)
+@@ -63,23 +57,15 @@ function preframe_init()
+ 			sv strings
+ 			set strings malloc((sprites_realloc_onepart))
+ 			if strings!=(NULL)
+-				valueu bra#1
+-				set bra malloc((\branch\))
+-				if bra!=(NULL)
+-					sv cuts;set cuts malloc(1) #symbolic, null malloc can be null return
+-					if cuts!=(NULL)
+-						set pf#:preframe.ustrings ustrings
+-						set pf#:preframe.ussize 0
+-						set pf#:preframe.strings strings
+-						set pf#:preframe.ssize 0
+-						set bra#:branch.cuts cuts
+-						set bra#:branch.size 0
+-						set pf#:preframe.abranch bra
+-						set pf#:preframe.size 0
+-						set pf#:preframe.recalculation 0
+-						return pf
+-					end
+-					call free(bra)
++				set pf#:preframe.abranch branch_init(pf)
++				if pf#:preframe.abranch!=(NULL)
++					set pf#:preframe.ustrings ustrings
++					set pf#:preframe.ussize 0
++					set pf#:preframe.strings strings
++					set pf#:preframe.ssize 0
++					set pf#:preframe.size 0
++					set pf#:preframe.recalculation 0
++					return pf
+ 				end
+ 				call free(strings)
+ 			end
+@@ -90,10 +76,16 @@ function preframe_init()
+ 	return (NULL)
+ end
+ 
+-import "branch_log" branch_log
+ import "string_log" string_log
+ import "branch_free" branch_free
++
++import "print_inline_start" print_inline_start
++import "print_inline_start_value" print_inline_start_value
++import "print_inline_done" print_inline_done
++import "print" print
+ import "print2" print2
++import "print_indent" print_indent
++import "print_unindent" print_unindent
+ 
+ function preframe_free(sv pf,charx ainit,datax log_index,valueu logstart)
+ 	charx log#1
+@@ -150,11 +142,11 @@ function preframe_free(sv pf,charx ainit
+ 		dataxu finalsize#1;set finalsize pf#:preframe.size
+ 		add finalsize pf#:preframe.recalculation
+ 		call print2("size=0x%X, final size=0x%X",pf#:preframe.size,finalsize) #these sizes are without pool and end tag
+-
+-		call branch_log(pf#:preframe.abranch,logstart)
++		call branch_free(pf#:preframe.abranch,logstart)
+ 		call print_unindent()
++	else
++		call branch_free(pf#:preframe.abranch,(NULL))
+ 	end
+-	call branch_free(pf#:preframe.abranch)
+ 
+ 	call free(pf)
+ end
+--- /dev/null
++++ actionswf-1/oad/ibranch.oc
+@@ -0,0 +1,11 @@
++
++format elfobj64
++
++override include_sec 1
++include "common.h" "common.h.oh"
++
++function ibranch_add(valueu *branch)
++#	charx ok#1
++#	set ok re_alloc(#branch#:branch.innerbranches,branch#:branch.isize)
++	return (EXIT_SUCCESS)
++end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -145,7 +145,7 @@ end
+ import "re_alloc" re_alloc
+ 
+ function function(valueu data)
+-	charx ok#1;set ok re_alloc(data#:oadata.functions,data#:oadata.functions_size)
++	charx ok#1;set ok re_alloc(#data#:oadata.functions,data#:oadata.functions_size)
+ 	if ok=(EXIT_SUCCESS)
+ 		add data#:oadata.functions_size :
+ 		return (EXIT_SUCCESS)
+@@ -156,6 +156,8 @@ end
+ import "frame_actions" frame_actions
+ import "string_add" string_add
+ import "string_id" string_id
++import "branch_init" branch_init
++import "ibranch_add" ibranch_add
+ 
+ function actionrow(ss log,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data,svu _text)
+ 	ss start;set start log
+@@ -212,16 +214,24 @@ function actionrow(ss log,sd end,sv px,s
+ 			elseif log#=(xlog_jump)
+ 				set log memhex_parse_withinc(log,#number)
+ 			elseif log#=(xlog_branch) #branch start
++				valueu branch_prec#1;set branch_prec prefr#:preframe.branchpointer
++				set branch_prec#:branch.subbranch branch_init(prefr)
++				if branch_prec#:branch.subbranch=(NULL)
++					return (EXIT_FAILURE)
++				end
+ 				call newbranch(px,pxx)
+ 				inc log
+ 			elseif log#=(xlog_innerbranch)
++				set ok ibranch_add(prefr#:preframe.branchpointer)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
+ 				call newbranch(px,pxx)
+ 				inc log
+ 			elseif log#=(xlog_innerbranchend) #innerbranch end
+ 				call newbranch(px,pxx)
+ 				inc log
+-			else
+-			#if log#=(xlog_function)
++			elseif log#=(xlog_function)
+ 				set ok function(data)
+ 				if ok!=(EXIT_SUCCESS)
+ 					return (EXIT_FAILURE)
+@@ -230,6 +240,8 @@ function actionrow(ss log,sd end,sv px,s
+ 				#add prefr#:preframe.size #only at log is important
+ 				add prefr#:preframe.recalculation (actionrecordheader_size+actionpush_type+actionpush_integer+actionrecordheader_tag_size) #adding func dtitles
+ 				#what if there are no func dtitles? the debugger will not work without that at this moment. maybe a to do
++			else #xlog_jumpback at loop end , continue
++				set log memhex_parse_withinc(log,#number)
+ 			end
+ 		end
+ 		return (EXIT_SUCCESS)
+@@ -317,7 +329,6 @@ function loop(ss log,sv x,sd xx,sd logsi
+ 				valueu xcode#1;set xcode x
+ 				add x xcode_size
+ 				set global.xoffset 0
+-				set pf#:preframe.branchpointer pf#:preframe.abranch
+ 
+ 				#[actions]
+ 				whiletrue
+--- actionswf-1.orig/oad/oadbgdata.h.oh
++++ actionswf-1/oad/oadbgdata.h.oh
+@@ -6,7 +6,7 @@ function oadata()
+ 
+ 	#these are pointers to actions
+ 	valuexu functions#1   #is this in conflict with for3 same sign? no, there will be another offset, remembering that offset at functions is at start
+-	dataxu functions_size#1  #anyway is using a counter at appending (preferred instead of null), DefineFunction is at minimum 8 like 64 :, anyway swfsize is ui32(that minus some tags)
++	dataxu functions_size#1  #anyway is using a counter at appending (preferred instead of null), DefineFunction is at minimum 8 same as : then swfsizeui32 minus some tags
+ 	#can stay outside, anyway is good for info
+ 	#here dtitles has a push/pop recognizer
+ 
+--- actionswf-1.orig/s64
++++ actionswf-1/s64
+@@ -1,4 +1,3 @@
+ 
+ if [ -z "${1}" ]; then make clean && cd example && ./mrdi && cd ..; fi && \
+-cd ./oad && ./md && \
+-cd ../tests/data && ./test
++cd ../tests/data && ./b
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -439,7 +439,7 @@ endfunction
+ import "brace_blocks_add_write_current" brace_blocks_add_write_current
+ 
+ import "add_dummy_jump" add_dummy_jump
+-import "resolve_dummy_jump" resolve_dummy_jump
++import "resolve_back_jump" resolve_back_jump
+ 
+ #next/same
+ function action_code_write_conditions(sd codepointer)
+@@ -629,18 +629,18 @@ function action_code_continue()
+ 	sd start;set start cond_blocks_at_index(0)
+ 	sd c_blocks;set c_blocks cond_blocks_noerror()
+ 	while start!=c_blocks
+-        sub c_blocks (DWORD)
+-        if c_blocks#=(top_flag)
+-            #the loop type and to the offset to jump from here
+-            sub c_blocks (2*DWORD)
+-            sd off_to_jump;set off_to_jump c_blocks#
+-            #
+-            call add_dummy_jump()
+-            call resolve_dummy_jump(off_to_jump)
+-            ret
+-        endif
++		sub c_blocks (DWORD)
++		if c_blocks#=(top_flag)
++			#the loop type and to the offset to jump from here
++			sub c_blocks (2*DWORD)
++			sd off_to_jump;set off_to_jump c_blocks#
++			#
++			call add_dummy_jump()
++			call resolve_back_jump(off_to_jump)
++			ret
++		endif
+ 	endwhile
+-    call error("Continue without a loop error")
++	call error("Continue without a loop error")
+ endfunction
+ 
+ function action_code_else_add()
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -1159,8 +1159,8 @@ function write_forward_offset_ex(sd offs
+ 	import "stack_to_word_arg" stack_to_word_arg
+ 	call stack_to_word_arg(size,mem)
+ 	if is_from_function=(FALSE)
+-		import "debug_phase_code_add_long_if" debug_phase_code_add_long_if
+-		callg debug_phase_code_add_long_if(mem)
++		import "debug_phase_code_add_jump_if" debug_phase_code_add_jump_if
++		callg debug_phase_code_add_jump_if(mem)
+ 	end
+ endfunction
+ #offset
+@@ -1216,7 +1216,7 @@ function brace_blocks_remove_write_jump(
+ 	sub c# 2
+ 
+ 	if ret_cont_break.type=(ret_cont_break_nothing)  #skip dead code
+-		call resolve_dummy_jump(blocks#)  #jump back
++		call resolve_back_jump(blocks#)  #jump back
+ 	elseif skip_jump!=0
+ 		ret
+ 	end
+@@ -1233,24 +1233,27 @@ function add_dummy_jump()
+     sd dummy_size=0
+     call swf_actionblock_add(#dummy_size,(actionjump_contentsize))
+ endfunction
+-function resolve_dummy_jump(sd jumpoffset)  #also at continue
+-    sd memblock
+-    ss mem
+-    sd size
+-    setcall memblock brace_blocks_get_memblock()
+-    call block_get_mem_size(memblock,#mem,#size)
+-    add mem size;sub mem (WORD)
+-    #
+-    sub size jumpoffset
++function resolve_back_jump(sd jumpoffset)  #also at continue
++	sd memblock
++	ss mem
++	sd size
++	setcall memblock brace_blocks_get_memblock()
++	call block_get_mem_size(memblock,#mem,#size)
++	add mem size;sub mem (WORD)
++	#
++	sub size jumpoffset
+ 	if size>=^0x8000
+ 		call error("offset>(signed word size) error (at jump back)")
+ 	end
++
++	import "debug_phase_code_add_jumpback_if" debug_phase_code_add_jumpback_if
++	call debug_phase_code_add_jumpback_if(#size)
++
+ 	mult size -1
+ 	#if size<=0xFFff8000   # 0x8000 or minus 1
+-    #
+-    set mem# size
+-    sd byte=0x0000ff00;and byte size;div byte 0x100
+-    inc mem;set mem# byte
++	set mem# size
++	sd byte=0x0000ff00;and byte size;div byte 0x100
++	inc mem;set mem# byte
+ endfunction
+ 
+ #function
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -346,11 +346,16 @@ end
+ function debug_phase_code_add_long(ss arg2,sd delim)
+ 	callg debug_phase_code_add((TRUE),arg2,delim)
+ end
+-function debug_phase_code_add_long_if(ss arg2)
++function debug_phase_code_add_jump_if(ss arg2)
+ 	if log_init.prexx=(prexx_flags)
+ 		callg debug_phase_code_add_long(arg2,(xlog_jump))
+ 	end
+ end
++function debug_phase_code_add_jumpback_if(ss arg2)
++	if log_init.prexx=(prexx_flags)
++		callg debug_phase_code_add_long(arg2,(xlog_jumpback))
++	end
++end
+ function debug_phase_code_add_one(ss arg2)
+ 	callg debug_phase_code_add((FALSE),arg2,(xlog_act))
+ endfunction
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -106,13 +106,13 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ *1^0,7,^0,2,^0,2,,^0,2,^0,2,,
+ *1^0,2,5@0006{^0,2,},^0^0,9,,
+ *1,A,,,2/^0,2,,5,&F/,A,,,2/^0,2,,2&B/^0,2,&6/,A,,,2/&0/
+-*1,A,,,2/^0,2,,2&B/
++*1,A,,,2/^0,2,,2$1F&B/
+ *1^0,2,,,,^0,2,,,,^0,2,,,5,,
+ *1^0,7,,2{^0,2,,,,&9}^0,2,,5,,,2/&0/
+-*1^0,2,,,1,1,,2^0,4,/,2&D/
+-*1^0,2,,5,,,1,1,,2^0,2,,7,/,2&16/
+-*1,2,2^0,2,,2&10/
+-*1^0,2,,,2/,2&5/
++*1^0,2,,,1,1,,2^0,4,/,2$1B&D/
++*1^0,2,,5,,,1,1,,2^0,2,,7,/,2$24&16/
++*1,2,2$A^0,2,,2$15&10/
++*1^0,2,,,2/,2$11&5/
+ *2^0^0,9,,
+ *1^0,2,^0,7,
+ *1^0,2,^0^0,E,,^0,2,^0,2,,A,
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -2,12 +2,14 @@ presprites:
+ 	0
+ 		frames=1
+ 		frame 1
+-			ustrings: x_coef=5 y_coef=12 movie=38 attachMovie=2B _x=52 _y=60 test=68
+-			strings: _movie=40
+-			size=0x65, final size=0x92
+-			branch: size=0x1C code:
+-				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 101001F1 68000000
+-				00000000 EEEEEEFE 00000000 00000000 FFFFFFFF
++			ustrings: x_coef=5 y_coef=12 movie=38 attachMovie=2B _x=52 _y=60 test=C9
++			strings: _movie=40 this_is_just_a_test=6C
++			size=0x95, final size=0xC2
++			branch:
++			branch:
++			branch:
++			branch: size=0x4 code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 	2
+ 		init
+ 			ustrings:
+@@ -22,13 +24,21 @@ presprites:
+ 			ustrings:
+ 			strings: move=5 width=11 height=1F lat=2E left=39 top=47 right=54 bottom=6D this=4 _x=9 _root=13 x_coef=19 _y=8D y_coef=9E
+ 			size=0x1A0, final size=0x1A0
+-			branch: size=0x198 code:
++			branch: size=0x114 code:
+ 				........ 3C000000 05000000 00000000 07000000 14000000 FFFFFFFF 3C000000 11000000 00000000 07000000 80020000
+ 				FFFFFFFF 3C000000 1F000000 00000000 07000000 E0010000 FFFFFFFF 3C000000 2E000000 00000000 07000000 28000000
+ 				FFFFFFFF 3C000000 39000000 00000000 1C000000 3E000000 00000000 FFFFFFFF 3C000000 47000000 00000000 1C000000
+ 				4B000000 00000000 FFFFFFFF 3C000000 54000000 00000000 1C000000 5A000000 00000000 0B000000 1C000000 60000000
+ 				00000000 0B000000 1C000000 64000000 00000000 FFFFFFFF 3C000000 6D000000 00000000 1C000000 74000000 00000000
+ 				0B000000 1C000000 7B000000 00000000 0B000000 1C000000 7F000000 00000000 FFFFFFFF FFFFFFFF
++			branch:
++			branch:
++			branch:
++			branch:
++			branch:
++			branch:
++			branch:
++			branch: size=0x84 code:
+ 				........ ........ ........ CCCCCCFC 01000000 4F000000 E7000000 00000000 EC000000 00000000 00000000 00000000
+ 				BBBBBBFB 1C000000 EF000000 00000000 0C000000 4E000000 F4000000 00000000 FA000000 00000000 00000000 00000000
+ 				BBBBBBFB 47000000 4E000000 01010000 00000000 06010000 00000000 00000000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+@@ -37,14 +47,17 @@ presprites:
+ 			ustrings: stop=2B play=50
+ 			strings: _root=4 tog=A _movie=24
+ 			size=0x72, final size=0x7A
++			branch:
++			branch:
++			branch:
+ 			branch: size=0x4 code:
+ 				........ ........ ........ ........ FFFFFFFF
+ 		frames=0
+ sprites:
+ 	id=0
+ 		frame 1
+-			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
+-			text: size=121 <<<
++			lines=17 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,2 2,6 1,2 1,1 1,0 1,3 2,0
++			text: size=242 <<<
+ 
+ 			var x_coef=1;
+ 			var y_coef=1;
+@@ -53,7 +66,15 @@ sprites:
+ 				_movie._x=100;
+ 				_movie._y=100;
+ 			}
+-			test()
++			var this_is_just_a_test=0;
++			while(true){
++				if(this_is_just_a_test==0){
++					this_is_just_a_test=1;
++					continue;
++				}
++				test();
++				break;
++			}
+ 			<<<
+ 	id=2
+ 		init
+--- actionswf-1.orig/tests/.expected/data32.txt
++++ actionswf-1/tests/.expected/data32.txt
+@@ -2,12 +2,14 @@ presprites:
+ 	0
+ 		frames=1
+ 		frame 1
+-			ustrings: x_coef=5 y_coef=12 movie=38 attachMovie=2B _x=52 _y=60 test=68
+-			strings: _movie=40
+-			size=0x65, final size=0x92
+-			branch: size=0x14 code:
+-				........ ........ ........ ........ ........ ........ ........ ........ 101001F1 68000000 EEEEEEFE 00000000
+-				FFFFFFFF
++			ustrings: x_coef=5 y_coef=12 movie=38 attachMovie=2B _x=52 _y=60 test=C9
++			strings: _movie=40 this_is_just_a_test=6C
++			size=0x95, final size=0xC2
++			branch:
++			branch:
++			branch:
++			branch: size=0x4 code:
++				........ ........ ........ FFFFFFFF
+ 	2
+ 		init
+ 			ustrings:
+@@ -21,12 +23,20 @@ presprites:
+ 			ustrings:
+ 			strings: move=5 width=11 height=1F lat=2E left=39 top=47 right=54 bottom=6D this=4 _x=9 _root=13 x_coef=19 _y=8D y_coef=9E
+ 			size=0x1A0, final size=0x1A0
+-			branch: size=0x130 code:
++			branch: size=0xD4 code:
+ 				........ 3C000000 05000000 07000000 14000000 FFFFFFFF 3C000000 11000000 07000000 80020000 FFFFFFFF 3C000000
+ 				1F000000 07000000 E0010000 FFFFFFFF 3C000000 2E000000 07000000 28000000 FFFFFFFF 3C000000 39000000 1C000000
+ 				3E000000 FFFFFFFF 3C000000 47000000 1C000000 4B000000 FFFFFFFF 3C000000 54000000 1C000000 5A000000 0B000000
+ 				1C000000 60000000 0B000000 1C000000 64000000 FFFFFFFF 3C000000 6D000000 1C000000 74000000 0B000000 1C000000
+ 				7B000000 0B000000 1C000000 7F000000 FFFFFFFF FFFFFFFF
++			branch:
++			branch:
++			branch:
++			branch:
++			branch:
++			branch:
++			branch:
++			branch: size=0x5C code:
+ 				........ CCCCCCFC 01000000 4F000000 E7000000 EC000000 00000000 BBBBBBFB 1C000000 EF000000 0C000000 4E000000
+ 				F4000000 FA000000 00000000 BBBBBBFB 47000000 4E000000 01010000 06010000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+ 	3
+@@ -34,14 +44,17 @@ presprites:
+ 			ustrings: stop=2B play=50
+ 			strings: _root=4 tog=A _movie=24
+ 			size=0x72, final size=0x7A
++			branch:
++			branch:
++			branch:
+ 			branch: size=0x4 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 		frames=0
+ sprites:
+ 	id=0
+ 		frame 1
+-			lines=9 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,3
+-			text: size=121 <<<
++			lines=17 2,2 1,2 1,1 1,3 1,4 1,4 1,0 1,2 2,6 1,2 1,1 1,0 1,3 2,0
++			text: size=242 <<<
+ 
+ 			var x_coef=1;
+ 			var y_coef=1;
+@@ -50,7 +63,15 @@ sprites:
+ 				_movie._x=100;
+ 				_movie._y=100;
+ 			}
+-			test()
++			var this_is_just_a_test=0;
++			while(true){
++				if(this_is_just_a_test==0){
++					this_is_just_a_test=1;
++					continue;
++				}
++				test();
++				break;
++			}
+ 			<<<
+ 	id=2
+ 		init
+--- /dev/null
++++ actionswf-1/tests/data/b
+@@ -0,0 +1,4 @@
++cd ../../oad && \
++./md && \
++cd ../tests/data && \
++./test
