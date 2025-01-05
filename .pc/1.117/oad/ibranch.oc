@@ -1,0 +1,28 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+import "re_alloc" re_alloc
+import "branch_init" branch_init
+
+function ibranch_add(valueu pf)
+	valueu bra#1;set bra pf#:preframe.branchpointer
+	charx ok#1
+	set ok re_alloc(#bra#:branch.innerbranches,bra#:branch.isize)
+	if ok=(EXIT_SUCCESS)
+		svu pointer#1;set pointer bra#:branch.innerbranches
+		add pointer bra#:branch.isize
+		set pointer# branch_init(pf,bra)
+		if pointer#!=(NULL)
+			add bra#:branch.isize :
+			return (EXIT_SUCCESS)
+		end
+	end
+	return (EXIT_FAILURE)
+end
+function ibranch_done(valueu pf)
+	valueu bra#1;set bra pf#:preframe.branchpointer
+	set pf#:preframe.branchpointer bra#:branch.suprabranch
+end

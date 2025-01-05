@@ -1,0 +1,1080 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-117) bionic; urgency=medium
+ .
+   * xlog loop start
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-01-05
+
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -17,6 +17,7 @@ const xlog_function=0x40       #@
+ #A-F
+ const xlog_string=0x5E        ;#^
+ const xlog_innerbranch=0x7B    #{
++const xlog_vbar=0x7C          ;#|
+ const xlog_innerbranchend=0x7D #}
+ 
+ #note: oaalternative is using ainit
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -5,6 +5,9 @@ override include_sec 1
+ include "common.h" "common.h.oh"
+ 
+ importx "malloc" malloc
++
++import "global_blog" global_blog
++
+ #branch pointer
+ function branch_init(valueu pf,valueu pbra)
+ 	valueu bra#1
+@@ -24,7 +27,15 @@ function branch_init(valueu pf,valueu pb
+ 				set bra#:branch.suprabranch pbra
+ 				set bra#:branch.subbranch (NULL)
+ 
++				set bra#:branch.offset pf#:preframe.size
++
+ 				set pf#:preframe.branchpointer bra
++
++				charx blog#1;set blog global_blog()
++				if blog=(TRUE)
++					inc pf#:preframe.log_branchid
++					set bra#:branch.log_id pf#:preframe.log_branchid
++				end
+ 				return bra
+ 			end
+ 			call free(inners)
+@@ -35,7 +46,7 @@ function branch_init(valueu pf,valueu pb
+ end
+ 
+ importx "realloc" realloc
+-function branch_done(sv pf,dataxu size,dataxu offset,valueu code)
++function branch_add(sv pf,dataxu size,dataxu offset,valueu code)
+ 	sub size offset
+ 	sv br;set br pf#:preframe.branchpointer
+ 
+@@ -61,8 +72,9 @@ import "print_unindent" print_unindent
+ import "print_inline_start" print_inline_start
+ import "prints_inline_start" prints_inline_start
+ import "print_inline_done" print_inline_done
+-import "print_inline" print_inline
++import "print_iinline" print_iinline
+ import "prints_inline" prints_inline
++import "printt" printt
+ 
+ function branch_code(ssu code,valueu end,ss _a,ss _b,ss form)
+ 	ssu start;set start code
+@@ -86,12 +98,12 @@ function branch_code(ssu code,valueu end
+ 			if start!=(NULL)
+ 				call printf(form,code#)
+ 			else
+-				call printf(form)
++				call printt(form)
+ 			end
+ 			inc a
+ 		elseif b<12
+ 			if start!=(NULL)
+-				call print_inline(form,code#)
++				call print_iinline(form,code#)
+ 			else
+ 				call prints_inline(form)
+ 			end
+@@ -107,6 +119,7 @@ function branch_code(ssu code,valueu end
+ end
+ 
+ import "oadata_logpad_get" oadata_logpad_get #importx without args
++import "print_hex" print_hex
+ 
+ function branch_log(sv br,valueu start)
+ 	call prints_inline_start("branch:")
+@@ -119,12 +132,14 @@ function branch_log(sv br,valueu start)
+ 		add sz cuts#:branchcut.size
+ 		add cuts \branchcut\
+ 	end
+-	call print_inline("size=0x%X",sz)
++	call print_iinline("id=%u",br#:branch.log_id)
++	call print_hex("size",sz)
+ 	set sz br#:branch.isize
+-	if sz!=0 #most of the cases, only root has functions
++	if sz!=0 #most of the cases, it is best that only root has functions
+ 		div sz :
+-		call print_inline("inners=%u",sz)
++		call print_iinline("inners=%u",sz)
+ 	end
++	call print_hex("aoffset",br#:branch.offset)
+ 	call prints_inline("code:")
+ 	call print_inline_done()
+ 
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -14,6 +14,7 @@ const Tab=0x9
+ const NewLine=0xa
+ const CReturn=0xd
+ const Space=0x20
++const Comma=0x2c
+ const ZeroChar=0x30
+ const NineChar=0x39
+ const A=0x41
+@@ -49,7 +50,7 @@ function preframe()
+ 	valueu branchpointer#1  #starting from abranch and descending
+ 
+ 	#log only
+-	value log_recalculation#1 #can be in ui32, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
++	value log_recalculation#1 #can be on 32 bits, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
+ 	#
+ 	valueu log_mem#1
+ 	valueu log_size#1
+@@ -57,6 +58,8 @@ function preframe()
+ 	dataxu log_indents#1  #same as functions
+ 	#
+ 	valueu log_xsize#1   ;#example: a[a[a]]=a[a[a]] is 40 size vs 192 xsize
++	#
++	dataxu log_branchid#1 #for strings log
+ end
+ function branch()
+ 	valueu cuts#1
+@@ -68,7 +71,12 @@ function branch()
+ 	valueu suprabranch#1
+ 	valueu subbranch#1
+ 
+-#	valuexu *action#1   #for mark, after compare
++	dataxu offset#1      #at jumpback calculations, and at jumpforward and count the prev branch, and at cuts
++#	valuexu action#1     #for mark, after compare
++#	valuexu action_unresolved#1  #is last suprabranch action
++#	dataxu offset_loop#1 # if the branch has a loop start, else use no_loop=0xffFFffFF
++
++	dataxu log_id#1  #for strings log
+ end
+ function branchcut()
+ 	vdataxu x#1   #ints everywhere and pointers for strings, will not memcpy
+@@ -77,12 +85,13 @@ end
+ function ustring()
+ 	valueu base#1
+ 	valueu off#1
+-	valueu *branch#1
++	valueu ubranch#1
+ end
+ function string()
+ 	valueu base#1
+ 	valueu off#1
+ 	valuexu branches#1
++	dataxu size#1 #same as number of branches
+ end
+ 
+ const from_action=0
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -43,6 +43,16 @@ function re_calloc_size(sv pmem,sdu psiz
+ 	end
+ 	return ok
+ end
++function re_alloc_add(sv pmem,sdu size,valueu value)
++	charx ok#1;set ok re_alloc(pmem,size#)
++	if ok=(EXIT_SUCCESS)
++		sv mem;set mem pmem#
++		add mem size#
++		set mem# value
++		add size# :
++	end
++	return ok
++end
+ 
+ importx "malloc" malloc
+ importx "free" free
+@@ -60,6 +70,13 @@ function preframe_init()
+ 			sv strings
+ 			set strings malloc((sprites_realloc_onepart))
+ 			if strings!=(NULL)
++				charx blog#1;set blog global_blog()
++				if blog=(TRUE)
++					set pf#:preframe.log_recalculation 0
++					call tree_frame_init(pf)
++					set pf#:preframe.log_xsize 0
++					set pf#:preframe.log_branchid -1  #will inc to 0
++				end
+ 				set pf#:preframe.abranch branch_init(pf) #,suprabranch is not important since this is on root level and } can't happen
+ 				if pf#:preframe.abranch!=(NULL)
+ 					set pf#:preframe.ustrings ustrings
+@@ -67,12 +84,6 @@ function preframe_init()
+ 					set pf#:preframe.strings strings
+ 					set pf#:preframe.ssize 0
+ 					set pf#:preframe.size 0
+-					charx blog#1;set blog global_blog()
+-					if blog=(TRUE)
+-						set pf#:preframe.log_recalculation 0
+-						call tree_frame_init(pf)
+-						set pf#:preframe.log_xsize 0
+-					end
+ 					return pf
+ 				end
+ 				call free(strings)
+@@ -94,9 +105,13 @@ import "print_inline_done" print_inline_
+ import "print" print
+ import "print_indent" print_indent
+ import "print_unindent" print_unindent
++import "print_hex_start" print_hex_start
++import "print_hex" print_hex
++import "print_lhex" print_lhex
+ import "indent" indent
+ 
+ importx "printf" printf
++importx "putchar" putchar
+ 
+ function preframe_free(sv pf,charx ainit,datax log_index,valueu logstart)
+ 	charx log#1
+@@ -123,6 +138,9 @@ function preframe_free(sv pf,charx ainit
+ 		set str s#
+ 		if log=(TRUE)
+ 			call string_log(str#:ustring.base,str#:ustring.off)
++			valueu bra#1;set bra str#:ustring.ubranch
++			call putchar((Comma))
++			call printf("%u",bra#:branch.log_id)
+ 		end
+ 		call free(str)
+ 		incst s
+@@ -141,6 +159,15 @@ function preframe_free(sv pf,charx ainit
+ 		set str s#
+ 		if log=(TRUE)
+ 			call string_log(str#:string.base,str#:string.off)
++			sv brs;set brs str#:string.branches
++			valueu brsend#1;set brsend brs
++			add brsend str#:string.size
++			while brs!=brsend
++				valueu br#1;set br brs#
++				call putchar((Comma))
++				call printf("%u",br#:branch.log_id)
++				add brs :
++			end
+ 		end
+ 		call free(str#:string.branches)
+ 		call free(str)
+@@ -154,7 +181,9 @@ function preframe_free(sv pf,charx ainit
+ 		add finalsize pf#:preframe.log_recalculation
+ 
+ 		call indent()
+-		call printf("asize=0x%X, fasize=0x%X, size=0x%lX",pf#:preframe.size,finalsize,pf#:preframe.log_xsize) #final action size. asize and fasize are without pool and end tag
++		call print_hex_start("asize",pf#:preframe.size) #              is without pool and end tag
++		call print_hex("fasize",finalsize) #final action size. is without pool and end tag
++		call print_lhex("size",pf#:preframe.log_xsize)
+ 		call print_inline_done()
+ 
+ 		call branch_free(pf#:preframe.abranch,logstart,0)
+@@ -190,7 +219,6 @@ function frame_init(valueu total)
+ 	return (NULL)
+ end
+ 
+-import "print2_inline" print2_inline
+ import "print_text" print_text
+ import "prints" prints
+ 
+@@ -212,7 +240,8 @@ function frame_free(sv f,charx ainit,dat
+ 		if log_index!=(no_index)
+ 			valueu i#1;set i pointer#:line.index
+ 			if i!=ix
+-				call print2_inline("%u,%u",n,nr_actions)
++				call putchar((Space))
++				call printf("%u,%u",n,nr_actions)
+ 				set ix i;set n 1
+ 				set nr_actions pointer#:line.total
+ 			else
+@@ -225,7 +254,8 @@ function frame_free(sv f,charx ainit,dat
+ 		add pointer (\line\)
+ 	end
+ 	if log_index!=(no_index)
+-		call print2_inline("%u,%u",n,nr_actions)
++		call putchar((Space))
++		call printf("%u,%u",n,nr_actions)
+ 		call print_inline_done()
+ 		call print("text: size=%lu <<<",f#:frame.size)
+ 		call print_indent()
+--- actionswf-1.orig/oad/ibranch.oc
++++ actionswf-1/oad/ibranch.oc
+@@ -26,3 +26,16 @@ function ibranch_done(valueu pf)
+ 	valueu bra#1;set bra pf#:preframe.branchpointer
+ 	set pf#:preframe.branchpointer bra#:branch.suprabranch
+ end
++
++function branch_resolve(valueu pf,wordxu number)
++	dataxu offset#1;set offset pf#:preframe.size
++	sub offset number
++	valueu prev#1;set prev pf#:preframe.branchpointer
++	whiletrue
++		if prev#:branch.offset=offset  ##is /,,&offset/
++			#link prev#:branch.action_unresolved
++			break
++		end
++		set prev prev#:branch.suprabranch
++	end
++end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -103,7 +103,7 @@ function memdec(ss start,value end)
+ 	return val
+ end
+ #end
+-function memhex_parse_withinc(ss start,sd out) #will max be a jump in DoAction
++function memhex_parse_withinc(ssu start,swu out) #arecordheader,function,if,jump are 15/16 bits at max
+ 	inc start
+ 	ss a;set a start
+ 	whiletrue #the action row is ending in new line
+@@ -117,10 +117,10 @@ function memhex_parse_withinc(ss start,s
+ 	set out# 0
+ 	if a!=start   ##there are many ,, with no size
+ 		ss b;set b a
+-		dataxu n#1;set n 1
++		wordxu n#1;set n 1
+ 		while start!=b
+ 			dec b
+-			dataxu nr#1
++			wordxu nr#1
+ 			set nr b#
+ 			if nr<=(NineChar)
+ 				sub nr (ZeroChar)
+@@ -135,16 +135,17 @@ function memhex_parse_withinc(ss start,s
+ 	return a
+ end
+ 
+-function newbranch(sv px,sv pxx)
+-	sd xx;set xx pxx#
+-	sd branchsize;set branchsize xx#
+-	sub branchsize global.xoffset
+-
+-	#do something with the branchsize
++import "branch_add" branch_add
+ 
+-	add global.xoffset branchsize
+-	add px# branchsize
++function newbranch(sv px,sv pxx,valueu prefr)
++	sd xx;set xx pxx#
++	dataxu branchoffset#1;set branchoffset xx#
++	charx ok#1;set ok branch_add(prefr,branchoffset,global.xoffset,px#)
++	sub branchoffset global.xoffset
++	add px# branchoffset
++	add global.xoffset branchoffset
+ 	add pxx# (xlog_code_size)
++	return ok
+ end
+ 
+ import "re_alloc" re_alloc
+@@ -153,6 +154,7 @@ function function(valueu data)
+ 	charx ok#1;set ok re_alloc(#data#:oadata.functions,data#:oadata.functions_size)
+ 	if ok=(EXIT_SUCCESS)
+ 		add data#:oadata.functions_size :
++		#here a re_alloc_add maybe
+ 		return (EXIT_SUCCESS)
+ 	end
+ 	return (EXIT_FAILURE)
+@@ -167,6 +169,7 @@ import "ibranch_done" ibranch_done
+ import "tree_entry_ex" tree_entry_ex
+ import "tree_entry_start" tree_entry_start
+ import "tree_entry_end" tree_entry_end
++import "branch_resolve" branch_resolve
+ 
+ function actionrow(ss inlog,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data,svu _text)
+ 	ss start;set start inlog
+@@ -196,9 +199,9 @@ function actionrow(ss inlog,sd end,sv px
+ 			set _recalculation (NULL)
+ 		end
+ 		while inlog!=end
+-			dataxu number#1  #u16,u32,u16
++			wordxu number#1  #4 places
+ 			if inlog#=(xlog_act) #action
+-				set inlog memhex_parse_withinc(inlog,#number)
++				set inlog memhex_parse_withinc(inlog,#number) #Length If code >= 0x80, UI16
+ 				if number=0 # code < 0x80
+ 					add prefr#:preframe.size (actionrecordheader_tag_size)
+ 				else
+@@ -223,36 +226,49 @@ function actionrow(ss inlog,sd end,sv px
+ 					end
+ 					add pxx# (xlog_unique_new_size)
+ 				else #xlog_id
+-					call string_id(_recalculation,pxx#,inlog#)
++					set ok string_id(prefr,pxx#,_recalculation,inlog#)
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
+ 					add pxx# (xlog_id_size)
+ 				end
+ 				inc inlog
+ 			elseif inlog#=(xlog_jump)
+-				set inlog memhex_parse_withinc(inlog,#number)
++				set inlog memhex_parse_withinc(inlog,#number)   #ActionIf BranchOffset SI16(here 15 bits)  ActionJump BranchOffset SI16(here 15 bits)
++				call branch_resolve(prefr,number)
+ 			elseif inlog#=(xlog_branch) #branch start
++				set ok newbranch(px,pxx,prefr)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
+ 				valueu branch_prec#1;set branch_prec prefr#:preframe.branchpointer
+ 				set branch_prec#:branch.subbranch branch_init(prefr,branch_prec)
+ 				if branch_prec#:branch.subbranch=(NULL)
+ 					return (EXIT_FAILURE)
+ 				end
+-				call newbranch(px,pxx)
+ 				if global.blog=(TRUE)
+ 					call tree_entry_ex(prefr,(xlog_branch))
+ 				end
+ 				inc inlog
+ 			elseif inlog#=(xlog_innerbranch)
++				set ok newbranch(px,pxx,prefr)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
+ 				set ok ibranch_add(prefr)
+ 				if ok!=(EXIT_SUCCESS)
+ 					return (EXIT_FAILURE)
+ 				end
+-				call newbranch(px,pxx)
+ 				if global.blog=(TRUE)
+ 					call tree_entry_start(prefr)
+ 				end
+ 				inc inlog
+ 			elseif inlog#=(xlog_innerbranchend) #innerbranch end
++				set ok newbranch(px,pxx,prefr)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
+ 				call ibranch_done(prefr)
+-				call newbranch(px,pxx)
+ 				if global.blog=(TRUE)
+ 					call tree_entry_end(prefr)
+ 				end
+@@ -262,13 +278,15 @@ function actionrow(ss inlog,sd end,sv px
+ 				if ok!=(EXIT_SUCCESS)
+ 					return (EXIT_FAILURE)
+ 				end
+-				set inlog memhex_parse_withinc(inlog,#number)
++				set inlog memhex_parse_withinc(inlog,#number) #codeSize UI16
+ 				if global.blog=(TRUE)
+ 					add prefr#:preframe.log_recalculation (actionrecordheader_size+actionpush_type+actionpush_integer+actionrecordheader_tag_size) #adding func dtitles
+ 					#what if there are no func dtitles? the debugger will not work without that at this moment. maybe a to do
+ 				end
+-			else #xlog_jumpback at loop end , continue
+-				set inlog memhex_parse_withinc(inlog,#number)
++			elseif inlog#=(xlog_jumpback) # at loop end , continue. is goot to set next action to be somewhere inside a suprabranch
++				set inlog memhex_parse_withinc(inlog,#number)  #ActionJump BranchOffset SI16(here 15 bits)
++			else #xlog_vbar is for branch loop start mark and then will leave the branch for a subbranch
++				inc inlog
+ 			end
+ 		end
+ 		return (EXIT_SUCCESS)
+@@ -289,7 +307,6 @@ end
+ import "presprite_init" presprite_init
+ import "presprite_done" presprite_done
+ import "get_nframe" get_nframe
+-import "branch_done" branch_done
+ 
+ function loop(ss inlog,sv x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data,charx log)
+ 	add logsize inlog
+@@ -365,7 +382,7 @@ function loop(ss inlog,sv x,sd xx,sd log
+ 				#[actions]
+ 				whiletrue
+ 					if inlog=logsize
+-						set ok branch_done(pf,xcode_size,global.xoffset,xcode)
++						set ok branch_add(pf,xcode_size,global.xoffset,xcode)
+ 						if ok=(EXIT_SUCCESS)
+ 							return (EXIT_SUCCESS) #no [more] actions and nothing else. exit 3
+ 						end
+@@ -379,7 +396,7 @@ function loop(ss inlog,sv x,sd xx,sd log
+ 							return (EXIT_FAILURE)
+ 						end
+ 					else
+-						set ok branch_done(pf,xcode_size,global.xoffset,xcode)
++						set ok branch_add(pf,xcode_size,global.xoffset,xcode)
+ 						if ok!=(EXIT_SUCCESS)
+ 							return (EXIT_FAILURE)
+ 						end
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -34,6 +34,7 @@ function string_add(sv pf,sv p_string_of
+ 					return (EXIT_FAILURE)
+ 				end
+ 				set str#:string.branches branches
++				set str#:string.size 0
+ 
+ 				set str#:string.base strings_base  ##in two steps for log.
+ 				set str#:string.off p_string_off#
+@@ -56,13 +57,14 @@ function string_add(sv pf,sv p_string_of
+ 				return (EXIT_SUCCESS)
+ 			end
+ 		end
+-	else
++	else #xlog_unique
+ 		set ok re_alloc(#pf#:preframe.ustrings,pf#:preframe.ussize)
+ 		if ok=(EXIT_SUCCESS)
+ 			set str malloc((\ustring\))
+ 			if str!=(NULL)
+ 				set str#:ustring.base strings_base  ##in two steps for log.
+ 				set str#:ustring.off p_string_off#
++				set str#:ustring.ubranch pf#:preframe.branchpointer
+ 
+ 				if _recalculation!=(NULL)
+ 					add strings_base p_string_off#
+@@ -93,6 +95,13 @@ function indent()
+ 	end
+ end
+ 
++importx "fputs" fputs
++importx "stdout" stdout
++
++function printt(ss str)
++	sv so^stdout  #isn't at c an extra step? who cares, at o, to put stdout an arg is like putting the pointer
++	call fputs(str,so#)
++end
+ function print_indent()
+ 	inc global.indents
+ end
+@@ -106,28 +115,24 @@ function print(ss format,valueu value)
+ end
+ function prints(ss format)
+ 	call indent()
+-	call printf(format)
++	call printt(format)
+ 	call print_inline_done()
+ end
+ function prints_inline_start(ss str)
+ 	call indent()
+-	call printf(str)
++	call printt(str)
+ end
+ function print_inline_start(ss format,valueu value)
+ 	call indent()
+ 	call printf(format,value)
+ end
+-function print_inline(ss format,valueu value)
++function print_iinline(ss format,dataxu value)
+ 	call putchar((Space))
+ 	call printf(format,value)
+ end
+-function print2_inline(ss format,valueu value,valueu v2)
+-	call putchar((Space))
+-	call printf(format,value,v2)
+-end
+ function prints_inline(ss format)
+ 	call putchar((Space))
+-	call printf(format)
++	call printt(format)
+ end
+ function print_inline_done()
+ 	call putchar((NewLine))
+@@ -135,7 +140,6 @@ end
+ 
+ import "memnl" memnl
+ 
+-importx "stdout" stdout
+ importx "fwrite" fwrite
+ function print_text(ss a,valueu c)
+ 	sv so^stdout  #isn't at c an extra step? who cares, at o is not possible without this
+@@ -154,21 +158,52 @@ function print_text(ss a,valueu c)
+ 	end
+ end
+ 
++function print_hex_start(ss front,dataxu value)
++	call printf("%s=0x%X",front,value)
++end
++function print_hex(ss front,dataxu value)
++	call putchar((Space))
++	call print_hex_start(front,value)
++end
++function print_lhex(ss front,valueu value)
++	call putchar((Space))
++	call printf("%s=0x%lX",front,value)
++end
++
+ function string_log(valueu base,valueu off)
+ 	add base off
+ 	inc off ##to log like in .x where 0 is NULL and 1 is offset 0
+-	call print2_inline("%s=%lX",base,off) #will recognize the branch (visual) when having the string -> branch link and the branch offset
++	call print_lhex(base,off)  #will recognize the branch (visual) when having the string -> branch link and the branch offset
+ end
+ 
+-function string_id(sd _recalculation,swu xxcontent,charx inlogtype)
++import "re_alloc_add" re_alloc_add
++
++function string_id(valueu prefr,swu xxcontent,sd _recalculation,charx inlogtype)
++	wordxu id#1;set id xxcontent#
+ 	if _recalculation!=(NULL)
+ 		if inlogtype=(xlog_const16_log) #same
+-			if xxcontent#<^(ui8max_)
++			if id<^(ui8max_)
+ 				dec _recalculation#
+ 			end
+ 		end
+ 	end
+-	#here to do at string branches
++	sv str=:
++	mult str id
++	add str prefr#:preframe.strings
++	set str str#
++	valueu current_branch#1;set current_branch prefr#:preframe.branchpointer
++	valueu start#1;set start str#:string.branches
++	valuexu pointer#1;set pointer start
++	add pointer str#:string.size
++	while start!=pointer
++		sub pointer :
++		if pointer#=current_branch
++			return (EXIT_SUCCESS) #is on same branch, same cut if first match, else on another cut
++		end
++	end
++	charx ok#1
++	set ok re_alloc_add(#str#:string.branches,#str#:string.size,current_branch)
++	return ok
+ end
+ 
+ entryraw global()
+--- actionswf-1.orig/s32
++++ actionswf-1/s32
+@@ -3,3 +3,4 @@ if [ -n "${mirror}" ]; then git pull loc
+ if [ -z "${1}" ]; then make clean && cd src && ./mr32d && cd ../example && ./mr32d && cd ..; fi && \
+ cd ./tests/data && CC=arm-linux-gnueabihf-gcc test=32r ./b
+ # and once: ln ../../actionswf-1/tests/.expected/data32.txt .expected/data32.txt
++#     and   ln ../../actionswf-1/tests/.expected/a.swf.x32.txt .expected/a.swf.x32.txt
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -545,15 +545,17 @@ function write_ifjump_withNot(sd c2)
+ 	#write the jump offset
+ 	call write_ifjump_addTo_braceBlocks()
+ endfunction
++import "debug_xlog_loop" debug_xlog_loop
+ function add_while_top_off(sd typeOfLoop)
+-    call brace_blocks_add_write_current()
+-    sd block
+-    setcall block cond_blocks()
+-    set block# typeOfLoop
+-    call brace_blocks_counter_inc()
++	call debug_xlog_loop()
++	call brace_blocks_add_write_current()
++	sd block
++	setcall block cond_blocks()
++	set block# typeOfLoop
++	call brace_blocks_counter_inc()
+ 	set block cond_blocks() #also for the error check was: add block (DWORD)
+-    set block# (top_flag)
+-    call brace_blocks_counter_inc()
++	set block# (top_flag)
++	call brace_blocks_counter_inc()
+ endfunction
+ const forIn_ifBreak_size=3+1+1+3+2
+ function action_code_break()
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -474,3 +474,9 @@ function debug_xlog_pool(sd nr) #pool_fl
+ 		end
+ 	end
+ end
++
++function debug_xlog_loop()
++	if log_init.prexx=(prexx_flags)
++		call debug_phase_code_add_one((xlog_vbar))
++	end
++end
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -106,13 +106,13 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ *1^0,7,^0,2,^0,2,,^0,2,^0,2,,
+ *1^0,2,5@0006{^0,2,},^0^0,9,,
+ *1,A,,,2/^0,2,,5,&F/,A,,,2/^0,2,,2&B/^0,2,&6/,A,,,2/&0/
+-*1,A,,,2/^0,2,,2$1F&B/
++*1|,A,,,2/^0,2,,2$1F&B/
+ *1^0,2,,,,^0,2,,,,^0,2,,,5,,
+-*1^0,7,,2{^0,2,,,,&9}^0,2,,5,,,2/&0/
+-*1^0,2,,,1,1,,2^0,4,/,2$1B&D/
+-*1^0,2,,5,,,1,1,,2^0,2,,7,/,2$24&16/
+-*1,2,2$A^0,2,,2$15&10/
+-*1^0,2,,,2/,2$11&5/
++*1^0,7,,2|{^0,2,,,,&9}^0,2,,5,,,2/&0/
++*1^0,2,,|,1,1,,2^0,4,/,2$1B&D/
++*1^0,2,,5,,|,1,1,,2^0,2,,7,/,2$24&16/
++*1|,2,2$A^0,2,,2$15&10/
++*1|^0,2,,,2/,2$11&5/
+ *2^0^0,9,,
+ *1^0,2,^0,7,
+ *1^0,2,^0^0,E,,^0,2,^0,2,,A,
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -2,25 +2,43 @@ presprites:
+ 	0
+ 		frames=1
+ 		frame 1
+-			ustrings: x_coef=5 y_coef=12 movie=49 attachMovie=3C _x=63 _y=71 test2=79 test=93 test3=FC
+-			strings: _movie=51 this_is_just_a_test=9F
+-			asize=0xC7, fasize=0x110, size=0x1DC
+-			branch: size=0x0 inners=2 code:
++			ustrings: x_coef=0x5,0 y_coef=0x12,0 movie=0x49,2 attachMovie=0x3C,2 _x=0x63,2 _y=0x71,2 test2=0x79,1 test=0x93,3 test3=0xFC,5
++			strings: _movie=0x51,2 this_is_just_a_test=0x9F,0,4
++			asize=0xC7 fasize=0x110 size=0x1DC
++			branch: id=0 size=0xAC inners=2 aoffset=0x0 code:
++				........ 3C000000 05000000 00000000 07000000 01000000 FFFFFFFF 3C000000 12000000 00000000 07000000 01000000
++				FFFFFFFF 303003F3 24000000 00000000 00000000 00000000
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 303003F3 8B000000
++				00000000 00000000 00000000
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 3C000000 9F000000
++				00000000 07000000 00000000 FFFFFFFF 06060505 1C000000 BB000000 00000000 FFFFFFFF 9D000000 1C000000 C4000000
++				00000000 707007F7 49000000 00000000 07000000 00000000 FFFFFFFF
+ 			{
+-			branch: size=0x0 inners=1 code:
++			branch: id=1 size=0x30 inners=1 aoffset=0x22 code:
++				........ ........ ........ ........ ........ ........ 303003F3 34000000 00000000 00000000 00000000
++				........ ........ ........ 101001F1 79000000 00000000 EEEEEEFE 00000000 00000000 08080707
+ 			 {
+-			branch: size=0x0 code:
++			branch: id=2 size=0xA0 aoffset=0x2F code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 101001F1
++				3C000000 00000000 07000000 01000000 FFFFFFFF 08000000 51000000 00000000 FFFFFFFF 08000000 49000000 00000000
++				FFFFFFFF EEEEEEFE 00000000 00000000 4F000000 5C000000 00000000 63000000 00000000 00000000 00000000 BBBBBBFB
++				07000000 64000000 FFFFFFFF 4F000000 6A000000 00000000 71000000 00000000 00000000 00000000 BBBBBBFB 07000000
++				64000000 FFFFFFFF 08080707
+ 			 }
+ 			}
+ 			{
+-			branch: size=0x0 code:
++			branch: id=3 size=0x1C aoffset=0x7F code:
++				........ ........ ........ 101001F1 93000000 00000000 EEEEEEFE 00000000 00000000 08080707
+ 			}
+ 			/
+-			branch: size=0x0 code:
++			branch: id=4 size=0x20 aoffset=0xAB code:
++				........ ........ ........ ........ ........ ........ ........ 1D000000 DC000000 00000000 07000000 01000000
++				FFFFFFFF A0A00AFA 04040303
+ 			/
+-			branch: size=0x0 code:
++			branch: id=5 size=0x20 aoffset=0xBB code:
++				........ ........ ........ 101001F1 FC000000 00000000 EEEEEEFE 00000000 00000000 909009F9 DDDDDDFD
+ 			/
+-			branch: size=0x4 code:
++			branch: id=6 size=0x4 aoffset=0xC7 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 			{
+ 			 {
+@@ -31,63 +49,94 @@ presprites:
+ 	2
+ 		init
+ 			ustrings:
+-			strings: _root=1 tog=7
+-			asize=0x2C, fasize=0x2C, size=0x58
+-			branch: size=0x58 code:
++			strings: _root=0x1,0 tog=0x7,0
++			asize=0x2C fasize=0x2C size=0x58
++			branch: id=0 size=0x58 aoffset=0x0 code:
+ 				........ 4F000000 01000000 00000000 07000000 00000000 00000000 00000000 BBBBBBFB 07000000 00000000 FFFFFFFF
+ 				FFFFFFFF
+ 				........ 4F000000 01000000 00000000 07000000 00000000 00000000 00000000 BBBBBBFB 50000000 FFFFFFFF
+ 		frames=2
+ 		frame 2
+ 			ustrings:
+-			strings: move=5 width=11 height=1F lat=2E left=39 top=47 right=54 bottom=6D this=4 _x=9 _root=13 x_coef=19 _y=8D y_coef=9E
+-			asize=0x1A0, fasize=0x1A0, size=0x470
+-			branch: size=0x114 code:
++			strings: move=0x5,0,4,8 width=0x11,0 height=0x1F,0 lat=0x2E,0 left=0x39,2 top=0x47,6 right=0x54,0 bottom=0x6D,4 this=0x4,2,4,6,8 _x=0x9,2,4 _root=0x13,1,3,4,5,7,8 x_coef=0x19,1,3,4 _y=0x8D,6,8 y_coef=0x9E,5,7,8
++			asize=0x1A0 fasize=0x1A0 size=0x470
++			branch: id=0 size=0x154 aoffset=0x0 code:
+ 				........ 3C000000 05000000 00000000 07000000 14000000 FFFFFFFF 3C000000 11000000 00000000 07000000 80020000
+ 				FFFFFFFF 3C000000 1F000000 00000000 07000000 E0010000 FFFFFFFF 3C000000 2E000000 00000000 07000000 28000000
+ 				FFFFFFFF 3C000000 39000000 00000000 1C000000 3E000000 00000000 FFFFFFFF 3C000000 47000000 00000000 1C000000
+ 				4B000000 00000000 FFFFFFFF 3C000000 54000000 00000000 1C000000 5A000000 00000000 0B000000 1C000000 60000000
+ 				00000000 0B000000 1C000000 64000000 00000000 FFFFFFFF 3C000000 6D000000 00000000 1C000000 74000000 00000000
+ 				0B000000 1C000000 7B000000 00000000 0B000000 1C000000 7F000000 00000000 FFFFFFFF FFFFFFFF
++				........ 9D000000 4E000000 04000000 00000000 09000000 00000000 00000000 00000000 BBBBBBFB 707007F7 48000000
++				12000000 1C000000 0D000000 00000000 FFFFFFFF
+ 			/
+-			branch: size=0x0 code:
++			branch: id=1 size=0x54 aoffset=0x84 code:
++				........ ........ ........ ........ ........ 4F000000 13000000 00000000 19000000 00000000 00000000 00000000
++				BBBBBBFB 4E000000 20000000 00000000 26000000 00000000 00000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF
++				FFFFFFFF 04040303
++			/
++			branch: id=2 size=0x44 aoffset=0xA7 code:
++				........ ........ 00000040 9D000000 4E000000 38000000 00000000 3D000000 00000000 00000000 00000000 BBBBBBFB
++				707007F7 67000000 12000000 1C000000 41000000 00000000 FFFFFFFF
++			/
++			branch: id=3 size=0x54 aoffset=0xBF code:
++				........ ........ ........ ........ ........ ........ ........ 4F000000 46000000 00000000 4C000000 00000000
++				00000000 00000000 BBBBBBFB 4E000000 53000000 00000000 59000000 00000000 00000000 00000000 BBBBBBFB 0C000000
++				07000000 FFFFFFFF FFFFFFFF 04040303
++			/
++			branch: id=4 size=0xC0 aoffset=0xDD code:
++				........ ........ ........ ........ CCCCCCFC 01000000 4F000000 63000000 00000000 68000000 00000000 00000000
++				00000000 BBBBBBFB 1C000000 6B000000 00000000 0C000000 4E000000 70000000 00000000 76000000 00000000 00000000
++				00000000 BBBBBBFB 47000000 4E000000 7D000000 00000000 82000000 00000000 00000000 00000000 BBBBBBFB FFFFFFFF
++				9D000000 4E000000 88000000 00000000 8D000000 00000000 00000000 00000000 BBBBBBFB 707007F7 48000000 12000000
++				1C000000 91000000 00000000 FFFFFFFF
++			/
++			branch: id=5 size=0x54 aoffset=0x11E code:
++				........ ........ ........ ........ 4F000000 98000000 00000000 9E000000 00000000 00000000 00000000 BBBBBBFB
++				4E000000 A5000000 00000000 AB000000 00000000 00000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF FFFFFFFF
++				04040303
++			/
++			branch: id=6 size=0x44 aoffset=0x141 code:
++				........ 00000040 9D000000 4E000000 BD000000 00000000 C2000000 00000000 00000000 00000000 BBBBBBFB 707007F7
++				67000000 12000000 1C000000 C6000000 00000000 FFFFFFFF
++			/
++			branch: id=7 size=0x54 aoffset=0x159 code:
++				........ ........ ........ ........ ........ ........ 4F000000 CA000000 00000000 D0000000 00000000 00000000
++				00000000 BBBBBBFB 4E000000 D7000000 00000000 DD000000 00000000 00000000 00000000 BBBBBBFB 0C000000 07000000
++				FFFFFFFF FFFFFFFF 04040303
+ 			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x84 code:
++			branch: id=8 size=0x84 aoffset=0x177 code:
+ 				........ ........ ........ CCCCCCFC 01000000 4F000000 E7000000 00000000 EC000000 00000000 00000000 00000000
+ 				BBBBBBFB 1C000000 EF000000 00000000 0C000000 4E000000 F4000000 00000000 FA000000 00000000 00000000 00000000
+ 				BBBBBBFB 47000000 4E000000 01010000 00000000 06010000 00000000 00000000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+ 			////////
+ 	3
+ 		init
+-			ustrings: stop=2B play=50
+-			strings: _root=4 tog=A _movie=24
+-			asize=0x72, fasize=0x7A, size=0x100
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
++			ustrings: stop=0x2B,1 play=0x50,2
++			strings: _root=0x4,1,2 tog=0xA,1,2 _movie=0x24,2
++			asize=0x72 fasize=0x7A size=0x100
++			branch: id=0 size=0x3C aoffset=0x0 code:
++				........ 9D000000 4E000000 04000000 00000000 0A000000 00000000 00000000 00000000 BBBBBBFB 707007F7 49000000
++				00000000 07000000 01000000 FFFFFFFF
++			/
++			branch: id=1 size=0x5C aoffset=0x1B code:
++				........ ........ ........ ........ 4F000000 12000000 00000000 18000000 00000000 00000000 00000000 BBBBBBFB
++				07000000 00000000 FFFFFFFF 101001F1 2B000000 00000000 EEEEEEFE 1E000000 00000000 24000000 00000000 00000000
++				00000000 BBBBBBFB 04040303
++			/
++			branch: id=2 size=0x64 aoffset=0x49 code:
++				........ ........ ........ 00000040 4F000000 37000000 00000000 3D000000 00000000 00000000 00000000 BBBBBBFB
++				07000000 01000000 FFFFFFFF 101001F1 50000000 00000000 EEEEEEFE 43000000 00000000 49000000 00000000 00000000
++				00000000 BBBBBBFB CCCCCCFC 01000000
+ 			/
+-			branch: size=0x4 code:
++			branch: id=3 size=0x4 aoffset=0x72 code:
+ 				........ ........ ........ ........ FFFFFFFF
+ 			///
+ 		frames=0
+ sprites:
+ 	id=0
+ 		frame 1
+-			lines=23 2,2 1,2 1,1 1,1 1,3 1,4 1,4 1,0 1,3 1,0 1,1 1,3 1,0 1,2 2,6 1,2 1,1 1,0 1,3 2,0
++			lines=23 2,2 1,2 1,1 1,1 1,3 1,4 1,4 1,0 1,3 1,0 1,1 1,3 1,0 1,2 1,0 1,6 1,2 1,1 1,0 1,3 2,0
+ 			text: size=307 <<<
+ 				var x_coef=1;
+ 				var y_coef=1;
+--- actionswf-1.orig/tests/.expected/data32.txt
++++ actionswf-1/tests/.expected/data32.txt
+@@ -2,25 +2,40 @@ presprites:
+ 	0
+ 		frames=1
+ 		frame 1
+-			ustrings: x_coef=5 y_coef=12 movie=49 attachMovie=3C _x=63 _y=71 test2=79 test=93 test3=FC
+-			strings: _movie=51 this_is_just_a_test=9F
+-			asize=0xC7, fasize=0x110, size=0x16C
+-			branch: size=0x0 inners=2 code:
++			ustrings: x_coef=0x5,0 y_coef=0x12,0 movie=0x49,2 attachMovie=0x3C,2 _x=0x63,2 _y=0x71,2 test2=0x79,1 test=0x93,3 test3=0xFC,5
++			strings: _movie=0x51,2 this_is_just_a_test=0x9F,0,4
++			asize=0xC7 fasize=0x110 size=0x16C
++			branch: id=0 size=0x88 inners=2 aoffset=0x0 code:
++				........ 3C000000 05000000 07000000 01000000 FFFFFFFF 3C000000 12000000 07000000 01000000 FFFFFFFF 303003F3
++				24000000 00000000
++				........ ........ ........ ........ 303003F3 8B000000 00000000
++				3C000000 9F000000 07000000 00000000 FFFFFFFF 06060505 1C000000 BB000000 FFFFFFFF 9D000000 1C000000 C4000000
++				707007F7 49000000 00000000 07000000 00000000 FFFFFFFF
+ 			{
+-			branch: size=0x0 inners=1 code:
++			branch: id=1 size=0x20 inners=1 aoffset=0x22 code:
++				........ ........ 303003F3 34000000 00000000
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 101001F1
++				79000000 EEEEEEFE 00000000 08080707
+ 			 {
+-			branch: size=0x0 code:
++			branch: id=2 size=0x78 aoffset=0x2F code:
++				........ ........ ........ ........ ........ 101001F1 3C000000 07000000 01000000 FFFFFFFF 08000000 51000000
++				FFFFFFFF 08000000 49000000 FFFFFFFF EEEEEEFE 00000000 4F000000 5C000000 63000000 00000000 BBBBBBFB 07000000
++				64000000 FFFFFFFF 4F000000 6A000000 71000000 00000000 BBBBBBFB 07000000 64000000 FFFFFFFF 08080707
+ 			 }
+ 			}
+ 			{
+-			branch: size=0x0 code:
++			branch: id=3 size=0x14 aoffset=0x7F code:
++				........ ........ ........ ........ ........ ........ ........ 101001F1 93000000 EEEEEEFE 00000000 08080707
+ 			}
+ 			/
+-			branch: size=0x0 code:
++			branch: id=4 size=0x1C aoffset=0xAB code:
++				........ ........ ........ ........ ........ ........ 1D000000 DC000000 07000000 01000000 FFFFFFFF A0A00AFA
++				04040303
+ 			/
+-			branch: size=0x0 code:
++			branch: id=5 size=0x18 aoffset=0xBB code:
++				........ 101001F1 FC000000 EEEEEEFE 00000000 909009F9 DDDDDDFD
+ 			/
+-			branch: size=0x4 code:
++			branch: id=6 size=0x4 aoffset=0xC7 code:
+ 				........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 			{
+ 			 {
+@@ -31,60 +46,85 @@ presprites:
+ 	2
+ 		init
+ 			ustrings:
+-			strings: _root=1 tog=7
+-			asize=0x2C, fasize=0x2C, size=0x40
+-			branch: size=0x40 code:
++			strings: _root=0x1,0 tog=0x7,0
++			asize=0x2C fasize=0x2C size=0x40
++			branch: id=0 size=0x40 aoffset=0xEC000000 code:
+ 				........ 4F000000 01000000 07000000 00000000 BBBBBBFB 07000000 00000000 FFFFFFFF FFFFFFFF
+ 				........ 4F000000 01000000 07000000 00000000 BBBBBBFB 50000000 FFFFFFFF
+ 		frames=2
+ 		frame 2
+ 			ustrings:
+-			strings: move=5 width=11 height=1F lat=2E left=39 top=47 right=54 bottom=6D this=4 _x=9 _root=13 x_coef=19 _y=8D y_coef=9E
+-			asize=0x1A0, fasize=0x1A0, size=0x340
+-			branch: size=0xD4 code:
++			strings: move=0x5,0,4,8 width=0x11,0 height=0x1F,0 lat=0x2E,0 left=0x39,2 top=0x47,6 right=0x54,0 bottom=0x6D,4 this=0x4,2,4,6,8 _x=0x9,2,4 _root=0x13,1,3,4,5,7,8 x_coef=0x19,1,3,4 _y=0x8D,6,8 y_coef=0x9E,5,7,8
++			asize=0x1A0 fasize=0x1A0 size=0x340
++			branch: id=0 size=0x104 aoffset=0x9D code:
+ 				........ 3C000000 05000000 07000000 14000000 FFFFFFFF 3C000000 11000000 07000000 80020000 FFFFFFFF 3C000000
+ 				1F000000 07000000 E0010000 FFFFFFFF 3C000000 2E000000 07000000 28000000 FFFFFFFF 3C000000 39000000 1C000000
+ 				3E000000 FFFFFFFF 3C000000 47000000 1C000000 4B000000 FFFFFFFF 3C000000 54000000 1C000000 5A000000 0B000000
+ 				1C000000 60000000 0B000000 1C000000 64000000 FFFFFFFF 3C000000 6D000000 1C000000 74000000 0B000000 1C000000
+ 				7B000000 0B000000 1C000000 7F000000 FFFFFFFF FFFFFFFF
++				........ 9D000000 4E000000 04000000 09000000 00000000 BBBBBBFB 707007F7 48000000 12000000 1C000000 0D000000
++				FFFFFFFF
+ 			/
+-			branch: size=0x0 code:
++			branch: id=1 size=0x3C aoffset=0x84 code:
++				........ 4F000000 13000000 19000000 00000000 BBBBBBFB 4E000000 20000000 26000000 00000000 BBBBBBFB 0C000000
++				07000000 FFFFFFFF FFFFFFFF 04040303
++			/
++			branch: id=2 size=0x34 aoffset=0xA7 code:
++				........ ........ ........ ........ 00000040 9D000000 4E000000 38000000 3D000000 00000000 BBBBBBFB 707007F7
++				67000000 12000000 1C000000 41000000 FFFFFFFF
++			/
++			branch: id=3 size=0x3C aoffset=0xBF code:
++				........ ........ ........ ........ ........ 4F000000 46000000 4C000000 00000000 BBBBBBFB 4E000000 53000000
++				59000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF FFFFFFFF 04040303
++			/
++			branch: id=4 size=0x88 aoffset=0xDD code:
++				........ ........ ........ ........ ........ ........ ........ ........ CCCCCCFC 01000000 4F000000 63000000
++				68000000 00000000 BBBBBBFB 1C000000 6B000000 0C000000 4E000000 70000000 76000000 00000000 BBBBBBFB 47000000
++				4E000000 7D000000 82000000 00000000 BBBBBBFB FFFFFFFF 9D000000 4E000000 88000000 8D000000 00000000 BBBBBBFB
++				707007F7 48000000 12000000 1C000000 91000000 FFFFFFFF
++			/
++			branch: id=5 size=0x3C aoffset=0x11E code:
++				........ ........ ........ ........ ........ ........ 4F000000 98000000 9E000000 00000000 BBBBBBFB 4E000000
++				A5000000 AB000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF FFFFFFFF 04040303
++			/
++			branch: id=6 size=0x34 aoffset=0x141 code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ 00000040 9D000000 4E000000
++				BD000000 C2000000 00000000 BBBBBBFB 707007F7 67000000 12000000 1C000000 C6000000 FFFFFFFF
++			/
++			branch: id=7 size=0x3C aoffset=0x159 code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 4F000000 CA000000
++				D0000000 00000000 BBBBBBFB 4E000000 D7000000 DD000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF FFFFFFFF
++				04040303
+ 			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x5C code:
++			branch: id=8 size=0x5C aoffset=0x177 code:
+ 				........ CCCCCCFC 01000000 4F000000 E7000000 EC000000 00000000 BBBBBBFB 1C000000 EF000000 0C000000 4E000000
+ 				F4000000 FA000000 00000000 BBBBBBFB 47000000 4E000000 01010000 06010000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+ 			////////
+ 	3
+ 		init
+-			ustrings: stop=2B play=50
+-			strings: _root=4 tog=A _movie=24
+-			asize=0x72, fasize=0x7A, size=0xBC
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
+-			/
+-			branch: size=0x0 code:
++			ustrings: stop=0x2B,1 play=0x50,2
++			strings: _root=0x4,1,2 tog=0xA,1,2 _movie=0x24,2
++			asize=0x72 fasize=0x7A size=0xBC
++			branch: id=0 size=0x30 aoffset=0x0 code:
++				........ 9D000000 4E000000 04000000 0A000000 00000000 BBBBBBFB 707007F7 49000000 00000000 07000000 01000000
++				FFFFFFFF
++			/
++			branch: id=1 size=0x40 aoffset=0x1B code:
++				........ 4F000000 12000000 18000000 00000000 BBBBBBFB 07000000 00000000 FFFFFFFF 101001F1 2B000000 EEEEEEFE
++				1E000000 24000000 00000000 BBBBBBFB 04040303
++			/
++			branch: id=2 size=0x48 aoffset=0x49 code:
++				........ ........ ........ ........ ........ 00000040 4F000000 37000000 3D000000 00000000 BBBBBBFB 07000000
++				01000000 FFFFFFFF 101001F1 50000000 EEEEEEFE 43000000 49000000 00000000 BBBBBBFB CCCCCCFC 01000000
+ 			/
+-			branch: size=0x4 code:
++			branch: id=3 size=0x4 aoffset=0x72 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 			///
+ 		frames=0
+ sprites:
+ 	id=0
+ 		frame 1
+-			lines=23 2,2 1,2 1,1 1,1 1,3 1,4 1,4 1,0 1,3 1,0 1,1 1,3 1,0 1,2 2,6 1,2 1,1 1,0 1,3 2,0
++			lines=23 2,2 1,2 1,1 1,1 1,3 1,4 1,4 1,0 1,3 1,0 1,1 1,3 1,0 1,2 1,0 1,6 1,2 1,1 1,0 1,3 2,0
+ 			text: size=307 <<<
+ 				var x_coef=1;
+ 				var y_coef=1;
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -48,7 +48,7 @@ smart_ask () {
+ 		echo y \?; read -n1 -t $((60*60*24)) ans
+ 	fi
+ 	if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+-	base64 a.swf${2} > .expected/a.swf${1}.txt
++	base64 a.swf${2} > .expected/a.swf${1}.txt #this is ok with ln
+ }
+ 	base64 -d .expected/a.swf.txt > .expected/a.swf || { echo not ok; exit 1; }
+ 	smart_diff .expected/a.swf a.swf
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -16,4 +16,5 @@ fi
+ if [ -n "${1}" ]; then exit 1; fi
+ echo y \?; read -n1 -t $((60*60*24)) ans
+ if [ "${ans}" != "y" ]; then exit 1; fi
+-mv data.txt ../.expected/data${e}.txt
++cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
++rm data.txt
