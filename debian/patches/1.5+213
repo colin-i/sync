@@ -1,0 +1,744 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+213) xenial; urgency=medium
+ .
+   * constif
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-01-08
+
+--- ocompiler-1.orig/localtest
++++ ocompiler-1/localtest
+@@ -1 +1 @@
+-1-5+212
++1-5+213
+--- ocompiler-1.orig/o.html
++++ ocompiler-1/o.html
+@@ -114,7 +114,7 @@
+ 	<p>
+ 	1. Constants
+ 	<br>
+-	Language command: <b>Const</b>
++	Language command: <b>Const</b> <b>ConstIf</b>
+ 	<br>
+ 	Is a 32 bit value. It's content is declared into the memory(variables are declared into the file) therefore it is used at header files.
+ 	<br>
+@@ -122,6 +122,8 @@
+ 	<br>
+ 	Constants(like ordinary integers) can be used at operations, but to avoid same names these are introduced with parenthesis (); without parenthesis only one integer can be used 
+ 	<br>
++	<b>ConstIf</b> will define the constant only if is not defined.
++	<br>
+ 	Example:
+ 	<br>
+ 	<a class="code">
+@@ -240,7 +242,9 @@
+ 	so ostrip can remove them after ld linked the objects.
+ 	</p>
+ 
+-	<br>
++	<p>
++	For otoc, adding <b>U</b> at the end, excepting constants, will make them unsigned in C, and excepting chars where adding <b>S</b> will make them signed.
++	</p>
+ 
+ 	<p>
+ 	Data can be declared using the following methods:
+@@ -1074,8 +1078,8 @@ format elfobj64<br>
+ </table>
+ <br>Table D:
+ <table id="selection_table">
+-	<tr><td>Xfile_declfield_const</td><td class="red" rowspan=2>name</td></tr>
+-	<tr><td class="green">DA</td></tr>
++	<tr><td>Xfile_declfield_const</td>     <td>Xfile_declfield_const_*</td><td class="red" rowspan=2>name</td></tr>
++	<tr><td class="green" colspan=2>DA</td></tr>
+ </table>
+ <br>Table DA:
+ <table id="selection_table">
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,3 +1,4 @@
++<p>ocompiler-1-5+212.x86_64.rpm,1K9c6e0LtDDJfYIQK-X4fNLXaIGTEKIcR,2025-01-08T07:00:04.471Z,86151,https://drive.google.com/uc?id=1K9c6e0LtDDJfYIQK-X4fNLXaIGTEKIcR&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+211.x86_64.rpm,1yIkW0c_6AF93CQUuLRi4K2Rln3fjbj6Y,2024-12-06T06:28:41.623Z,86129,https://drive.google.com/uc?id=1yIkW0c_6AF93CQUuLRi4K2Rln3fjbj6Y&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+210.x86_64.rpm,1oGGg0Pc-LJALU2DHMHggxMEdGMRjv76_,2024-12-02T13:22:56.675Z,86097,https://drive.google.com/uc?id=1oGGg0Pc-LJALU2DHMHggxMEdGMRjv76_&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+208.x86_64.rpm,1GQex6-g3qIybPLIRqxiSN0AhzbySjUV3,2024-12-02T07:37:37.006Z,85865,https://drive.google.com/uc?id=1GQex6-g3qIybPLIRqxiSN0AhzbySjUV3&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+--- ocompiler-1.orig/otoc/decl.oc
++++ ocompiler-1/otoc/decl.oc
+@@ -5,10 +5,10 @@ function functiondef_d(sv pbuffer,sd out
+ 	datax args#1;call get_data(pbuffer,#args)
+ 	if args>=^1
+ 		charx field#1
+-		call decl(pbuffer,outfile,#field,(NULL))
++		call decl(pbuffer,outfile,#field,(NULL)) #1 more
+ 		sd n=1;while n!=args
+ 			call writec(outfile)
+-			call decl(pbuffer,outfile,#field,(NULL))
++			call decl(pbuffer,outfile,#field,(NULL)) #1 more
+ 			inc n
+ 		end
+ 	end
+@@ -108,18 +108,24 @@ function decl_runtime(sv pbuffer,sd outf
+ 	call decl_runtime_core(pbuffer,outfile,field,ptype)
+ 	charx feature#1;call get_char(pbuffer,#feature) #not used here at the moment
+ end
+-function decl(sv pbuffer,sd outfile,ss pfield,ss ptype)
++function decl(sv pbuffer,sd outfile,ss pfield,ss ptype,ss pconstif)
+ 	call get_char(pbuffer,pfield)
++	datax sz#1;valuex pointer#1
+ 	if pfield#!=(Xfile_declfield_const)
+ 		call decl_runtime(pbuffer,outfile,pfield#,ptype)
++		call get_string(pbuffer,#sz,#pointer)
+ 	else
++		call get_char(pbuffer,pconstif)
++		call get_string(pbuffer,#sz,#pointer)
++		if pconstif#=(Xfile_declfield_const_cond)
++			char a="#ifndef "^
++			call write(outfile,#a,\.a)
++			call writen(outfile,pointer,sz)
++		end
+ 		char c="#define"^
+ 		call write(outfile,#c,\.c)
+ 	end
+ 	call writes(outfile)
+-
+-	datax sz#1;valuex pointer#1
+-	call get_string(pbuffer,#sz,#pointer)
+ 	callg write(outfile,pointer,sz)
+ end
+ function decl_type(sd outfile,sv fn)
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -316,8 +316,8 @@ function include(sd outfile,sv pbuffer)
+ 	or loop.allowwrite (allowwrite_no_include)
+ end
+ function declare(sd outfile,sv pbuffer)
+-	charx type#1;charx field#1
+-	call decl(pbuffer,outfile,#field,#type)
++	charx type#1;charx field#1;charx constif#1
++	call decl(pbuffer,outfile,#field,#type,#constif)
+ 	datax sz#1;valuex pointer#1
+ 	charx sign#1;call get_char(pbuffer,#sign)
+ 	if sign=(Xfile_declsign_reserve)
+@@ -378,6 +378,10 @@ function declare(sd outfile,sv pbuffer)
+ 	endelse
+ 	if field!=(Xfile_declfield_const)
+ 		call writet(outfile)
++	elseif constif=(Xfile_declfield_const_cond)
++		call writenl(outfile)
++		char a="#endif"^
++		call write(outfile,#a,\.a)
+ 	end
+ 	callg writenl(outfile)
+ end
+--- ocompiler-1.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-1/src/files/functions/actions/dataparse.oc
+@@ -63,6 +63,7 @@ function get_img_vdata_dataSize()
+ 	return reg
+ endfunction
+ 
++Char constdup="Constant name is already defined."
+ #err
+ Function addvarreference(sv ptrcontent,sd ptrsize,sd valsize,sd typenumber,sd mask,sd stackoffset,sd is_expand)
+ 	#duplications
+@@ -121,9 +122,7 @@ Function addvarreference(sv ptrcontent,s
+ 		Data pointer#1
+ 		SetCall pointer vars(content,valsize,structure)
+ 		If pointer!=zero
+-			Char constdup="Constant name is already defined."
+-			Str pconstdup^constdup
+-			Return pconstdup
++			Return #main.constdup
+ 		EndIf
+ 		#this will be set outside Set value 0
+ 	EndElse
+--- ocompiler-1.orig/src/files/functions/actions/declare.oc
++++ ocompiler-1/src/files/functions/actions/declare.oc
+@@ -1,5 +1,20 @@
+ 
+ #err
++function declare_const(sv pcontent,sd pcomsize,charx sign,dataxu valsize,sd subtype)
++	sd err
++	if subtype!=(cCONSTIF)
++		SetCall err dataassign(pcontent,pcomsize,sign,valsize,(constantsnumber),(NULL),(FALSE))  #there are 5 more argument but are not used
++		#                                                                               since %%| getsign is not allowing relocbool at const, and only at assignsign
++	else
++		set main.is_constif (TRUE)
++		SetCall err dataassign(pcontent,pcomsize,sign,valsize,(constantsnumber),(NULL),(FALSE))  #there are 5 more argument but are not used
++		#                                                                               same
++		set main.is_constif (FALSE)
++	endelse
++	return err
++endfunction
++
++#err
+ function declare(sv pcontent,sd pcomsize,sd subtype,sd parses,sd bool_64)
+ 	sd declare_typenumber
+ 	sd is_expand
+@@ -170,8 +185,7 @@ function declare(sv pcontent,sd pcomsize
+ 						call advancecursors(pcontent,pcomsize,pcomsize#)
+ 						return (noerror)
+ 					endif
+-					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool) #there are 4 more argument but are not used
+-					#                                                                            since %%|
++					setcall err declare_const(pcontent,pcomsize,sign,valsize,subtype)
+ 				endif
+ 			else
+ 				setcall err vars_log_prepare(pcontent#,valsize)
+@@ -196,8 +210,8 @@ function declare(sv pcontent,sd pcomsize
+ 							endif
+ 						endif
+ 					endelse
+-					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,mask,relocbool,dataxrel,is_stack) #there are 2 more arguments but are not used
+-					#                                                                               since %%|
++					setcall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,#unitsize,relocbool,mask,dataxrel,is_stack) #there are 2 more arguments but are not used
++					#                                                                          since %%|
+ 					if is_expand=(FALSE)
+ 						sd pdataReg%%ptr_dataReg
+ 						add pdataReg# unitsize
+@@ -208,7 +222,7 @@ function declare(sv pcontent,sd pcomsize
+ 				endif
+ 			endelse
+ 		else
+-			setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,is_signed,pcontent#,valsize,sign,relocbool,dataxrel)
++			setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,is_signed,pcontent#,valsize,sign,relocbool,dataxrel,subtype)
+ 			if err=(noerror)
+ 				if typenumber=(constantsnumber)
+ 					if sign!=(pointersigndeclare)
+@@ -223,12 +237,15 @@ function declare(sv pcontent,sd pcomsize
+ 							return (noerror)
+ 						endif
+ 					endif
+-				elseif is_expand=(TRUE)
+-					if sign!=(reservesign)
+-						return "Virtual declarations can have only the reserve sign."
++					setcall err declare_const(pcontent,pcomsize,sign,valsize,subtype)
++				else
++					if is_expand=(TRUE)
++						if sign!=(reservesign)
++							return "Virtual declarations can have only the reserve sign."
++						endif
+ 					endif
+-				endelseif
+-				SetCall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),mask,relocbool,dataxrel,is_stack,is_expand,is_signed)
++					SetCall err dataassign(pcontent,pcomsize,sign,valsize,typenumber,(NULL),relocbool,mask,dataxrel,is_stack,is_expand,is_signed)
++				endelse
+ 			endif
+ 		endelse
+ 	endif
+--- ocompiler-1.orig/src/files/functions/actions/fndecargs.oc
++++ ocompiler-1/src/files/functions/actions/fndecargs.oc
+@@ -120,7 +120,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 		setcall err xfile_proto_arg(xfile_decltype,is_stack,is_expand,is_signed)
+ 		return err
+ 	endif
+-	setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,is_signed,ptrcontent#,sz,(sign_not_required)) #2 more
++	setcall err xfile_add_declare_if(xfile_decltype,is_stack,is_expand,is_signed,ptrcontent#,sz,(sign_not_required)) #3 more
+ 	If err!=noerr
+ 		Return err
+ 	EndIf
+--- ocompiler-1.orig/src/files/functions/commons/getcommand.oc
++++ ocompiler-1/src/files/functions/commons/getcommand.oc
+@@ -11,7 +11,7 @@ Char cDATA_c="DATA";Char cSTR_c="STR";Ch
+ 	Char cVDATA_c="VDATA";Char cVSTR_c="VSTR";Char cVALUE_c="VALUE";Char cVWORD_c="VWORD"
+ 	Char cDATAX_c="DATAX";Char cSTRX_c="STRX";Char cCHARX_c="CHARX";Char cWORDX_c="WORDX"
+ 	Char cVDATAX_c="VDATAX";Char cVSTRX_c="VSTRX";Char cVALUEX_c="VALUEX";Char cVWORDX_c="VWORDX"
+-	Char cCONST_c="CONST"
++	Char cCONST_c="CONST";Char cCONSTIF_c="CONSTIF"
+ Char cSET_c="SET";Char cADD_c="ADD";Char cSUB_c="SUB";Char cMULT_c="MULT";Char cDIV_c="DIV";Char cDIVU_c="DIVU";Char cREM_c="REM";Char cREMU_c="REMU";Char cAND_c="AND";Char cOR_c="OR";Char cXOR_c="XOR"
+ Char cRETURN_c="RETURN";Char cINC_c="INC";Char cDEC_c="DEC";Char cINCST_c="INCST";Char cDECST_c="DECST";Char cNEG_c="NEG";Char cNOT_c="NOT";Char cBASE_c="BASE";Char cLEAVE_c="LEAVE"; Char cSHL1_c="SHL1";Char cSHR1_c="SHR1";Char cSAR1_c="SAR1";Char cEXIT_c="EXIT"
+ Char cCALL_c="CALL";Char cCALLX_c="CALLX"
+@@ -153,6 +153,11 @@ Const numberofcommandsvars=(\-commandsva
+ 			Data *=cDECLARE
+ 			Data *=cCONST
+ 			Data *=spacereq
++		Const cCONSTIF=\-cDECLARE_top
++			data *^cCONSTIF_c
++			Data *=cDECLARE
++			Data *=cCONSTIF
++			Data *=spacereq
+ 	Const cPRIMSEC=\-coms_start
+ 	Const cPRIMSEC_top=\
+ 		Const cSET=\-cPRIMSEC_top
+@@ -492,11 +497,12 @@ const declares_flag=0x80000000 # chars c
+ #declare coresp
+ function commandSubtypeDeclare_to_typenumber(sd subtype,sd p_is_expand,sd p_is_signed)
+ #these numbers will be used at getstruct directly
+-	if subtype=(cCONST)
++	sd test;set test subtype;and subtype (~declares_flag)
++
++	if subtype>=^(cCONST)
+ 		return (constantsnumber)
+ 	endif
+ 
+-	sd test;set test subtype;and subtype (~declares_flag)
+ 	if test=subtype
+ 		set p_is_signed# (Xfile_declext_no)
+ 	else
+@@ -569,7 +575,7 @@ Function getcommand(value pcontent,data
+ 		#		set intercursors #pointer  ##only for elseGif
+ 		#	endif
+ 		elseif command=(cDECLARE)
+-			if ptrsubtype#!=(cCONST)
++			if ptrsubtype#<^(cCONST)
+ 				setcall extstr getcom_declare(ptrsubtype#)
+ 			endif
+ 		Elseif command=(cSTARTFUNCTION)
+@@ -624,7 +630,7 @@ Function getcommand(value pcontent,data
+ 				#	else #elseg
+ 				#		set main.ret_cont_break (ret_cont_break_skip)
+ 				#	endelse
+-				if command=(cDECLARE) #chars/charxs
++				if command=(cDECLARE) #chars/charxs and all ...u
+ 					or ptrsubtype# (declares_flag)
+ 				elseIf command=(cSTARTFUNCTION)
+ 				#functionxx/entryx , varargs
+--- ocompiler-1.orig/src/files/functions/dataassign.oc
++++ ocompiler-1/src/files/functions/dataassign.oc
+@@ -1,7 +1,7 @@
+ 
+ 
+ #err
+-Function dataassign(sd ptrcontent,sd ptrsize,sd sign,sd valsize,sd typenumber,sd punitsize,sd long_mask,sd relocbool,sd dataxrel,sd stack,sd is_expand,sd is_signed)
++Function dataassign(sd ptrcontent,sd ptrsize,sd sign,sd valsize,sd typenumber,sd punitsize,sd relocbool,sd long_mask,sd dataxrel,sd stack,sd is_expand,sd is_signed)
+ 	Data false=FALSE
+ 	Data true=TRUE
+ 	Str err#1
+@@ -24,7 +24,15 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			Call getcontReg(constantsstruct,ptroffset_const)
+ 			SetCall err addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,(dummy_mask)) #there are 2 more arguments but are not used
+ 			#it is not a mistake to go with 0 mask in variable from here to addaref
+-			If err!=noerr;Return err;EndIf
++			If err!=noerr
++				if main.is_constif=(TRUE)
++					if err=#main.constdup
++						call advancecursors(ptrcontent,ptrsize,ptrsize#)
++						return (noerror)
++					endif
++				endif
++				Return err
++			EndIf
+ 		else
+ 			sd immovable_struct_cont ;#for size of var
+ 			sd reg	             ;#for size of var
+--- ocompiler-1.orig/src/files/functions/xfile_details.oc
++++ ocompiler-1/src/files/functions/xfile_details.oc
+@@ -36,11 +36,18 @@ function xfile_add_declare_base(sd declt
+ endfunction
+ 
+ #err
+-function xfile_add_declare_if(sd decltype,sd is_stack,sd is_expand,sd is_signed,ss content,sd size,sd sign,sd reloc,sd relocx)
++function xfile_add_declare_if(sd decltype,sd is_stack,sd is_expand,sd is_signed,ss content,sd size,sd sign,sd reloc,sd relocx,sd subtype)
+ 	if main.xfile!=(openno)
+ 		sd err
+ 		if decltype=(Xfile_decltype_const)
+ 			setcall err xfile_add_char((Xfile_declfield_const))
++			if err=(noerror)
++				if subtype=(cCONST)
++					setcall err xfile_add_char((Xfile_declfield_const_normal))
++				else # cCONSTIF
++					setcall err xfile_add_char((Xfile_declfield_const_cond))
++				endelse
++			endif
+ 		else
+ 			setcall err xfile_add_declare_base(decltype,is_stack,is_expand,is_signed)
+ 			if err=(noerror)
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -575,3 +575,5 @@ Data innerfunction#1
+ Const globalinnerfunction^innerfunction
+ datax innerfunctionreturn#1
+ datax varargs#1
++
++charx is_constif#1
+--- ocompiler-1.orig/src/files/headers/xfile.h
++++ ocompiler-1/src/files/headers/xfile.h
+@@ -53,6 +53,9 @@ const Xfile_declfield_stack=1
+ const Xfile_declfield_data=2
+ const Xfile_declfield_varargs=3
+ 
++const Xfile_declfield_const_normal=0
++const Xfile_declfield_const_cond=1
++
+ const Xfile_declfield_data_concrete=0
+ const Xfile_declfield_data_expand=1
+ 
+--- ocompiler-1.orig/src/files/inits/inits.oc
++++ ocompiler-1/src/files/inits/inits.oc
+@@ -118,3 +118,5 @@ set ret_cont_break (ret_cont_break_notye
+ set entryReg (lastReg)
+ 
+ set xstruct (unierror)
++
++set is_constif (FALSE)
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -13,6 +13,9 @@ char* c9="";short* ca=1;int* cb=1;
+ unsigned char cc[]={9,97,122};
+ //constu a1=1
+ #define a1 1
++#ifndef a1
++#define a1 2
++#endif//ok
+ unsigned char a[3];long b=a;
+ unsigned char no_hotgroup=1;long no_hotgroup_test=&no_hotgroup;
+ long*intern(int a,int* b,long* c,unsigned long* d){//commenting
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -1,45 +1,45 @@
+-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
+-AAADAQAAADEfhAAAAwEAAAAxHw0AAAMBAAAAMR+NAAADAQAAADEfDhwTDAAAAwEAAAAxH44AAAMB
+-AAAAMR8cEwwAAAMBAAAAMR+PAAADAQAAADEfHBMMAAADAQAAADEfjAAAAwEAAAAxHxwTDAAAAwEA
+-AAAxH4MAAAMBAAAAMR8cEwwAAAMBAAAAMR+GAAADAQAAADEfHBMMAAADAQAAADEfhwAAAwEAAAAx
+-HxwTDAAAAwEAAAAxH4IAAAMBAAAAMR8cEwsAAAEAAABiAAAAAQAAAGIAAAADAQAAADEfDwAAAwEA
+-AAAxH4UAAAMBAAAAMh8SExAREwcCAAAAAAEAAAB6AgAABQQAAAAweGZmKwAEAwAAADA3NysAAwIA
+-AAAxMi0AAwEAAAAzKxAAAwEAAAA0KgADAQAAADMvAAMBAAAAMlwAAwEAAAAxJgADAQAAADF8AAMB
+-AAAAMV4AAwEAAAAxJQADAQAAADU6AAMBAAAANVsAAwEAAAAzXQADAQAAADN9AAMBAAAAMz0AAwEA
+-AAAyZQADAQAAADI8AAMBAAAAMz4AAwEAAAAzTAADAQAAADRHAAMBAAAANGEAAwEAAAA3bwADAQAA
+-ADd1AAMBAAAANlUAAwEAAAA2bAADAQAAADZnAAMBAAAANhgfHAEkAAAAY2hhciBlcj0zISEyIGNo
+-YXIgZXI9MyEyIGNoYXIgZXI9MyQyBwIAAAAAAgAAAHoyAgAABgIAAABhMR8cBwIAAAAAAgAAAHoz
+-AgABBgIAAABhMR8cBwIAAAAAAgAAAHo0AgACBgIAAABhMR8cBwIAAAAAAgAAAHo1AgADBgIAAABh
+-MR8HAgAAAAACAAAAcTECAAAAHxwHAgAAAAACAAAAcTICAAAHAgAAAHN0HxwHAgAAAAACAAAAcTMC
+-AAALAgAAAHN0AQAAAGEAHxwHAgAAAAACAAAAcTQCAAAKAgAAAHN0AQAAAGEAHxcAAQMAAAB0c3QZ
+-BgAAAHhfZmlsZQEbCAEAAAMBAAAAMh8=
++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
+--- ocompiler-1.orig/tests/.expected/declare.oc.x.txt
++++ ocompiler-1/tests/.expected/declare.oc.x.txt
+@@ -2,7 +2,7 @@ AAAAAAQDBwIAAAAAAQAAAGECAAMDAQAAADEtEAID
+ AQIAAAAAAwEAAAAyHwADAQAAADIfBwIAAQQAAQAAAGMDAAADAQAAADEfBwEBBAABAAAAZAEAAwEA
+ AAAxHwcCAAEEAQEAAABkAQADAQAAADEfBwIAAQQCAgAAAGRkAAEAAABjBwIAAQMAAQAAAGUBAAMB
+ AAAAMR8HAgABBQABAAAAZgEAAwEAAAAxHwcBAQUAAQAAAGcCAgYAAABxd2Vxd2UABwIAAQcAAQAA
+-AGgBAAMBAAAAMR8HAQEHAAEAAABpAQADAQAAADEfBwABAAAAagIAAAMBAAAAMR8BCAAAAHZhbHVl
+-IGslBwIAAQQAAQAAAGsEAAADAQAAADEfBwIBAQQAAQAAAGwBAAMBAAAAMR8BCQAAAHJldHVybiAx
+-KwgAAAADAQAAADErAAMBAAAAMR8HAgABBQEBAAAAegICAwAAADEyMwAHAgABBAEBAAAAegACAAAA
+-ZGQHAgABAQABAAAAdwABAAAAYQcCAAEGAAIAAAB3dwABAAAAYQcBAQYAAwAAAHd3dwABAAAAYQ==
++AGgBAAMBAAAAMR8HAQEHAAEAAABpAQADAQAAADEfBwAAAQAAAGoCAAADAQAAADEfAQgAAAB2YWx1
++ZSBrJQcCAAEEAAEAAABrBAAAAwEAAAAxHwcCAQEEAAEAAABsAQADAQAAADEfAQkAAAByZXR1cm4g
++MSsIAAAAAwEAAAAxKwADAQAAADEfBwIAAQUBAQAAAHoCAgMAAAAxMjMABwIAAQQBAQAAAHoAAgAA
++AGRkBwIAAQEAAQAAAHcAAQAAAGEHAgABBgACAAAAd3cAAQAAAGEHAQEGAAMAAAB3d3cAAQAAAGE=
+--- ocompiler-1.orig/tests/.expected/declareN.c
++++ /dev/null
+@@ -1,24 +0,0 @@
+-void b(int d){
+-char a[2];
+-char c[]={1,2,3};
+-//char e=""^
+-char e[]="1234";
+-int aa;
+-aa;
+-}
+-//const a=\b.a\
+-a=1;
+-char z=;
+-char z=;
+-char z=;
+-char z=1;
+-char z=;
+-char z=;
+-char z=;
+-char z=;
+-char z=a;
+-char z=c;
+-char z=d;
+-char z=e;
+-char z=a;
+-}
+--- ocompiler-1.orig/tests/.expected/declareN.oc.x.txt
++++ ocompiler-1/tests/.expected/declareN.oc.x.txt
+@@ -1,9 +1,9 @@
+ AAAAAAABAAAAYgEAAAACAAECAQQDBgABAAAAYgABAAAAAgABAgABAAAAZAcCAAAAAAEAAABhAQAD
+ AQAAADIfBwIAAAAAAQAAAGMCAQMAAAAAAwEAAAAxHwADAQAAADIfAAMBAAAAMx8BCgAAAGNoYXIg
+ ZT0iIl4HAgAAAAABAAAAZQICBAAAADEyMzQABwIAAQQAAgAAAGFhAAEAAABhCAACAAAAAgAAAGFh
+-AVMTAQ0AAABjb25zdCBhPVxiLmFcBwABAAAAYQIAAAMBAAAAMR8HAgAAAAEBAAAAegIAAAAfBwIA
+-AAABAQAAAHoCAAABHwcCAAAAAQEAAAB6AgAAAh8HAgAAAAEBAAAAegIAAAMBAAAAMR8HAgAAAAEB
+-AAAAegIAAAUDAAAAMHhmHwcCAAAAAQEAAAB6AgAABgEAAABhHwcCAAAAAQEAAAB6AgAABwEAAABi
+-HwcCAAAAAQEAAAB6AgAACAEAAABiHwcCAAAAAQEAAAB6AgAACgEAAABiAQAAAGEAHwcCAAAAAQEA
+-AAB6AgAACgEAAABiAQAAAGMAHwcCAAAAAQEAAAB6AgAACgEAAABiAQAAAGQAHwcCAAAAAQEAAAB6
+-AgAACgEAAABiAQAAAGUAHwcCAAAAAQEAAAB6AgAACwEAAABiAQAAAGEAHw==
++AVMTAQ0AAABjb25zdCBhPVxiLmFcBwAAAQAAAGECAAADAQAAADEfBwIAAAABAQAAAHoCAAAAHwcC
++AAAAAQEAAAB6AgAAAR8HAgAAAAEBAAAAegIAAAIfBwIAAAABAQAAAHoCAAADAQAAADEfBwIAAAAB
++AQAAAHoCAAAFAwAAADB4Zh8HAgAAAAEBAAAAegIAAAYBAAAAYR8HAgAAAAEBAAAAegIAAAcBAAAA
++Yh8HAgAAAAEBAAAAegIAAAgBAAAAYh8HAgAAAAEBAAAAegIAAAoBAAAAYgEAAABhAB8HAgAAAAEB
++AAAAegIAAAoBAAAAYgEAAABjAB8HAgAAAAEBAAAAegIAAAoBAAAAYgEAAABkAB8HAgAAAAEBAAAA
++egIAAAoBAAAAYgEAAABlAB8HAgAAAAEBAAAAegIAAAsBAAAAYgEAAABhAB8=
+--- ocompiler-1.orig/tests/.expected/operations.oc.x.txt
++++ ocompiler-1/tests/.expected/operations.oc.x.txt
+@@ -1,32 +1,32 @@
+-AAAAAAQCBwABAAAAYQIAAAMBAAAAMR8BAAEAACAgICAgICAgICAgICAgIGFkZCBzdWIgbXVsIGRp
+-diAgIGRpdnUgICAgICAgICAgIHJlbSAgIHJlbXUgICAgIHBvdyBhbmQgb3IgIHhvciBub3Qgc2hs
+-MSBzYXIxICBzaHIxICAgZXF1YWwgaW5lcXVhbCBsZXNzIGdyZWF0ZXIgbGVzc0VxdWFsIGdyZWF0
+-ZXJFcXVhbCBsb2dpY2FsQW5kIGxvZ2ljYWxPciB1bnNpZ25lZExlc3MgIHVuc2lnbmVkR3JlYXRl
+-ciB1bnNpZ25lZExlc3NFcXVhbCB1bnNpZ25lZEdyZWF0ZXJFcXVhbCBwYXJpdHkgb2RkICBuZWcH
+-AgAAAAEIAAAAZXhhbXBsZXMCAR4AAAAAAwEAAAAzKwADAQAAADIfAAMBAAAANi0AAwEAAAA0HwAD
+-AQAAADUqAAMBAAAANR8AAwIAAAAzMi8AAwIAAAAxMB8BAwEAAAAxXAAFCgAAADB4MTAwMDAwMDAf
+-AAMCAAAAMzIlAAMCAAAAMTAfAQMBAAAAMToABQQAAAAweDEwHwADAQAAADMkAAMBAAAAMh8AAwEA
+-AAA3JgADAQAAADIfAAMBAAAANXwAAwEAAAAyHwADAQAAADdeAAMBAAAAMh8CBAEAAAAwHwADAQAA
+-ADJbAAMBAAAAMh8AAwEAAAA4XQADAQAAADMfAQMBAAAAMX0AAwIAAAAyNR8AAwEAAAA3PQADAQAA
+-ADcfAAMBAAAAN2UAAwEAAAA3HwADAQAAADI8AAMBAAAAMx8AAwEAAAAyPgADAQAAADMfAAMBAAAA
+-OUwAAwEAAAA5HwADAQAAADlHAAMBAAAAOR8AAwEAAAAxYQAEAQAAADAfAAQBAAAAMG8AAwEAAAAx
+-HwADAQAAADF1AAUKAAAAMHhmZkZGZmZGRh8AAwEAAAAxVQAFCgAAADB4ZmZGRmZmRkYfAQMBAAAA
+-MWwBAwEAAAAyHwEDAQAAADFnAAQBAAAAMB8AAwEAAAA0IQADAQAAADEfAAMBAAAAMnAAAwEAAAAx
+-HwEGAQAAAGEfAf8AAABoZXg6ICAgICAgICAgICA1ICAgMiAgIDE5ICAzICAgICBmICAgICAgICAg
+-ICAgICAyICAgICBmICAgICAgICA5ICAgICAyIDcgICA1ICAgZmYgIDggICAgMSAgICAgN2YgICAg
+-IDEgICAgIDAgICAgICAgMSAgICAwICAgICAgIDEgICAgICAgICAxICAgICAgICAgICAgMCAgICAg
+-ICAgICAxICAgICAgICAgMSAgICAgICAgICAgICAwICAgICAgICAgICAgICAgMCAgICAgICAgICAg
+-ICAgICAgMSAgICAgICAgICAgICAgICAgICAgMSAgICAgIDEgICAgZmYZBgAAAHdfYXNfZQAHAgAB
+-AgEJAAAAb3ZlcmZsb3dzAgAAAwEAAAAyJAADAgAAADMxHwMEAAAAODAuLgcCAAECAQAAAAACAAAD
+-AQAAADIkAAMCAAAAMzIfAw0AAAAwICAgIG92ZXJmbG93BwIAAQIBAAAAAAIAAAMBAAAAMiQAAwIA
+-AAAzMx8DFwAAADAgICAgMSBvdmVyZmxvdyBtZXNzYWdlBwIAAQIBAAAAAAIAAAMBAAAAMVsAAwIA
+-AAAzMR8DBAAAADgwLi4HAgABAgEAAAAAAgAAAwEAAAAxWwADAgAAADMyHwMNAAAAMCAgICBvdmVy
+-ZmxvdwcCAAECAQAAAAACAAAEAQAAADBbAAMEAAAAMTExMR8DCwAAADAgICAgZGlyZWN0BwIAAQIB
+-AAAAAAIAAAUKAAAAMHg4MDAwMDAwMF0AAwIAAAAzMR8DBAAAAGZmLi4HAgABAgEAAAAAAgAABQoA
+-AAAweDgwMDAwMDAwXQADAgAAADMyHwMLAAAAZmYuLiBkaXJlY3QHAgABAgEAAAAAAgAABQoAAAAw
+-eDQwMDAwMDAwXQADAgAAADMxHwMLAAAAMCAgICBkaXJlY3QHAgABAgEAAAAAAgAABQoAAAAweDgw
+-MDAwMDAwfQADAgAAADMxHwMBAAAAMQcCAAECAQAAAAACAAAFCgAAADB4ODAwMDAwMDB9AAMCAAAA
+-MzIfAwsAAAAwICAgIGRpcmVjdAcCAAECAQAAAAACAAAFCgAAADB4ZmZGRmZmRkUrAAMBAAAAMR8D
+-AgAAAGZmBwIAAQIBAAAAAAIAAAUKAAAAMHhmZkZGZmZGRSsAAwEAAAAyHwMNAAAAMCAgICBvdmVy
+-ZmxvdwcCAAECAQAAAAACAAAFCgAAADB4NDAwMDAwMDAqAAMBAAAAMh8DAgAAADgwBwIAAQIBAAAA
+-AAIAAAUKAAAAMHg0MDAwMDAwMCoAAwEAAAA0HwMNAAAAMDAgICBvdmVyZmxvdw==
++AAAAAAQCBwAAAQAAAGECAAADAQAAADEfAQABAAAgICAgICAgICAgICAgICBhZGQgc3ViIG11bCBk
++aXYgICBkaXZ1ICAgICAgICAgICByZW0gICByZW11ICAgICBwb3cgYW5kIG9yICB4b3Igbm90IHNo
++bDEgc2FyMSAgc2hyMSAgIGVxdWFsIGluZXF1YWwgbGVzcyBncmVhdGVyIGxlc3NFcXVhbCBncmVh
++dGVyRXF1YWwgbG9naWNhbEFuZCBsb2dpY2FsT3IgdW5zaWduZWRMZXNzICB1bnNpZ25lZEdyZWF0
++ZXIgdW5zaWduZWRMZXNzRXF1YWwgdW5zaWduZWRHcmVhdGVyRXF1YWwgcGFyaXR5IG9kZCAgbmVn
++BwIAAAABCAAAAGV4YW1wbGVzAgEeAAAAAAMBAAAAMysAAwEAAAAyHwADAQAAADYtAAMBAAAANB8A
++AwEAAAA1KgADAQAAADUfAAMCAAAAMzIvAAMCAAAAMTAfAQMBAAAAMVwABQoAAAAweDEwMDAwMDAw
++HwADAgAAADMyJQADAgAAADEwHwEDAQAAADE6AAUEAAAAMHgxMB8AAwEAAAAzJAADAQAAADIfAAMB
++AAAANyYAAwEAAAAyHwADAQAAADV8AAMBAAAAMh8AAwEAAAA3XgADAQAAADIfAgQBAAAAMB8AAwEA
++AAAyWwADAQAAADIfAAMBAAAAOF0AAwEAAAAzHwEDAQAAADF9AAMCAAAAMjUfAAMBAAAANz0AAwEA
++AAA3HwADAQAAADdlAAMBAAAANx8AAwEAAAAyPAADAQAAADMfAAMBAAAAMj4AAwEAAAAzHwADAQAA
++ADlMAAMBAAAAOR8AAwEAAAA5RwADAQAAADkfAAMBAAAAMWEABAEAAAAwHwAEAQAAADBvAAMBAAAA
++MR8AAwEAAAAxdQAFCgAAADB4ZmZGRmZmRkYfAAMBAAAAMVUABQoAAAAweGZmRkZmZkZGHwEDAQAA
++ADFsAQMBAAAAMh8BAwEAAAAxZwAEAQAAADAfAAMBAAAANCEAAwEAAAAxHwADAQAAADJwAAMBAAAA
++MR8BBgEAAABhHwH/AAAAaGV4OiAgICAgICAgICAgNSAgIDIgICAxOSAgMyAgICAgZiAgICAgICAg
++ICAgICAgMiAgICAgZiAgICAgICAgOSAgICAgMiA3ICAgNSAgIGZmICA4ICAgIDEgICAgIDdmICAg
++ICAxICAgICAwICAgICAgIDEgICAgMCAgICAgICAxICAgICAgICAgMSAgICAgICAgICAgIDAgICAg
++ICAgICAgMSAgICAgICAgIDEgICAgICAgICAgICAgMCAgICAgICAgICAgICAgIDAgICAgICAgICAg
++ICAgICAgIDEgICAgICAgICAgICAgICAgICAgIDEgICAgICAxICAgIGZmGQYAAAB3X2FzX2UABwIA
++AQIBCQAAAG92ZXJmbG93cwIAAAMBAAAAMiQAAwIAAAAzMR8DBAAAADgwLi4HAgABAgEAAAAAAgAA
++AwEAAAAyJAADAgAAADMyHwMNAAAAMCAgICBvdmVyZmxvdwcCAAECAQAAAAACAAADAQAAADIkAAMC
++AAAAMzMfAxcAAAAwICAgIDEgb3ZlcmZsb3cgbWVzc2FnZQcCAAECAQAAAAACAAADAQAAADFbAAMC
++AAAAMzEfAwQAAAA4MC4uBwIAAQIBAAAAAAIAAAMBAAAAMVsAAwIAAAAzMh8DDQAAADAgICAgb3Zl
++cmZsb3cHAgABAgEAAAAAAgAABAEAAAAwWwADBAAAADExMTEfAwsAAAAwICAgIGRpcmVjdAcCAAEC
++AQAAAAACAAAFCgAAADB4ODAwMDAwMDBdAAMCAAAAMzEfAwQAAABmZi4uBwIAAQIBAAAAAAIAAAUK
++AAAAMHg4MDAwMDAwMF0AAwIAAAAzMh8DCwAAAGZmLi4gZGlyZWN0BwIAAQIBAAAAAAIAAAUKAAAA
++MHg0MDAwMDAwMF0AAwIAAAAzMR8DCwAAADAgICAgZGlyZWN0BwIAAQIBAAAAAAIAAAUKAAAAMHg4
++MDAwMDAwMH0AAwIAAAAzMR8DAQAAADEHAgABAgEAAAAAAgAABQoAAAAweDgwMDAwMDAwfQADAgAA
++ADMyHwMLAAAAMCAgICBkaXJlY3QHAgABAgEAAAAAAgAABQoAAAAweGZmRkZmZkZFKwADAQAAADEf
++AwIAAABmZgcCAAECAQAAAAACAAAFCgAAADB4ZmZGRmZmRkUrAAMBAAAAMh8DDQAAADAgICAgb3Zl
++cmZsb3cHAgABAgEAAAAAAgAABQoAAAAweDQwMDAwMDAwKgADAQAAADIfAwIAAAA4MAcCAAECAQAA
++AAACAAAFCgAAADB4NDAwMDAwMDAqAAMBAAAANB8DDQAAADAwICAgb3ZlcmZsb3c=
+--- ocompiler-1.orig/tests/.expected/unref.oc.x.txt
++++ ocompiler-1/tests/.expected/unref.oc.x.txt
+@@ -1,3 +1,3 @@
+-dgAAAAABAAAAYQAAAAAAAAQAAABtYWluAAAAAAEEAwUABwAAAHVucmVmLmgABwABAAAAYgIAAAMB
+-AAAAMR8GAAEAAABhAQAAAAAHAgEBAgABAAAAYwEAAwEAAAAxHwcCAQECAAEAAABkAQADAQAAADEf
+-Ex0GAwQAAABtYWluAAAAAAAIAAIAAAEBAAAAYQEAAABkAA==
++dwAAAAABAAAAYQAAAAAAAAQAAABtYWluAAAAAAEEAwUABwAAAHVucmVmLmgABwAAAQAAAGICAAAD
++AQAAADEfBgABAAAAYQEAAAAABwIBAQIAAQAAAGMBAAMBAAAAMR8HAgEBAgABAAAAZAEAAwEAAAAx
++HxMdBgMEAAAAbWFpbgAAAAAACAACAAABAQAAAGEBAAAAZAA=
+--- ocompiler-1.orig/tests/.expected/unref2.oc.x.txt
++++ ocompiler-1/tests/.expected/unref2.oc.x.txt
+@@ -1,3 +1,3 @@
+-AAAAAAABAAAAYQAAAAAABAMFAAcAAAB1bnJlZi5oAAcAAQAAAGICAAADAQAAADEfBgABAAAAYQEA
+-AAAABwIBAQIAAQAAAGMBAAMBAAAAMR8HAgEBAgABAAAAZAEAAwEAAAAxHxMdCgAAAQAAAGECAAAA
+-AAAGAQAAAGIfAgAAAQEAAABhAQAAAGMA
++AAAAAAABAAAAYQAAAAAABAMFAAcAAAB1bnJlZi5oAAcAAAEAAABiAgAAAwEAAAAxHwYAAQAAAGEB
++AAAAAAcCAQECAAEAAABjAQADAQAAADEfBwIBAQIAAQAAAGQBAAMBAAAAMR8THQoAAAEAAABhAgAA
++AAAABgEAAABiHwIAAAEBAAAAYQEAAABjAA==
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -17,9 +17,9 @@ char c3="45"
+ word c5=1;datau c6=1;str c7=1;value c8=1
+ vstr c9="";vword ca=1;vdata cb=1
+ char cc="\taz"^
+-
+ #constu a1=1
+ const a1=1
++constif a1=2 #ok
+ 
+ char a#3;value b^a
+ char no_hotgroup=1;value no_hotgroup_test^no_hotgroup
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -6,6 +6,14 @@ else
+ 	diffs=0
+ fi
+ e=.expected/
++to_expected () {
++	if [ -z "${is_log}" ]; then
++		base64 ${1} > ${exp}${1}.txt
++	else
++		mv ${1} ${exp}${1}
++		#chmod -x ${exp}${1}    #else, will be warning at dpkg-source
++	fi
++}
+ switch () {
+ 	test -e ${1}
+ 	if [ $? = 0 ]; then
+@@ -29,6 +37,7 @@ switch () {
+ 						if [ -n "${mod_and_cont}" ]; then
+ 							echo y \?; read -n1 -t $((60*60*24)) ans
+ 							if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++							to_expected ${1}
+ 							diffs=$((diffs+1))
+ 						else
+ 							exit 1
+@@ -41,12 +50,7 @@ switch () {
+ 				#	rm ${exp}${1}
+ 				#fi
+ 			else
+-				if [ -z "${is_log}" ]; then
+-					base64 ${1} > ${exp}${1}.txt
+-				else
+-					mv ${1} ${exp}${1}
+-					#chmod -x ${exp}${1}    #else, will be warning at dpkg-source
+-				fi
++				to_expected ${1}
+ 			fi
+ 		fi
+ 	fi
+--- ocompiler-1.orig/tests/c0
++++ ocompiler-1/tests/c0
+@@ -1,23 +1 @@
+-
+-if [ -z "${1}" ]; then echo error; exit 1; fi
+-
+-current=${1}.oc
+-exp=.expected/
+-
+-a=${current}.log
+-aa=${exp}${a}
+-diff ${a} ${aa}
+-
+-b=${1}.o
+-bb=${exp}${b}
+-bbb=${bb}.txt
+-base64 -d ${bbb} > ${bb}
+-diff ${b} ${bb}
+-rm ${bb}
+-
+-c=${current}.x
+-cc=${exp}${c}
+-ccc=${cc}.txt
+-base64 -d ${ccc} > ${cc}
+-diff ${c} ${cc}
+-rm ${cc}
++mod_and_cont=1 ./c 1
+--- /dev/null
++++ ocompiler-1/tests/c1
+@@ -0,0 +1,23 @@
++
++if [ -z "${1}" ]; then echo error; exit 1; fi
++
++current=${1}.oc
++exp=.expected/
++
++a=${current}.log
++aa=${exp}${a}
++diff ${a} ${aa}
++
++b=${1}.o
++bb=${exp}${b}
++bbb=${bb}.txt
++base64 -d ${bbb} > ${bb}
++diff ${b} ${bb}
++rm ${bb}
++
++c=${current}.x
++cc=${exp}${c}
++ccc=${cc}.txt
++base64 -d ${ccc} > ${cc}
++diff ${c} ${cc}
++rm ${cc}
+--- ocompiler-1.orig/tests/di
++++ ocompiler-1/tests/di
+@@ -1,2 +1,3 @@
+-
+-OCOMP=o ./d $@
++if [ -z "${OCOMP}" ]; then OCOMP=o; fi
++if [ -z "${OCONV}" ]; then OCONV=otoc; fi
++OCOMP=${OCOMP} OCONV=${OCONV} ./d $@
