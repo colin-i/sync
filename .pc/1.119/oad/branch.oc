@@ -1,0 +1,209 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+importx "malloc" malloc
+
+import "global_blog" global_blog
+
+#branch pointer
+function branch_init(valueu pf,valueu pbra)
+	valueu bra#1
+	set bra malloc((\branch\))
+	if bra!=(NULL)
+		valueu inners#1
+		set inners malloc((sprites_realloc_onepart))
+		if inners!=(NULL)
+			sv cuts;set cuts malloc(1) #symbolic, null malloc can be null return
+			if cuts!=(NULL)
+				set bra#:branch.cuts cuts
+				set bra#:branch.size 0
+
+				set bra#:branch.innerbranches inners
+				set bra#:branch.isize 0
+
+				set bra#:branch.suprabranch pbra
+				set bra#:branch.subbranch (NULL)
+
+				set bra#:branch.offset pf#:preframe.size
+
+				set pf#:preframe.branchpointer bra
+
+				charx blog#1;set blog global_blog()
+				if blog=(TRUE)
+					inc pf#:preframe.log_branchid
+					set bra#:branch.log_id pf#:preframe.log_branchid
+				end
+				return bra
+			end
+			call free(inners)
+		end
+		call free(bra)
+	end
+	return (NULL)
+end
+
+importx "realloc" realloc
+function branch_add(sv pf,dataxu size,dataxu offset,valueu code)
+	sub size offset
+	sv br;set br pf#:preframe.branchpointer
+
+	valueu sz#1;set sz br#:branch.size
+	add sz \branchcut\
+	valueu mem#1;set mem realloc(br#:branch.cuts,sz)
+	if mem!=(NULL)
+		set br#:branch.cuts mem
+		add mem sz
+		sub mem \branchcut\
+		set mem#:branchcut.x code
+		set mem#:branchcut.size size
+		set br#:branch.size sz
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+importx "printf" printf
+
+import "print_indent" print_indent
+import "print_unindent" print_unindent
+import "print_inline_start" print_inline_start
+import "prints_inline_start" prints_inline_start
+import "print_inline_done" print_inline_done
+import "print_iinline" print_iinline
+import "prints_inline" prints_inline
+import "printt" printt
+
+function branch_code(ssu code,valueu end,ss _a,ss _b,ss form)
+	ssu start;set start code
+	charx a#1;charx b#1
+	set a _a#;set b _b#
+	add end code
+	while code!=end
+	#best view command is same as in src/x.oc debug_x_pad
+		if b=0
+			if a=0
+				if start!=(NULL)
+					call print_inline_start(form,code#)
+				else
+					call prints_inline_start(form)
+				end
+				inc a;inc b;inc code
+				continue
+			end
+		end
+		if a<4
+			if start!=(NULL)
+				call printf(form,code#)
+			else
+				call printt(form)
+			end
+			inc a
+		elseif b<12
+			if start!=(NULL)
+				call print_iinline(form,code#)
+			else
+				call prints_inline(form)
+			end
+			set a 1;inc b
+		else
+			call print_inline_done()
+			set a 0;set b 0
+			continue
+		end
+		inc code
+	end
+	set _a# a;set _b# b
+end
+
+import "oadata_logpad_get" oadata_logpad_get #importx without args
+import "print_hex" print_hex
+
+function branch_log(sv br,valueu start)
+	call prints_inline_start("branch:")
+	valueu end#1;set end br#:branch.size
+
+	valueu cuts#1;set cuts br#:branch.cuts
+	dataxu sz#1;set sz 0
+	add end cuts
+	while cuts!=end
+		add sz cuts#:branchcut.size
+		add cuts \branchcut\
+	end
+	call print_iinline("id=%u",br#:branch.log_id)
+	call print_hex("size",sz)
+	set sz br#:branch.isize
+	if sz!=0 #most of the cases, it is best that only root has functions
+		div sz :
+		call print_iinline("inners=%u",sz)
+	end
+	call print_hex("aoffset",br#:branch.offset)
+	call prints_inline("code:")
+	call print_inline_done()
+
+	call print_indent()
+	set cuts br#:branch.cuts
+	while cuts!=end
+		ss code;set code cuts#:branchcut.x
+		set sz cuts#:branchcut.size
+
+		charx pad#1;set pad oadata_logpad_get()
+		#charx pad_minus_one#256-1 #was xlog_pad_default
+		#	#for branches with holes(like a function def there) a full 48 row is required
+		#	#here is the initial pad, that can be full row - 4 bytes. but if not padded can be - 1 byte, then, 47
+
+		valueu pad_sz#1;set pad_sz code
+		sub pad_sz start
+		dataxu strip_pad_sz#1;set strip_pad_sz pad_sz
+		divu strip_pad_sz pad
+		mult strip_pad_sz pad
+		sub pad_sz strip_pad_sz
+
+		charx a#1;charx b#1
+		set a 0;set b 0
+		call branch_code((NULL),pad_sz,#a,#b,"..")
+		call branch_code(code,sz,#a,#b,"%02X")
+		call print_inline_done()
+
+		add cuts \branchcut\
+	end
+	call print_unindent()
+end
+
+import "tree_entrylive" tree_entrylive
+
+importx "free" free
+
+function branch_free(valueu br,valueu logstart,dataxu indents)
+	if logstart!=(NULL)
+		call branch_log(br,logstart)
+	end
+	call free(br#:branch.cuts)
+
+	svu pointer#1;set pointer br#:branch.innerbranches
+	valueu end#1;set end pointer
+	add end br#:branch.isize
+	while pointer!=end
+		if logstart!=(NULL)
+			call tree_entrylive(indents,(xlog_innerbranch))
+			inc indents
+		end
+		call branch_free(pointer#,logstart,indents)
+		if logstart!=(NULL)
+			dec indents
+			call tree_entrylive(indents,(xlog_innerbranchend))
+		end
+		add pointer :
+	end
+	call free(br#:branch.innerbranches)
+
+	if br#:branch.subbranch!=(NULL)
+		if logstart!=(NULL)
+			call tree_entrylive(indents,(xlog_branch))
+		end
+		call branch_free(br#:branch.subbranch,logstart,indents)
+	end
+	call free(br)
+end
