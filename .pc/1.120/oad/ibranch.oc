@@ -1,0 +1,81 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+import "re_alloc" re_alloc
+import "branch_init" branch_init
+
+function ibranch_add(valueu pf)
+	valueu bra#1;set bra pf#:preframe.branchpointer
+	charx ok#1
+	set ok re_alloc(#bra#:branch.innerbranches,bra#:branch.isize)
+	if ok=(EXIT_SUCCESS)
+		svu pointer#1;set pointer bra#:branch.innerbranches
+		add pointer bra#:branch.isize
+		set pointer# branch_init(pf,bra) #no suprabranch, same as root
+		if pointer#!=(NULL)
+			add bra#:branch.isize :
+			return (EXIT_SUCCESS)
+		end
+	end
+	return (EXIT_FAILURE)
+end
+function ibranch_done(valueu pf)
+	valueu bra#1;set bra pf#:preframe.branchpointer
+	set pf#:preframe.branchpointer bra#:branch.topbranch
+end
+
+import "re_alloc_add" re_alloc_add
+
+function jumpforwardif_resolve(valueu pf,wordxu number)
+	dataxu offset#1;set offset pf#:preframe.size
+	sub offset number
+	valueu prev#1;set prev pf#:preframe.branchpointer
+	whiletrue
+		if prev#:branch.offset=offset  ##is /,,+offset/
+			charx ok#1;set ok re_alloc_add(#pf:preframe.actions_if,#pf:preframe.actions_if_size,prev#:branch.action_if)
+			return ok
+		end
+		#for forin break ends
+		if prev#:branch.offset_break=offset
+#			action_break
+			return (EXIT_SUCCESS)
+		end
+		set prev prev#:branch.suprabranch
+	end
+end
+function jumpforward_resolve(valueu pf,wordxu number)
+	dataxu offset#1;set offset pf#:preframe.size
+	sub offset number
+	valueu prev#1;set prev pf#:preframe.branchpointer
+	whiletrue
+		#for conditions end
+		if prev#:branch.offset=offset  ##is /,,&offset/
+#			charx ok#1;set ok re_alloc_add(#pf:preframe.actions_jump,#pf:preframe.actions_jump_size,prev#:branch.action_if)
+#			return ok
+			return (EXIT_SUCCESS)
+		end
+		#for break ends
+		if prev#:branch.offset_break=offset ##both on first? like If? whiletrue break var a} but this is not logical
+#			action_break
+			return (EXIT_SUCCESS)
+		end
+		set prev prev#:branch.suprabranch
+	end
+end
+function jumpbackward_resolve(valueu pf,wordxu number)
+	dataxu offset#1;set offset pf#:preframe.size
+	sub offset number
+	valueu prev#1;set prev pf#:preframe.branchpointer
+	whiletrue
+		if prev#:branch.offset_loop=offset ##can be ,,|,,$
+			#link prev action to loop start action
+			valueu last#1;set last pf#:preframe.action_last
+			set last#:action.next prev#:branch.action_loop
+			break
+		end
+		set prev prev#:branch.suprabranch
+	end
+end

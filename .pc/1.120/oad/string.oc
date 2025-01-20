@@ -1,0 +1,226 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+import "re_alloc" re_alloc
+
+importx "malloc" malloc
+importx "printf" printf
+importx "putchar" putchar
+importx "free" free
+importx "strlen" strlen
+
+#multithread unsafe
+char indents=0
+#
+
+const ui8max_=256
+
+#                            # is xlog_new_size
+function string_add(sv pf,sv p_string_off,valueu strings_base,charx type,sd _recalculation,charx inlogtype)
+	charx ok#1
+	valueu str#1;sv dest
+	if type=(xlog_new)
+		set ok re_alloc(#pf#:preframe.strings,pf#:preframe.ssize)
+		if ok=(EXIT_SUCCESS)
+			set str malloc((\string\))
+			if str!=(NULL)
+				valueu branches#1
+				set branches malloc((sprites_realloc_onepart))
+				if branches=(NULL)
+					call free(str)
+					return (EXIT_FAILURE)
+				end
+				set str#:string.branches branches
+				set str#:string.size 0
+
+				set str#:string.base strings_base  ##in two steps for log.
+				set str#:string.off p_string_off#
+
+				if _recalculation!=(NULL)
+					if inlogtype=(xlog_const16_log) #index can be lower in final
+						dataxu items#1;set items pf#:preframe.ssize
+						divu items :
+						if items<^(ui8max_)
+							dec _recalculation#
+						end
+					end
+				end
+
+				set dest pf#:preframe.strings
+				add dest pf#:preframe.ssize
+				set dest# str
+				add pf#:preframe.ssize :
+
+				return (EXIT_SUCCESS)
+			end
+		end
+	else #xlog_unique
+		set ok re_alloc(#pf#:preframe.ustrings,pf#:preframe.ussize)
+		if ok=(EXIT_SUCCESS)
+			set str malloc((\ustring\))
+			if str!=(NULL)
+				set str#:ustring.base strings_base  ##in two steps for log.
+				set str#:ustring.off p_string_off#
+				set str#:ustring.ubranch pf#:preframe.branchpointer
+
+				if _recalculation!=(NULL)
+					add strings_base p_string_off#
+					add _recalculation# strlen(strings_base)
+					if inlogtype=(xlog_const16_log) #
+						dec _recalculation#
+					end
+				end
+
+				set dest pf#:preframe.ustrings
+				add dest pf#:preframe.ussize
+				set dest# str
+				add pf#:preframe.ussize :
+
+				return (EXIT_SUCCESS)
+			end
+		end
+	end
+	return (EXIT_FAILURE)
+end
+
+function indent()
+	charx i#1
+	set i global.indents
+	while i>0
+		call putchar((Tab))
+		dec i
+	end
+end
+
+importx "fputs" fputs
+importx "stdout" stdout
+importx "fputc" fputc
+
+function printn(sv s)
+	call fputc((NewLine),s)
+end
+function printt(ss str)
+	sv so^stdout  #isn't at c an extra step? who cares, at o, to put stdout an arg is like putting the pointer
+	call fputs(str,so#)
+end
+function print_indent()
+	inc global.indents
+end
+function print_unindent()
+	dec global.indents
+end
+function print(ss format,valueu value)
+	call indent()
+	call printf(format,value)
+	call print_inline_done()
+end
+function prints(ss format)
+	call indent()
+	call printt(format)
+	call print_inline_done()
+end
+function prints_inline_start(ss str)
+	call indent()
+	call printt(str)
+end
+function print_inline_start(ss format,valueu value)
+	call indent()
+	call printf(format,value)
+end
+function print_iinline(ss format,dataxu value)
+	call putchar((Space))
+	call printf(format,value)
+end
+function prints_inline(ss format)
+	call putchar((Space))
+	call printt(format)
+end
+function print_inline_done()
+	sv so^stdout  #isn't at c an extra step? who cares, at o is not possible without this
+	call printn(so#)
+end
+
+import "memnl" memnl
+
+importx "fwrite" fwrite
+function print_text(ss a,valueu c)
+	sv so^stdout
+	ss b
+	valueu d#1
+	add c a
+	while a!=c
+		set d memnl(a,#b) #more in the function, \r\n example
+		if d!=a  #why to write a whitespaces row?
+			sub d a
+			call indent()
+			call fwrite(a,d,1,so#)
+			call print_inline_done()
+		end
+		set a b
+	end
+end
+
+importx "stderr" stderr
+function printe(ss er)
+	sv se^stderr
+	set se se#
+	call fputs(er,se)
+	call printn(se)
+end
+
+function print_hex_start(ss front,dataxu value)
+	call printf("%s=0x%X",front,value)
+end
+function print_hhex(ss front,wordxu value)
+	call putchar((Space))
+	call printf("%s=0x%hX",front,value)
+end
+function print_hex(ss front,dataxu value)
+	call putchar((Space))
+	call print_hex_start(front,value)
+end
+function print_lhex(ss front,valueu value)
+	call putchar((Space))
+	call printf("%s=0x%lX",front,value)
+end
+
+function string_log(valueu base,valueu off)
+	add base off
+	inc off ##to log like in .x where 0 is NULL and 1 is offset 0
+	call print_lhex(base,off)  #will recognize the branch (visual) when having the string -> branch link and the branch offset
+end
+
+import "re_alloc_add" re_alloc_add
+
+function string_id(valueu prefr,swu xxcontent,sd _recalculation,charx inlogtype)
+	wordxu id#1;set id xxcontent#
+	if _recalculation!=(NULL)
+		if inlogtype=(xlog_const16_log) #same
+			if id<^(ui8max_)
+				dec _recalculation#
+			end
+		end
+	end
+	sv str=:
+	mult str id
+	add str prefr#:preframe.strings
+	set str str#
+	valueu current_branch#1;set current_branch prefr#:preframe.branchpointer
+	valueu start#1;set start str#:string.branches
+	valuexu pointer#1;set pointer start
+	add pointer str#:string.size
+	while start!=pointer
+		sub pointer :
+		if pointer#=current_branch
+			return (EXIT_SUCCESS) #is on same branch, same cut if first match, else on another cut
+		end
+	end
+	charx ok#1
+	set ok re_alloc_add(#str#:string.branches,#str#:string.size,current_branch)
+	return ok
+end
+
+entryraw global()

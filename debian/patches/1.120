@@ -1,0 +1,1094 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-120) bionic; urgency=medium
+ .
+   * flush_end fix, and a trick at offset_loop
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-01-20
+
+--- actionswf-1.orig/include/ascii.h
++++ actionswf-1/include/ascii.h
+@@ -9,10 +9,10 @@ Const Nullchar=0x00
+ #Const Bell=0x07
+ #Const BackSpace=0x08
+ Const HorizontalTab=0x09
+-Const LineFeed=0x0A
++#Const LineFeed=0x0A
+ #Const VerticalTab=0x0B
+ #Const FormFeed=0x0C
+-Const CarriageReturn=0x0D
++#Const CarriageReturn=0x0D
+ #Const ShiftOut=0x0E
+ #Const ShiftIn=0x0F
+ #Const DataLineEscape=0x10
+--- actionswf-1.orig/include/xlog.h.oh
++++ actionswf-1/include/xlog.h.oh
+@@ -7,6 +7,10 @@ const xlog_unique_new_size=: ;#DWORD/QWO
+ const xlog_id=2
+ const xlog_id_size=2 #WORD
+ 
++const xlog_nl=0x0A
++const text_nl=xlog_nl
++const text_cr=0x0D
++
+ const xlog_break=0x21         ;# !
+ const xlog_forin=0x23          ##
+ const xlog_jumpback=0x24      ;#$
+@@ -17,6 +21,11 @@ const xlog_jumpif=0x2B        ;#+
+ const xlog_act=0x2C            #,
+ const xlog_branch=0x2F        ;#/
+ #0-9
++const xlog_const8_log=0x30
++const xlog_const16_log=0x31
++const xlog_forin_break=0x30
++const xlog_forin_return=0x31
++#
+ const xlog_function=0x40       #@
+ #A-F
+ const xlog_string=0x5E        ;#^
+@@ -37,11 +46,5 @@ const actionrecordheader_tag_size=1
+ const actionrecordheader_length_size=2
+ const actionrecordheader_size=actionrecordheader_tag_size+actionrecordheader_length_size
+ 
+-const xlog_const8_log=0x30
+-const xlog_const16_log=0x31
+-
+ const actionpush_type=1     #BYTE
+ const actionpush_integer=4  #DWORD
+-
+-const xlog_forin_break=0x30
+-const xlog_forin_return=0x31
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -34,11 +34,15 @@ function branch_init(valueu pf,valueu pt
+ 				set bra#:branch.offset_loop (no_loop)
+ 				set bra#:branch.offset_break (no_loop)
+ 
++				set bra#:branch.action_top (NULL) ##normaly branch.size!=0 but that implies pointer_to_action and that will not work between action calls
++
+ 				charx blog#1;set blog global_blog()
+ 				if blog=(TRUE)
+ 					inc pf#:preframe.log_branchid
+ 					set bra#:branch.log_id pf#:preframe.log_branchid
+ 					set bra#:branch.log_fn 0
++					set bra#:branch.log_backjumps 0
++					set bra#:branch.log_fwdjumps 0
+ 				end
+ 				return bra
+ 			end
+@@ -154,6 +158,12 @@ function branch_log(sv br,valueu start)
+ 	if br#:branch.log_fn!=0
+ 		call print_hhex("afsize",br#:branch.log_fn)
+ 	end
++	if br#:branch.log_backjumps!=0
++		call print_iinline("bjump=%u",br#:branch.log_backjumps)
++	end
++	if br#:branch.log_fwdjumps!=0
++		call print_iinline("fjump=%u",br#:branch.log_fwdjumps)
++	end
+ 	call prints_inline("code:")
+ 	call print_inline_done()
+ 
+--- actionswf-1.orig/oad/common.h.oh
++++ actionswf-1/oad/common.h.oh
+@@ -9,8 +9,6 @@ const SEEK_SET=0
+ const SEEK_END=2
+ 
+ const Tab=0x9
+-const NewLine=0xa
+-const CReturn=0xd
+ const Space=0x20
+ const Comma=0x2c
+ const ZeroChar=0x30
+@@ -20,6 +18,7 @@ const F=0x46
+ const El=0x65
+ const Il=0x69
+ const Ml=0x6d
++const Rl=0x72
+ 
+ #override include_sec 1
+ einclude "../include/xlog.h" "../include/xlog.h.oh" #e? xlog_id is else
+@@ -53,7 +52,8 @@ function preframe()
+ 	valueu action_last#1
+ 	valuexu actions_if#1 ;#is also between action calls, if jump forwards to End must set if_flag
+ 	dataxu actions_if_size#1
+-#	valuexu actions_jump#1 #here is ok to have NULL next if to End
++	valuexu actions_jump#1 #here is ok to have NULL next if to End
++	dataxu actions_jump_size#1
+ 
+ 	#log only
+ 	value log_recalculation#1 #can be on 32 bits, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
+@@ -81,7 +81,7 @@ function branch()
+ 	dataxu offset#1       #at jumpforward, and at log
+ 	dataxu offset_loop#1  #if the branch has a loop start, else use no_loop . and at forin_breaks
+ 	dataxu offset_break#1 #only 1 is logical, at second must error else will do segmentation
+-#	valueu action#1      #branch start action, for mark, after compare
++	valueu action_top#1      #branch start action, for mark, after compare
+ 	valueu action_if#1   #is last suprabranch action (if is not root) to resolve jumpforward (ActionIf) if will be the case
+ 	valueu action_loop#1 #if is an offset_loop, next will be the action_loop that can be linked (there are exceptions like ret_cont_break cases)
+ 	valueu action_break#1
+@@ -89,6 +89,8 @@ function branch()
+ 
+ 	dataxu log_id#1  #for strings log
+ 	wordxu log_fn#1  #nostalgia
++	wordxu log_backjumps#1 #not dataxu? totalvalues is short
++	wordxu log_fwdjumps#1  #not dataxu? totalvalues is short
+ end
+ function branchcut()
+ 	vdataxu x#1   #ints everywhere and pointers for strings, will not memcpy
+@@ -112,3 +114,5 @@ const from_show=1
+ const pad_default=0x100
+ 
+ const no_loop=0xffFFffFF
++
++const output_nl=xlog_nl #this must be the same with what is in memnl(), or change it
+--- actionswf-1.orig/oad/compare.oc
++++ actionswf-1/oad/compare.oc
+@@ -295,12 +295,15 @@ function presprite_init(svu newpointer,s
+ 	return (EXIT_FAILURE)
+ end
+ 
+-function presprite_done(sv sprites,wordxu preid,wordxu id,sv data)
++import "jumpforwards_done" jumpforwards_done
++
++function presprite_done(sv sprites,wordxu preid,wordxu id,sv data,sv presprites)
+ 	sv pointer=:
+ 	mult pointer preid
+ 	if pointer<^global.presprites_size  ##can be a done with no action/show
+ 		add pointer sprites
+ 		if pointer#!=(NULL)     #same
++			call jumpforwards_done(presprites,preid)
+ 			sv destination=:
+ 			mult destination id
+ 			add destination :   #for size comparison
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -73,24 +73,31 @@ function preframe_init()
+ 				sv ifs
+ 				set ifs malloc((sprites_realloc_onepart))
+ 				if ifs!=(NULL)
+-					charx blog#1;set blog global_blog()
+-					if blog=(TRUE)
+-						set pf#:preframe.log_recalculation 0
+-						call tree_frame_init(pf)
+-						set pf#:preframe.log_xsize 0
+-						set pf#:preframe.log_branchid -1  #will inc to 0 at branch_init
+-					end
+-					set pf#:preframe.size 0  #used at branch_init
+-					set pf#:preframe.abranch branch_init(pf) #no ,topbranch,suprabranch since this is on root level and } can't happen and there is nothing for suprabranch
+-					if pf#:preframe.abranch!=(NULL)
+-						set pf#:preframe.ustrings ustrings
+-						set pf#:preframe.ussize 0
+-						set pf#:preframe.strings strings
+-						set pf#:preframe.ssize 0
+-						set pf#:preframe.action_last (NULL)
+-						set pf#:preframe.actions_if ifs
+-						set pf#:preframe.actions_if_size 0
+-						return pf
++					sv jumps
++					set jumps malloc((sprites_realloc_onepart))
++					if jumps!=(NULL)
++						charx blog#1;set blog global_blog()
++						if blog=(TRUE)
++							set pf#:preframe.log_recalculation 0
++							call tree_frame_init(pf)
++							set pf#:preframe.log_xsize 0
++							set pf#:preframe.log_branchid -1  #will inc to 0 at branch_init
++						end
++						set pf#:preframe.size 0  #used at branch_init
++						set pf#:preframe.abranch branch_init(pf) #no ,topbranch,suprabranch since this is on root level and } can't happen and there is nothing for suprabranch
++						if pf#:preframe.abranch!=(NULL)
++							set pf#:preframe.ustrings ustrings
++							set pf#:preframe.ussize 0
++							set pf#:preframe.strings strings
++							set pf#:preframe.ssize 0
++							set pf#:preframe.action_last (NULL)
++							set pf#:preframe.actions_if ifs
++							set pf#:preframe.actions_if_size 0
++							set pf#:preframe.actions_jump jumps
++							set pf#:preframe.actions_jump_size 0
++							return pf
++						end
++						call free(jumps)
+ 					end
+ 					call free(ifs)
+ 				end
+@@ -202,6 +209,7 @@ function preframe_free(sv pf,charx ainit
+ 	end
+ 
+ 	call free(pf#:preframe.actions_if)
++	call free(pf#:preframe.actions_jump)
+ 	call free(pf)
+ end
+ 
+@@ -240,15 +248,10 @@ end
+ import "print_text" print_text
+ import "prints" prints
+ 
+-function frame_print_action(valueu v,valueu against,charx c,charx a)
+-	if v!=against
+-		if a=(FALSE)
+-			ret
+-		end
+-	elseif a=(TRUE)
+-		ret
++function frame_print_action(valueu a,valueu b,charx c)
++	if a!=b
++		call putchar(c)
+ 	end
+-	call putchar(c)
+ end
+ function frame_print(valueu n,dataxu nr_actions,valueu actions)
+ 	call putchar((Space))
+@@ -258,12 +261,15 @@ function frame_print(valueu n,dataxu nr_
+ 	mult end nr_actions
+ 	add end actions
+ 	while actions!=end
+-		# i+e can be, only m is alone
+-		call frame_print_action(actions#:action.amark,(action_mark_default),(Ml),(TRUE)) #this goes full 64 bits on both o/c
+-		call frame_print_action(actions#:action.nextif,(action_nextif_default),(Il),(TRUE))
+-		#Fl if_end
+-		call frame_print_action(actions#:action.next,(action_next_default),(El),(FALSE)) #at loop end,if this there, still need to ask if actions!=NULL	#this is also good at cut ends
+-		#Rl return_end
++		# m can't be with i/f
++		#these functions to have this function small? yes, and will be hard coded if not this way
++		call frame_print_action(actions#:action.amark,(action_mark_default),(Ml)) #call (int,imm32) #this goes full 64 bits on both o/c, there ulong,ulong
++		call frame_print_action(actions#:action.nextif,(action_nextif_default),(Il))
++#		call frame_print_action(actions#:action.if_flag,(flag_notset),(Fl))
++		if actions#:action.next=(action_next_default)
++			call frame_print_action(actions#:action.return_flag,(flag_set),(El)) #at loop end,if this there, still need to ask if actions!=NULL	#this is also good at cut ends
++			call frame_print_action(actions#:action.return_flag,(flag_notset),(Rl))
++		end
+ 		add actions \action\
+ 	end
+ end
+@@ -414,7 +420,7 @@ function frame_text_add(valueu fr,svu _t
+ 		sub p starttext
+ 		call memcpy(mem,starttext,p)
+ 		add mem p
+-		set mem# (NewLine)
++		set mem# (output_nl)
+ 		inc mem
+ 		set starttext next
+ 	end
+@@ -471,7 +477,9 @@ function frame_actions(valueu fr,valueu
+ 				while pointer!=cursor
+ 					sub cursor \action\
+ 					set cursor#:action.next (action_next_default)     #last one is null
++					set cursor#:action.return_flag (flag_notset)
+ 					set cursor#:action.nextif (action_nextif_default) #other way at ActionIf
++					set cursor#:action.if_flag (flag_notset)
+ 					set cursor#:action.amark (action_mark_default)    #other way at branch start
+ 				end
+ 				set _actions# pointer
+--- actionswf-1.orig/oad/ibranch.oc
++++ actionswf-1/oad/ibranch.oc
+@@ -34,48 +34,77 @@ function jumpforwardif_resolve(valueu pf
+ 	sub offset number
+ 	valueu prev#1;set prev pf#:preframe.branchpointer
+ 	whiletrue
++		charx ok#1
+ 		if prev#:branch.offset=offset  ##is /,,+offset/
+-			charx ok#1;set ok re_alloc_add(#pf:preframe.actions_if,#pf:preframe.actions_if_size,prev#:branch.action_if)
++			set ok re_alloc_add(#pf:preframe.actions_if,#pf:preframe.actions_if_size,prev#:branch.action_if)
+ 			return ok
+ 		end
+ 		#for forin break ends
+ 		if prev#:branch.offset_break=offset
+-#			action_break
+-			return (EXIT_SUCCESS)
++			set ok re_alloc_add(#pf:preframe.actions_if,#pf:preframe.actions_if_size,prev#:branch.action_break)
++			return ok
+ 		end
+ 		set prev prev#:branch.suprabranch
+ 	end
+ end
++import "printe" printe
+ function jumpforward_resolve(valueu pf,wordxu number)
+ 	dataxu offset#1;set offset pf#:preframe.size
+ 	sub offset number
+ 	valueu prev#1;set prev pf#:preframe.branchpointer
+ 	whiletrue
+-		#for conditions end
++		charx ok#1
++		#for conditions end, this will resolve also break ends
+ 		if prev#:branch.offset=offset  ##is /,,&offset/
+-#			charx ok#1;set ok re_alloc_add(#pf:preframe.actions_jump,#pf:preframe.actions_jump_size,prev#:branch.action_if)
+-#			return ok
+-			return (EXIT_SUCCESS)
++			set ok re_alloc_add(#pf:preframe.actions_jump,#pf:preframe.actions_jump_size,prev#:branch.action_if)
++			return ok
+ 		end
+-		#for break ends
++		#this is catching unreachable code after break end
+ 		if prev#:branch.offset_break=offset ##both on first? like If? whiletrue break var a} but this is not logical
+-#			action_break
+-			return (EXIT_SUCCESS)
++			call printe("unreachable code after break")
++			return (EXIT_FAILURE)
+ 		end
+ 		set prev prev#:branch.suprabranch
+ 	end
+ end
+-function jumpbackward_resolve(valueu pf,wordxu number)
++function jumpbackward_resolved(valueu dest,valueu src,charx log,valueu br)
++	set dest#:action.next src
++	if log=(TRUE)
++		inc br#:branch.log_backjumps
++	end
++end
++function jumpbackward_resolve(valueu pf,wordxu number,charx log)
+ 	dataxu offset#1;set offset pf#:preframe.size
+ 	sub offset number
+ 	valueu prev#1;set prev pf#:preframe.branchpointer
+ 	whiletrue
+ 		if prev#:branch.offset_loop=offset ##can be ,,|,,$
+ 			#link prev action to loop start action
+-			valueu last#1;set last pf#:preframe.action_last
+-			set last#:action.next prev#:branch.action_loop
++			call jumpbackward_resolved(pf#:preframe.action_last,prev#:branch.action_loop,log,prev)
+ 			break
+ 		end
+ 		set prev prev#:branch.suprabranch
+ 	end
+ end
++
++function jumpforwards_frame_done(valueu prefr)
++	if prefr!=(NULL)  #else if from_show / no aframe
++		if prefr#:preframe.actions_if_size!=0
++		end
++		if prefr#:preframe.actions_jump_size!=0
++		end
++	end
++end
++function jumpforwards_done(sv presprites,sv prespr) #id will be word*4
++	mult prespr :
++	add prespr presprites
++	set prespr prespr#
++	call jumpforwards_frame_done(prespr#:presprite.apreframe)
++	svu pointer;set pointer prespr#:presprite.preframes
++	valueu end#1;set end pointer
++	add end prespr#:presprite.size
++	while pointer!=end
++		call jumpforwards_frame_done(pointer#)
++		add pointer :
++	end
++end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -43,20 +43,20 @@ end
+ #at these memnl the last row is ending in nl from src
+ function memnlcr(ss log,sv pnext,sv _cr) #here is moving through text, an example with cr: ffdec action output is \r\n
+ 	set pnext# 1
+-	if log#!=(NewLine) #empty row / last row
++	if log#!=(xlog_nl) #empty row / last row
+ 		whiletrue
+-			if log#=(NewLine)
++			if log#=(text_nl)
+ 				add pnext# log
+ 				dec log
+-				if log#!=(CReturn)
++				if log#!=(text_cr)
+ 					inc log
+ 				end
+ 				break
+ 			end
+-			if log#=(CReturn)
++			if log#=(text_cr)
+ 				add pnext# log
+ 				ss next;set next pnext#
+-				if next#=(NewLine)
++				if next#=(text_nl)
+ 					add pnext# 1
+ 					if _cr!=(NULL)
+ 						add _cr# 1
+@@ -73,9 +73,9 @@ function memnlcr(ss log,sv pnext,sv _cr)
+ end
+ function memnl(ss log,sv pnext) #here is moving only on nl from src
+ 	set pnext# 1
+-	if log#!=(NewLine) #emptyrow
++	if log#!=(xlog_nl) #emptyrow
+ 		inc log
+-		while log#!=(NewLine)
++		while log#!=(xlog_nl)
+ 			inc log
+ 		end
+ 		add pnext# log
+@@ -172,6 +172,7 @@ import "tree_entry_end" tree_entry_end
+ import "jumpforward_resolve" jumpforward_resolve
+ import "jumpforwardif_resolve" jumpforwardif_resolve
+ import "jumpbackward_resolve" jumpbackward_resolve
++import "jumpbackward_resolved" jumpbackward_resolved
+ import "printe" printe
+ 
+ function actionrow(ss inlog,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data,svu _text,svu _pointer_to_action_loop)
+@@ -222,32 +223,54 @@ function actionrow(ss inlog,sd end,sv px
+ 						end
+ 					end
+ 				end
+-				#if actions!=actions_start_on_this_line ##first link is with another line
++				svu p_a
+ 				if _pointer_to_action_loop#!=(NULL) #can also be on first action, this if is not relevant for action_if (both cases can be)
+-					svu p_a_l;set p_a_l _pointer_to_action_loop#
+-					set p_a_l# actions
++					set p_a _pointer_to_action_loop#
++					set p_a# actions
+ 					set _pointer_to_action_loop# (NULL)
+ 				end
+-#				if _pointer_to_action#!=(NULL)
+-#				end
++				set branch_item prefr#:preframe.branchpointer
++				if branch_item#:branch.action_top=(NULL)
++					set branch_item#:branch.action_top actions ##this is better than _pointer_to_action# because is working between action calls
++				end
+ 				if prefr#:preframe.action_last!=(NULL) #cannot work on first frame action, here is also for action_if
++					svu begin;svu pointer
+ 					if prefr#:preframe.actions_if_size!=0
+-						svu begin;set begin prefr#:preframe.actions_if
+-						svu pointer;set pointer begin
++						set begin prefr#:preframe.actions_if
++						set pointer begin
+ 						add pointer prefr#:preframe.actions_if_size
+ 						while begin!=pointer
+ 							sub pointer :
+-#							action.nextif
++							set act pointer#
++							set act#:action.nextif actions
+ 						end
+ 						set prefr#:preframe.actions_if_size 0
+ 					end
+-#					if prefr#:preframe.actions_jump_size!=0  # inline ifelse and inter_for are resolved at innerbranch out, here only conditions_ends/breaks jumps
+-#						action.next
+-#					end
++					if prefr#:preframe.actions_jump_size!=0  # inline ifelse and inter_for are resolved at innerbranch out, here only conditions_ends/breaks jumps
++						set begin prefr#:preframe.actions_jump
++						set pointer begin
++						add pointer prefr#:preframe.actions_jump_size
++						if global.blog=(TRUE)
++							while begin!=pointer
++								sub pointer :
++								set act pointer#
++								set act#:action.next actions
++								inc branch_item#:branch.log_fwdjumps
++							end
++						else
++							while begin!=pointer
++								sub pointer :
++								set act pointer#
++								set act#:action.next actions
++							end
++						end
++						set prefr#:preframe.actions_jump_size 0
++					end
+ 					set act prefr#:preframe.action_last
+ 					if act#:action.next=(NULL) #else is a jumpback, this if is not relevant for action_if (both cases can be)
+-					#					if return_flag = not_set . why not next=~NULL? is not cosmetic
+-						set act#:action.next actions
++						if act#:action.return_flag=(flag_notset) #why not next=~NULL? is not cosmetic
++							set act#:action.next actions
++						end
+ 					end
+ 				end
+ 				set prefr#:preframe.action_last actions
+@@ -289,11 +312,13 @@ function actionrow(ss inlog,sd end,sv px
+ 					return (EXIT_FAILURE)
+ 				end
+ 				set branch_item prefr#:preframe.branchpointer
+-				set branch_item#:branch.subbranch branch_init(prefr,branch_item#:branch.topbranch,branch_item)
+-				if branch_item#:branch.subbranch=(NULL)
++				valueu branch_value#1
++				set branch_value branch_init(prefr,branch_item#:branch.topbranch,branch_item)
++				if branch_value=(NULL)
+ 					return (EXIT_FAILURE)
+ 				end
+-				set branch_item#:branch.action_if prefr#:preframe.action_last ##can also be NULL if there are whiletrue break tricks
++				set branch_item#:branch.subbranch branch_value
++				set branch_value#:branch.action_if prefr#:preframe.action_last ##can also be NULL if there are whiletrue break tricks
+ 				#										is not always required, example at simple if end
+ 				if global.blog=(TRUE)
+ 					call tree_entry_ex(prefr,(xlog_branch))
+@@ -324,13 +349,14 @@ function actionrow(ss inlog,sd end,sv px
+ 				set act branch_item#:branch.action_cut
+ 				set act#:action.next (NULL)  #in a normal case when the inner branch is not 0, was jump/definefunction linked to next
+ 				set prefr#:preframe.action_last act
++				#set _pointer_to_action# (NULL) #in case was 0 size with no actions, this branch already has this, last action was DefineFunction/ActionJump/ActionIf
+ 				if global.blog=(TRUE)
+ 					call tree_entry_end(prefr)
+ 				end
+ 				inc inlog
+ 			elseif inlog#=(xlog_return)
+ 				set act prefr#:preframe.action_last
+-				#set act#:action.return_flag (set)
++				set act#:action.return_flag (flag_set)
+ 				inc inlog
+ 			elseif inlog#=(xlog_function)
+ 				set ok function(data)
+@@ -347,7 +373,7 @@ function actionrow(ss inlog,sd end,sv px
+ 				end
+ 			elseif inlog#=(xlog_jumpback) # at loop end , continue. is goot to set next action to be somewhere inside a suprabranch
+ 				set inlog memhex_parse_withinc(inlog,#number)  #ActionJump BranchOffset SI16(here 15 bits)
+-				call jumpbackward_resolve(prefr,number)
++				call jumpbackward_resolve(prefr,number,global.blog)
+ 			elseif inlog#=(xlog_loop) # is for branch loop start mark and then will leave the branch for a subbranch
+ 				set branch_item prefr#:preframe.branchpointer
+ 				set branch_item#:branch.offset_loop prefr#:preframe.size
+@@ -364,9 +390,14 @@ function actionrow(ss inlog,sd end,sv px
+ 				inc inlog
+ 			else #xlog_forin
+ 				inc inlog
+-				if inlog#=(xlog_forin_break) #backjump if,eq,to push
+-				else # xlog_forin_return     #backifjump not,eq,to push
++				set act actions
++				sub act 4*\action\
++				if inlog#=(xlog_forin_break) #back jump,if,eq,push
++					call jumpbackward_resolved(act,prefr#:preframe.action_last,global.blog,prefr#:preframe.branchpointer)
++				else # xlog_forin_return     #backif jump,not,eq,push
++					set act#:action.nextif prefr#:preframe.action_last
+ 				end
++				inc inlog
+ 			end
+ 		end
+ 		return (EXIT_SUCCESS)
+@@ -413,7 +444,7 @@ function loop(ss inlog,sv x,sd xx,sd log
+ 				else #done, here for sprite, already opened or ignore it (no action/show)
+ 					wordxu id#1
+ 					set id memdec(inlog,p) #[inlog,p) ui16
+-					set ok presprite_done(psprites#,preid,id,data)
++					set ok presprite_done(psprites#,preid,id,data,ppresprites#)
+ 					if ok!=(EXIT_SUCCESS)
+ 						return (EXIT_FAILURE)
+ 					end
+--- actionswf-1.orig/oad/log.oc
++++ actionswf-1/oad/log.oc
+@@ -25,7 +25,7 @@ importx "free" free
+ import "print_text" print_text
+ function tree_frame_free(valueu pf)
+ 	if pf#:preframe.log_mem!=(NULL)
+-		call tree_entry_ex(pf,(NewLine))  #for memnl, if for prints will be '\0'
++		call tree_entry_ex(pf,(output_nl))  #for memnl, if for prints will be '\0'
+ 		call print_text(pf#:preframe.log_mem,pf#:preframe.log_size)
+ 		call free(pf#:preframe.log_mem)
+ 	end
+@@ -68,13 +68,13 @@ function tree_indents(valueu pf)
+ 	end
+ end
+ function tree_entry_start(valueu pf)
+-	call tree_entry_ex(pf,(NewLine))
++	call tree_entry_ex(pf,(output_nl))
+ 	call tree_indents(pf)
+ 	inc pf#:preframe.log_indents
+ 	call tree_entry_ex(pf,(xlog_innerbranch))
+ end
+ function tree_entry_end(valueu pf)
+-	call tree_entry_ex(pf,(NewLine))
++	call tree_entry_ex(pf,(output_nl))
+ 	dec pf#:preframe.log_indents
+ 	call tree_indents(pf)
+ 	call tree_entry_ex(pf,(xlog_innerbranchend))
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -63,7 +63,7 @@ functionx oadata_make(ss swf_fullpath,sv
+ 									set exit tree_exit()
+ 								end
+ 								if exit=(EXIT_SUCCESS)
+-									set exit presprite_done(sprites,0,0,poadata#) #root has not a done(0 to 0) in .log
++									set exit presprite_done(sprites,0,0,poadata#,presprites) #root has not a done(0 to 0) in .log
+ 									if exit=(EXIT_SUCCESS)
+ 										set exit inter(swf_fullpath)
+ 									end
+--- actionswf-1.orig/oad/oadbgdatas.h.oh
++++ actionswf-1/oad/oadbgdatas.h.oh
+@@ -35,10 +35,16 @@ end
+ const action_next_default=NULL
+ const action_nextif_default=NULL
+ const action_mark_default=-1
++const flag_notset=0
++const flag_set=1
+ function action()
+-	valuexu next#1   #at log e if default
+-	valuexu nextif#1 #at log i if not default
+-	datax amark#1    #at log m if not default
++	valuexu next#1      #at log e if default
++	charx return_flag#1 #r
++
++	valuexu nextif#1    #at log i if not default
++	charx if_flag#1     #f
++
++	datax amark#1       #at log m if not default
+ end
+ function mark()
+ 	datax prev#1
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -100,7 +100,7 @@ importx "stdout" stdout
+ importx "fputc" fputc
+ 
+ function printn(sv s)
+-	call fputc((NewLine),s)
++	call fputc((output_nl),s)
+ end
+ function printt(ss str)
+ 	sv so^stdout  #isn't at c an extra step? who cares, at o, to put stdout an arg is like putting the pointer
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -541,9 +541,11 @@ function action_code_write_conditions(sd
+ 		sd c2=0
+ 		setcall codepointer action_code_right_util_ex(codepointer,#c2)
+ 		call write_ifjump_withNot(c2)
+-		call debug_xlog(codepointer) #after jump
+-		#before: .x is also not knowing about that . but now with .xx is not a .x parse
+ 	end
++	#why outside infinite? offset_loop at two whiletrue cannot stay on one branch, is extra coding versus a simple solution
++	call debug_xlog(codepointer) #after jump
++	#before: .x is also not knowing about that . but now with .xx is not a .x parse
++
+ 	#return the current pointer
+ 	return codepointer
+ endfunction
+@@ -980,7 +982,7 @@ function action_definefunction(sd codepo
+ 
+ 	#this on same row with dummy at .log
+ 	call debug_xlog_stepin(codepointer) #after define function tag
+-	#all previous codes must pe catched at this phase, this place for this function is tested, example: "function(){" on one row
++	#all previous codes must pe catched at this phase, this place for this function is tested, example: function(){\nvar a
+ 	call debug_phase_code(codepointer)
+ 
+ 	#a function marker for return and for..in case
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -13,12 +13,12 @@ import "spaces" spaces
+ #0 yes  1 no
+ function row_termination(sv p_ac,sv p_row)
+ 	ss ac;set ac p_ac#
+-	if ac#=(LineFeed)
++	if ac#=(text_nl)
+ 		inc p_row#
+ 		return 0
+ 	endif
+-	if ac#=(CarriageReturn)
+-		inc ac;if ac#=(LineFeed);set p_ac# ac;endif
++	if ac#=(text_cr)
++		inc ac;if ac#=(text_nl);set p_ac# ac;endif
+ 		inc p_row#
+ 		return 0
+ 	endif
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -213,7 +213,7 @@ function debug_action_init(ss ac)
+ 
+ 			#out rows\nac\n
+ 			sv file%p_debug_file
+-			char f={Percent,l,u,LineFeed,Percent,s,LineFeed,Nullchar}
++			char f={Percent,l,u,xlog_nl,Percent,s,xlog_nl,Nullchar}
+ 			call f_printf((fprintf_min+2),file#,#f,row,start)
+ 
+ 			mult row :
+@@ -239,28 +239,36 @@ endfunction
+ function debug_phase_code(sd codepointer)
+ 	if log_init.prexx=(prexx_flags)
+ 		sv a;setcall a debug_mark_get()
+-		if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+-			if debug_data.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+-				sv rows;set rows a
+-				sv end;setcall end debug_end()
+-				while codepointer>=^rows#   # > ? same as above
+-					call debug_mark_add()
+-					setcall rows debug_mark_get()
+-					if rows>=end#   ;# > ? example when last row is b=1 }" then rows now will point at one row after last row
+-						break
+-					endif
+-				endwhile
+-				sub rows a
+-				div rows :
+-				#do not write now, can be break;} or Not Not If  and need to truncate that
+-				datax size#1;set size debug_data.size
+-				set debug_data.size 0
+-				add debug_data.rows rows  ## add? is the case with break+ret and remove them and will be an empty row and that flush was skipped, below example
+-				#example, add var q , at while break below example (at debug_phase_code_flush)
+-			end
++		sv end;setcall end debug_end()
++		if a<=^end# #else can't point  ("function a(){}") , flush_end will catch }
++			if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
++				if debug_data.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
++					sv rows;set rows a
++					while codepointer>=^rows#   # > ? same as above
++						call debug_mark_add()
++						setcall rows debug_mark_get()
++						if rows>=end#   ;# > ? example when last row is b=1 }" then rows now will point at one row after last row
++						# > also in ("function a(){}")
++							break
++						endif
++					endwhile
++					sub rows a
++					div rows :
++					#do not write now, can be break;} or Not Not If  and need to truncate that
++					datax size#1;set size debug_data.size
++					set debug_data.size 0
++					add debug_data.rows rows  ## add? is the case with break+ret and remove them and will be an empty row and that flush was skipped, below example
++					#example, add var q , at while break below example (at debug_phase_code_flush)
++				end
++			endif
+ 		endif
+ 	endif
+ endfunction
++function debug_phase_code_flush_part(sd sz)
++	call f_write(debug_data.file,debug_data.mem,sz)
++	char a=xlog_nl
++	callg f_write(debug_data.file,#a,1)
++end
+ function debug_phase_code_flush()
+ 	if debug_data.rows!=0
+ 		if debug_phase_code.size!=0
+@@ -271,12 +279,18 @@ function debug_phase_code_flush()
+ 			sv file%p_debug_file
+ 			char format=xlog_actions;char *="%lu"
+ 			call f_printf((fprintf_min+1),file#,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
+-			call f_write(file#,debug_data.mem,debug_phase_code.size)
+-			call f_write(file#,"\n",1)
++			call debug_phase_code_flush_part(debug_phase_code.size)
+ 			set debug_data.rows 0
+ 		end
+ 	end
+ end
++function debug_phase_code_flush_end()
++	call debug_phase_code_flush()
++	if debug_data.size!=0 #cases: function a(){}\n\n , function a(){}
++		call fseek(debug_data.file,-1,(SEEK_CUR))
++		callg debug_phase_code_flush_part(debug_data.size) # if(1==1){}else{} is size 3
++	end
++end
+ 
+ function debug_base_core(sd id)
+ 	sv file%p_debug_file
+@@ -292,7 +306,8 @@ end
+ function debug_show(sd id)
+ 	if debug_data.file!=(NULL)
+ 		call debug_base_core(id)
+-		call debug_write("\n\n",2)
++		char a={xlog_nl,xlog_nl}
++		call debug_write(#a,2)
+ 	end
+ end
+ function debug_write(ss s,sd d)
+@@ -302,7 +317,8 @@ end
+ function debug_spritedone(sd p,sd i)
+ 	if debug_data.file!=(NULL)
+ 		call debug_base_core(p)
+-		call debug_write("\n",1)
++		char a=xlog_nl
++		call debug_write(#a,1)
+ 		callg debug_base_core(i)
+ 	end
+ end
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -65,8 +65,8 @@ function action_base(ss ac)
+ 		while p_values#!=(math_end)
+ 			setcall p_values action__code_row(p_values)  #also at actionx
+ 		endwhile
+-		import "debug_phase_code_flush" debug_phase_code_flush
+-		call debug_phase_code_flush()
++		import "debug_phase_code_flush_end" debug_phase_code_flush_end
++		call debug_phase_code_flush_end()
+ 		import "debug_x" debug_x
+ 		call debug_x(stored,nr#) #need to be after, to modify pointers inside
+ 
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -111,7 +111,7 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ *1^0,7,,2|{^0,2,,,,}^0,2,,5,,,2/+0/
+ *1^0,2,,|,1,1,,2/^0,4,,2$1B+D/
+ *1^0,2,,5,,|,1,1,,2/^0,2,,7,,2$24+16/
+-*1|,2!,2$A^0,2,,2$15&10/
++*1|/,2!,2$A^0,2,,2$15&10/
+ *1|^0,2,,,2/,2$11+5/
+ *2^0^0,9,,
+ *1^0,2,^0,7,
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -2,17 +2,15 @@ presprites:
+ 	0
+ 		frames=1
+ 		frame 1
+-			ustrings: x_coef=0x5,0 y_coef=0x12,0 movie=0x49,2 attachMovie=0x3C,2 _x=0x63,2 _y=0x71,2 test2=0x79,1 test=0x93,3 Array=0xB1,3 test3=0x1C6,14
+-			strings: _movie=0x51,2 more_oad_tests=0x9E,3,4,7 a=0xC4,4,8 b=0xF6,5,7 this_is_just_a_test=0x14E,0,13
++			ustrings: x_coef=0x5,0 y_coef=0x12,0 movie=0x49,2 attachMovie=0x3C,2 _x=0x63,2 _y=0x71,2 test2=0x79,1 test=0x93,3 Array=0xB1,3 test3=0x1C6,15
++			strings: _movie=0x51,2 more_oad_tests=0x9E,3,4,7 a=0xC4,4,8 b=0xF6,5,7 this_is_just_a_test=0x14E,12,14
+ 			asize=0x1AE fasize=0x1FC size=0x394
+-			branch: id=0 size=0xBC inners=2 aoffset=0x0 aoffset_loop=0x15B afsize=0xD1 code:
++			branch: id=0 size=0x84 inners=2 aoffset=0x0 aoffset_loop=0x15B afsize=0xD1 bjump=2 code:
+ 				........ 3C000000 05000000 00000000 07000000 01000000 FFFFFFFF 3C000000 12000000 00000000 07000000 01000000
+ 				FFFFFFFF 303003F3 24000000 00000000 00000000 00000000
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 303003F3 8B000000
+ 				00000000 00000000 00000000
+-				3C000000 4E010000 00000000 07000000 00000000 FFFFFFFF 06060545 1C000000 6A010000 00000000 FFFFFFFF 1D000000
+-				70010000 00000000 50000000 9D000000 1C000000 89010000 00000000 707007F7 49000000 00000000 07000000 01000000
+-				FFFFFFFF
++				3C000000 4E010000 00000000 07000000 00000000 FFFFFFFF 06060545 1C000000 6A010000 00000000 FFFFFFFF
+ 			{
+ 			branch: id=1 size=0x30 inners=1 aoffset=0x22 afsize=0x37 code:
+ 				........ ........ ........ ........ ........ ........ 303003F3 34000000 00000000 00000000 00000000
+@@ -27,12 +25,12 @@ presprites:
+ 			 }
+ 			}
+ 			{
+-			branch: id=3 size=0x64 aoffset=0x7F aoffset_loop=0xAA code:
++			branch: id=3 size=0x64 aoffset=0x7F aoffset_loop=0xAA bjump=1 code:
+ 				........ ........ ........ 101001F1 93000000 00000000 EEEEEEFE 00000000 00000000 3C000000 9E000000 00000000
+ 				404004F4 B1000000 00000000 07000000 02000000 FFFFFFFF 07000000 01000000 FFFFFFFF EEEEEEFE 00000000 00000000
+ 				E0E00EFE 1C000000 C9000000 00000000
+ 			 /
+-			branch: id=4 size=0x6C aoffset=0xB8 aoffset_loop=0xD5 code:
++			branch: id=4 size=0x6C aoffset=0xB8 aoffset_loop=0xD5 bjump=1 code:
+ 				........ ........ ........ ........ 3C000000 C4000000 00000000 101001F1 00000000 00000000 D9000000 00000000
+ 				4E000000 DF000000 00000000 00000000 00000000 505005F5 1C000000 EE000000 00000000 FFFFFFFF 00000000 00000000
+ 				BBBBBBFB FFFFFFFF EEEEEEFE E0E00EFE 1C000000 FB000000 00000000
+@@ -41,7 +39,7 @@ presprites:
+ 				........ ........ ........ ........ ........ ........ ........ 1D000000 F6000000 00000000 9D000000 1C000000
+ 				0E010000 00000000 707007F7 49000000 00000000 07000000 02000000 FFFFFFFF
+ 			 /
+-			branch: id=6 size=0x8 aoffset=0x100 aoffset_break=0x10A code:
++			branch: id=6 size=0x8 aoffset=0x100 aoffset_break=0x10A bjump=1 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ 909009F9 04040343
+ 			 /
+ 			branch: id=7 size=0x54 aoffset=0x10F code:
+@@ -63,30 +61,35 @@ presprites:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 08080747
+ 			}
+ 			/
+-			branch: id=12 size=0x8 aoffset=0x179 code:
++			branch: id=12 size=0x38 aoffset=0x15B code:
++				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ 1D000000
++				70010000 00000000 50000000 9D000000 1C000000 89010000 00000000 707007F7 49000000 00000000 07000000 01000000
++				FFFFFFFF
++			/
++			branch: id=13 size=0x8 aoffset=0x179 code:
+ 				........ A0A00AFA 04040343
+ 			/
+-			branch: id=13 size=0x28 aoffset=0x17E code:
++			branch: id=14 size=0x28 aoffset=0x17E code:
+ 				........ ........ ........ 9D000000 1C000000 AE010000 00000000 707007F7 49000000 00000000 07000000 02000000
+ 				FFFFFFFF
+ 			/
+-			branch: id=14 size=0x1C aoffset=0x193 code:
++			branch: id=15 size=0x1C aoffset=0x193 code:
+ 				........ 101001F1 C6010000 00000000 EEEEEEFE 00000000 00000000 04040343
+ 			/
+-			branch: id=15 size=0x10 aoffset=0x1A4 aoffset_break=0x1A9 code:
++			branch: id=16 size=0x10 aoffset=0x1A4 aoffset_break=0x1A9 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ 0E0E0D4D 909009F9 CCCCCCFC 01000000
+ 			/
+-			branch: id=16 size=0x4 aoffset=0x1A9 code:
++			branch: id=17 size=0x4 aoffset=0x1A9 fjump=1 code:
+ 				DDDDDDFD
+ 			/
+-			branch: id=17 size=0x4 aoffset=0x1AE code:
++			branch: id=18 size=0x4 aoffset=0x1AE code:
+ 				........ FFFFFFFF
+ 			{
+ 			 {
+ 			 }
+ 			}
+ 			{////////
+-			}//////
++			}///////
+ 	2
+ 		init
+ 			ustrings:
+@@ -125,7 +128,7 @@ presprites:
+ 				00000000 00000000 BBBBBBFB 4E000000 53000000 00000000 59000000 00000000 00000000 00000000 BBBBBBFB 0C000000
+ 				07000000 FFFFFFFF FFFFFFFF 04040343
+ 			/
+-			branch: id=4 size=0xC0 aoffset=0xDD code:
++			branch: id=4 size=0xC0 aoffset=0xDD fjump=1 code:
+ 				........ ........ ........ ........ CCCCCCFC 01000000 4F000000 63000000 00000000 68000000 00000000 00000000
+ 				00000000 BBBBBBFB 1C000000 6B000000 00000000 0C000000 4E000000 70000000 00000000 76000000 00000000 00000000
+ 				00000000 BBBBBBFB 47000000 4E000000 7D000000 00000000 82000000 00000000 00000000 00000000 BBBBBBFB FFFFFFFF
+@@ -146,7 +149,7 @@ presprites:
+ 				00000000 BBBBBBFB 4E000000 D7000000 00000000 DD000000 00000000 00000000 00000000 BBBBBBFB 0C000000 07000000
+ 				FFFFFFFF FFFFFFFF 04040343
+ 			/
+-			branch: id=8 size=0x84 aoffset=0x177 code:
++			branch: id=8 size=0x84 aoffset=0x177 fjump=1 code:
+ 				........ ........ ........ CCCCCCFC 01000000 4F000000 E7000000 00000000 EC000000 00000000 00000000 00000000
+ 				BBBBBBFB 1C000000 EF000000 00000000 0C000000 4E000000 F4000000 00000000 FA000000 00000000 00000000 00000000
+ 				BBBBBBFB 47000000 4E000000 01010000 00000000 06010000 00000000 00000000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+@@ -177,7 +180,7 @@ presprites:
+ sprites:
+ 	id=0
+ 		frame 1
+-			lines=40 2,2 1,2 1,1 1,1 1,3 1,4 1,4e 1,0 1,3e 1,0 1,1 1,3 1,3 1,9 1,6 1,9 1,6 1,4 1,0 1,6 1,1 1,6 1,6 1,0 1,1 1,0 1,2 1,0 1,5 1,6 1,1 1,0 1,6 1,3 1,1 2,1 2,1
++			lines=40 2,2 1,2 1,1 1,1 1,3 1,4 1,4e 1,0 1,3e 1,0 1,1 1,3 1,3 1,9i 1,6 1,9i 1,6i 1,4i 1,0 1,6 1,1 1,6i 1,6ir 1,0 1,1 1,0 1,2 1,0 1,5 1,6i 1,1 1,0 1,6i 1,3 1,1 2,1 2,1
+ 			text: size=566 <<<
+ 				var x_coef=1;
+ 				var y_coef=1;
+@@ -226,7 +229,7 @@ sprites:
+ 				_root.tog++
+ 			<<<
+ 		frame 2
+-			lines=8 1,32 3,35 1,15 2,35 1,15e
++			lines=8 1,32 3,35ii 1,15 2,35ii 1,15e
+ 			text: size=402 <<<
+ 				var move=20;var width=640;var height=480;var lat=40;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move
+ 				if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+@@ -238,7 +241,7 @@ sprites:
+ 			<<<
+ 	id=8
+ 		init
+-			lines=6 2,8 1,11 1,1 1,11e 1,0
++			lines=6 2,8i 1,11 1,1 1,11e 1,0
+ 			text: size=94 <<<
+ 				if(_root.tog==1){
+ 					_root.tog=0;_root._movie.stop()
+--- actionswf-1.orig/tests/.expected/data32.txt
++++ actionswf-1/tests/.expected/data32.txt
+@@ -2,16 +2,15 @@ presprites:
+ 	0
+ 		frames=1
+ 		frame 1
+-			ustrings: x_coef=0x5,0 y_coef=0x12,0 movie=0x49,2 attachMovie=0x3C,2 _x=0x63,2 _y=0x71,2 test2=0x79,1 test=0x93,3 Array=0xB1,3 test3=0x1C6,14
+-			strings: _movie=0x51,2 more_oad_tests=0x9E,3,4,7 a=0xC4,4,8 b=0xF6,5,7 this_is_just_a_test=0x14E,0,13
++			ustrings: x_coef=0x5,0 y_coef=0x12,0 movie=0x49,2 attachMovie=0x3C,2 _x=0x63,2 _y=0x71,2 test2=0x79,1 test=0x93,3 Array=0xB1,3 test3=0x1C6,15
++			strings: _movie=0x51,2 more_oad_tests=0x9E,3,4,7 a=0xC4,4,8 b=0xF6,5,7 this_is_just_a_test=0x14E,12,14
+ 			asize=0x1AE fasize=0x1FC size=0x2CC
+-			branch: id=0 size=0x94 inners=2 aoffset=0x0 aoffset_loop=0x15B afsize=0xD1 code:
++			branch: id=0 size=0x64 inners=2 aoffset=0x0 aoffset_loop=0x15B afsize=0xD1 bjump=2 code:
+ 				........ 3C000000 05000000 07000000 01000000 FFFFFFFF 3C000000 12000000 07000000 01000000 FFFFFFFF 303003F3
+ 				24000000 00000000
+ 				........ ........ ........ ........ 303003F3 8B000000 00000000
+ 				........ ........ ........ ........ ........ 3C000000 4E010000 07000000 00000000 FFFFFFFF 06060545 1C000000
+-				6A010000 FFFFFFFF 1D000000 70010000 50000000 9D000000 1C000000 89010000 707007F7 49000000 00000000 07000000
+-				01000000 FFFFFFFF
++				6A010000 FFFFFFFF
+ 			{
+ 			branch: id=1 size=0x20 inners=1 aoffset=0x22 afsize=0x37 code:
+ 				........ ........ 303003F3 34000000 00000000
+@@ -25,12 +24,12 @@ presprites:
+ 			 }
+ 			}
+ 			{
+-			branch: id=3 size=0x4C aoffset=0x7F aoffset_loop=0xAA code:
++			branch: id=3 size=0x4C aoffset=0x7F aoffset_loop=0xAA bjump=1 code:
+ 				........ ........ ........ ........ ........ ........ ........ 101001F1 93000000 EEEEEEFE 00000000 3C000000
+ 				9E000000 404004F4 B1000000 07000000 02000000 FFFFFFFF 07000000 01000000 FFFFFFFF EEEEEEFE 00000000 E0E00EFE
+ 				1C000000 C9000000
+ 			 /
+-			branch: id=4 size=0x4C aoffset=0xB8 aoffset_loop=0xD5 code:
++			branch: id=4 size=0x4C aoffset=0xB8 aoffset_loop=0xD5 bjump=1 code:
+ 				........ ........ 3C000000 C4000000 101001F1 00000000 D9000000 4E000000 DF000000 00000000 505005F5 1C000000
+ 				EE000000 FFFFFFFF 00000000 BBBBBBFB FFFFFFFF EEEEEEFE E0E00EFE 1C000000 FB000000
+ 			 /
+@@ -38,7 +37,7 @@ presprites:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ 1D000000 F6000000 9D000000
+ 				1C000000 0E010000 707007F7 49000000 00000000 07000000 02000000 FFFFFFFF
+ 			 /
+-			branch: id=6 size=0x8 aoffset=0x100 aoffset_break=0x10A code:
++			branch: id=6 size=0x8 aoffset=0x100 aoffset_break=0x10A bjump=1 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ 909009F9 04040343
+ 			 /
+ 			branch: id=7 size=0x3C aoffset=0x10F code:
+@@ -60,30 +59,34 @@ presprites:
+ 				........ ........ ........ ........ 08080747
+ 			}
+ 			/
+-			branch: id=12 size=0x8 aoffset=0x179 code:
++			branch: id=12 size=0x30 aoffset=0x15B code:
++				........ ........ 1D000000 70010000 50000000 9D000000 1C000000 89010000 707007F7 49000000 00000000 07000000
++				01000000 FFFFFFFF
++			/
++			branch: id=13 size=0x8 aoffset=0x179 code:
+ 				........ ........ A0A00AFA 04040343
+ 			/
+-			branch: id=13 size=0x24 aoffset=0x17E code:
++			branch: id=14 size=0x24 aoffset=0x17E code:
+ 				........ ........ ........ ........ 9D000000 1C000000 AE010000 707007F7 49000000 00000000 07000000 02000000
+ 				FFFFFFFF
+ 			/
+-			branch: id=14 size=0x14 aoffset=0x193 code:
++			branch: id=15 size=0x14 aoffset=0x193 code:
+ 				........ 101001F1 C6010000 EEEEEEFE 00000000 04040343
+ 			/
+-			branch: id=15 size=0x10 aoffset=0x1A4 aoffset_break=0x1A9 code:
++			branch: id=16 size=0x10 aoffset=0x1A4 aoffset_break=0x1A9 code:
+ 				........ ........ ........ ........ ........ ........ 0E0E0D4D 909009F9 CCCCCCFC 01000000
+ 			/
+-			branch: id=16 size=0x4 aoffset=0x1A9 code:
++			branch: id=17 size=0x4 aoffset=0x1A9 fjump=1 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ DDDDDDFD
+ 			/
+-			branch: id=17 size=0x4 aoffset=0x1AE code:
++			branch: id=18 size=0x4 aoffset=0x1AE code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ ........ ........ ........ FFFFFFFF
+ 			{
+ 			 {
+ 			 }
+ 			}
+ 			{////////
+-			}//////
++			}///////
+ 	2
+ 		init
+ 			ustrings:
+@@ -118,7 +121,7 @@ presprites:
+ 				........ ........ ........ ........ ........ 4F000000 46000000 4C000000 00000000 BBBBBBFB 4E000000 53000000
+ 				59000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF FFFFFFFF 04040343
+ 			/
+-			branch: id=4 size=0x88 aoffset=0xDD code:
++			branch: id=4 size=0x88 aoffset=0xDD fjump=1 code:
+ 				........ ........ ........ ........ ........ ........ ........ ........ CCCCCCFC 01000000 4F000000 63000000
+ 				68000000 00000000 BBBBBBFB 1C000000 6B000000 0C000000 4E000000 70000000 76000000 00000000 BBBBBBFB 47000000
+ 				4E000000 7D000000 82000000 00000000 BBBBBBFB FFFFFFFF 9D000000 4E000000 88000000 8D000000 00000000 BBBBBBFB
+@@ -137,7 +140,7 @@ presprites:
+ 				D0000000 00000000 BBBBBBFB 4E000000 D7000000 DD000000 00000000 BBBBBBFB 0C000000 07000000 FFFFFFFF FFFFFFFF
+ 				04040343
+ 			/
+-			branch: id=8 size=0x5C aoffset=0x177 code:
++			branch: id=8 size=0x5C aoffset=0x177 fjump=1 code:
+ 				........ CCCCCCFC 01000000 4F000000 E7000000 EC000000 00000000 BBBBBBFB 1C000000 EF000000 0C000000 4E000000
+ 				F4000000 FA000000 00000000 BBBBBBFB 47000000 4E000000 01010000 06010000 00000000 BBBBBBFB FFFFFFFF FFFFFFFF
+ 			////////
+@@ -165,7 +168,7 @@ presprites:
+ sprites:
+ 	id=0
+ 		frame 1
+-			lines=40 2,2 1,2 1,1 1,1 1,3 1,4 1,4e 1,0 1,3e 1,0 1,1 1,3 1,3 1,9 1,6 1,9 1,6 1,4 1,0 1,6 1,1 1,6 1,6 1,0 1,1 1,0 1,2 1,0 1,5 1,6 1,1 1,0 1,6 1,3 1,1 2,1 2,1
++			lines=40 2,2 1,2 1,1 1,1 1,3 1,4 1,4e 1,0 1,3e 1,0 1,1 1,3 1,3 1,9i 1,6 1,9i 1,6i 1,4i 1,0 1,6 1,1 1,6i 1,6ir 1,0 1,1 1,0 1,2 1,0 1,5 1,6i 1,1 1,0 1,6i 1,3 1,1 2,1 2,1
+ 			text: size=566 <<<
+ 				var x_coef=1;
+ 				var y_coef=1;
+@@ -214,7 +217,7 @@ sprites:
+ 				_root.tog++
+ 			<<<
+ 		frame 2
+-			lines=8 1,32 3,35 1,15 2,35 1,15e
++			lines=8 1,32 3,35ii 1,15 2,35ii 1,15e
+ 			text: size=402 <<<
+ 				var move=20;var width=640;var height=480;var lat=40;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move
+ 				if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+@@ -226,7 +229,7 @@ sprites:
+ 			<<<
+ 	id=8
+ 		init
+-			lines=6 2,8 1,11 1,1 1,11e 1,0
++			lines=6 2,8i 1,11 1,1 1,11e 1,0
+ 			text: size=94 <<<
+ 				if(_root.tog==1){
+ 					_root.tog=0;_root._movie.stop()
