@@ -1,0 +1,173 @@
+
+#aftercalli
+
+function functiondef_d(sv pbuffer,sd outfile)
+	datax args#1;call get_data(pbuffer,#args)
+	if args>=^1
+		charx field#1
+		call decl(pbuffer,outfile,#field,(NULL)) #1 more
+		sd n=1;while n!=args
+			call writec(outfile)
+			call decl(pbuffer,outfile,#field,(NULL)) #1 more
+			inc n
+		end
+	end
+	return args ##for varargs
+end
+function functiondef_r(sv pbuffer,sd outfile,sd pointer,sd sz)
+	set loop.function_start ftell(outfile)
+	if loop.function_start!=(err)
+		call write_void(outfile,pointer,sz)
+		call writel(outfile)
+		sd args;set args functiondef_d(pbuffer,outfile)
+		return args ##for varargs
+	end
+	call aftercallenable()
+end
+function functiondef_rw(sv pbuffer,sd outfile,sd pointer,sd sz)
+	call functiondef_r(pbuffer,outfile,pointer,sz)
+	callg writer(outfile)
+end
+function functiondef_ext(sv pbuffer,sd outfile,sd pointer,sd sz)
+	charx e#1;call get_char(pbuffer,#e)
+	sd args;set args functiondef_r(pbuffer,outfile,pointer,sz)
+	if e=(Xfile_function_e_normal)
+		call writer(outfile)
+	else #varargs
+		if args!=0
+			call writec(outfile)
+		endif
+		call varargs(outfile)
+		callg writer(outfile)
+	end
+end
+
+function functiondef_intern(sv pbuffer,sd outfile,sd pointer,sd sz)
+	charx s#1;call get_char(pbuffer,#s)
+	if s=(Xfile_function_t_normal)
+		call functiondef_rw(pbuffer,outfile,pointer,sz)
+	else
+		char a="struct "^
+		call write(outfile,#a,\.a)
+		call write(outfile,pointer,sz)
+		call functiondef_d(pbuffer,outfile)
+	end
+	callg writecln(outfile)
+end
+function functiondef_raw(sv pbuffer,sd outfile,sd pointer,sd sz)
+	charx s#1;call get_char(pbuffer,#s)
+	if s=(Xfile_function_t_normal)
+		call functiondef_rw(pbuffer,outfile,pointer,sz)
+		set loop.has_entry (TRUE)
+		call writecln(outfile)
+	else #skip struct part, entryraw is only for global variables here, will error if not that
+		call functiondef_d(pbuffer,outfile)
+		callg writenl(outfile)
+	end
+end
+function functiondef_extern(sv pbuffer,sd outfile,sd pointer,sd sz)
+	call functiondef_ext(pbuffer,outfile,pointer,sz)
+	callg writecln(outfile)
+end
+function functiondef_entry(sv pbuffer,sd outfile,sd pointer,sd sz)
+	call functiondef_ext(pbuffer,outfile,pointer,sz)
+	set loop.has_entry (TRUE)
+	callg writecln(outfile)
+end
+
+#D structure
+function decl_runtime_core(sv pbuffer,sd outfile,sd field,ss ptype)
+	charx sign#1;charx type#1
+	if field=(Xfile_declfield_data)
+		charx data#1;call get_char(pbuffer,#data)
+		call get_char(pbuffer,#sign)
+		if ptype=(NULL);call get_char(pbuffer,#type);else;call get_char(pbuffer,ptype);set type ptype#;end
+		if sign=(Xfile_declext_no)
+			call unsigned(outfile)
+		end
+		#special hack for a pointless long (value), needed to inc/dec
+		if type=(Xfile_decltype_long)
+			if data=(Xfile_declfield_data_concrete)
+				callg write(outfile,#write_long.a,\write_long.a)
+				ret
+			end
+		end
+		callg decl_type(outfile,type)
+	elseif field=(Xfile_declfield_stack)
+		call get_char(pbuffer,#sign)
+		if ptype=(NULL);call get_char(pbuffer,#type);else;call get_char(pbuffer,ptype);set type ptype#;end
+		if sign=(Xfile_declext_no)
+			call unsigned(outfile)
+		end
+		callg decl_type(outfile,type)
+	else #Xfile_declfield_varargs
+		callg varargs(outfile)
+	end
+end
+function decl_runtime(sv pbuffer,sd outfile,sd field,ss ptype)
+	call decl_runtime_core(pbuffer,outfile,field,ptype)
+	charx feature#1;call get_char(pbuffer,#feature) #not used here at the moment
+end
+function decl(sv pbuffer,sd outfile,ss pfield,ss ptype,ss pconstif)
+	call get_char(pbuffer,pfield)
+	datax sz#1;valuex pointer#1
+	if pfield#!=(Xfile_declfield_const)
+		call decl_runtime(pbuffer,outfile,pfield#,ptype)
+		call get_string(pbuffer,#sz,#pointer)
+	else
+		call get_char(pbuffer,pconstif)
+		call get_string(pbuffer,#sz,#pointer)
+		if pconstif#=(Xfile_declfield_const_cond)
+			char a="#ifndef "^
+			call write(outfile,#a,\.a)
+			call writen(outfile,pointer,sz)
+		end
+		char c="#define"^
+		call write(outfile,#c,\.c)
+	end
+	call writes(outfile)
+	callg write(outfile,pointer,sz)
+end
+function decl_type(sd outfile,sv fn)
+	value f^byte      #char[x]                        Xfile_decltype_byte
+	value *^word      #word[x]                        Xfile_decltype_word
+	value *^int       #data[x]                        Xfile_decltype_int
+	value *^longByte  #is intByte but same as vstr    Xfile_decltype_intByte
+	value *^longLong  #valuex sv                      Xfile_decltype_long
+	value *^longByte  #vstr[x] ss                     Xfile_decltype_longByte
+	value *^longWord  #vword[x] sw                    Xfile_decltype_longWord
+	value *^longInt   #vdata[x] sd                    Xfile_decltype_longInt
+	mult fn :
+	add fn #f
+	set fn fn#
+	callg fn(outfile)
+end
+function byte(sd outfile)
+	char a="char*"^
+	call write(outfile,#a,\.a-1)
+end
+function word(sd outfile)
+	char a="short*"^
+	call write(outfile,#a,\.a-1)
+end
+function int(sd outfile)
+	char a="int*"^
+	call write(outfile,#a,\.a-1)
+end
+function longByte(sd outfile)
+	call write(outfile,#byte.a,\byte.a)
+end
+function longLong(sd outfile)
+	call write(outfile,#write_long.a,(write_long_cast))
+end
+#function longByte()end
+function longWord(sd outfile)
+	call write(outfile,#word.a,\word.a)
+end
+function longInt(sd outfile)
+	call write(outfile,#int.a,\int.a)
+end
+function varargs(sd outfile)
+	char a="..."^
+	callg write(outfile,#a,\.a)
+end
