@@ -1,0 +1,98 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.h.oh"
+
+#multithread unsafe
+charx error#1
+#
+
+function tree_init()
+	set global.error (EXIT_SUCCESS)
+end
+function tree_exit()
+	return global.error
+end
+
+function tree_frame_init(valueu pf)
+	set pf#:preframe.log_mem (NULL)
+	set pf#:preframe.log_size 0
+	set pf#:preframe.log_allsize 0
+	set pf#:preframe.log_indents 0
+end
+importx "free" free
+import "print_text" print_text
+function tree_frame_free(valueu pf)
+	if pf#:preframe.log_mem!=(NULL)
+		call tree_entry_ex(pf,(output_nl))  #for memnl, if for prints will be '\0'
+		call print_text(pf#:preframe.log_mem,pf#:preframe.log_size)
+		call free(pf#:preframe.log_mem)
+	end
+end
+const tree_pad=pad_default
+const tree_pad_=(tree_pad-1)
+const _tree_pad_=~tree_pad_
+importx "realloc" realloc
+function tree_resize(valueu pf,valueu sz)
+	add sz pf#:preframe.log_size
+	if sz>^pf#:preframe.log_allsize
+		add sz (tree_pad)
+		and sz (_tree_pad_)
+		valueu m#1;set m realloc(pf#:preframe.log_mem,sz)
+		if m=(NULL)
+			set global.error (EXIT_FAILURE)
+			return (EXIT_FAILURE)
+		end
+		set pf#:preframe.log_allsize sz
+		set pf#:preframe.log_mem m
+	end
+	return (EXIT_SUCCESS)
+end
+
+function tree_entry_ex(valueu pf,charx type)
+	charx ok#1;set ok tree_resize(pf,1)
+	if ok=(EXIT_SUCCESS)
+		ss p;set p pf#:preframe.log_mem
+		add p pf#:preframe.log_size
+		set p# type
+		inc pf#:preframe.log_size
+	end
+end
+
+function tree_indents(valueu pf)
+	dataxu i#1;set i pf#:preframe.log_indents
+	while i!=0  #not at root, add indents
+		call tree_entry_ex(pf,(Space))
+		dec i
+	end
+end
+function tree_entry_start(valueu pf)
+	call tree_entry_ex(pf,(output_nl))
+	call tree_indents(pf)
+	inc pf#:preframe.log_indents
+	call tree_entry_ex(pf,(xlog_innerbranch))
+end
+function tree_entry_end(valueu pf)
+	call tree_entry_ex(pf,(output_nl))
+	dec pf#:preframe.log_indents
+	call tree_indents(pf)
+	call tree_entry_ex(pf,(xlog_innerbranchend))
+end
+
+importx "putchar" putchar
+
+import "indent" indent
+import "print_inline_done" print_inline_done
+
+function tree_entrylive(dataxu indents,charx type)
+	call indent()
+	while indents>^0
+		call putchar((Space))
+		dec indents
+	end
+	call putchar(type)
+	call print_inline_done()
+end
+
+entryraw global()

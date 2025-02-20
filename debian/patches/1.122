@@ -1,0 +1,2720 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-122) bionic; urgency=medium
+ .
+   * liboadbgdata
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-02-20
+
+--- /dev/null
++++ actionswf-1/dev/actionswf.h
+@@ -0,0 +1,186 @@
++
++#define flag_forin1 0x20
++#define flag_framesAsShows 0x40
++#define flag_pool_write 0x100
++#define flag_pool_read 0x200
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++
++
++#define StateMoveTo 1
++#define StateFillStyle0 2*StateMoveTo
++#define StateFillStyle1 2*StateFillStyle0
++#define StateLineStyle 2*StateFillStyle1
++#define StateNewStyles 2*StateLineStyle
++#pragma pack(push,4)
++typedef struct ButtonData_str{
++    unsigned int def_fill;
++    int def_line_sz;
++	unsigned int def_line;
++	unsigned int ov_fill;
++    int ov_line_sz;
++	unsigned int ov_line;
++	unsigned int dn_fill;
++	int dn_line_sz;
++	unsigned int dn_line;
++    int xcurve;
++    int ycurve;
++    char* text;
++    int font_id;
++    int font_height;
++    int font_vertical_offset;
++    int font_color;
++    char* actions;
++}ButtonData;
++#pragma pack(pop)
++#define HasText 0x80
++#define WordWrap 0x40
++#define Multiline 0x20
++#define Password 0x10
++#define ReadOnly 0x8
++#define HasTextColor 0x4
++#define HasMaxLength 0x2
++#define HasFont 0x1
++#define HasFontClass 0x8000
++#define AutoSize 0x4000
++#define HasLayout 0x2000
++#define NoSelect 0x1000
++#define Border 0x800
++#define WasStatic 0x400
++#define HTML 0x200
++#define UseOutlines 0x100
++#pragma pack(push,4)
++typedef struct EditText_str
++{
++    int fontid;
++    int font_height;
++    char* fontclassname;
++    int rgba;
++    int maxlength;
++    char* initialtext;
++    int layout_align;
++    int layout_leftmargin;
++    int layout_rightmargin;
++    int layout_indent;
++    int layout_leading;
++} EditText;
++#pragma pack(pop)
++#define FontFlagsHasLayout 0x80
++#define FontFlagsShiftJIS 0x40
++#define FontFlagsSmallText 0x20
++#define FontFlagsANSI 0x10
++#define FontFlagsWideOffsets 8
++#define FontFlagsWideCodes 4
++#define FontFlagsItalic 2
++#define FontFlagsBold 1
++
++
++//swf
++
++
++//button
++
++//id
++int swf_button(int width,int height,ButtonData* b);
++//id
++int swf_button_last(char* newtext,char* actions);
++
++//font
++
++//id
++int swf_font(char* fontname,int font_flags);
++//id
++int swf_font_basic(char* fontname);
++
++//text
++
++//id
++int swf_text(int bound_width,int bound_height,char* variablename,int flags,EditText* structure);
++
++//shape
++
++//id
++int swf_shape(int width,int height,int* args);
++//id
++int swf_shape_basic(int width,int height,int fillcolor,int linecolor);
++//id
++int swf_shape_bitmap(int bitmapId,int width,int height);
++//id
++int swf_shape_border(int width,int height,int linesize,int linecolor);
++//id
++int swf_image(char* imagepath);
++//id
++int swf_image_ex(char* imagepath,int wh[2]);
++
++//dbl
++
++//id
++int swf_dbl(char* imagepath);
++//id
++int swf_dbl_ex(char* imagepath,int wh[2]);
++//width
++int swf_dbl_width(char* imagepath);
++//height
++int swf_dbl_height(char* imagepath);
++
++//back at generic swf functions
++
++void swf_done();
++void swf_new(char* path,int width,int height,int backgroundcolor,int fps);
++void swf_new_ex(char* path,int width,int height,int backgroundcolor,int fps,int is_debug);
++void swf_placeobject(int refid,int depth);
++void swf_placeobject_coords(int refid,int depth,int x,int y);
++void swf_removeobject(int depth);
++void swf_showframe();
++
++//sprite
++
++//id
++int swf_sprite_done(int spriteid);
++//pre-id
++int swf_sprite_new();
++void swf_sprite_placeobject(int spriteid,int object,int depth);
++void swf_sprite_placeobject_coords(int spriteid,int object,int depth,int x,int y);
++void swf_sprite_removeobject(int spriteid,int depth);
++void swf_sprite_showframe(int spriteid);
++
++//exports
++
++void swf_exports_add(int id,char* name);
++void swf_exports_done();
++
++
++//action
++
++
++//this/an action
++
++void action(char* ac);
++void actionf(char* buffer,char* format,...);
++void actiond(char* ac);
++
++//action at sprite
++
++void action_sprite(int sprite,char* ac);
++void actionf_sprite(int sprite,char* buffer,char* format,...);
++void action_init_sprite(int sprite,char* ac);
++void actionf_init_sprite(int sprite,char* buffer,char* format,...);
++
++
++
++//tool
++
++char erbool_get();
++void erbool_reset();
++void freereset();
++unsigned char xlog_pad_get();
++void xlog_pad_set(unsigned char new_pad);
++
++
++
++#ifdef __cplusplus
++}
++#endif
+--- /dev/null
++++ actionswf-1/dev/flags.oh
+@@ -0,0 +1,21 @@
++
++const debug_none=0
++const debug_log=0x1
++const debug_alt=0x2
++const debug_titles=0x4
++const debug_x=0x8
++const debug_x_pad=0x10
++
++const flag_forin1=0x20
++const flag_framesAsShows=0x40
++
++const flag_x=0x80           #will turn off antix_read flags
++const flag_pool_write=0x100
++const flag_pool_read=0x200  #will turn off flag_pool_write
++
++const debug_xpad=debug_x|debug_x_pad
++const flags_pool=flag_pool_write|flag_pool_read
++const flags_x=debug_x|flag_x
++const prexx_flags=debug_log|flag_pool_write|debug_x
++const xx_flags=debug_log|flag_pool_read|flag_x
++const antix_read=debug_log|debug_alt|debug_xpad
+--- actionswf-1.orig/dev/import.h
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-include "../include/flags.h"
+-include "importf.h"
+--- /dev/null
++++ actionswf-1/dev/import.oh
+@@ -0,0 +1,3 @@
++
++include "flags.oh"
++include "importf.oh"
+--- actionswf-1.orig/dev/importf.h
++++ /dev/null
+@@ -1,80 +0,0 @@
+-
+-#there are some ..x with no args but anyway we are using otoc OR the c header file.
+-#still, why importx? for the os calling convention there is a lot of extern code from the call to the library
+-#	 and Xfile_import_extern from ocompiler-dev
+-
+-#swf
+-
+-#id
+-importX "swf_button" swf_button
+-#id
+-importX "swf_button_last" swf_button_last
+-#id
+-importX "swf_font" swf_font
+-#id
+-importX "swf_font_basic" swf_font_basic
+-#id
+-importX "swf_text" swf_text
+-#id
+-importX "swf_shape" swf_shape
+-#id
+-importX "swf_shape_basic" swf_shape_basic
+-#id
+-importX "swf_shape_bitmap" swf_shape_bitmap
+-#id
+-importX "swf_shape_border" swf_shape_border
+-#id
+-importX "swf_image" swf_image
+-#id
+-importX "swf_image_ex" swf_image_ex
+-#dbl
+-#id
+-importX "swf_dbl" swf_dbl
+-#id
+-importX "swf_dbl_ex" swf_dbl_ex
+-#width
+-importX "swf_dbl_width" swf_dbl_width
+-#height
+-importX "swf_dbl_height" swf_dbl_height
+-#utils
+-importX "swf_done" swf_done
+-importX "swf_new" swf_new
+-importX "swf_new_ex" swf_new_ex
+-importX "swf_placeobject" swf_placeobject
+-importX "swf_placeobject_coords" swf_placeobject_coords
+-importX "swf_removeobject" swf_removeobject
+-importX "swf_showframe" swf_showframe
+-
+-#sprite
+-
+-#id
+-importX "swf_sprite_done" swf_sprite_done
+-#preid
+-importX "swf_sprite_new" swf_sprite_new
+-importX "swf_sprite_placeobject" swf_sprite_placeobject
+-importX "swf_sprite_placeobject_coords" swf_sprite_placeobject_coords
+-importX "swf_sprite_removeobject" swf_sprite_removeobject
+-importX "swf_sprite_showframe" swf_sprite_showframe
+-
+-#swf exports
+-
+-importX "swf_exports_add" swf_exports_add
+-importX "swf_exports_done" swf_exports_done
+-
+-#actionscript
+-
+-importX "action" action
+-importX "actionf" actionf
+-importX "actiond" actiond
+-importX "action_sprite" action_sprite
+-importX "action_init_sprite" action_init_sprite
+-importX "actionf_sprite" actionf_sprite
+-importX "actionf_init_sprite" actionf_init_sprite
+-
+-#tool
+-
+-importx "erbool_get" erbool_get
+-importx "erbool_reset" erbool_reset
+-importx "freereset" freereset
+-importx "xlog_pad_get" xlog_pad_get
+-importx "xlog_pad_set" xlog_pad_set
+--- /dev/null
++++ actionswf-1/dev/importf.oh
+@@ -0,0 +1,80 @@
++
++#there are some ..x with no args but anyway we are using otoc OR the c header file.
++#still, why importx? for the os calling convention there is a lot of extern code from the call to the library
++#	 and Xfile_import_extern from ocompiler-dev
++
++#swf
++
++#id
++importX "swf_button" swf_button
++#id
++importX "swf_button_last" swf_button_last
++#id
++importX "swf_font" swf_font
++#id
++importX "swf_font_basic" swf_font_basic
++#id
++importX "swf_text" swf_text
++#id
++importX "swf_shape" swf_shape
++#id
++importX "swf_shape_basic" swf_shape_basic
++#id
++importX "swf_shape_bitmap" swf_shape_bitmap
++#id
++importX "swf_shape_border" swf_shape_border
++#id
++importX "swf_image" swf_image
++#id
++importX "swf_image_ex" swf_image_ex
++#dbl
++#id
++importX "swf_dbl" swf_dbl
++#id
++importX "swf_dbl_ex" swf_dbl_ex
++#width
++importX "swf_dbl_width" swf_dbl_width
++#height
++importX "swf_dbl_height" swf_dbl_height
++#utils
++importX "swf_done" swf_done
++importX "swf_new" swf_new
++importX "swf_new_ex" swf_new_ex
++importX "swf_placeobject" swf_placeobject
++importX "swf_placeobject_coords" swf_placeobject_coords
++importX "swf_removeobject" swf_removeobject
++importX "swf_showframe" swf_showframe
++
++#sprite
++
++#id
++importX "swf_sprite_done" swf_sprite_done
++#preid
++importX "swf_sprite_new" swf_sprite_new
++importX "swf_sprite_placeobject" swf_sprite_placeobject
++importX "swf_sprite_placeobject_coords" swf_sprite_placeobject_coords
++importX "swf_sprite_removeobject" swf_sprite_removeobject
++importX "swf_sprite_showframe" swf_sprite_showframe
++
++#swf exports
++
++importX "swf_exports_add" swf_exports_add
++importX "swf_exports_done" swf_exports_done
++
++#actionscript
++
++importX "action" action
++importX "actionf" actionf
++importX "actiond" actiond
++importX "action_sprite" action_sprite
++importX "action_init_sprite" action_init_sprite
++importX "actionf_sprite" actionf_sprite
++importX "actionf_init_sprite" actionf_init_sprite
++
++#tool
++
++importx "erbool_get" erbool_get
++importx "erbool_reset" erbool_reset
++importx "freereset" freereset
++importx "xlog_pad_get" xlog_pad_get
++importx "xlog_pad_set" xlog_pad_set
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -91,6 +91,7 @@ clean:
+ 	-rm -f ${sfile}.log
+ 	-rm -f ${sfile}.x ${sfile}.xx
+ 	-rm -f ${sfile}
++	-rm -f ${sfile}.data
+ 
+ distclean: clean
+ 
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -5,7 +5,7 @@ format elfobj64
+ importx "_sprintf" sprintf
+ importx "_exit" exit
+ 
+-einclude "../dev/import.h"
++einclude "../dev/import.oh"
+ 
+ const width=640
+ const height=480
+--- actionswf-1.orig/example/shared_c_example.c
++++ actionswf-1/example/shared_c_example.c
+@@ -2,7 +2,7 @@
+ //a simple shape moving on the stage example
+ 
+ #include <stdio.h>
+-#include "../include/actionswf.h"
++#include "../dev/actionswf.h"
+ 
+ #define width 640
+ #define height 480
+--- actionswf-1.orig/include/actionswf.h
++++ /dev/null
+@@ -1,186 +0,0 @@
+-
+-#define flag_forin1 0x20
+-#define flag_framesAsShows 0x40
+-#define flag_pool_write 0x100
+-#define flag_pool_read 0x200
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-
+-
+-#define StateMoveTo 1
+-#define StateFillStyle0 2*StateMoveTo
+-#define StateFillStyle1 2*StateFillStyle0
+-#define StateLineStyle 2*StateFillStyle1
+-#define StateNewStyles 2*StateLineStyle
+-#pragma pack(push,4)
+-typedef struct ButtonData_str{
+-    unsigned int def_fill;
+-    int def_line_sz;
+-	unsigned int def_line;
+-	unsigned int ov_fill;
+-    int ov_line_sz;
+-	unsigned int ov_line;
+-	unsigned int dn_fill;
+-	int dn_line_sz;
+-	unsigned int dn_line;
+-    int xcurve;
+-    int ycurve;
+-    char* text;
+-    int font_id;
+-    int font_height;
+-    int font_vertical_offset;
+-    int font_color;
+-    char* actions;
+-}ButtonData;
+-#pragma pack(pop)
+-#define HasText 0x80
+-#define WordWrap 0x40
+-#define Multiline 0x20
+-#define Password 0x10
+-#define ReadOnly 0x8
+-#define HasTextColor 0x4
+-#define HasMaxLength 0x2
+-#define HasFont 0x1
+-#define HasFontClass 0x8000
+-#define AutoSize 0x4000
+-#define HasLayout 0x2000
+-#define NoSelect 0x1000
+-#define Border 0x800
+-#define WasStatic 0x400
+-#define HTML 0x200
+-#define UseOutlines 0x100
+-#pragma pack(push,4)
+-typedef struct EditText_str
+-{
+-    int fontid;
+-    int font_height;
+-    char* fontclassname;
+-    int rgba;
+-    int maxlength;
+-    char* initialtext;
+-    int layout_align;
+-    int layout_leftmargin;
+-    int layout_rightmargin;
+-    int layout_indent;
+-    int layout_leading;
+-} EditText;
+-#pragma pack(pop)
+-#define FontFlagsHasLayout 0x80
+-#define FontFlagsShiftJIS 0x40
+-#define FontFlagsSmallText 0x20
+-#define FontFlagsANSI 0x10
+-#define FontFlagsWideOffsets 8
+-#define FontFlagsWideCodes 4
+-#define FontFlagsItalic 2
+-#define FontFlagsBold 1
+-
+-
+-//swf
+-
+-
+-//button
+-
+-//id
+-int swf_button(int width,int height,ButtonData* b);
+-//id
+-int swf_button_last(char* newtext,char* actions);
+-
+-//font
+-
+-//id
+-int swf_font(char* fontname,int font_flags);
+-//id
+-int swf_font_basic(char* fontname);
+-
+-//text
+-
+-//id
+-int swf_text(int bound_width,int bound_height,char* variablename,int flags,EditText* structure);
+-
+-//shape
+-
+-//id
+-int swf_shape(int width,int height,int* args);
+-//id
+-int swf_shape_basic(int width,int height,int fillcolor,int linecolor);
+-//id
+-int swf_shape_bitmap(int bitmapId,int width,int height);
+-//id
+-int swf_shape_border(int width,int height,int linesize,int linecolor);
+-//id
+-int swf_image(char* imagepath);
+-//id
+-int swf_image_ex(char* imagepath,int wh[2]);
+-
+-//dbl
+-
+-//id
+-int swf_dbl(char* imagepath);
+-//id
+-int swf_dbl_ex(char* imagepath,int wh[2]);
+-//width
+-int swf_dbl_width(char* imagepath);
+-//height
+-int swf_dbl_height(char* imagepath);
+-
+-//back at generic swf functions
+-
+-void swf_done();
+-void swf_new(char* path,int width,int height,int backgroundcolor,int fps);
+-void swf_new_ex(char* path,int width,int height,int backgroundcolor,int fps,int is_debug);
+-void swf_placeobject(int refid,int depth);
+-void swf_placeobject_coords(int refid,int depth,int x,int y);
+-void swf_removeobject(int depth);
+-void swf_showframe();
+-
+-//sprite
+-
+-//id
+-int swf_sprite_done(int spriteid);
+-//pre-id
+-int swf_sprite_new();
+-void swf_sprite_placeobject(int spriteid,int object,int depth);
+-void swf_sprite_placeobject_coords(int spriteid,int object,int depth,int x,int y);
+-void swf_sprite_removeobject(int spriteid,int depth);
+-void swf_sprite_showframe(int spriteid);
+-
+-//exports
+-
+-void swf_exports_add(int id,char* name);
+-void swf_exports_done();
+-
+-
+-//action
+-
+-
+-//this/an action
+-
+-void action(char* ac);
+-void actionf(char* buffer,char* format,...);
+-void actiond(char* ac);
+-
+-//action at sprite
+-
+-void action_sprite(int sprite,char* ac);
+-void actionf_sprite(int sprite,char* buffer,char* format,...);
+-void action_init_sprite(int sprite,char* ac);
+-void actionf_init_sprite(int sprite,char* buffer,char* format,...);
+-
+-
+-
+-//tool
+-
+-char erbool_get();
+-void erbool_reset();
+-void freereset();
+-unsigned char xlog_pad_get();
+-void xlog_pad_set(unsigned char new_pad);
+-
+-
+-
+-#ifdef __cplusplus
+-}
+-#endif
+--- actionswf-1.orig/include/flags.h
++++ /dev/null
+@@ -1,21 +0,0 @@
+-
+-const debug_none=0
+-const debug_log=0x1
+-const debug_alt=0x2
+-const debug_titles=0x4
+-const debug_x=0x8
+-const debug_x_pad=0x10
+-
+-const flag_forin1=0x20
+-const flag_framesAsShows=0x40
+-
+-const flag_x=0x80           #will turn off antix_read flags
+-const flag_pool_write=0x100
+-const flag_pool_read=0x200  #will turn off flag_pool_write
+-
+-const debug_xpad=debug_x|debug_x_pad
+-const flags_pool=flag_pool_write|flag_pool_read
+-const flags_x=debug_x|flag_x
+-const prexx_flags=debug_log|flag_pool_write|debug_x
+-const xx_flags=debug_log|flag_pool_read|flag_x
+-const antix_read=debug_log|debug_alt|debug_xpad
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -99,7 +99,7 @@ const FontFlagsHasLayout=0x80
+ #const FontFlagsBold=1
+ 
+ include "lin.h" "win.h"
+-include "flags.h"
++include "../dev/flags.oh"
+ 
+ Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
+ Const _open_read=_O_RDONLY|flag_O_BINARY
+@@ -141,4 +141,4 @@ const doubleH_sign=0x80000000
+ #const F_OK=0  # 0 2 4 6 are same as windows
+ const R_OK=4
+ 
+-include "xlog.h.oh"
++include "xlog.oh"
+--- actionswf-1.orig/include/xlog.h.oh
++++ /dev/null
+@@ -1,51 +0,0 @@
+-
+-const xlog_type_size=1 #BYTE
+-const xlog_code_size=4 #DWORD
+-const xlog_unique=0
+-const xlog_new=1
+-const xlog_unique_new_size=: ;#DWORD/QWORD
+-const xlog_id=2
+-const xlog_id_size=2 #WORD
+-
+-const xlog_nl=0x0A
+-const text_nl=xlog_nl
+-const text_cr=0x0D
+-
+-const xlog_break=0x21         ;# !
+-const xlog_forin=0x23          ##
+-const xlog_jumpback=0x24      ;#$
+-const xlog_return=0x25        ;#%
+-const xlog_jump=0x26          ;#&
+-const xlog_actions=0x2A       ;#*
+-const xlog_jumpif=0x2B        ;#+
+-const xlog_act=0x2C            #,
+-const xlog_branch=0x2F        ;#/
+-#0-9
+-const xlog_const8_log=0x30
+-const xlog_const16_log=0x31
+-const xlog_forin_break=0x30
+-const xlog_forin_return=0x31
+-#
+-const xlog_call=0x40           #@
+-#A-F
+-const xlog_function=0x5C       #\ #
+-const xlog_string=0x5E        ;#^
+-const xlog_innerbranch=0x7B    #{
+-const xlog_loop=0x7C          ;#|
+-const xlog_innerbranchend=0x7D #}
+-
+-#note: oaalternative is using ainit
+-const xlog_ainit_false=0
+-const xlog_ainit_true=1
+-
+-const xlog_strings_size=:
+-const xlog_xcode_size=4   #DWORD
+-
+-const xlog_pad_default=0x10
+-
+-const actionrecordheader_tag_size=1
+-const actionrecordheader_length_size=2
+-const actionrecordheader_size=actionrecordheader_tag_size+actionrecordheader_length_size
+-
+-const actionpush_type=1     #BYTE
+-const actionpush_integer=4  #DWORD
+--- /dev/null
++++ actionswf-1/include/xlog.oh
+@@ -0,0 +1,51 @@
++
++const xlog_type_size=1 #BYTE
++const xlog_code_size=4 #DWORD
++const xlog_unique=0
++const xlog_new=1
++const xlog_unique_new_size=: ;#DWORD/QWORD
++const xlog_id=2
++const xlog_id_size=2 #WORD
++
++const xlog_nl=0x0A
++const text_nl=xlog_nl
++const text_cr=0x0D
++
++const xlog_break=0x21         ;# !
++const xlog_forin=0x23          ##
++const xlog_jumpback=0x24      ;#$
++const xlog_return=0x25        ;#%
++const xlog_jump=0x26          ;#&
++const xlog_actions=0x2A       ;#*
++const xlog_jumpif=0x2B        ;#+
++const xlog_act=0x2C            #,
++const xlog_branch=0x2F        ;#/
++#0-9
++const xlog_const8_log=0x30
++const xlog_const16_log=0x31
++const xlog_forin_break=0x30
++const xlog_forin_return=0x31
++#
++const xlog_call=0x40           #@
++#A-F
++const xlog_function=0x5C       #\ #
++const xlog_string=0x5E        ;#^
++const xlog_innerbranch=0x7B    #{
++const xlog_loop=0x7C          ;#|
++const xlog_innerbranchend=0x7D #}
++
++#note: oaalternative is using ainit
++const xlog_ainit_false=0
++const xlog_ainit_true=1
++
++const xlog_strings_size=:
++const xlog_xcode_size=4   #DWORD
++
++const xlog_pad_default=0x10
++
++const actionrecordheader_tag_size=1
++const actionrecordheader_length_size=2
++const actionrecordheader_size=actionrecordheader_tag_size+actionrecordheader_length_size
++
++const actionpush_type=1     #BYTE
++const actionpush_integer=4  #DWORD
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -31,7 +31,7 @@ re:
+ 
+ xlog=../include/xlog.
+ 
+-items=intern compare frame string branch ibranch log
++items=intern compare frame string branch ibranch log save mark
+ #$(eval subobjects = )
+ $(foreach var,$(items),$(eval subobjects += ${var}.o))
+ #$(eval sublogs = )
+@@ -57,23 +57,23 @@ ${libname}: main.o ${exte}
+ 	$(CC) ${model} -c -w -fPIC ${compilerflags} $*.c
+ #-fPIC since launchpad bionic build
+ #-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
+-%.oh: %.h.oh
++%.ohi: %.oh
+ 	echo "format elfobj64" > $@
+ 	echo "orphan off" >> $@
+ 	echo "override include_sec 1" >> $@
+ 	cat $< >> $@
+-%.h: %.oh
++%.h: %.ohi
+ #	if [ $@ = common.h ]; then $(MAKE) ${xlog}h;fi
+ 	${OCOMP} $< ${OFLAGS} logfile 0
+ 	${OCONV} $<.x
+ 
+ clean:
+-	-rm -f common.oh              common.oh.x     common.h
+-	-rm -f ${xlog}oh              ${xlog}oh.x     ${xlog}h
+-	-rm -f oadbgdatas.oh          oadbgdatas.oh.x oadbgdatas.h
+-	-rm -f ${objects} ${sublogs}  ${subx}         ${subc}
+-	-rm -f            main.oc.log main.oc.x       main.c
+-	-rm -f oadbgdata.oh           oadbgdata.oh.x  oadbgdata.h
++	-rm -f common.ohi            common.ohi.x     common.h
++	-rm -f ${xlog}ohi            ${xlog}ohi.x     ${xlog}h
++	-rm -f oadbgdatas.ohi        oadbgdatas.ohi.x oadbgdatas.h
++	-rm -f ${objects} ${sublogs} ${subx}          ${subc}
++	-rm -f           main.oc.log main.oc.x        main.c
++	-rm -f oadbgdata.ohi         oadbgdata.ohi.x  oadbgdata.h
+ 
+ 	-rm -f ${exte} ${libname}
+ 
+@@ -83,9 +83,8 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	echo "not ready"
+-#	install -D ${libname} \
+-#		$(DESTDIR)$(prefix)/lib/${libname}
++	install -D ${libname} \
++		$(DESTDIR)$(prefix)/lib/${libname}
+ 
+ install: all install-lib
+ 
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ importx "malloc" malloc
+ 
+@@ -129,23 +129,25 @@ function branch_code(ssu code,valueu end
+ end
+ 
+ import "oadata_logpad_get" oadata_logpad_get #importx without args
++import "print_lhex" print_lhex
+ import "print_hex" print_hex
+ import "print_hhex" print_hhex
+ 
+ function branch_log(sv br,valueu start)
+ 	call prints_inline_start("branch:")
+-	valueu end#1;set end br#:branch.size
+-
+ 	valueu cuts#1;set cuts br#:branch.cuts
+-	dataxu sz#1;set sz 0
+-	add end cuts
++	valueu end#1;set end cuts
++
++	valueu size#1;set size 0  # same like in branch.size comment
++	#long long on 32? is not the case, more at save_branch
++	add end br#:branch.size
+ 	while cuts!=end
+-		add sz cuts#:branchcut.size
++		add size cuts#:branchcut.size
+ 		add cuts \branchcut\
+ 	end
+ 	call print_einline("id",br#:branch.log_id)
+-	call print_hex("size",sz)
+-	set sz br#:branch.isize
++	call print_lhex("size",size)
++	dataxu sz#1;set sz br#:branch.isize
+ 	if sz!=0 #most of the cases, it is best that only root has functions
+ 		div sz :
+ 		call print_einline("inners",sz)
+@@ -173,7 +175,7 @@ function branch_log(sv br,valueu start)
+ 	set cuts br#:branch.cuts
+ 	while cuts!=end
+ 		ss code;set code cuts#:branchcut.x
+-		set sz cuts#:branchcut.size
++		set sz cuts#:branchcut.size  ##same minimum like in save save_branch
+ 
+ 		charx pad#1;set pad oadata_logpad_get()
+ 		#charx pad_minus_one#256-1 #was xlog_pad_default
+--- actionswf-1.orig/oad/common.h.oh
++++ /dev/null
+@@ -1,121 +0,0 @@
+-
+-const FALSE=0
+-const TRUE=1
+-
+-const EXIT_SUCCESS=0
+-const EXIT_FAILURE=-1
+-
+-const SEEK_SET=0
+-const SEEK_END=2
+-
+-const Tab=0x9
+-const Space=0x20
+-const Comma=0x2c
+-const ZeroChar=0x30
+-const NineChar=0x39
+-const Equal=0x3d
+-const A=0x41
+-const F=0x46
+-const Cl=0x63
+-const El=0x65
+-const Fl=0x66
+-const Il=0x69
+-const Ml=0x6d
+-const Rl=0x72
+-
+-#override include_sec 1
+-einclude "../include/xlog.h" "../include/xlog.h.oh" #e? xlog_id is else
+-include "oadbgdatas.h" "oadbgdatas.h.oh"
+-
+-const mark_nothing=-1
+-const no_index=-1
+-
+-const sprites_realloc_onepart=10*:
+-#to be at least 2, for presprites_init; and 1 for sprite_done (root 0 move to final)
+-
+-function presprite() #presprites_size is intern
+-	valuexu apreframe#1
+-
+-	valuexu preframes#1
+-	dataxu  size#1     #same as parent, at button is extra, here are ui16 frames, copy sprites mechanism that is padded for debugger
+-end
+-function preframe()
+-	valuexu ustrings#1
+-	dataxu ussize#1  ;#Count=ui16 * :
+-
+-	valuexu strings#1
+-	dataxu ssize#1  ;#Count=ui16 * :
+-
+-	dataxu size#1  #DoAction has ui32 but overall also is a ui32
+-
+-	valueu abranch#1
+-
+-	valueu branchpointer#1  #starting from abranch and descending
+-
+-	valueu action_last#1
+-	valuexu actions_if#1 ;#is also between action calls, if jump forwards to End must set if_flag
+-	dataxu actions_if_size#1
+-	valuexu actions_jump#1 #here is ok to have NULL next if to End
+-	dataxu actions_jump_size#1
+-
+-	#log only
+-	value log_recalculation#1 #can be on 32 bits, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
+-	#
+-	valueu log_mem#1
+-	valueu log_size#1
+-	valueu log_allsize#1  #this is increasing so much at last indents
+-	dataxu log_indents#1  #same as functions
+-	#
+-	valueu log_xsize#1   ;#example: a[a[a]]=a[a[a]] is 40 size vs 192 xsize
+-	dataxu log_branchid#1 #for strings log
+-	dataxu log_sizedfunctions#1  #why to make something spacial for oadata when here is fast
+-end
+-function branch()
+-	valueu cuts#1
+-	valueu size#1  #here a return undefined DoAction has 8 and a branchcut has 12(16 if aligned), there are no 3 size(tag+end) DoAction from actionswf lib
+-
+-	valuexu innerbranches#1 #for define functions and for 3rd part
+-	dataxu isize#1  #same as oadata functions plus for 3rd that is bigger, a jump,push,define at least
+-
+-	valueu topbranch#1
+-	valueu suprabranch#1
+-	valueu subbranch#1
+-
+-	dataxu offset#1       #at jumpforward, and at log
+-	dataxu offset_loop#1  #if the branch has a loop start, else use no_loop . and at forin_breaks
+-	dataxu offset_break#1 #only 1 is logical, at second must error else will do segmentation
+-	valueu action_top#1      #branch start action, for mark, after compare
+-	valueu action_if#1   #is last suprabranch action (if is not root) to resolve jumpforward (ActionIf) if will be the case
+-	valueu action_loop#1 #if is an offset_loop, next will be the action_loop that can be linked (there are exceptions like ret_cont_break cases)
+-	valueu action_break#1
+-	valueu action_cut#1  #to resolve cuts, can be the same with action_loop when whiletrue and then the cuts
+-
+-	dataxu log_id#1  #for strings log
+-	wordxu log_fn#1  #nostalgia
+-	wordxu log_backjumps#1 #not dataxu? totalvalues is short
+-	wordxu log_fwdjumps#1  #not dataxu? totalvalues is short
+-end
+-function branchcut()
+-	vdataxu x#1   #ints everywhere and pointers for strings, will not memcpy
+-	dataxu size#1 #same x size doctrine
+-end
+-function ustring()
+-	valueu base#1
+-	valueu off#1
+-	valueu ubranch#1
+-end
+-function string()
+-	valueu base#1
+-	valueu off#1
+-	valuexu branches#1
+-	dataxu size#1 #same as number of branches
+-end
+-
+-const from_action=0
+-const from_show=1
+-
+-const pad_default=0x100
+-
+-const no_loop=0xffFFffFF
+-
+-const output_nl=xlog_nl #this must be the same with what is in memnl(), or change it
+--- /dev/null
++++ actionswf-1/oad/common.oh
+@@ -0,0 +1,126 @@
++
++const EXIT_SUCCESS=0
++const EXIT_FAILURE=-1
++
++const SEEK_SET=0
++const SEEK_END=2
++
++const Tab=0x9
++const Space=0x20
++const Comma=0x2c
++const ZeroChar=0x30
++const NineChar=0x39
++const Equal=0x3d
++const A=0x41
++const F=0x46
++const Cl=0x63
++const El=0x65
++const Fl=0x66
++const Il=0x69
++const Ml=0x6d
++const Rl=0x72
++
++#override include_sec 1
++einclude "../include/xlog.h" "../include/xlog.oh" #e? xlog_id is else
++include "oadbgdatas.h" "oadbgdatas.oh"
++
++const mark_nothing=-1
++const no_index=-1
++
++const sprites_realloc_onepart=10*:
++#to be at least 2, for presprites_init; and 1 for sprite_done (root 0 move to final)
++
++function preoadata()
++	valuexu presprites#1
++	dataxu size#1
++end
++function presprite() #presprites_size is intern
++	valuexu apreframe#1
++
++	valuexu preframes#1
++	dataxu  size#1     #same as parent, at button is extra, here are ui16 frames, copy sprites mechanism that is padded for debugger
++end
++function preframe()
++	valuexu ustrings#1
++	dataxu ussize#1  ;#Count=ui16 * :
++	#attention that in a constantpool of actionrecordheader of ui16 there are, at maximum, 3 bytes constants(null and two bytes) counting in total 0xffff/3
++	#null and one byte are 255 maximum
++	valueu restore_ustrings#1
++
++	valuexu strings#1
++	dataxu ssize#1  ;#Count=ui16 * :
++	valueu restore_dstrings#1
++
++	dataxu size#1  #DoAction has ui32 but overall also is a ui32
++
++	valueu abranch#1
++
++	valueu branchpointer#1  #starting from abranch and descending
++
++	valueu action_last#1
++	valuexu actions_if#1 ;#is also between action calls, if jump forwards to End must set if_flag
++	dataxu actions_if_size#1
++	valuexu actions_jump#1 #here is ok to have NULL next if to End
++	dataxu actions_jump_size#1
++
++	#log only
++	value log_recalculation#1 #can be on 32 bits, multiple actions with a big pool, or multiple actions constant16 to constant8 reductions. good at log
++	#
++	valueu log_mem#1
++	valueu log_size#1
++	valueu log_allsize#1  #this is increasing so much at last indents
++	dataxu log_indents#1  #same as functions
++	#
++	valueu log_xsize#1   ;#example: a[a[a]]=a[a[a]] is 40 size vs 192 xsize
++	dataxu log_branchid#1 #for strings log
++	dataxu log_sizedfunctions#1  #why to make something spacial for oadata when here is fast
++end
++function branch()
++	valueu cuts#1
++	valueu size#1  # there are examples which tends to x4 from DoAction to .x. a branchcut has 12(16 if aligned), there are no 3 size(tag+end) DoAction from actionswf lib
++
++	valuexu innerbranches#1 #for define functions and for 3rd part
++	dataxu isize#1  #same as oadata functions plus for 3rd that is bigger, a jump,push,define at least
++
++	valueu topbranch#1
++	valueu suprabranch#1
++	valueu subbranch#1
++
++	dataxu offset#1       #at jumpforward, and at log
++	dataxu offset_loop#1  #if the branch has a loop start, else use no_loop . and at forin_breaks
++	dataxu offset_break#1 #only 1 is logical, at second must error else will do segmentation
++	valueu action_top#1      #branch start action, for mark, after compare
++	valueu action_if#1   #is last suprabranch action (if is not root) to resolve jumpforward (ActionIf) if will be the case
++	valueu action_loop#1 #if is an offset_loop, next will be the action_loop that can be linked (there are exceptions like ret_cont_break cases)
++	valueu action_break#1
++	valueu action_cut#1  #to resolve cuts, can be the same with action_loop when whiletrue and then the cuts
++
++	dataxu log_id#1  #for strings log
++	wordxu log_fn#1  #nostalgia
++	wordxu log_backjumps#1 #not dataxu? totalvalues is short
++	wordxu log_fwdjumps#1  #not dataxu? totalvalues is short
++end
++function branchcut()
++	vdataxu x#1   #ints everywhere and pointers for strings, will not memcpy
++	dataxu size#1 #same x size doctrine
++end
++function ustring()
++	valueu base#1
++	valueu off#1
++	valueu ubranch#1
++end
++function string()
++	valueu base#1
++	valueu off#1
++	valuexu branches#1
++	dataxu size#1 #same as number of branches
++end
++
++const from_action=0
++const from_show=1
++
++const pad_default=0x100
++
++const no_loop=0xffFFffFF
++
++const output_nl=xlog_nl #this must be the same with what is in memnl(), or change it
+--- actionswf-1.orig/oad/compare.oc
++++ actionswf-1/oad/compare.oc
+@@ -9,18 +9,25 @@ importx "free" free
+ importx "fclose" fclose
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ #multithread unsafe
+ dataxu presprites_size#1  #same as sprites_size
+ #
++function global_presprites_size()
++	return global.presprites_size
++end
+ 
+ char inter_extension_data=".data";vstr p_inter_extension_data^inter_extension_data
+ function inter_extension(sv psize)
+ 	set psize# (\global.inter_extension_data)
+ 	return global.p_inter_extension_data
+ end
+-function compare(ss swf_fullpath)
++import "restore" restore
++import "restore_free" restore_free
++import "mark_all" mark_all
++import "mark_compare" mark_compare
++function compare(ss swf_fullpath,valueu presprites,valueu data)
+ 	sd size;set size strlen(swf_fullpath)
+ 	sd size1=\global.inter_extension_data
+ 	add size1 size
+@@ -33,11 +40,19 @@ function compare(ss swf_fullpath)
+ 		sd file
+ 		set file fopen(prev,"rb")
+ 		call free(prev)
++		charx ok#1
+ 		if file!=(NULL) #will mark diffs
++			valueu oldpreoadata#1;set oldpreoadata restore(file)
+ 			call fclose(file)
+-		#else will mark all
++			if oldpreoadata!=(NULL)
++				set ok mark_compare(oldpreoadata,presprites,global.presprites_size,data)
++				call restore_free(oldpreoadata)
++				return ok
++			end
++			return (EXIT_FAILURE)
+ 		end
+-		return (EXIT_SUCCESS)
++		set ok mark_all(presprites,global.presprites_size,data)
++		return ok
+ 	end
+ 	return (EXIT_FAILURE)
+ end
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -4,7 +4,7 @@ format elfobj64
+ importx "realloc" realloc
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ function re_alloc(svu pmem,dataxu size) #only dataxu external sizes, and +1 increments
+ 	if size!=0
+@@ -43,13 +43,13 @@ function re_calloc_size(svu pmem,sdu psi
+ 	end
+ 	return ok
+ end
+-function re_alloc_add(svu pmem,sdu size,valueu value)
+-	charx ok#1;set ok re_alloc(pmem,size#)
++function re_alloc_add(svu pmem,sdu psize,valueu value)
++	charx ok#1;set ok re_alloc(pmem,psize#)
+ 	if ok=(EXIT_SUCCESS)
+ 		sv mem;set mem pmem#
+-		add mem size#
++		add mem psize#
+ 		set mem# value
+-		add size# :
++		add psize# :
+ 	end
+ 	return ok
+ end
+@@ -227,18 +227,12 @@ function frame_init(valueu total)
+ 		sv text;set text malloc((frame_text_allocpart))
+ 		if text!=(NULL)
+ 			sv lines
+-			charx bool#1;set bool (TRUE)
+-			if total!=0
+-				valueu size#1;set size (\line\)
+-				mult size total
+-				set lines malloc(size)
+-				if lines=(NULL)
+-					set bool (FALSE)
+-				end
+-			else
+-				set lines (NULL)
+-			end
+-			if bool=(TRUE)
++			#charx bool#1;set bool (TRUE)
++			#if total!=0 even "" is 1 line
++			valueu size#1;set size (\line\)
++			mult size total
++			set lines malloc(size)
++			if lines!=(NULL)
+ 				set f#:frame.lines lines
+ 				set f#:frame.total 0
+ 				set f#:frame.text text
+@@ -265,8 +259,8 @@ function frame_print_action(valueu a,val
+ 	end
+ end
+ function frame_print_action_flag(charx flags,charx f,charx c)
+-	and f flags
+-	if f!=0
++	and flags f
++	if flags=f
+ 		call putchar(c)
+ 	end
+ end
+@@ -296,21 +290,22 @@ function frame_print(valueu n,dataxu nr_
+ end
+ function frame_free(sv f,charx ainit,datax log_index)
+ 	valueu n#1;dataxu nr_actions#1
+-	sv lines;set lines f#:frame.lines
++	valueu t#1;set t f#:frame.total
++	sv lines;set lines f#:frame.lines   ## why to have blank lines anyway
+ 	if log_index!=(no_index)
+ 		call frame_print_top(ainit,log_index)
+-		call print_inline_start("lines=%lu",f#:frame.total)
+-		if lines!=(NULL)
++		call print_inline_start("lines=%lu",t)
++		if t!=0
+ 			set n 0
+ 			set nr_actions lines#:line.total
+ 		end
+ 	end
+-	if lines!=(NULL)
++	if t!=0 # action("") is 1 line
+ 		valueu ix#1;valueu actions#1
+ 		set ix 0
+ 		set actions lines#:line.actions
+ 		valueu end#1;set end \line\
+-		mult end f#:frame.total
++		mult end t
+ 		sv pointer;set pointer lines
+ 		add end pointer
+ 		while pointer!=end
+@@ -499,7 +494,7 @@ function frame_actions(valueu fr,valueu
+ 					sub cursor \action\
+ 					set cursor#:action.next (action_next_default)     #last one is null
+ 					set cursor#:action.nextif (action_nextif_default) #other way at ActionIf
+-					set cursor#:action.flags (nothing_flag)
++					set cursor#:action.flags (no_flags)
+ 					set cursor#:action.amark (action_mark_default)    #other way at branch start
+ 				end
+ 				set _actions# pointer
+@@ -530,17 +525,17 @@ function frame_actions(valueu fr,valueu
+ end
+ function frame_expand(valueu fr,valueu lines) #,sv p_totallines)
+ 	add lines fr#:frame.total
+-	if lines!=0
+-		valueu alloc#1;set alloc \line\
+-		mult alloc lines
+-		valueu re#1
+-		set re realloc(fr#:frame.lines,alloc)
+-		if re=(NULL)
+-			return (EXIT_FAILURE)
+-		end
++	#if lines!=0  action("") is 1 line
++	valueu alloc#1;set alloc \line\
++	mult alloc lines
++	valueu re#1
++	set re realloc(fr#:frame.lines,alloc)
++	if re!=(NULL)
+ 		set fr#:frame.lines re
+ 		#set p_totallines# fr#:frame.total
+ 		#this is at end because can be truncated on last blank lines: set fr#:frame.total lines
++		return (EXIT_SUCCESS)
+ 	end
+-	return (EXIT_SUCCESS)
++	#end
++	return (EXIT_FAILURE)
+ end
+--- actionswf-1.orig/oad/ibranch.oc
++++ actionswf-1/oad/ibranch.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ import "re_alloc" re_alloc
+ import "branch_init" branch_init
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ importx "fopen" fopen
+ importx "fseek" fseek
+@@ -268,7 +268,7 @@ function actionrow(ss inlog,sd end,sv px
+ 					if act#:action.next=(action_next_default) #else is a jumpback, this if is not relevant for action_if (both cases can be)
+ 						charx flags#1;set flags act#:action.flags
+ 						and flags (return_flag)
+-						if flags=(nothing_flag) #why not next=~NULL? is not cosmetic
++						if flags!=(return_flag) #why not next=~NULL? is not cosmetic
+ 							set act#:action.next actions
+ 						end
+ 					end
+@@ -542,7 +542,8 @@ function inter_last_extension(sv psize)
+ 	set psize# (\global.inter_last_extension_data)
+ 	return global.p_inter_last_extension_data
+ end
+-function inter(ss swf_fullpath)
++import "save" save
++function inter(valueu presprites,ss swf_fullpath,valueu data)
+ 	sd size;set size strlen(swf_fullpath)
+ 	sd size1=\global.inter_last_extension_data
+ 	add size1 size
+@@ -556,9 +557,13 @@ function inter(ss swf_fullpath)
+ 		set file fopen(from,"wb")
+ 		call free(from)
+ 		if file!=(NULL)
++			charx exit#1
++			set exit save(presprites,file)
+ 			call fclose(file)
+-			sd exit;set exit compare(swf_fullpath)
+-			return exit
++			if exit=(EXIT_SUCCESS)
++				set exit compare(swf_fullpath,presprites,data)
++				return exit
++			end
+ 		end
+ 	end
+ 	return (EXIT_FAILURE)
+@@ -576,11 +581,9 @@ function oadata_init(sv poadata)
+ 			if a#:oadata.functions!=(NULL)
+ 				set a#:oadata.functions_size 0
+ 
+-				set a#:oadata.marks malloc(\mark\)
+-				sd m;set m a#:oadata.marks
+-				if m!=(NULL)
+-					set m#:mark.prev (mark_nothing)
+-					set m#:mark.next (mark_nothing)
++				set a#:oadata.marks malloc(1)
++				if a#:oadata.marks!=(NULL)
++					set a#:oadata.size 0
+ 					return (EXIT_SUCCESS)
+ 				end
+ 			end
+--- actionswf-1.orig/oad/log.oc
++++ actionswf-1/oad/log.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ #multithread unsafe
+ charx error#1
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -7,7 +7,7 @@ importx "free" free
+ importx "memcpy" memcpy
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ import "fcontent" fcontent
+ import "loop" loop
+@@ -25,7 +25,7 @@ char logpad=xlog_pad_default
+ 
+ #functions(except oadata_logpad) are returning 0(long) on success and != on failure (EXIT_FAILURE or another != (from extern calls))
+ 
+-functionx oadata_make(ss swf_fullpath,sv poadata,charx log)
++functionx oadata_make(ss swf_fullpath,svu poadata,charx log)
+ 	set poadata# (NULL)
+ 	sd size;set size strlen(swf_fullpath)
+ 	char logext=".log";vstr slogext^logext
+@@ -65,7 +65,7 @@ functionx oadata_make(ss swf_fullpath,sv
+ 								if exit=(EXIT_SUCCESS)
+ 									set exit presprite_done(sprites,0,0,poadata#,presprites) #root has not a done(0 to 0) in .log
+ 									if exit=(EXIT_SUCCESS)
+-										set exit inter(swf_fullpath)
++										set exit inter(presprites,swf_fullpath,poadata#)
+ 									end
+ 								end
+ 							end
+@@ -137,12 +137,12 @@ functionx oadata_ok(ss swf_fullpath)
+ end
+ 
+ importx "puts" puts
++importx "printf" printf
+ 
+ import "sprite_free" sprite_free
+ 
+-import "print_indent" print_indent
+-import "print_unindent" print_unindent
+ import "print" print
++import "print_inline_done" print_inline_done
+ 
+ functionx oadata_free(sv data,charx log)
+ 	if data!=(NULL)
+@@ -176,24 +176,17 @@ functionx oadata_free(sv data,charx log)
+ 				sv marks;set marks data#:oadata.marks
+ 				if marks!=(NULL)
+ 					if log=(TRUE)
+-						call puts("mark struct:")
+-						sd m;set m marks
+-						dataxu i#1;set i 0
+-						whiletrue
+-							datax next#1;set next m#:mark.next
+-							call print_indent()
+-							call print("%u",i)
+-							call print_indent()
+-							call print("%d",m#:mark.prev)
+-							call print("%d",next)
+-							call print_unindent()
+-							call print_unindent()
+-							if next=(mark_nothing)
+-								break
+-							end
+-							#add m \mark\
+-							#inc i
++						valueu sz#1;set sz data#:oadata.size
++						div sz \mark\
++						call printf("marks: %u",sz)
++						if sz>^\mark\
++							#log first and last
++							valueu tolog#1;set tolog marks
++							add tolog data#:oadata.size
++							sub tolog \mark\
++							call printf(": %d %u ... %u %d",marks#:mark.prev,marks#:mark.next,tolog#:mark.prev,tolog#:mark.next)
+ 						end
++						call print_inline_done()
+ 					end
+ 					call free(marks)
+ 				end
+--- /dev/null
++++ actionswf-1/oad/mark.oc
+@@ -0,0 +1,318 @@
++
++format elfobj64
++
++override include_sec 1
++include "common.h" "common.oh"
++
++function mark_all(svu presprites,valueu end,valueu data)
++	charx ok#1
++	add end presprites
++	while presprites!=end
++		if presprites#!=(NULL) #here can have other tags, the map order is important when debugging
++			set ok mark_presprite(presprites#,data)
++			if ok!=(EXIT_SUCCESS)
++				return (EXIT_FAILURE)
++			end
++		end
++		incst presprites
++	end
++	return (EXIT_SUCCESS)
++end
++function mark_presprite(valueu ps,valueu data)
++	charx ok#1
++	valueu fr#1
++	if ps#:presprite.apreframe!=(NULL)
++		set fr ps#:presprite.apreframe
++		set ok mark_branch(fr#:preframe.abranch,data)
++		if ok=(EXIT_FAILURE)
++			return (EXIT_FAILURE)
++		end
++	end
++	svu frames;set frames ps#:presprite.preframes
++	valueu fend#1;set fend frames
++	add fend ps#:presprite.size
++	while frames!=fend
++		if frames#!=(NULL) #also with shows
++			set fr frames#
++			set ok mark_branch(fr#:preframe.abranch,data)
++			if ok=(EXIT_FAILURE)
++				return (EXIT_FAILURE)
++			end
++		end
++		incst frames
++	end
++	return (EXIT_SUCCESS)
++end
++function mark_branch(valueu br,valueu data)
++	charx ok#1;set ok mark_action_if(br#:branch.action_top,data)
++	if ok=(EXIT_SUCCESS)
++		svu ibrs;set ibrs br#:branch.innerbranches
++		valueu end#1;set end ibrs
++		add end br#:branch.isize
++		while ibrs!=end
++			set ok mark_branch(ibrs#,data)
++			if ok=(EXIT_FAILURE)
++				return (EXIT_FAILURE)
++			end
++			incst ibrs
++		end
++		if br#:branch.subbranch!=(NULL)
++			set ok mark_branch(br#:branch.subbranch,data)
++			if ok=(EXIT_FAILURE)
++				return (EXIT_FAILURE)
++			end
++		end
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++function mark_action_if(valueu act,valueu data)
++	if act!=(NULL) #can be trick branch, while(true){break} , then has subbranches with actions
++		charx ok#1;set ok mark_action(act,data)
++		return ok
++	end
++	return (EXIT_SUCCESS)
++end
++importx "realloc" realloc
++function mark_action(valueu act,valueu data)
++	valueu size#1;set size data#:oadata.size
++	valueu ix#1;set ix size
++	valueu index#1;set index ix
++	add size \mark\
++	svu marks;set marks realloc(data#:oadata.marks,size)
++	if marks!=(NULL)
++		set data#:oadata.marks marks
++		set data#:oadata.size size
++		div index \mark\
++		set act#:action.amark index
++
++		add ix marks
++		if ix=marks
++			set ix#:mark.prev (mark_nothing)
++			set ix#:mark.next (mark_nothing)
++		else
++			set ix#:mark.next (mark_nothing)
++			div size \mark\
++			dec size
++			set ix#:mark.prev size
++			dec ix#:mark.prev
++
++			sub ix \mark\
++			set ix#:mark.next size
++		end
++
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++
++function mark_string_branch(valueu br,valueu data)
++	valueu act#1;set act br#:branch.action_top
++	if act#:action.amark=(mark_nothing) #was already marked at another previous branch
++		charx ok#1;set ok mark_action(act,data)
++		return ok
++	end
++	return (EXIT_SUCCESS)
++end
++function mark_string_branches(valueu str,valueu data)
++	svu brs#1;valueu brsend#1;charx ok#1
++	set brs str#:string.branches
++	set brsend brs;add brsend str#:string.size
++	while brs!=brsend
++		set ok mark_string_branch(brs#,data)
++		if ok!=(EXIT_SUCCESS)
++			return (EXIT_FAILURE)
++		end
++		incst brs
++	end
++	return (EXIT_SUCCESS)
++end
++
++function mark_compare(valueu prevoadata,svu presprites,dataxu size,valueu data)
++	svu prevpresprites#1;set prevpresprites prevoadata#:preoadata.presprites
++	valueu prevend#1;set prevend prevpresprites;add prevend prevoadata#:preoadata.size
++	valueu end#1;set end presprites
++	add end size
++	while presprites!=end
++		if presprites#!=(NULL) #from parsed where the map to oadata out was
++			charx ok#1
++			valueu pvps#1
++			if prevpresprites!=prevend
++				set pvps prevpresprites#
++				valueu ps#1;set ps presprites#
++				valueu fr#1
++
++				if ps#:presprite.apreframe!=(NULL)
++					if pvps#:presprite.apreframe!=(NULL)
++						set ok mark_compare_frame(pvps#:presprite.apreframe,ps#:presprite.apreframe,data)
++					else
++						set fr ps#:presprite.apreframe
++						set ok mark_branch(fr#:preframe.abranch,data)
++					end
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
++				end
++
++				svu prevfrs#1;set prevfrs pvps#:presprite.preframes
++				valueu prevfend#1;set prevfend prevfrs;add prevfend pvps#:presprite.size
++
++				svu frs;set frs ps#:presprite.preframes
++				valueu fend#1;set fend frs
++				add fend ps#:presprite.size
++				while frs!=fend
++					if prevfrs!=prevfend
++						if frs#!=(NULL) #shows
++							set ok mark_compare_frame(prevfrs#,frs#,data)
++						end
++						incst prevfrs
++					elseif frs#!=(NULL) #shows
++						set fr frs#
++						set ok mark_branch(fr#:preframe.abranch,data)
++					end
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
++					incst frs
++				end
++
++				incst prevpresprites
++			else
++				set ok mark_presprite(presprites#,data)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
++			end
++		end
++		incst presprites
++	end
++	return (EXIT_SUCCESS)
++end
++function mark_compare_frame(valueu prevpf,valueu pf,valueu data)
++	charx ok#1
++	set ok mark_compare_branch(prevpf#:preframe.abranch,pf#:preframe.abranch,data) #compare branch
++	if ok=(EXIT_SUCCESS) #strings are last because if where first then will ask for action.amark not mark_nothing at cuts
++		svu strs#1;valueu end#1;svu prevstrs;valueu prevend#1;valueu str#1;datax cmp#1
++		#compare ustrings, prev, action.amark!=mark_nothing and then same like strings, and then mark_action
++		set prevstrs prevpf#:preframe.ustrings
++		set prevend prevstrs;add prevend prevpf#:preframe.ussize
++		set strs pf#:preframe.ustrings
++		set end strs;add end pf#:preframe.ussize
++		while strs!=end
++			set str strs#
++			if prevstrs!=prevend
++				set cmp mark_compare_string(prevstrs#,str)
++				if cmp!=0
++					#restored string has no branches, that diff is observable at cuts
++					set ok mark_string_branch(str#:ustring.ubranch,data)
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
++				end
++				incst prevstrs
++			else
++				set ok mark_string_branch(str#:ustring.ubranch,data)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
++			end
++			incst strs
++		end
++		#compare strings, prev, here compare string first(strings without knowing null end) then branches action.amark!=mark_nothing, and then mark_action
++		set prevstrs prevpf#:preframe.strings
++		set prevend prevstrs;add prevend prevpf#:preframe.ssize
++		set strs pf#:preframe.strings
++		set end strs;add end pf#:preframe.ssize
++		while strs!=end
++			set str strs#
++			if prevstrs!=prevend
++				set cmp mark_compare_string(prevstrs#,str)
++				if cmp!=0
++					#restored string has no branches, that diff is observable at cuts
++					set ok mark_string_branches(str,data)
++					if ok!=(EXIT_SUCCESS)
++						return (EXIT_FAILURE)
++					end
++				end
++				incst prevstrs
++			else
++				set ok mark_string_branches(str,data)
++				if ok!=(EXIT_SUCCESS)
++					return (EXIT_FAILURE)
++				end
++			end
++			incst strs
++		end
++	end
++	return ok
++end
++importx "memcmp" memcmp
++function mark_compare_branch(valueu prevbr,valueu br,valueu data)
++	charx ok#1
++
++	#compare cuts
++	if prevbr#:branch.size=br#:branch.size
++		svu prevcursor;svu cursor;valueu cutsend#1
++		set prevcursor prevbr#:branch.cuts
++		set cursor br#:branch.cuts
++		set cutsend cursor;add cutsend br#:branch.size
++		while cursor!=cutsend
++			if prevcursor#:branchcut.size=cursor#:branchcut.size
++				datax cmp#1;set cmp memcmp(prevcursor#:branchcut.x,cursor#:branchcut.x,cursor#:branchcut.size)
++				if cmp=0
++					add cursor \branchcut\
++					add prevcursor \branchcut\
++					continue
++				end
++			end
++			set ok mark_action_if(br#:branch.action_top,data)
++			if ok!=(EXIT_SUCCESS)
++				return (EXIT_FAILURE)
++			end
++			break
++		end
++	else
++		set ok mark_action_if(br#:branch.action_top,data) #one case can be: prev with size, this no size
++		if ok!=(EXIT_SUCCESS)
++			return (EXIT_FAILURE)
++		end
++	end
++
++	#inners
++	svu previns#1;set previns prevbr#:branch.innerbranches
++	valueu prevend#1;set prevend previns;add prevend prevbr#:branch.isize
++	svu ins#1;set ins br#:branch.innerbranches
++	valueu end#1;set end ins;add end br#:branch.isize
++	while ins!=end
++		if previns!=prevend
++			set ok mark_compare_branch(previns#,ins#,data)
++			incst previns
++		else
++			set ok mark_branch(ins#,data)
++		end
++		if ok!=(EXIT_SUCCESS)
++			return (EXIT_FAILURE)
++		end
++		incst ins
++	end
++
++	#subbranch
++	if br#:branch.subbranch!=(NULL)
++		if prevbr#:branch.subbranch!=(NULL)
++			set ok mark_compare_branch(prevbr#:branch.subbranch,br#:branch.subbranch,data)
++		else
++			set ok mark_branch(br#:branch.subbranch,data)
++		end
++		return ok
++	end
++	return (EXIT_SUCCESS)
++end
++importx "strcmp" strcmp
++function mark_compare_string(valueu prevstr,valueu str)
++	valueu s1#1;set s1 prevstr#:ustring.base
++	add s1 prevstr#:ustring.off
++	valueu s2#1;set s2 str#:ustring.base
++	add s2 str#:ustring.off
++	datax cmp#1;set cmp strcmp(s1,s2)
++	return cmp
++end
+--- actionswf-1.orig/oad/oadbgdata.h.oh
++++ /dev/null
+@@ -1,7 +0,0 @@
+-
+-include "oadbgdatas.h" "oadbgdatas.h.oh"
+-
+-importx "oadata_make" oadata_make
+-importx "oadata_free" oadata_free
+-importx "oadata_ok" oadata_ok
+-importx "oadata_logpad_set" oadata_logpad_set
+--- /dev/null
++++ actionswf-1/oad/oadbgdata.oh
+@@ -0,0 +1,7 @@
++
++include "oadbgdatas.h" "oadbgdatas.oh"
++
++importx "oadata_make" oadata_make
++importx "oadata_free" oadata_free
++importx "oadata_ok" oadata_ok
++importx "oadata_logpad_set" oadata_logpad_set
+--- actionswf-1.orig/oad/oadbgdatas.h.oh
++++ /dev/null
+@@ -1,51 +0,0 @@
+-
+-constif NULL=0
+-
+-function oadata()
+-	valuexu sprites#1
+-	dataxu sprites_size#1 ;#1(root)+ui16 *: ,for free
+-	#dtitles has a constant pool end recognizer for frame_one/frame
+-
+-	#these are pointers to actions
+-	valuexu functions#1   #is this in conflict with for3 same sign? no, there will be another offset, remembering that offset at functions is at start
+-	dataxu functions_size#1  #anyway is using a counter at appending (preferred instead of null), DefineFunction is at minimum 8 same as : then swfsizeui32 minus some tags
+-	#can stay outside, anyway is good for info
+-	#here dtitles has a push/pop recognizer
+-
+-	valuexu marks#1
+-end
+-function sprite()
+-	valuexu aframe#1
+-
+-	valuexu frames#1
+-	dataxu size#1    #same as presprite. for free, and when adding at last frame
+-end
+-function frame()
+-	valueu lines#1
+-	valueu total#1  #if outside is command like, break 100 from only 50 will fast tell if is an error. and with this occasion, for free
+-	vstrx text#1    #not null ended text
+-	valueu size#1   #for fast
+-end
+-function line()
+-	valueu index#1    #same as lines total
+-
+-	valueu actions#1
+-	dataxu total#1   #nr of actions, can also be 0
+-end
+-const action_next_default=NULL
+-const action_nextif_default=NULL
+-const action_mark_default=-1
+-const nothing_flag=0x0
+-const if_flag=0x1     #f
+-const call_flag=0x2   #c
+-const return_flag=0x4 #r
+-function action()
+-	valuexu next#1      #at log e if default
+-	valuexu nextif#1    #at log i if not default
+-	charx flags#1
+-	datax amark#1       #at log m if not default
+-end
+-function mark()
+-	datax prev#1
+-	datax next#1
+-end
+--- /dev/null
++++ actionswf-1/oad/oadbgdatas.oh
+@@ -0,0 +1,57 @@
++
++constif NULL=0
++constif FALSE=0
++constif TRUE=1
++
++function oadata()
++	valuexu sprites#1
++	dataxu sprites_size#1 ;#1(root)+ui16 *: ,for free
++	#dtitles has a constant pool end recognizer for frame_one/frame
++
++	#these are pointers to actions
++	valuexu functions#1   #is this in conflict with for3 same sign? no, there will be another offset, remembering that offset at functions is at start
++	dataxu functions_size#1  #anyway is using a counter at appending (preferred instead of null), DefineFunction is at minimum 8 same as : then swfsizeui32 minus some tags
++	#can stay outside, anyway is good for info
++	#here dtitles has a push/pop recognizer
++
++	valueu marks#1
++	valueu size#1
++	#anyway, a while(true){stop();break;} is only 1 byte, 7fff... from src a tag, 2 ints a mark struct
++	#Subclause 6.7.2.1 of the C Standard states, "There may be unnamed padding within a structure object, but not at its beginning" [ISO/IEC 9899:2011].
++	#__attribute__((aligned (16))) will do that
++end
++function sprite()
++	valuexu aframe#1
++
++	valuexu frames#1
++	dataxu size#1    #same as presprite. for free, and when adding at last frame
++end
++function frame()
++	valueu lines#1
++	valueu total#1  #if outside is command like, break 100 from only 50 will fast tell if is an error. and with this occasion, for free
++	vstrx text#1    #not null ended text
++	valueu size#1   #for fast
++end
++function line()
++	valueu index#1    #same as lines total
++
++	valueu actions#1
++	dataxu total#1   #nr of actions, can also be 0
++end
++const action_next_default=NULL
++const action_nextif_default=NULL
++const action_mark_default=-1
++const no_flags=0x0
++const if_flag=0x1     #f
++const call_flag=0x2   #c
++const return_flag=0x4 #r
++function action()
++	valuexu next#1      #at log e if default
++	valuexu nextif#1    #at log i if not default
++	charx flags#1
++	datax amark#1       #at log m if not default
++end
++function mark()
++	datax prev#1
++	datax next#1
++end
+--- /dev/null
++++ actionswf-1/oad/save.oc
+@@ -0,0 +1,542 @@
++
++format elfobj64
++
++override include_sec 1
++include "common.h" "common.oh"
++
++const BYTE=1
++const WORD=2
++const DWORD=4
++
++importx "fwrite" fwrite
++
++function lowwrite(valueu buf,charx sz,valueu file)
++	charx out#1;set out fwrite(buf,sz,1,file)
++	return out
++end
++function mediumwrite(valueu buf,wordxu sz,valueu file)
++	charx out#1;set out fwrite(buf,sz,1,file)
++	return out
++end
++function highwrite(valueu buf,dataxu sz,valueu file)
++	charx out#1;set out fwrite(buf,sz,1,file)
++	return out
++end
++function swrite(wordxu n,valueu file)
++	charx out#1;set out lowwrite(#n,(WORD),file) #size_t but WORD write
++	return out
++end
++function iwrite(dataxu n,valueu file)
++	charx out#1;set out lowwrite(#n,(DWORD),file)
++	return out
++end
++function truewrite(valueu file)
++	char a=TRUE
++	charx out#1;set out lowwrite(#a,(BYTE),file)
++	return out
++end
++function falsewrite(valueu file)
++	char a=FALSE
++	charx out#1;set out lowwrite(#a,(BYTE),file)
++	return out
++end
++
++import "global_presprites_size" global_presprites_size
++function save(svu presprites,valueu file)
++	valueu end#1;set end presprites
++	add end global_presprites_size()
++	wordxu counted#1;set counted 0
++	sv pointer#1;set pointer presprites
++	while pointer!=end
++		if pointer#!=(NULL)
++			inc counted
++		end
++		incst pointer
++	end
++	charx out#1;set out swrite(counted,file)
++	if out!=0
++		while presprites!=end
++			valueu ps#1;set ps presprites#
++			if ps!=(NULL)
++				if ps#:presprite.apreframe!=(NULL)
++					set out truewrite(file)
++					if out=0
++						return (EXIT_FAILURE)
++					end
++					set out save_frame(ps#:presprite.apreframe,file)
++				else
++					set out falsewrite(file)
++				end
++				if out=0
++					return (EXIT_FAILURE)
++				end
++				dataxu size#1;set size ps#:presprite.size
++				sub size : #1 is always only ready for next
++				valueu fend#1;set fend size
++				div size :
++				set out swrite(size,file) #store from_show places, next they can be with action and later one frame is unmodified, plus all gotoAnd places
++				if out!=0
++					svu frames#1;set frames ps#:presprite.preframes
++					add fend frames
++					while frames!=fend
++						if frames#!=(NULL)
++							set out truewrite(file)
++							if out=0
++								return (EXIT_FAILURE)
++							end
++							set out save_frame(frames#,file)
++						else  # from_show
++							set out falsewrite(file)
++						end
++						if out=0
++							return (EXIT_FAILURE)
++						end
++						incst frames
++					end
++				end
++			end
++			incst presprites
++		end
++		return (EXIT_SUCCESS)
++	end
++	return (EXIT_FAILURE)
++end
++
++function save_frame(valueu aframe,valueu file)
++	charx out#1;set out save_strings(aframe#:preframe.ustrings,aframe#:preframe.ussize,file)
++	if out!=0
++		set out save_strings(aframe#:preframe.strings,aframe#:preframe.ssize,file)
++		if out!=0
++			set out save_branch(aframe#:preframe.abranch,file)
++		end
++	end
++	return out
++end
++
++importx "strlen" strlen
++
++function save_strings(valuexu pointer,valueu end,valueu file)
++	valuexu strings#1;set strings pointer
++	wordxu size#1;set size 0  #string was in constantpool that is actionrecordheader with ui16 size
++	add end pointer
++	valueu str#1;valueu text#1
++	while pointer!=end
++		set str pointer#
++		set text str#:string.base
++		add text str#:string.off
++		add size strlen(text)
++		inc size ##null end \0
++		incst pointer
++	end
++	charx out#1;set out swrite(size,file)
++	if out!=0
++		while strings!=end
++			set str strings#
++			set text str#:string.base
++			add text str#:string.off
++			set size strlen(text)
++			inc size ##null
++			set out mediumwrite(text,size,file)
++			if out=0
++				return 0
++			end
++			incst strings
++		end
++	end
++	return out
++end
++
++function save_branch(valueu br,valueu file) #at least a mathend/function_marker/whileblock_end/if_marker here
++	# branch_log. here we are gipsying because on 32 we are not agreeing with qword size. we are writing cuts sized parts
++	#with this occasion: it is good that multiple action calls are not merged into a branch
++	#anyway on 32src there are ftell calls .x at xcode start, at expands, overall at reread, that will enforce a small file
++	valueu cuts#1;set cuts br#:branch.cuts
++	valueu end#1;set end cuts
++	add end br#:branch.size
++	charx out#1;dataxu sz#1
++	while cuts!=end
++		set sz cuts#:branchcut.size
++		set out iwrite(sz,file)
++		if out=0
++			return 0
++		end
++		valueu code#1;set code cuts#:branchcut.x
++		set out highwrite(code,sz,file)
++		if out=0
++			return 0
++		end
++		add cuts \branchcut\
++	end
++	set out iwrite(0,file)
++	if out!=0
++		set sz br#:branch.isize ##expanded size
++		set end sz
++		divu sz :
++		set out iwrite(sz,file)
++		if out!=0
++			svu pointer;set pointer br#:branch.innerbranches
++			add end pointer
++			while pointer!=end
++				set out save_branch(pointer#,file)
++				if out=0
++					return 0
++				end
++				incst pointer
++			end
++			set pointer br#:branch.subbranch
++			if pointer!=(NULL)
++				set out truewrite(file)
++				if out!=0
++					set out save_branch(pointer,file)
++				end
++			else
++				set out falsewrite(file)
++			end
++		end
++	end
++	return out
++end
++
++#read
++
++importx "fread" fread
++importx "free" free
++
++function lowread(valueu file,valueu buf,charx sz)
++	call fread(buf,sz,1,file)
++end
++function mediumread(valueu file,wordxu sz)
++	valueu mem#1;set mem malloc(sz)
++	if mem!=(NULL)
++		call fread(mem,sz,1,file)
++	end
++	return mem
++end
++function highread(valueu file,dataxu sz)
++	valueu mem#1;set mem malloc(sz)
++	if mem!=(NULL)
++		call fread(mem,sz,1,file)
++	end
++	return mem
++end
++function cread(valueu file,ss pn)
++	call lowread(file,pn,(BYTE))
++end
++function sread(valueu file,swu pn)
++	call lowread(file,pn,(WORD))
++end
++function iread(valueu file,sdu pn)
++	call lowread(file,pn,(DWORD))
++end
++
++importx "malloc" malloc
++importx "printf" printf
++
++import "re_alloc_add" re_alloc_add
++import "print_inline_done" print_inline_done
++import "global_blog" global_blog
++
++function restore(valueu file)
++	valueu data#1;set data malloc((\preoadata\))
++	if data!=(NULL)
++		svu presprites;set presprites malloc((sprites_realloc_onepart))
++		if presprites!=(NULL)
++			set data#:preoadata.presprites presprites
++			set data#:preoadata.size 0
++			wordxu size#1
++			call sread(file,#size)
++			charx log#1;set log global_blog()
++			if log=(TRUE)
++				call printf("%hu sprites to restore",size)
++				call print_inline_done()
++			end
++			while size!=0
++				valueu ps#1;set ps malloc((\presprite\))
++				if ps!=(NULL)
++					valueu fs#1;set fs malloc((sprites_realloc_onepart))
++					if fs!=(NULL)
++						charx ok#1;set ok re_alloc_add(#data#:preoadata.presprites,#data#:preoadata.size,ps)
++						if ok=(EXIT_SUCCESS)
++							set ps#:presprite.preframes fs
++							set ps#:presprite.size 0
++							charx bl#1
++							call cread(file,#bl)
++							if bl=(TRUE)
++								set ps#:presprite.apreframe restore_frame(file)
++								if ps#:presprite.apreframe=(NULL)
++									call restore_free(data)
++									return (NULL)
++								end
++							else
++								set ps#:presprite.apreframe (NULL)
++							end
++							wordxu frames#1;call sread(file,#frames)
++							while frames!=0
++								call cread(file,#bl)
++								if bl=(TRUE)
++									whiletrue
++										valueu mem#1
++										set mem restore_frame(file)
++										if mem!=(NULL)
++											set ok re_alloc_add(#ps#:presprite.preframes,#ps#:presprite.size,mem)
++											if ok=(EXIT_SUCCESS)
++												break
++											end
++											call free(mem)
++										end
++										call restore_free(data)
++										return (NULL)
++									end
++								else
++									set ok re_alloc_add(#ps#:presprite.preframes,#ps#:presprite.size,(NULL))
++									if ok=(EXIT_FAILURE)
++										call restore_free(data)
++										return (NULL)
++									end
++								end
++								dec frames
++							end
++							dec size
++							continue
++						end
++						call free(fs)
++					end
++					call free(ps)
++				end
++				call restore_free(data)
++				return (NULL)
++			end
++			return data
++		end
++		call free(data)
++	end
++	return (NULL)
++end
++
++function restore_frame(valueu file)
++	valueu f#1;set f malloc((\preframe\))
++	if f!=(NULL)
++		whiletrue
++			wordxu usize#1
++			set usize restore_strings(file,#f#:preframe.restore_ustrings,#f#:preframe.ustrings,#f#:preframe.ussize)
++			if usize!=0
++				if f#:preframe.ussize=0
++					break
++				end
++			end
++			whiletrue
++				wordxu dsize#1
++				set dsize restore_strings(file,#f#:preframe.restore_dstrings,#f#:preframe.strings,#f#:preframe.ssize)
++				if dsize!=0
++					if f#:preframe.ssize=0
++						break
++					end
++				end
++				valueu mem#1;set mem restore_branch(file)
++				if mem!=(NULL)
++					set f#:preframe.abranch mem
++					return f
++				end
++				if dsize!=0
++					call restore_strings_free(f#:preframe.restore_dstrings,f#:preframe.strings,f#:preframe.ssize) #inside comparation is extra in extra, but in flow is a saving
++				end
++				break
++			end
++			if usize!=0
++				call restore_strings_free(f#:preframe.restore_ustrings,f#:preframe.ustrings,f#:preframe.ussize)
++			end
++			break
++		end
++		call free(f)
++	end
++	return (NULL)
++end
++
++function restore_strings(valueu file,svu _constpool,svu _strs,sd _size)
++	set _size# 0
++	wordxu cpsize#1
++	call sread(file,#cpsize)
++	if cpsize!=0
++		set _constpool# mediumread(file,cpsize)
++		valueu mem#1;set mem _constpool#
++		if mem!=(NULL)
++			valueu start#1;set start mem
++			set _strs# malloc((sprites_realloc_onepart))
++			if _strs#!=(NULL)
++				valueu end#1;set end mem
++				add end cpsize
++				while mem!=end
++					valueu s#1;set s malloc(\ustring\)
++					if s!=(NULL)
++						charx ok#1;set ok re_alloc_add(_strs,_size,s)
++						if ok=(EXIT_SUCCESS)
++							set s#:ustring.base start
++							set s#:ustring.off mem
++							sub s#:ustring.off start
++							add mem strlen(mem)
++							inc mem ##null end
++							continue
++						end
++						call free(s)
++					end
++					call restore_strings_free(start,_strs#,_size#)
++					set _size# 0
++					call free(start)
++					break
++				end
++				return cpsize
++			end
++			call free(start)
++		end
++	end
++	return cpsize
++end
++
++importx "realloc" realloc
++
++function restore_branch(valueu file)
++	valueu br#1;set br malloc(\branch\)
++	if br!=(NULL)
++		valueu mem#1
++		dataxu size#1
++		set br#:branch.cuts malloc(1) #same as original. is still a mem take, will need it later
++		if br#:branch.cuts!=(NULL)
++			set br#:branch.size 0
++			value sz#1;set sz 0
++			whiletrue
++				call iread(file,#size)
++				if size=0
++					break
++				end
++				set mem highread(file,size)
++				if mem!=(NULL)
++					add sz \branchcut\
++					valueu remem#1;set remem realloc(br#:branch.cuts,sz)
++					if remem!=(NULL)
++						set br#:branch.cuts remem
++						add remem br#:branch.size
++						set remem#:branchcut.x mem
++						set remem#:branchcut.size size
++						set br#:branch.size sz
++						continue
++					end
++					call free(mem)
++				end
++				call restore_branch_cuts_free(br)
++				call free(br)
++				return (NULL)
++			end
++			set br#:branch.innerbranches malloc((sprites_realloc_onepart))
++			if br#:branch.innerbranches!=(NULL)
++				set br#:branch.isize 0
++				call iread(file,#size)
++				while size!=0 #inners
++					set mem restore_branch(file)
++					if mem!=(NULL)
++						charx ok#1;set ok re_alloc_add(#br#:branch.innerbranches,#br#:branch.isize,mem)
++						if ok=(EXIT_SUCCESS)
++							dec size
++							continue
++						end
++						call restore_branch_free(mem)
++					end
++					call restore_branch_cuts_free(br)
++					call restore_branch_inners_free(br)
++					call free(br)
++					return (NULL)
++				end
++				charx bl#1
++				call cread(file,#bl)
++				if bl=(TRUE) #subbranch
++					set br#:branch.subbranch restore_branch(file)
++					if br#:branch.subbranch!=(NULL)
++						return br
++					end
++					call restore_branch_free(br)
++					return (NULL)
++				end
++				set br#:branch.subbranch (NULL)
++				return br
++			end
++			call restore_branch_cuts_free(br)
++		end
++		call free(br)
++	end
++	return (NULL)
++end
++
++function restore_free(svu predata)
++	svu pss#1;set pss predata#:preoadata.presprites
++	valueu end#1;set end pss
++	add end predata#:preoadata.size
++	while pss!=end
++		valueu ps#1;set ps pss#
++		if ps#:presprite.apreframe!=(NULL)
++			call restore_frame_free(ps#:presprite.apreframe)
++		end
++		valueu fs#1;set fs ps#:presprite.preframes
++		sv f;set f fs
++		valueu fend#1;set fend f
++		add fend ps#:presprite.size
++		while f!=fend
++			if f#!=(NULL) #can be also showframe
++				call restore_frame_free(f#)
++			end
++			incst f
++		end
++		call free(fs)
++		call free(ps)
++		incst pss
++	end
++	call free(predata#:preoadata.presprites)
++	call free(predata)
++end
++
++function restore_frame_free(valueu fr)
++	call restore_strings_free(fr#:preframe.restore_ustrings,fr#:preframe.ustrings,fr#:preframe.ussize)
++	call restore_strings_free(fr#:preframe.restore_dstrings,fr#:preframe.strings,fr#:preframe.ssize)
++	call restore_branch_free(fr#:preframe.abranch)
++end
++
++function restore_strings_free(valueu constpool,svu strs,dataxu size)
++	if size!=0  #not always having strings
++		sv cursor;set cursor strs
++		valueu end#1;set end strs
++		add end size
++		while cursor!=end
++			call free(cursor#)
++			incst cursor
++		end
++		call free(strs)
++		call free(constpool)
++	end
++end
++
++function restore_branch_free(valueu br)
++	call restore_branch_cuts_free(br)
++	call restore_branch_inners_free(br)
++	valueu sbr#1;set sbr br#:branch.subbranch
++	if sbr!=(NULL)
++		call restore_branch_free(sbr)
++	end
++	call free(br)
++end
++function restore_branch_cuts_free(valueu br)
++	valueu cursor#1;set cursor br#:branch.cuts
++	valueu end#1;set end cursor
++	add end br#:branch.size
++	while cursor!=end
++		call free(cursor#:branchcut.x)
++		add cursor \branchcut\
++	end
++	call free(br#:branch.cuts)
++end
++function restore_branch_inners_free(valueu br)
++	sv cursor;set cursor br#:branch.innerbranches
++	valueu end#1;set end cursor
++	add end br#:branch.isize
++	while cursor!=end
++		call restore_branch_free(cursor#)
++		incst cursor
++	end
++end
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "common.h" "common.h.oh"
++include "common.h" "common.oh"
+ 
+ import "re_alloc" re_alloc
+ 
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -5,11 +5,11 @@ On Ubuntu from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+-Or the *manual installation step* from this link *https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6* \
+-Install:
++Or the *Manual installation step* from this [link](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6):
+ ```sh
+ sudo apt-get install actionswf
+ ```
++There is also <i>libactionswf-dev</i>.\
+ \
+ On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/actionswf/releases).
+ ```sh
+@@ -19,15 +19,14 @@ yum install actionswf-*.*.rpm
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases) has the dll.
+ 
+ ## From source
+-Compile with [O Compiler](https://github.com/colin-i/o)
++Compile with [O Compiler](https://github.com/colin-i/o).
+ 
+ ## Info
+ A brief intro is at [readme.txt](https://raw.githubusercontent.com/colin-i/actionswf/master/readme.txt).\
+-Games by this program at *https://www.kongregate.com/accounts/bitplayer/games?filter=favorites&sort=gameplays*
++Games by this program at [kongregate](https://www.kongregate.com/accounts/bitplayer/games?filter=favorites&sort=gameplays).
+ 
+ [//]: # (https://www.kongregate.com/games/bitplayer)
+ <!--- but with no sort --->
+ 
+ ## Donations
+-The *donations* section is here
+-*https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6*
++The *Donations* section is [here](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6).
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -2,7 +2,7 @@
+ Action Swf can create swf files.
+ The program is a set of objects made with O Language.
+ A swf with actionscript example is in the example folder for static o language.
+-The include/actionswf.h is for c/c++ language. dev/import.h are the imports for o language.
++The libactionswf-dev actionswf.h is for c/c++ language and import.oh are the imports for o language.
+ The files swf.es and action.es has the main functions that can be used; functions from tool.es can be used in rare situations.
+ When using the debug_log flag at swf_new_ex, action,action_sprite,swf_sprite_done calls are logged. The syntax is as follow:
+ 
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -46,7 +46,7 @@ function swf_new_ex_local(ss path,sd wid
+ #sd height
+ #sd backgroundcolor  0xRRGGBB  value
+ #sd fps              swf frames per second
+-#sd flags            see flags.h
++#sd flags            see flags.oh
+     #F=uncompressed, C=ZLib
+ const hd_start=\
+     char *=F
+--- actionswf-1.orig/tests/.expected/data.txt
++++ actionswf-1/tests/.expected/data.txt
+@@ -1,3 +1,4 @@
++3 sprites to restore
+ presprites:
+ 	0
+ 		frames=1
+@@ -256,7 +257,4 @@ sprites:
+ 				}
+ 			<<<
+ functions: 3
+-mark struct:
+-	0
+-		-1
+-		-1
++marks: 0
+--- actionswf-1.orig/tests/.expected/data32.txt
++++ actionswf-1/tests/.expected/data32.txt
+@@ -1,3 +1,4 @@
++3 sprites to restore
+ presprites:
+ 	0
+ 		frames=1
+@@ -245,7 +246,4 @@ sprites:
+ 				}
+ 			<<<
+ functions: 3
+-mark struct:
+-	0
+-		-1
+-		-1
++marks: 0
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -3,7 +3,7 @@ format elfobj64
+ 
+ importx "_exit" exit
+ 
+-einclude "../dev/import.h"
++einclude "../dev/import.oh"
+ 
+ include "entryraw.oc" "entry.oc"
+ call xlog_pad_set(0x30)
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -7,7 +7,7 @@ if [ -z "${1}" ]; then
+ 	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+ 	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
+ else
+-xxd_args=" -c 48 -g 4 "
++source ./xxd
+ smart_diff () {
+ 	diff ${1} ${2}
+ 	if [ $? = 0 ]; then
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -1,5 +1,7 @@
+ 
+-if [ -n "${1}" ]; then g="gdb --args"; fi
++if [ -n "${1}" ]; then
++	g="gdb -ex start --args"
++fi
+ 
+ if [ -z "${CC}" ]; then
+ 	CC=cc
+@@ -15,4 +17,4 @@ o a.oc x_file 1 && \
+ otoc a.oc.x && \
+ ${CC} ${model} -w -g a.c -L../../oad -loadbgdata && \
+ LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} || { echo a.out error; exit 1; }
+-rm ${f}.data
++#if [ -z "${d}" ]; then rm ${f}.data; else cp ${f}.data .; fi
+--- actionswf-1.orig/tests/data/a.oc
++++ actionswf-1/tests/data/a.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "../../oad/oadbgdata.h" "../../oad/oadbgdata.h.oh"
++include "../../oad/oadbgdata.h" "../../oad/oadbgdata.oh"
+ 
+ 
+ entry main(data srgc,sv argv)
+@@ -10,8 +10,8 @@ entry main(data srgc,sv argv)
+ 	incst argv
+ 	ss path;set path argv#
+ 	sd data
+-	sd a;set a oadata_make(path,#data,1)
++	sd a;set a oadata_make(path,#data,(TRUE))
+ 	if a!=0;return a;end
+-	call oadata_free(data,1)
++	call oadata_free(data,(TRUE))
+ 	set a oadata_ok(path)
+ 	return a
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -1,4 +1,6 @@
+ 
++# 1 cc conv_64 e g rd xxd_args
++
+ if [ -z "${CC}" ]; then
+ 	if [ "${conv_64}" = 1 ]; then
+ 		e=32
+@@ -7,14 +9,35 @@ else
+ 	e=32
+ fi
+ 
+-set -o pipefail && /bin/bash ./a | tee data.txt || exit 1
++etest=../../example/example.swf.data
++
++if [ ! -e ${etest} ]; then
++	/bin/bash ./a || exit 1
++	if [ -n "${rd}" ]; then
++		read -t $((60*60*24))
++	fi
++fi
++
++set -o pipefail && /bin/bash ./a ${g} | tee data.txt || exit 1
+ diff ../.expected/data${e}.txt data.txt
+-if [ $? = 0 ]; then
+-	rm data.txt
+-	exit 0
++if [ $? != 0 ]; then
++	if [ -n "${1}" ]; then exit 1; fi
++	echo y \?; read -n1 -t $((60*60*24)) ans
++	if [ "${ans}" != "y" ]; then exit 1; fi
++	cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
++fi
++
++diff ../.expected/example.swf.data ${etest}
++if [ $? -ne 0 ]; then
++	if [ -n "${1}" ]; then exit 1; fi
++	source ../xxd
++	xxd${xxd_args} ../.expected/example.swf.data > 1
++	xxd${xxd_args} ${etest} > 2
++	diff --color 1 2
++	rm 1 2
++	echo y \?; read -n1 -t $((60*60*24)) ans
++	if [ "${ans}" != "y" ]; then exit 1; fi
++	cp ${etest} ../.expected
+ fi
+-if [ -n "${1}" ]; then exit 1; fi
+-echo y \?; read -n1 -t $((60*60*24)) ans
+-if [ "${ans}" != "y" ]; then exit 1; fi
+-cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
++
+ rm data.txt
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -3,7 +3,7 @@ format elfobj64
+ 
+ importx "_exit" exit
+ 
+-einclude "../../dev/import.h"
++einclude "../../dev/import.oh"
+ 
+ include "../entryraw.oc" "../entry.oc"
+ 
+--- /dev/null
++++ actionswf-1/tests/xxd
+@@ -0,0 +1 @@
++xxd_args=" -c 48 -g 4 "
