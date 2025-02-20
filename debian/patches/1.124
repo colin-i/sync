@@ -1,0 +1,63 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-124) bionic; urgency=medium
+ .
+   * 32bit oad restore test
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-02-20
+
+--- actionswf-1.orig/s32
++++ actionswf-1/s32
+@@ -8,8 +8,9 @@ reln () {
+ 		ln ../actionswf-1/tests/.expected/${1} ${here}
+ 	fi
+ }
+-reln data32.txt
+ reln a.swf.x32.txt
++reln data32.txt
++reln example.swf.data32
+ 
+ if [ -n "${mirror}" ]; then git pull local master; fi && \
+ if [ -z "${1}" ]; then make clean && cd src && ./mr32d && cd ../example && ./mr32d && cd ..; fi && \
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -27,17 +27,18 @@ if [ $? != 0 ]; then
+ 	cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
+ fi
+ 
+-diff ../.expected/example.swf.data ${etest}
++etestexp=../.expected/example.swf.data${e}
++diff ${etestexp} ${etest}
+ if [ $? -ne 0 ]; then
+ 	if [ -n "${1}" ]; then exit 1; fi
+ 	source ../xxd
+-	xxd${xxd_args} ../.expected/example.swf.data > 1
++	xxd${xxd_args} ${etestexp} > 1
+ 	xxd${xxd_args} ${etest} > 2
+ 	diff --color 1 2
+ 	rm 1 2
+ 	echo y \?; read -n1 -t $((60*60*24)) ans
+ 	if [ "${ans}" != "y" ]; then exit 1; fi
+-	cp ${etest} ../.expected
++	cp ${etest} ${etestexp}
+ fi
+ 
+ rm data.txt
