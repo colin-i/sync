@@ -1,0 +1,249 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+217) xenial; urgency=medium
+ .
+   * otoc callret and fix include_sec
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-02-26
+
+--- ocompiler-1.orig/.github/workflows/appimage.yml
++++ ocompiler-1/.github/workflows/appimage.yml
+@@ -165,7 +165,7 @@ jobs:
+        chmod a+x ${name}.AppImage
+       fi
+    - name: artifact
+-     uses: actions/upload-artifact@v3
++     uses: actions/upload-artifact@v4
+      with:
+       name: appimage
+       path: ./*.AppImage
+--- ocompiler-1.orig/localtest
++++ ocompiler-1/localtest
+@@ -1 +1 @@
+-1-5+216
++1-5+217
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,3 +1,4 @@
++<p>ocompiler-1-5+216.x86_64.rpm,1cmm7gwogGIpPt04cioKMWoIEbDYandB-,2025-02-26T08:50:23.916Z,86329,https://drive.google.com/uc?id=1cmm7gwogGIpPt04cioKMWoIEbDYandB-&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+215.x86_64.rpm,1T053lnfb2KI9ND3aRDc55jTTIoKlADZv,2025-02-02T09:36:32.878Z,86142,https://drive.google.com/uc?id=1T053lnfb2KI9ND3aRDc55jTTIoKlADZv&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+214.x86_64.rpm,1jOeYUxR8c4fJp_hilNLc2VCYkCMyv7v3,2025-01-30T04:36:27.388Z,86437,https://drive.google.com/uc?id=1jOeYUxR8c4fJp_hilNLc2VCYkCMyv7v3&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+213.x86_64.rpm,1ATNjUb8jtMRpZ6ApPGp_UMHAYYHlFzAF,2025-01-23T07:48:27.444Z,86401,https://drive.google.com/uc?id=1ATNjUb8jtMRpZ6ApPGp_UMHAYYHlFzAF&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+--- ocompiler-1.orig/otoc/action.oc
++++ ocompiler-1/otoc/action.oc
+@@ -22,18 +22,20 @@ function action1(sv act,sv pbuffer,sd ou
+ 	callg act(pbuffer,outfile)
+ end
+ 
+-function action_areturn(sv pbuffer,sd outfile)
++function return(sd outfile)
+ 	if loop.function_start!=(err)
+ 		if loop.allowwrite=(allowwrite_yes) #can be no_include
+ 			call fseek(outfile,loop.function_start,(SEEK_SET))
+ 			call fwrite(#write_long.a,(write_long_cast),1,outfile)
+ 			call fseek(outfile,0,(SEEK_END))
+-			#is ok to ignore multi return at entry because it is non-sense
+-			#set loop.function_start (err) #if is not at endfunction, is here
++			set loop.function_start (err) #if is not at endfunction, is here. multipe returns,write once
+ 		end
+ 	end
+ 	char a="return "^  #also used at ret
+-	call write(outfile,#a,\.a)
++	callg write(outfile,#a,\.a)
++end
++function action_areturn(sv pbuffer,sd outfile)
++	call return(outfile)
+ 	callg arg(pbuffer,outfile)
+ end
+ function action_aexit(sv pbuffer,sd outfile) #this exit() an option? now only entryraw/exit case
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -420,6 +420,9 @@ function action2(sd outfile,sv pbuffer)
+ end
+ function call(sd outfile,sv pbuffer)
+ 	char c#1;call get_char(pbuffer,#c)
++	if c=(Xfile_call_ret)
++		call return(outfile)
++	end
+ 	call cll(pbuffer,outfile)
+ 	callg writetn(outfile)
+ end
+@@ -474,7 +477,7 @@ function end(sd outfile)
+ 	callg writetn(outfile) #with termination only for struct
+ end
+ function ret(sd outfile)
+-	call write(outfile,#action_areturn.a,\action_areturn.a-1)
++	call write(outfile,#return.a,\return.a-1)
+ 	callg writetn(outfile)
+ end
+ function library(sd *outfile,sv pbuffer)
+--- ocompiler-1.orig/readme.md
++++ ocompiler-1/readme.md
+@@ -5,11 +5,11 @@ On Ubuntu from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+-Or the *manual installation step* from this link *https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6* \
+-Install:
++Or the *Manual installation step* from this [link](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6):
+ ```sh
+ sudo apt-get install ocompiler
+ ```
++There is also <i>ocompiler-dev</i>.\
+ \
+ On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).\
+ \
+@@ -25,5 +25,4 @@ Documentation is at [o.html](https://htm
+ [Preferences file](https://raw.githubusercontent.com/colin-i/o/master/ocompiler.conf).
+ 
+ ## Donations
+-The *donations* section is here
+-*https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6*
++The *Donations* section is [here](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6).
+--- ocompiler-1.orig/src/files/actions/main/index/include.oc
++++ ocompiler-1/src/files/actions/main/index/include.oc
+@@ -12,6 +12,7 @@ if errormsg=noerr
+ 		SetCall errormsg xfile_add_char_ifif(subtype)
+ 		if errormsg=noerr
+ 			if include_sec=(TRUE)
++				sd inc_resolved=FALSE
+ 				ss include_test
+ 				set include_test content
+ 				add include_test quotsz
+@@ -27,11 +28,10 @@ if errormsg=noerr
+ 							SetCall errormsg quotinmem_started(pcontent,pcomsize,pquotsz,pescapes)
+ 							if errormsg=noerr
+ 								SetCall errormsg xfile_add_char_ifif((Xfile_include_alternative_yes))
++								set inc_resolved (TRUE)
+ 							endif
+ 						endif
+-					else
+-						setcall errormsg xfile_add_char_ifif((Xfile_include_alternative_no))
+-					endelse
++					endif
+ 				endif
+ 			endif
+ 			if errormsg=noerr
+@@ -40,7 +40,9 @@ if errormsg=noerr
+ 					Set includebool one
+ 					if include_sec=(FALSE)
+ 						SetCall errormsg include_sec_skip(pcontent,pcomsize)
+-					endif
++					elseif inc_resolved=(FALSE)
++						setcall errormsg xfile_add_char_ifif((Xfile_include_alternative_no))
++					endelseif
+ 				EndIf
+ 			endif
+ 		endif
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -91,4 +91,5 @@ long*main(int* argc,...){
+ 	unsigned char q1=sizeof(long);unsigned char q2=sizeof(struct st);unsigned char q3=offsetof(struct st,a);unsigned char q4=sizeof(((struct st*)0)->a);
+ 	__builtin_trap();
+ 	return 2;
++	return main(0);
+ };
+--- ocompiler-1.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-1/tests/.expected/a.out.oc.x.txt
+@@ -43,4 +43,4 @@ YXIgZXI9MyEyIGNoYXIgZXI9MyQyBwIAAAAAAgAA
+ AgABBgIAAABhMR8cBwIAAAAAAgAAAHo0AgACBgIAAABhMR8cBwIAAAAAAgAAAHo1AgADBgIAAABh
+ MR8HAgAAAAACAAAAcTECAAAAHxwHAgAAAAACAAAAcTICAAAHAgAAAHN0HxwHAgAAAAACAAAAcTMC
+ AAALAgAAAHN0AQAAAGEAHxwHAgAAAAACAAAAcTQCAAAKAgAAAHN0AQAAAGEAHxcAAQMAAAB0c3QZ
+-BgAAAHhfZmlsZQEbCAEAAAMBAAAAMh8=
++BgAAAHhfZmlsZQEbCAEAAAMBAAAAMh8KAQAEAAAAbWFpbgEAAAAAAAQBAAAAMB8=
+--- ocompiler-1.orig/tests/.expected/a.out.txt
++++ ocompiler-1/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+ f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAeZUECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAhgAAAAYAAAAAYAAAAAEAAAAQAAAGAEAABglAQIYJQECCMDAAAjAwAABQAAAAAQ
+-AAADAAAAgwcAAIOXBAiDlwQIEwAAABMAAAAEAAAAAQAAAAIAAACWBwAAlqcECJanBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAJYHAACWpwQIlqcECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAABqgECAYIAAAWAAAAAAAAAAAAAAAB
+-AAAAAAAAAA0AAAAGAAAAAwAAAJanBAiWBwAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++BAAAAIQECACEBAhgAAAAYAAAAAYAAAAAEAAAAQAAAGAEAABglAQIYJQECDIDAAAyAwAABQAAAAAQ
++AAADAAAAkgcAAJKXBAiSlwQIEwAAABMAAAAEAAAAAQAAAAIAAAClBwAApacECKWnBAhQAAAAUAAA
++AAQAAAABAAAAAQAAAKUHAAClpwQIpacECJYAAACWAAAABgAAAAAQAAAEAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAMAAAACAAAAFagECBUIAAAWAAAAAAAAAAAAAAAB
++AAAAAAAAAA0AAAAGAAAAAwAAAKWnBAilBwAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -26,12 +26,12 @@ iwK6WIQECIkCuAIAAAC5AgAAADnBD4UDAAAAyVvD
+ ALophAQIAQK4BAAAALophAQIKQK5BAAAALophAQIiwL34bophAQIiQK5BAAAALophAQIiwL36bop
+ hAQIiQKxBLoAhAQIigIPuuAHcwXGxP/rA8bEAPb5iAKxCLoAhAQIigLGxAD28YgCsQG6AIQECIoC
+ D7rgB3MFxsT/6wPGxAD2+YgisQG6AIQECIoCxsQA9vGIIrABugCEBAggArABugCEBAgIArgBAAAA
+-uimEBAgxAvy9bYvjuiaEBAgPtgJQukyEBAgPtgJQukKEBAiLwlBoAQAAAOj0/f//i+O4KKgECP8Q
++uimEBAgxAvy9bYvjuiaEBAgPtgJQukyEBAgPtgJQukKEBAiLwlBoAQAAAOj0/f//i+O4N6gECP8Q
+ uimEBAiJArgBAAAAuQEAAAA5wQ+FAAAAALgBAAAAuQEAAAA5wQ+EBQAAAOkXAAAAuAEAAAC5AQAA
+ ADnBD40FAAAA6QAAAAC4AQAAALkBAAAAOcEPjgAAAAC4AQAAALkBAAAAOcEPjwAAAAC4AQAAALkB
+ AAAAOcEPjAAAAAC4AQAAALkBAAAAOcEPgwAAAAC4AQAAALkBAAAAOcEPhgAAAAC4AQAAALkBAAAA
+ OcEPhwAAAAC4AQAAALkBAAAAOcEPggAAAACL47kBAAAAuimEBAiLAoH5AAAAAHQH/8n/NIjr8bgp
+-hAQI/xC4AgAAALkBAAAAOcEPhQUAAADp6f///8y4AQAAAMfDAgAAAM2AL2xpYi9sZC1saW51eC5z
+-by4yAAEAAAAAAAAABAAAAOanBAgGAAAA9qcECAsAAAAQAAAABQAAAAaoBAgKAAAAFgAAAAcAAAAc
+-qAQICAAAAAwAAAAJAAAADAAAAAAAAAAAAAAAAQAAAAEAAAAAAAAAAAAAAAIAAAAAAAAAAAAAABIA
+-AABhAGIAAC5keW5zdHIALmR5bmFtaWMAKKgECAEAAAAAAAAAAAAAAA==
++hAQI/xC4AgAAALkBAAAAOcEPhQUAAADp6f///8y4AQAAAMfDAgAAAM2Ai+NoAAAAAOjq/f//yVvD
++L2xpYi9sZC1saW51eC5zby4yAAEAAAAAAAAABAAAAPWnBAgGAAAABagECAsAAAAQAAAABQAAABWo
++BAgKAAAAFgAAAAcAAAArqAQICAAAAAwAAAAJAAAADAAAAAAAAAAAAAAAAQAAAAEAAAAAAAAAAAAA
++AAIAAAAAAAAAAAAAABIAAABhAGIAAC5keW5zdHIALmR5bmFtaWMAN6gECAEAAAAAAAAAAAAAAA==
+--- ocompiler-1.orig/tests/.expected/include.oc.x.txt
++++ ocompiler-1/tests/.expected/include.oc.x.txt
+@@ -1,2 +1,2 @@
+ AAAAAAUACQAAAGluY2x1ZGUuaAAdBQEJAAAAaW5jbHVkZS5oAQgAAABmYWtlZmlsZR0ZCwAAAGlu
+-Y2x1ZGVfc2VjAQUACQAAAGluY2x1ZGUuaB0FAAgAAABmYWtlZmlsZQEJAAAAaW5jbHVkZS5oHQ==
++Y2x1ZGVfc2VjAQUACQAAAGluY2x1ZGUuaAAdBQAIAAAAZmFrZWZpbGUBCQAAAGluY2x1ZGUuaB0=
+--- ocompiler-1.orig/tests/a.out.oc
++++ ocompiler-1/tests/a.out.oc
+@@ -113,3 +113,4 @@ entryv main(sd argc)
+ 	override x_file 1
+ 	i3
+ 	exit 2
++	callret main(0)
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -89,6 +89,7 @@ switch acall/e
+ 
+ if [ ${is_del} = 0 ]; then
+ 	if [ ${is_diff} = 1 ]; then
++		echo diff a.out.c .expected/a.out.c
+ 		diff a.out.c .expected/a.out.c || exit 1
+ 		tests=( `find -name "*.oc"` )
+ 		n=${#tests[@]}
+--- ocompiler-1.orig/tests/c1
++++ ocompiler-1/tests/c1
+@@ -22,5 +22,9 @@ comp () {
+ 	rm 1 2 3
+ }
+ 
+-comp ${1}.o
++if [ -e "${1}.o" ]; then
++	comp ${1}.o
++else
++	comp ${1}.exe
++fi
+ comp ${current}.x
+--- /dev/null
++++ ocompiler-1/tests/db
+@@ -0,0 +1,4 @@
++
++if [ -z "${OCONV}" ]; then OCONV=../otoc/otoc; fi
++./xb ${1} && \
++${OCONV} ${1}.oc.x
