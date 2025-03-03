@@ -1,0 +1,673 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-126) bionic; urgency=medium
+ .
+   * image jpeg/png/gif
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-03-03
+
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -110,13 +110,13 @@ int swf_shape_basic(int width,int height
+ int swf_shape_bitmap(int bitmapId,int width,int height);
+ //id
+ int swf_shape_border(int width,int height,int linesize,int linecolor);
++
++//dbl
++
+ //id
+ int swf_image(char* imagepath);
+ //id
+ int swf_image_ex(char* imagepath,int wh[2]);
+-
+-//dbl
+-
+ //id
+ int swf_dbl(char* imagepath);
+ //id
+@@ -129,6 +129,10 @@ int swf_dbl_height(char* imagepath);
+ //jpeg/png/gif
+ 
+ //id
++int swf_imagej(char* imagepath,int width,int height);
++//id
++int swf_imagej_alpha(char* imagepath,int width,int height,char* alphapath);
++//id
+ int swf_jpeg(char* imagepath);
+ //id
+ int swf_jpeg_alpha(char* imagepath,char* alphapath);
+--- actionswf-1.orig/dev/importf.oh
++++ actionswf-1/dev/importf.oh
+@@ -23,11 +23,12 @@ importX "swf_shape_basic" swf_shape_basi
+ importX "swf_shape_bitmap" swf_shape_bitmap
+ #id
+ importX "swf_shape_border" swf_shape_border
++
++#dbl
+ #id
+ importX "swf_image" swf_image
+ #id
+ importX "swf_image_ex" swf_image_ex
+-#dbl
+ #id
+ importX "swf_dbl" swf_dbl
+ #id
+@@ -36,6 +37,12 @@ importX "swf_dbl_ex" swf_dbl_ex
+ importX "swf_dbl_width" swf_dbl_width
+ #height
+ importX "swf_dbl_height" swf_dbl_height
++
++#jpeg/png/gif
++#id
++importX "swf_imagej" swf_imagej
++#id
++importX "swf_imagej_alpha" swf_imagej_alpha
+ #id
+ importX "swf_jpeg" swf_jpeg
+ #id
+@@ -44,6 +51,7 @@ importX "swf_jpeg_alpha" swf_jpeg_alpha
+ importX "swf_gif_width" swf_gif_width
+ #height
+ importX "swf_gif_height" swf_gif_height
++
+ #utils
+ importX "swf_done" swf_done
+ importX "swf_new" swf_new
+--- actionswf-1.orig/include/ascii.h
++++ actionswf-1/include/ascii.h
+@@ -75,7 +75,7 @@ Const F=0x46
+ #Const I=0x49
+ #Const J=0x4A
+ #Const K=0x4B
+-#Const L=0x4C
++Const L=0x4C
+ #Const M=0x4D
+ #Const N=0x4E
+ #Const O=0x4F
+--- actionswf-1.orig/include/prog.h
++++ actionswf-1/include/prog.h
+@@ -145,6 +145,8 @@ const R_OK=4
+ 
+ include "xlog.oh"
+ 
+-const dblsignature=4
++const dblsignature_major=3
++const dblsignature=dblsignature_major+1
+ const dblsize=4
++const dblsize16=2
+ const dblformat=1
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -96,13 +96,13 @@ function file_open(ss filepath,sd flags)
+ endfunction
+ #offset
+ function file_seek(sd file,sd off,sd method)
+-    sd seekint
++	sd seekint
+ 	setcall seekint lseek(file,off,method) #Some devices are incapable of seeking and POSIX does not specify which devices must support lseek
+ 	#in the rest: a normal error will be when file is to large and seeking there
+-    If seekint=-1
+-        vstr seekerr="File seek error"
+-        call error(seekerr)
+-    endif
++	If seekint=-1
++		vstr seekerr="File seek error"
++		call error(seekerr)
++	endif
+ 	return seekint
+ endfunction
+ #offset
+@@ -135,20 +135,20 @@ function file_get_content(ss filepath,sv
+ 		dec size
+ 	end
+ 	call file_get_content__resources((TRUE),(fd_none),mem)
+-	call file_read(file,mem,size)
++	call read(file,mem,size)
+ 	if p_size=(NULL)
+ 		add size mem
+ 		set size# (Nullchar)
+ 	end
+ 	return mem
+ endfunction
+-function file_read(sd file,sd mem,sd size)
+-    sd read_sz
+-    setcall read_sz read(file,mem,size)
+-    if read_sz!=size
+-        call error("Read length is different or error")
+-    endif
+-endfunction
++#function file_read(sd file,sd mem,sd size)
++#    sd read_sz
++#    setcall read_sz read(file,mem,size)
++#    if read_sz!=size
++#        call error("Read length is different or error")
++#    endif
++#endfunction
+ 
+ #write
+ 
+@@ -210,9 +210,37 @@ function filepath_get_word(ss imagepath,
+ 	if size<^offsetandword
+ 		call error(err)
+ 	endif
+-	call file_seek(file,offset,(SEEK_SET))
++	call lseek(file,offset,(SEEK_SET))
++	sw dim=0  #sw is long at the moment
++	call read(file,#dim,(WORD))
++	call file_resources_free()
++	return dim
++endfunction
++
++#file
++function dblsize_start(ss imagepath,sd p_size,ss p_ver)
++	sd file
++	setcall file file_open(imagepath,(_open_read))
++	call file_resources_set(file)
++	setcall p_size# filesize(file)
++	if p_size#<^(dblsignature_major)
++		call error("error at dblsize start")
++	end
++	charx sig#2
++	charx imp#1
++	call read(file,#sig,(dblsignature_major)) #if not with errors, like read() to be a macro and be inserted there?
++	set p_ver# imp
++	return file
++endfunction
++function dblsize_end(sd file,sd size,sd offset)
++	sd offsetandword;set offsetandword offset
++	add offsetandword (WORD)
++	if size<^offsetandword
++		call error("error at dblsize end")
++	endif
++	call lseek(file,offset,(SEEK_SET))
+ 	sw dim=0  #sw is long at the moment
+-	call file_read(file,#dim,(WORD))
++	call read(file,#dim,(WORD))
+ 	call file_resources_free()
+ 	return dim
+ endfunction
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -457,60 +457,81 @@ function swf_image_ex_local(ss imagepath
+     return shape_id
+ endfunction
+ import "swf_tag_recordheader_long_entry" swf_tag_recordheader_long_entry
++import "word_swap" word_swap
+ #id
+ function swf_dbl_ex_local(ss imagepath,sd p_wh)
+ #ss imagepath = path name for the dbl image
+ #sd p_wh = pointer width a dword and height next dword
+-    sd id
+-    sd mem
+-    sd size
+-    sd cursor
+-    setcall mem file_get_content(imagepath,#size)
+-    if size<(dblsignature+dblsize)
+-        call error("missing image header")
+-    endif
+-    char hd_magic1={D,B,l,1};vdata magic1^hd_magic1
+-    char hd_magic2={D,B,l,2};vdata magic2^hd_magic2
+-    if mem#!=magic1#
+-    if mem#!=magic2#
+-        call printEr("expecting dbl(define bits lossless 1 or 2)header; filepath: ")
+-        call error(imagepath)
+-    endif;endif
+-    sd header=DefineBitsLossless2
+-    if mem#=magic1#
+-        set header (DefineBitsLossless)
+-    endif
+-    set cursor mem
+-    add cursor (DWORD)
+-
+-    sd image_size
+-    setcall image_size dword_swap(cursor#)
+-    add cursor (DWORD)
+-    sub size (2*DWORD)
+-    if image_size>size
+-        call error("size error at dbl")
+-    endif
+-    #add the define bits lossless file to mem
+-    add size (WORD)
+-    call swf_tag_recordheader_long_entry(header,size)
+-    setcall id identifiers_get()
+-    call swf_mem_add(#id,(WORD))
+-    if p_wh!=0
+-        #get width and height;BitmapFormat UI8,BitmapWidth UI16,BitmapHeight UI16
+-        if image_size<(2*WORD+BYTE)
+-            call error("size error at dbl when looking for width/height")
+-        endif
+-        sd pointer
+-        set pointer cursor
+-        add pointer (BYTE)
+-        setcall p_wh# word_arg_to_stack(pointer)
+-        add pointer (WORD)
+-        add p_wh (DWORD)
+-        setcall p_wh# word_arg_to_stack(pointer)
+-    endif
+-    call swf_mem_add(cursor,image_size)
+-    call file_get_content__resources_free()
+-    return id
++	sd id
++	sd mem
++	sd size
++	sd cursor
++	setcall mem file_get_content(imagepath,#size)
++	if size<(dblsignature+dblsize)
++	call error("missing image header")
++	endif
++	char hd_magic0={D,B,L,1};vdata magic0^hd_magic0
++	char hd_magic00={D,B,L,2};vdata magic00^hd_magic00
++	char hd_magic1={D,B,l,1};vdata magic1^hd_magic1
++	char hd_magic2={D,B,l,2};vdata magic2^hd_magic2
++	if mem#!=magic1#
++	if mem#!=magic2#
++	if mem#!=magic0#
++	if mem#!=magic00#
++		call printEr("expecting dbl(define bits lossless 1 or 2)header; filepath: ")
++		call error(imagepath)
++	endif;endif;endif;endif
++	set cursor mem
++	add cursor 2
++	sd header
++	sd image_size
++	if cursor#s^=(l)
++		inc cursor
++		if cursor#s^=(1)
++			set header (DefineBitsLossless)
++		else
++			set header (DefineBitsLossless2)
++		end
++		inc cursor
++		set image_size dword_swap(cursor#)
++		add cursor (DWORD)
++		sub size (2*DWORD)
++	else #this is 1950-1952 when all size was on WORD
++		inc cursor
++		if cursor#s^=(1)
++			set header (DefineBitsLossless)
++		else
++			set header (DefineBitsLossless2)
++		end
++		inc cursor
++		set image_size word_swap(cursor#w^)
++		add cursor (WORD)
++		sub size (DWORD+WORD)
++	end
++	if image_size>size
++		call error("size error at dbl")
++	endif
++	#add the define bits lossless file to mem
++	add size (WORD)
++	call swf_tag_recordheader_long_entry(header,size)
++	setcall id identifiers_get()
++	call swf_mem_add(#id,(WORD))
++	if p_wh!=0
++		#get width and height;BitmapFormat UI8,BitmapWidth UI16,BitmapHeight UI16
++		if image_size<(2*WORD+BYTE)
++			call error("size error at dbl when looking for width/height")
++		endif
++		sd pointer
++		set pointer cursor
++		add pointer (BYTE)
++		setcall p_wh# word_arg_to_stack(pointer)
++		add pointer (WORD)
++		add p_wh (DWORD)
++		setcall p_wh# word_arg_to_stack(pointer)
++	endif
++	call swf_mem_add(cursor,image_size)
++	call file_get_content__resources_free()
++	return id
+ endfunction
+ 
+ import "f_open" f_open
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -35,7 +35,7 @@ import "swf_shape_simple" swf_shape_simp
+ import "identifiers_get" identifiers_get
+ 
+ functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
+-valuex bp#1;base bp;call ebase(bp)
++	valuex bp#1;base bp;call ebase(bp)
+ 	callg swf_new_ex_local(path,width,height,backgroundcolor,fps,(debug_none))
+ endfunction
+ 
+@@ -43,7 +43,7 @@ import "swf_button_base" swf_button_base
+ import "swf_text_initial_font_centered" swf_text_initial_font_centered
+ #id
+ functionX swf_button(sd width,sd height,sd ButtonData)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ data def_fill#1
+ data def_line_h#1;#no pad
+ data def_line#1
+@@ -143,7 +143,7 @@ vstr actions#1
+ endfunction
+ #id
+ functionX swf_button_last(ss newtext,ss actions)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #ss newtext  is the new text for a new button with the attributes from the previous swf_button call
+ #ss actions  button actions
+     data shape_up#1
+@@ -181,11 +181,11 @@ functionX swf_font(ss fontname,sd font_f
+ endfunction
+ #id
+ functionX swf_font_basic(ss fontname)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #ss fontname    = a string with the browser font, for example "_sans"
+-    sd id
+-    setcall id swf_font_local(fontname,0)
+-    return id
++	sd id
++	setcall id swf_font_local(fontname,0)
++	return id
+ endfunction
+ 
+ #text
+@@ -208,18 +208,18 @@ endfunction
+ 
+ #id
+ functionX swf_shape_basic(sd width,sd height,sd fillcolor,sd linecolor)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd width
+ #sd height
+ #sd fillcolor       RGBA color to fill the shape
+ #sd linecolor       RGBA line color around the shape
+-    sd xcurve_value;set xcurve_value width;div xcurve_value 6
+-    sd ycurve_value;set ycurve_value height;div ycurve_value 6
+-    sd lineheight;set lineheight width;if lineheight>height;set lineheight height;endif;div lineheight 20
+-    #xc width/6;yc..hg..;lh (min(w,h))/20
+-    sd id
+-    setcall id swf_shape_simple(width,height,fillcolor,lineheight,linecolor,xcurve_value,ycurve_value)
+-    return id
++	sd xcurve_value;set xcurve_value width;div xcurve_value 6
++	sd ycurve_value;set ycurve_value height;div ycurve_value 6
++	sd lineheight;set lineheight width;if lineheight>height;set lineheight height;endif;div lineheight 20
++	#xc width/6;yc..hg..;lh (min(w,h))/20
++	sd id
++	setcall id swf_shape_simple(width,height,fillcolor,lineheight,linecolor,xcurve_value,ycurve_value)
++	return id
+ endfunction
+ 
+ #id
+@@ -231,7 +231,7 @@ functionX swf_shape_bitmap(sd bitmapId,s
+ endfunction
+ #id
+ functionX swf_shape_border(sd width,sd height,sd linesize,sd linecolor)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd width      border width
+ #sd height     border height
+ #sd linesize  line size
+@@ -267,30 +267,32 @@ base swf_new.bp;call ebase(swf_new.bp)
+     return shape
+ endfunction
+ 
++######################dbl
++
+ #id
+ functionX swf_image(ss imagepath)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-    data width#1;data *height#1
+-    sd shape_id;setcall shape_id swf_image_ex_local(imagepath,#width)
+-    return shape_id
++	data width#1;data *height#1
++	sd shape_id;setcall shape_id swf_image_ex_local(imagepath,#width)
++	return shape_id
+ endfunction
+ #id
+ import "swf_image_ex_local" swf_image_ex_local
+ functionX swf_image_ex(ss imagepath,sd p_wh)
+ 	base swf_new.bp;call ebase(swf_new.bp)
++#ss imagepath, sd p_wh
+ 	sd id;set id swf_image_ex_local(imagepath,p_wh)
+ 	return id
+ endfunction
+ 
+-######################dbl
+ #id
+ functionX swf_dbl(ss imagepath)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-    sd id
+-    setcall id swf_dbl_ex_local(imagepath,(NULL))
+-    return id
++	sd id
++	setcall id swf_dbl_ex_local(imagepath,(NULL))
++	return id
+ endfunction
+ #id
+ import "swf_dbl_ex_local" swf_dbl_ex_local
+@@ -299,28 +301,56 @@ functionX swf_dbl_ex(ss imagepath,sd p_w
+ 	sd id;set id swf_dbl_ex_local(imagepath,p_wh)
+ 	return id
+ endfunction
+-import "filepath_get_word" filepath_get_word
+ 
++import "dblsize_start" dblsize_start
++import "dblsize_end" dblsize_end
+ #width
+ functionX swf_dbl_width(ss imagepath)
+-base swf_new.bp;call ebase(swf_new.bp)
+-#ss imagepath = path name for the dbl image
+ 	base swf_new.bp;call ebase(swf_new.bp)
++#ss imagepath = path name for the dbl image
+ 	#format? ming newSWFDBLBitmap_fromInput
+-	vstru err="invalid dbl file"
+-	sw dim;set dim filepath_get_word(imagepath,(dblsignature+dblsize+dblformat),err)
++	dataxu size#1;charx t#1;sw dim
++	sd file;set file dblsize_start(imagepath,#size,#t)
++	if t=(l)
++		set dim dblsize_end(file,size,(dblsignature+dblsize+dblformat))
++	else
++		set dim dblsize_end(file,size,(dblsignature+dblsize16+dblformat))
++	end
+ 	return dim
+ endfunction
+ #height
+ functionX swf_dbl_height(ss imagepath)
+-base swf_new.bp;call ebase(swf_new.bp)
+-#ss imagepath = path name for the dbl image
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	sw dim;set dim filepath_get_word(imagepath,(dblsignature+dblsize+dblformat+WORD),swf_dbl_width.err)
++#ss imagepath = path name for the dbl image
++	dataxu size#1;charx t#1;sw dim
++	sd file;set file dblsize_start(imagepath,#size,#t)
++	if t=(l)
++		set dim dblsize_end(file,size,(dblsignature+dblsize+dblformat+WORD))
++	else
++		set dim dblsize_end(file,size,(dblsignature+dblsize16+dblformat+WORD))
++	end
+ 	return dim
+ endfunction
+ 
++#jpeg/png/gif
++
+ import "swf_jpeg_local" swf_jpeg_local
++#id
++functionX swf_imagej(ss imagepath,sd width,sd height)
++	base swf_new.bp;call ebase(swf_new.bp)
++#ss imagepath, width, height
++	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
++	sd shape_id;setcall shape_id swf_shape_bitmap_local(id,width,height)
++	return shape_id
++endfunction
++#id
++functionX swf_imagej_alpha(ss imagepath,sd width,sd height,ss alphapath)
++	base swf_new.bp;call ebase(swf_new.bp)
++	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
++	sd shape_id;setcall shape_id swf_shape_bitmap_local(id,width,height)
++	return shape_id
++endfunction
++
+ #https://stackoverflow.com/questions/7676701/java-jpeg-converter-for-odd-image-types
+ #https://www.w3.org/Graphics/JPEG/jfif3.pdf
+ #FFD8, can skip FFE[0-F] bigendianSize(usually 0010) = skip 20 bytes, FFDB...FFD9
+@@ -329,31 +359,34 @@ import "swf_jpeg_local" swf_jpeg_local
+ #Transparent Color Flag
+ #anyway, more simple is: identify -format %A a.gif
+ functionX swf_jpeg(ss imagepath)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+ 	sd id
+ 	setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+ 	return id
+ endfunction
+ functionX swf_jpeg_alpha(ss imagepath,ss alphapath)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+ 	sd id
+ 	setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+ 	return id
+ endfunction
+ 
++import "filepath_get_word" filepath_get_word
+ const gifsignature=6 #GIF89a
+ #width
+ functionX swf_gif_width(ss imagepath)
+-#ss imagepath = path name for the gif image
+ 	base swf_new.bp;call ebase(swf_new.bp)
++#ss imagepath = path name for the gif image
+ 	vstr err="invalid gif file"
+ 	sw dim;set dim filepath_get_word(imagepath,(gifsignature),err)
+ 	return dim
+ endfunction
+ #height
+ functionX swf_gif_height(ss imagepath)
+-#ss imagepath = path name for the gif image
+ 	base swf_new.bp;call ebase(swf_new.bp)
++#ss imagepath = path name for the gif image
+ 	sw dim;set dim filepath_get_word(imagepath,(gifsignature+WORD),swf_gif_width.err)
+ 	return dim
+ endfunction
+@@ -361,15 +394,15 @@ endfunction
+ ##############
+ import "exportsId_get" exportsId_get
+ functionX swf_done()
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ 	call swf_exports_done_local();#remaining exports?
+ 
+ #	sd p;set p swf_frames_pointer()
+ 	call swf_actionblock((mem_exp_part_done),(from_done)) #,p in case there are remaining actions
+ 
+ #the swf is done and the total length is wrote and the memory is freed
+-    call swf_mem((mem_exp_done))
+-    call freereset()
++	call swf_mem((mem_exp_done))
++	call freereset()
+ endfunction
+ 
+ import "swf_new_ex_local" swf_new_ex_local
+@@ -398,7 +431,7 @@ endfunction
+ import "swf_showframe_base" swf_showframe_base
+ 
+ functionX swf_showframe()
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #	sd p;set p swf_frames_pointer()
+ 	call swf_showframe_base() #p if on error will error at unregistered input id
+ endfunction
+@@ -409,7 +442,7 @@ endfunction
+ 
+ #id
+ functionX swf_sprite_done(sd spriteid)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd spriteid        pre-id created with swf_sprite_new
+     call swf_mem((mem_exp_change),spriteid)
+ 
+@@ -454,7 +487,7 @@ endfunction
+ import "new_sprite_id" new_sprite_id
+ #pre-id
+ functionX swf_sprite_new()
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #a pre-id to be used
+     sd id
+     setcall id new_sprite_id()
+@@ -472,7 +505,7 @@ base swf_new.bp;call ebase(swf_new.bp)
+     return id
+ endfunction
+ functionX swf_sprite_placeobject(sd spriteid,sd object,sd depth)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd spriteid          pre-id
+ #sd object,sd depth   same as swf_placeobject
+     call swf_mem((mem_exp_change),spriteid)
+@@ -480,7 +513,7 @@ base swf_new.bp;call ebase(swf_new.bp)
+     call swf_mem((mem_exp_change_back))
+ endfunction
+ functionX swf_sprite_placeobject_coords(sd spriteid,sd object,sd depth,sd x,sd y)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd spriteid                   pre-id
+ #sd object,sd depth,sd x,sd y  same as swf_placeobject_coords
+     call swf_mem((mem_exp_change),spriteid)
+@@ -488,7 +521,7 @@ base swf_new.bp;call ebase(swf_new.bp)
+     call swf_mem((mem_exp_change_back))
+ endfunction
+ functionX swf_sprite_removeobject(sd spriteid,sd depth)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd spriteid   pre-id
+ #sd depth      same as swf_removeobject
+     call swf_mem((mem_exp_change),spriteid)
+@@ -496,7 +529,7 @@ base swf_new.bp;call ebase(swf_new.bp)
+     call swf_mem((mem_exp_change_back))
+ endfunction
+ functionX swf_sprite_showframe(sd spriteid)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd spriteid   pre-id
+     call swf_mem((mem_exp_change),spriteid)
+     call swf_actionblock((mem_exp_change),spriteid)
+@@ -511,7 +544,7 @@ endfunction
+ #exports
+ 
+ functionX swf_exports_add(sd id,ss name)
+-base swf_new.bp;call ebase(swf_new.bp)
++	base swf_new.bp;call ebase(swf_new.bp)
+ #sd id
+ #ss name       name to be used at the actionscript
+     sd exports
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -49,6 +49,14 @@ function word_arg_to_stack(ss arg)
+     or value arg#
+     return value
+ endfunction
++function word_swap(sw word)
++	ss p^word
++	sw val;set val p#
++	mult val 0x100
++	divu word 0x100
++	or val p#
++	return val
++endfunction
+ #swapped data
+ function dword_swap(sd value)
+     sd al
