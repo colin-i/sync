@@ -1,0 +1,252 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+218) xenial; urgency=medium
+ .
+   * callret;endfunction
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-03-06
+
+--- ocompiler-1.orig/localtest
++++ ocompiler-1/localtest
+@@ -1 +1 @@
+-1-5+217
++1-5+218
+--- ocompiler-1.orig/ocompiler.conf
++++ ocompiler-1/ocompiler.conf
+@@ -15,7 +15,7 @@
+ #hidden_pref=1
+ 
+ #4. Showed warnings as errors.
+-#0 if False; 1 is True
++#0 is False; 1 is True
+ #w_as_e=1
+ 
+ #5. Log file. This option creates a file with string lines. The files tree and virtual offset are logged.
+@@ -99,4 +99,8 @@
+ 
+ #24. Make .x file.
+ #0 is No; 1 is Yes; 2 is Yes_strict without making exe/elf
+-#x_file=0
+\ No newline at end of file
++#x_file=0
++
++#25. Warn on callret;endfunction
++#0 is No and Error; 1 is Yes
++#callret_end_warn=1
+\ No newline at end of file
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,3 +1,4 @@
++<p>ocompiler-1-5+217.x86_64.rpm,1GiWfKQN4VmlX5b5SYItd_BwxmZSJcHDt,2025-03-06T05:16:07.837Z,86394,https://drive.google.com/uc?id=1GiWfKQN4VmlX5b5SYItd_BwxmZSJcHDt&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+216.x86_64.rpm,1cmm7gwogGIpPt04cioKMWoIEbDYandB-,2025-02-26T08:50:23.916Z,86329,https://drive.google.com/uc?id=1cmm7gwogGIpPt04cioKMWoIEbDYandB-&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+215.x86_64.rpm,1T053lnfb2KI9ND3aRDc55jTTIoKlADZv,2025-02-02T09:36:32.878Z,86142,https://drive.google.com/uc?id=1T053lnfb2KI9ND3aRDc55jTTIoKlADZv&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+214.x86_64.rpm,1jOeYUxR8c4fJp_hilNLc2VCYkCMyv7v3,2025-01-30T04:36:27.388Z,86437,https://drive.google.com/uc?id=1jOeYUxR8c4fJp_hilNLc2VCYkCMyv7v3&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+--- ocompiler-1.orig/src/files/actions/main/index.oc
++++ ocompiler-1/src/files/actions/main/index.oc
+@@ -190,7 +190,7 @@ if errormsg=(noerror)
+ 			ElseIf commandset=(cRET)
+ 		call entryscope_verify_code()
+ 				setcall errormsg xfile_add_char_if((Xfile_ret));if errormsg=(noerror)
+-					setcall errormsg writeret();endif
++					setcall errormsg writeret((ret_cont_break_mustskip));endif
+ 			ElseIf commandset=(cINCLUDELINK)
+ 				Include "./index/include.oc"
+ 			ElseIf commandset=(cFORMAT)
+--- ocompiler-1.orig/src/files/functions/commands/cond.oc
++++ ocompiler-1/src/files/functions/commands/cond.oc
+@@ -376,7 +376,7 @@ Function closeifopenelse(sd xfile_type)
+ 				Data elsenr=elsenumber
+ 				SetCall err condbeginwrite(elsenr)
+ 			endif
+-		else # ret_cont_break_canskip ret_cont_break_mustskip ret_cont_break_notyet
++		else # ret_cont_break_canskip ret_cont_break_canskip_warn ret_cont_break_mustskip ret_cont_break_notyet
+ 			if main.ret_cont_break!=(ret_cont_break_notyet) #is useless JMP, if no previous JMP in this ifinscribe, is also useless ELSE
+ 				setcall err elseg()
+ 				If err!=noerr
+--- ocompiler-1.orig/src/files/functions/commands/ret.oc
++++ ocompiler-1/src/files/functions/commands/ret.oc
+@@ -1,6 +1,6 @@
+ 
+ #err
+-function writeret()
++function writeret(sd type)
+ 	sd err
+ 	sd termswitch
+ 	sd continuation
+@@ -16,7 +16,7 @@ function writeret()
+ 		setcall continuationsize getreturn(#continuation)
+ 		setcall err addtosec(continuation,continuationsize,ptrcodesec)
+ 	endelse
+-	set main.ret_cont_break_marker (ret_cont_break_mustskip)
++	set main.ret_cont_break_marker type
+ 	return err
+ endfunction
+ 
+@@ -30,7 +30,7 @@ function after_after_call(sd subtype)
+ 	setcall subtype callret_flag(subtype)
+ 	if subtype!=0
+ 		sd err
+-		setcall err writeret()
++		setcall err writeret((ret_cont_break_canskip_warn)) #if was only o, mustskip was a rule, but at otoc this is: return operation
+ 		return err
+ 	endif
+ 	return (noerror)
+--- ocompiler-1.orig/src/files/functions/global/end.oc
++++ ocompiler-1/src/files/functions/global/end.oc
+@@ -28,10 +28,25 @@ function endfunction(sd parses)
+ 					setcall sizereturn getreturn(ptrptrreturn)
+ 					SetCall err addtoCode_set_programentrypoint(ptrreturn,sizereturn)
+ 					If err!=(noerror);return err;endif
+-				elseif main.ret_cont_break=(ret_cont_break_canskip)
++				elseif main.ret_cont_break=(ret_cont_break_mustskip)
++					vstr uselessret="Previous RET was useless."
++					return uselessret
++				else
+ 					call set_programentrypoint()
+-				else # ret_cont_break_mustskip
+-					return "Previous RET was useless."
++					if main.ret_cont_break=(ret_cont_break_canskip_warn)
++						if main.xbool!=(Yes_strict) #at c is ok, is return argument
++							whiletrue
++								if main.xbool=(Yes)
++									if main.callret_end_warn=(Yes)
++										call Message("CallRet;EndFunction warning") #at c more important
++										break
++									end
++								end
++								return uselessret ##at only o or o more important
++							end
++						end
++					end
++					#else ret_cont_break_canskip
+ 				endelse
+ 				setcall err scopes_store(main.functionTagIndex)
+ 				If err=(noerror)
+--- ocompiler-1.orig/src/files/functions/pref/preffuncs.oc
++++ ocompiler-1/src/files/functions/pref/preffuncs.oc
+@@ -235,13 +235,14 @@ function initpreferences()
+ 	set ptr_nobits_virtual# (Yes)
+ 	set ptr_has_debug# (No)
+ 	set main.xbool (No)
++	set main.callret_end_warn (Yes)
+ 
+ 	#this is used also at arguments
+ 
+ 	sv q%nr_of_prefs_pointers_p
+-	set q# ptrwarningsbool; incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# ptr_relativepath; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w;         incst q;set q# #main.xbool
++	set q# ptrwarningsbool; incst q;set q# p_over_pref; incst q;set q# p_hidden_pref; incst q;set q# p_w_as_e; incst q;set q# ptrlogbool; incst q;set q# ptrcodeFnObj; incst q;set q# cb;           incst q;set q# ptrincludedir; incst q;set q# ptr_relativepath; incst q;set q# text_fn_info;    incst q;set q# conv_64;   incst q;set q# p_nul_res_pref; incst q;set q# sdsv_p;     incst q;set q# p_inplace_reloc_pref; incst q;set q# p_pref_reloc_64; incst q;set q# p_underscore_pref; incst q;set q# p_exit_end; incst q;set q# p_include_sec; incst q;set q# p_ignore_format_so; incst q;set q# ptr_call_align; incst q;set q# ptr_nobits_virtual; incst q;set q# ptr_has_debug; incst q;set q# p_o_w;         incst q;set q# #main.xbool; incst q;set q# #main.callret_end_warn
+ 	sv t%nr_of_prefs_strings_p
+-	set t# "orphans";       incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "relative_path";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"; incst t;set t# "x_file"
++	set t# "orphans";       incst t;set t# "over_pref"; incst t;set t# "hidden_pref"; incst t;set t# "w_as_e"; incst t;set t# "logfile";  incst t;set t# "codeFnObj";  incst t;set t# "const_warn"; incst t;set t# "includedir";  incst t;set t# "relative_path";  incst t;set t# "function_name"; incst t;set t# "conv_64"; incst t;set t# "nul_res_pref"; incst t;set t# "sd_as_sv"; incst t;set t# "inplace_reloc";      incst t;set t# "reloc_64";      incst t;set t# "underscore_pref"; incst t;set t# "exit_end"; incst t;set t# "include_sec"; incst t;set t# "ignore_format_so"; incst t;set t# "call_align";   incst t;set t# "nobits_virtual";   incst t;set t# "has_debug";   incst t;set t# "offset_warn"; incst t;set t# "x_file";    incst t;set t# "callret_end_warn"
+ endfunction
+ 
+ #void
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -468,7 +468,7 @@ const p_hidden_pref^hidden_pref
+ vstr safecurrentdirtopath#1
+ const p_safecurrentdirtopath^safecurrentdirtopath
+ 
+-const nr_of_prefs=24
++const nr_of_prefs=25
+ const nr_of_prefs_jumper=nr_of_prefs*:
+ 
+ vdata nr_of_prefs_pointers#nr_of_prefs;vdata nr_of_prefs_strings#nr_of_prefs
+@@ -547,8 +547,9 @@ charx xfile_sharp_comment#1
+ charx ret_cont_break#1   #cont break? is also skipping the jump at conditions
+ charx ret_cont_break_marker#1
+ const ret_cont_break_no=0
+-const ret_cont_break_canskip=1  #for return,leave, break,continue, endwhile for whiletrue without breaks. this case is compiler extra type
+-const ret_cont_break_mustskip=2 # ret against end, this case is user extra type
++const ret_cont_break_canskip=1      #for return,leave, break,continue, endwhile for whiletrue without breaks. this case is compiler extra type
++const ret_cont_break_mustskip=2     #ret against end, this case is user extra type
++const ret_cont_break_canskip_warn=3 #same as mustskip but from callret
+ const ret_cont_break_notyet=0xff
+ 
+ valuex ac_current_data#1
+@@ -577,3 +578,5 @@ datax innerfunctionreturn#1
+ datax varargs#1
+ 
+ charx is_constif#1
++
++charx callret_end_warn#1
+--- ocompiler-1.orig/tests/.expected/call/call-ret.o.txt
++++ ocompiler-1/tests/.expected/call/call-ret.o.txt
+@@ -1,13 +1,13 @@
+ f0VMRgIBAQAAAAAAAAAAAAEAPgABAAAAAAAAAAAAAAAAAAAAAAAAAEIAAAAAAAAAAAAAAEAAAAAA
+ AEAACAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAEAAAABAAAAAwAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAHAAAAAQAAAAYAAAAAAAAAAAAAAAAAAAAABAAAAAAAAI4A
+-AAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAADQAAAAgAAAADAAAAAAAAAAAAAAAAAAAAjgQA
++AAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAHAAAAAQAAAAYAAAAAAAAAAAAAAAAAAAAABAAAAAAAAJYA
++AAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAADQAAAAgAAAADAAAAAAAAAAAAAAAAAAAAlgQA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAABoAAAACAAAAAAAAAAAAAAAAAAAA
+-AAAAAI4EAAAAAAAAkAAAAAAAAAAHAAAABAAAAAQAAAAAAAAAGAAAAAAAAAAiAAAABAAAAAAAAAAA
+-AAAAAAAAAAAAAAAeBQAAAAAAAAAAAAAAAAAABAAAAAEAAAAEAAAAAAAAABgAAAAAAAAALQAAAAQA
+-AAAAAAAAAAAAAAAAAAAAAAAAHgUAAAAAAAAAAAAAAAAAAAQAAAACAAAABAAAAAAAAAAYAAAAAAAA
+-ADgAAAADAAAAAAAAAAAAAAAAAAAAAAAAAB4FAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA
++AAAAAJYEAAAAAAAAkAAAAAAAAAAHAAAABAAAAAQAAAAAAAAAGAAAAAAAAAAiAAAABAAAAAAAAAAA
++AAAAAAAAAAAAAAAmBQAAAAAAAAAAAAAAAAAABAAAAAEAAAAEAAAAAAAAABgAAAAAAAAALQAAAAQA
++AAAAAAAAAAAAAAAAAAAAAAAAJgUAAAAAAAAAAAAAAAAAAAQAAAACAAAABAAAAAAAAAAYAAAAAAAA
++ADgAAAADAAAAAAAAAAAAAAAAAAAAAAAAACYFAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -16,10 +16,10 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFNV
+-SIvsSIvcyVvDWEiD7DBQU1VIi+xIi9xIgesIAAAAkEiL4+jX////kEiL47kCAAAASIvTSIsCSIH5
+-AAAAAHQISP/J/zTI6+/osv///5BIi+Poqf///8lbWUiDxDBRw5BIi+O5AgAAAEiL00iLAkiB+QAA
+-AAB0CEj/yf80yOvv6Hv////JW1lIg8QwUcMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAwAB
+-AAAAAAAAAAAAAAAAAAAAAAAHAAAAAwACAAAAAAAAAAAAAAAAAAAAAAANAAAAAwADAAAAAAAAAAAA
+-AAAAAAAAAAATAAAAIgACAAAAAAAAAAAAAAAAAAAAAAAVAAAAEgACAAsAAAAAAAAAAAAAAAAAAAAA
+-LmRhdGEALnRleHQALmR0bmIAYQBtYWluAC5zeW10YWIALnJlbGEuZGF0YQAucmVsYS50ZXh0AC5z
+-dHJ0YWIA
++SIvsSIvcSIvj6PD////JW8NYSIPsMFBTVUiL7EiL3EiB6wgAAACQSIvj6M////+QSIvjuQIAAABI
++i9NIiwJIgfkAAAAAdAhI/8n/NMjr7+iq////kEiL4+ih////yVtZSIPEMFHDkEiL47kCAAAASIvT
++SIsCSIH5AAAAAHQISP/J/zTI6+/oc////8lbWUiDxDBRwwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAEAAAADAAEAAAAAAAAAAAAAAAAAAAAAAAcAAAADAAIAAAAAAAAAAAAAAAAAAAAAAA0AAAADAAMA
++AAAAAAAAAAAAAAAAAAAAABMAAAAiAAIAAAAAAAAAAAAAAAAAAAAAABUAAAASAAIAEwAAAAAAAAAA
++AAAAAAAAAAAuZGF0YQAudGV4dAAuZHRuYgBhAG1haW4ALnN5bXRhYgAucmVsYS5kYXRhAC5yZWxh
++LnRleHQALnN0cnRhYgA=
+--- ocompiler-1.orig/tests/.expected/call/call-ret.oc.x.txt
++++ ocompiler-1/tests/.expected/call/call-ret.oc.x.txt
+@@ -1,4 +1,5 @@
+-MAAAAAABAAAAYQAAAAAAAAQAAABtYWluAAAAAAAEAwYAAAEAAABhAAAAAAATBgMABAAAAG1haW4A
+-AAAABwEBBAABAAAAYgEAAwEAAAAxHxgBAAAAAAMDAAAAMTQ0HxwKAAABAAAAYQAAAAAYAQAAAAAD
+-AwAAADE0NB8cCwAAAQAAAGEAAAABAAAAYgAAAAMBAAAAMh8YAQAAAAADAwAAADE0NB8cCgEAAQAA
+-AGEAAAAAGAEAAAAAAwMAAAAxNDQfHAsBAAEAAABhAAAAAQAAAGIAAAADAQAAADIf
++PAAAAAABAAAAYQAAAAAAAAQAAABtYWluAAAAAAAEAwYAAAEAAABhAAAAAAAKAQABAAAAYQAAAAAT
++BgMABAAAAG1haW4AAAAABwEBBAABAAAAYgEAAwEAAAAxHxgBAAAAAAMDAAAAMTQ0HxwKAAABAAAA
++YQAAAAAYAQAAAAADAwAAADE0NB8cCwAAAQAAAGEAAAABAAAAYgAAAAMBAAAAMh8YAQAAAAADAwAA
++ADE0NB8cCgEAAQAAAGEAAAAAGAEAAAAAAwMAAAAxNDQfHAsBAAEAAABhAAAAAQAAAGIAAAADAQAA
++ADIf
+--- ocompiler-1.orig/tests/call/call-ret.oc
++++ ocompiler-1/tests/call/call-ret.oc
+@@ -2,6 +2,7 @@
+ format elfobj64
+ 
+ function a()
++	callret a()
+ endfunction
+ 
+ entry main()
