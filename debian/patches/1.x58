@@ -1,0 +1,76 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x58) focal; urgency=medium
+ .
+   * /bin/bash for deb pack
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-03-14
+
+--- edor-1.orig/Makefile.am
++++ edor-1/Makefile.am
+@@ -4,7 +4,7 @@ SUBDIRS = s
+ .PHONY: test
+ test:
+ 	cp -r s test
+-	cd test && make clean && ./headless
++	cd test && make clean && /bin/bash ./headless
+ 	rm -r test #it is a mirror, who can use it instead of ./s ?
+ 
+ #install-exec-local:
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2305,7 +2305,10 @@ static bool grab_file(char*f,size_t*text
+ 				text_init_b=(char*)malloc(size);
+ 				if(text_init_b!=nullptr){
+ 					lseek(fd,0,SEEK_SET);
++					#pragma GCC diagnostic push
++					#pragma GCC diagnostic ignored "-Wunused-result"
+ 					read(fd,text_init_b,size);
++					#pragma GCC diagnostic pop
+ 					text_sz[0]=size;
+ 					fake=false;
+ 				}
+@@ -2328,8 +2331,10 @@ static bool grab_input(size_t*text_sz){
+ 		//d=strlen(c);
+ 		*text_sz+=d;
+ 	}while(d==s);
+-	freopen("/dev/tty","r",stdin);
+-	return false;
++	FILE* tty=freopen("/dev/tty","r",stdin);
++	if(tty!=nullptr)
++		return false;
++	return true;//it was a problem at input, not sure if was here
+ }
+ 
+ static bool valid_ln_term(int argc,char**argv,bool*not_forced){
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -179,7 +179,10 @@ bool split_grab(char**p_text,size_t*p_si
+ 					//content
+ 					int f=files[explodes].file;
+ 					lseek(f,0,(SEEK_SET));//was at size tell
++					#pragma GCC diagnostic push
++					#pragma GCC diagnostic ignored "-Wunused-result"
+ 					read(f,cursor,files[explodes].size);//can close now but is extra code
++					#pragma GCC diagnostic pop
+ 					cursor+=files[explodes].size;
+ 					explodes++;
+ 
