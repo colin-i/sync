@@ -1,0 +1,20 @@
+
+//here because split.h is not inlcuding curses.h for WINDOW and base.h has that
+
+//main
+//bar,tw,tit,split
+extern row*rows;
+extern size_t rows_tot;
+//bar,split
+extern char ln_term[3];
+extern size_t ln_term_sz;
+//split
+extern size_t clue;
+
+//bar
+//split
+int open_or_new(char*);
+
+//sep
+//main,split
+extern char path_separator;
