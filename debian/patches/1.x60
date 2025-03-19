@@ -1,0 +1,2524 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x60) focal; urgency=medium
+ .
+   * split out ancestors, and optimizations
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-03-19
+
+--- /dev/null
++++ edor-1/cf
+@@ -0,0 +1 @@
++autoreconf -i && ./configure
+--- edor-1.orig/md
++++ edor-1/md
+@@ -1,2 +1,2 @@
+ 
+-autoreconf -i && ./configure CFLAGS=-g --disable-cpp && cd s && ./headless
++./cf && cd s && ./mdhd
+--- /dev/null
++++ edor-1/mk
+@@ -0,0 +1 @@
++./cf && make
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -72,21 +72,22 @@ static char input2[max_path_0];
+ static char*input0=input1;
+ static WINDOW*poswn;
+ static char inputr[max_path_0];
+-static size_t cursorr=0;
++static bar_byte cursorr=0;
+ #define get_right getbegx(poswn)-1
+ static char inputf[max_path_0];
+-static int cursorf=0;
++static bar_byte cursorf=0;
+ 
+ static int number2;//number is also negative
+ static int number3;
+ static int fprevnumber;
+ 
+ typedef struct{
+-size_t yb;
+-size_t xb;
+-size_t ye;
+-size_t xe;
+-char*data;}eundo;
++	size_t yb;
++	row_dword xb;
++	size_t ye;
++	row_dword xe;
++	char*data;
++}eundo;
+ static eundo*undos=nullptr;
+ static size_t undos_tot=0;
+ static size_t undos_spc=0;
+@@ -139,33 +140,34 @@ static bool wrt_loop_split(int f,size_t
+ 	return true;
+ }
+ //command return
+-static int wrt_simple_split(int f){
++static command_char wrt_simple_split(int f){
+ 	size_t n=rows_tot-1;
+ 	unsigned int off=0;
+ 	bool no_errors=true;
+ 	if(wrt_loop_split(f,n,&off,&no_errors)/*true*/){
+ 		if(swrite(f,rows[n].data+off,rows[n].sz-off)==swrite_ok){
+ 			if(no_errors/*true*/){
+-				return command_return_ok;
++				return command_ok;
+ 			}
+ 		}
+ 	}
+-	return 0;
++	return command_false;
+ }
+-static int wrt_simple(int f){
++//same
++static command_char wrt_simple(int f){
+ 	size_t n=rows_tot-1;
+ 	for(size_t i=0;i<n;i++){
+ 		row*r=&rows[i];
+-		if(write(f,r->data,r->sz)!=r->sz)return 0;
+-		if(write(f,ln_term,ln_term_sz)!=ln_term_sz)return 0;
++		if(write(f,r->data,r->sz)!=r->sz)return command_false;
++		if(write(f,ln_term,ln_term_sz)!=ln_term_sz)return command_false;
+ 	}
+-	if(write(f,rows[n].data,rows[n].sz)==rows[n].sz)return command_return_ok;
+-	return 0;
++	if(write(f,rows[n].data,rows[n].sz)==rows[n].sz)return command_ok;
++	return command_false;
+ }
+ //same
+-static int wrt_split(char*filename){
++static command_char wrt_split(char*filename){
+ 	if(split_write_init(filename)/*true*/){
+-		int a;
++		command_char a;
+ 		int f=open_or_new(filename);
+ 		if(f!=-1){
+ 			a=wrt_simple_split(f);
+@@ -177,25 +179,25 @@ static int wrt_split(char*filename){
+ 		return a;
+ 	}
+ 	print_error((char*)"Error at split init");
+-	return 0;
++	return command_false;
+ }
+ //same
+-static int wrt(char*filename){
++static command_char wrt(char*filename){
+ 	int f=open_or_new(filename);
+ 	if(f!=-1){
+-		int r=wrt_simple(f);
++		command_char r=wrt_simple(f);
+ 		close(f);
+ 		return r;
+ 	}
+ 	default_error();
+-	return 0;
++	return command_false;
+ }
+-static int bcdl(int y,int*p,char*input,int cursor){
++static bar_byte bcdl(int y,bar_byte*p,char*input,bar_byte cursor){
+ 	int x=getcurx(stdscr);
+-	int pos=p[0];
++	bar_byte pos=p[0];
+ 	if(pos==0&&x==com_left)return cursor;
+-	int of=x-com_left;
+-	for(int i=pos+of;i<cursor;i++){
++	bar_byte of=x-com_left;
++	for(bar_byte i=pos+of;i<cursor;i++){
+ 		input[i-1]=input[i];
+ 	}
+ 	if(pos==0){
+@@ -209,7 +211,7 @@ static int bcdl(int y,int*p,char*input,i
+ 		move(y,x);
+ 		return cursor-1;
+ 	}
+-	pos--;int n=x-com_left;
++	pos--;bar_byte n=x-com_left;
+ 	if(pos==0)mvaddch(y,com_left-1,' ');
+ 	else if(n!=0)move(y,com_left);
+ 	addnstr(input+pos,n);
+@@ -251,9 +253,18 @@ void err_set(WINDOW*w){
+ 		wmove(w,getcury(w),getcurx(w));//newpath+save
+ 	}
+ }
+-void bar_char(char c,WINDOW*w){
++//also test double chars
++bool bar_char(char c,WINDOW*w,bool singlechar){
+ 	mvaddch(getmaxy(stdscr)-1,com_left,c);
++	bool s=getcurx(stdscr)==com_left+1;//some ctrl like h will not write, will say com_left-1
++	if(s/*true*/){
++		if(singlechar==false){
++			attrset(color_0);
++			addch(' ');
++		}
++	}
+ 	wnoutrefresh(stdscr);wmove(w,getcury(w),getcurx(w));//refresh() is moving down
++	return s;
+ }
+ 
+ int open_new(char*path){
+@@ -273,26 +284,26 @@ int open_or_new(char*dest){
+ }
+ bool is_extension_ok(char*extension,char*filename){//also filename to save restore files in a simple way
+ 	if(*extension!='\0'){//else all files
+-		if(filename!=nullptr){//here is only the split_grab case
+-			char*pos=strrchr(filename,'.');
+-			if(pos!=nullptr){
+-				pos++;
+-				if(strcmp(pos,extension)==0)return true;
+-			}
++		char*pos=strrchr(filename,'.');
++		if(pos!=nullptr){
++			pos++;
++			if(strcmp(pos,extension)==0)return true;
+ 		}
+ 		return false;
+ 	}
+ 	return true;
+ }
+ //command return
+-int saving_base(char*dest){
+-	if(splits_flag/*true*/){
+-		if(is_extension_ok(split_extension,dest)/*true*/)return wrt_split(dest);
++command_char saving_base(char*dest){
++	split_char r=split_conditions(dest,false);
++	if(r!=split_err){
++		if(r==split_yes)return wrt_split(dest);
++		return wrt(dest);
+ 	}
+-	return wrt(dest);
++	return command_false;
+ }
+ //command return
+-static int saving(){
++static command_char saving(){
+ 	return saving_base(textfile);
+ }
+ static void inputpath(){
+@@ -306,17 +317,18 @@ static void inputpath(){
+ 	else input0=input1;
+ 	//good for other commands that are not storing the result
+ }
+-//-1exist,0er,1ok
+-static int saves(){
++//-1exist,0er,1ok and also mix with command returns
++static command_char saves(){
+ 	if(access(input0,F_OK)==-1){
+ 		inputpath();
+ 		//new_f=true;
+ 		return saving();
+ 	}
+-	return -1;
++	return command_no;
+ }
+-static void clear_com(int y,int sz,int pos,int cursor){
+-	int len;if(pos!=0){
++static void clear_com(int y,int sz,bar_byte pos,bar_byte cursor){
++	bar_byte_plus len;//len will also clear left and right arrows
++	if(pos!=0){
+ 		move(y,com_left-1);
+ 		len=1+cursor-pos;sz++;
+ 	}
+@@ -331,7 +343,7 @@ static void clear_com(int y,int sz,int p
+ 		//memset(mapsel,' ',(size_t)sz+1);mapsel[sz+1]='\0';addstr(mapsel);
+ 	}
+ 	else{
+-		for(int i=0;i<len;i++)
++		for(bar_byte_plus i=0;i<len;i++)
+ 			addch(' ');
+ 		//memset(mapsel,' ',(size_t)len);mapsel[len]='\0';addstr(mapsel);
+ 	}
+@@ -345,35 +357,35 @@ void texter_macro(const char*t){
+ 	texter(t);
+ }
+ 
+-//1/0/-1 -2
+-int question(const char*q){
++//1/0/-1 -2  //return at command
++command_char question(const char*q){
+ 	//if(com_left+sz>getmaxx(stdscr))return 1;
+ 	int y=getmaxy(stdscr)-1;
+ 	mvaddstr(y,com_left,q);
+ 	addstr(quest_ex_s);
+ 	int ch=getch();
+-	if(ch==KEY_RESIZE)return -2;
++	if(ch==KEY_RESIZE)return command_resize;
+ 	move(y,com_left);
+ 	int sz=(int)(strlen(q)+sizeof(quest_ex_s)-1);
+ 	for(int i=0;i<sz;i++)
+ 		addch(' ');
+ 	//memset(mapsel,' ',sz);mapsel[sz]='\0';mvaddstr(y,com_left,mapsel);
+-	if(ch=='y')return 1;
+-	else if(ch=='n')return -1;
+-	return 0;
++	if(ch=='y')return command_ok;
++	else if(ch=='n')return command_no;
++	return command_false;
+ }
+-static int del(int x,char*input,int cursor,int dif){
++static bar_byte del(bar_byte x,char*input,bar_byte cursor,int dif){
+ 	if(x==cursor)return cursor;
+ 	cursor--;
+-	for(int i=x;i<cursor;i++){
++	for(bar_byte i=x;i<cursor;i++){
+ 		input[i]=input[i+1];
+ 	}
+-	int f=x+dif;int r;
++	int f=x+dif;bar_byte r;
+ 	if(cursor<f)r=cursor;else r=f;
+ 	while(x<r){addch(input[x]);x++;}
+-	if(cursor<f){
++	if(cursor<=f){//was <
+ 		addch(' ');
+-	}else if(f==cursor)addch(' ');
++	}//else if(f==cursor)addch(' ');
+ 	return cursor;
+ }
+ 
+@@ -407,7 +419,7 @@ static int inputcmp(char*S1,size_t L1,si
+ 	}
+ 	return -1;
+ }
+-static bool findingf(size_t cursor,size_t r,size_t c){
++static bool findingf(bar_byte cursor,size_t r,size_t c){
+ 	size_t i=ytext;
+ 	if(i+r>=rows_tot)i=0;
+ 	else{
+@@ -424,7 +436,7 @@ static bool findingf(size_t cursor,size_
+ 	size_t e=rows_tot;
+ 	for(;;){
+ 		int a=inputcmp(rows[i].data,rows[i].sz,cursor);
+-		if(a>=0){xtext=(size_t)a;ytext=i;return true;}
++		if(a>=0){xtext=a;ytext=i;return true;}
+ 		i++;
+ 		if(i==e){
+ 			if(e==rows_tot){
+@@ -456,7 +468,7 @@ static int inputrcmp(char*S1,size_t L1,s
+ 	}
+ 	return -1;
+ }
+-static bool findingb(size_t cursor,size_t r,size_t c){
++static bool findingb(bar_byte cursor,size_t r,size_t c){
+ 	size_t i=ytext;
+ 	if(i+r>=rows_tot)i=rows_tot-1;
+ 	else{//safe when find first fails
+@@ -464,7 +476,7 @@ static bool findingb(size_t cursor,size_
+ 		c+=xtext;
+ 		if(c<rows[i].sz){
+ 			int n=inputrcmp(rows[i].data,c,cursor);
+-			if(n>=0){xtext=(size_t)n;ytext=i;return true;}
++			if(n>=0){xtext=n;ytext=i;return true;}
+ 			if(i==0)i=rows_tot-1;
+ 			else i--;
+ 		}
+@@ -473,7 +485,7 @@ static bool findingb(size_t cursor,size_
+ 	size_t e=0;
+ 	for(;;){
+ 		int a=inputrcmp(rows[i].data,rows[i].sz,cursor);
+-		if(a>=0){xtext=(size_t)a;ytext=i;return true;}
++		if(a>=0){xtext=a;ytext=i;return true;}
+ 		if(i==e){
+ 			if(e==0){
+ 				if(b==rows_tot-1)return false;
+@@ -482,7 +494,7 @@ static bool findingb(size_t cursor,size_
+ 		}else i--;
+ 	}
+ }
+-static bool finding(size_t cursor,size_t r,size_t c,bool f){
++static bool finding(bar_byte cursor,size_t r,size_t c,bool f){
+ 	if(cursor==0)return false;
+ 	if(f/*true*/)return findingf(cursor,r,c);
+ 	return findingb(cursor,r,c);
+@@ -508,17 +520,17 @@ void position(int rw,int cl){
+ 	size_t y=ytext+(size_t)rw;size_t x;
+ 	if(y>=rows_tot){y=rows_tot-1;x=rows[y].sz;}
+ 	else{
+-		x=xtext+c_to_xc(cl,rw);
++		x=(size_t)xtext+c_to_xc(cl,rw);
+ 		if(x>rows[y].sz)x=rows[y].sz;
+ 	}
+ 	position_core(y,x);
+ }
+-void centering3(WINDOW*w,size_t*prw,size_t*pxc,bool right){
++void centering3(WINDOW*w,size_t*prw,row_dword*pxc,bool right){
+ 	int mx=getmaxx(w);
+ 	int wd=mx/3;
+ 	if(right/*true*/)wd=mx-wd;
+ 	int c=0;char*d=rows[ytext].data;
+-	size_t xc=xtext;
++	row_dword xc=xtext;
+ 	do{
+ 		if(xtext==0)break;
+ 		xtext--;
+@@ -537,9 +549,9 @@ int centeringy(WINDOW*w){
+ 	refreshpage(w);
+ 	return hg;
+ }
+-static void colorfind(int a,int y,size_t pos,size_t sz){
++static void colorfind(int a,int y,bar_byte pos,bar_byte sz){
+ 	attrset(COLOR_PAIR(a));
+-	mvaddnstr(y,com_left,inputf+pos,(int)sz);
++	mvaddnstr(y,com_left,inputf+pos,sz);
+ 	attrset(color_0);
+ }
+ static void replace_text_add(WINDOW*w,chtype c,int*rstart,int*rstop){
+@@ -588,7 +600,8 @@ static bool replace_text(WINDOW*w,int yb
+ 		}
+ 	}
+ }
+-static int go_to(int cursor){
++//0/1  not signed but will return at command
++static command_char go_to(bar_byte cursor){
+ 	int i=0;size_t y;size_t x;
+ 	for(;;){
+ 		if(input0[i]==','){
+@@ -609,11 +622,11 @@ static int go_to(int cursor){
+ 		x--;if(x>rows[ytext].sz)
+ 			xtext=rows[ytext].sz;
+ 		else xtext=x;
+-		return 1;
++		return command_ok;
+ 	}
+-	return 0;
++	return command_false;
+ }
+-int save(){
++command_char save(){
+ 	if(textfile!=nullptr){
+ 		return saving();
+ 	}
+@@ -630,7 +643,7 @@ void position_reset(){
+ }
+ static bool undo_expand(){
+ 	size_t sz=undos_tot+1;
+-	size_t dif=sz&row_pad;
++	char dif=sz&row_pad;
+ 	if(dif!=0)sz+=((dif^row_pad)+1);
+ 	if(sz>undos_spc){
+ 		void*v=realloc(undos,sz*sizeof(eundo));
+@@ -656,7 +669,7 @@ static void undo_newway(){
+ 		undos_max=undos_tot;
+ 	}
+ }
+-bool undo_add(size_t yb,size_t xb,size_t ye,size_t xe){
++bool undo_add(size_t yb,row_dword xb,size_t ye,row_dword xe){
+ 	if(undo_expand()/*true*/){
+ 		undo_newway();
+ 		eundo*un=&undos[undos_tot];
+@@ -666,7 +679,7 @@ bool undo_add(size_t yb,size_t xb,size_t
+ 	return true;
+ }
+ static bool undo_del_backward(eundo*un,size_t yb,size_t xb,size_t ye,size_t xe){
+-	size_t x=sizemembuf(yb,xb,ye,xe);
++	row_dword x=sizemembuf(yb,xb,ye,xe);
+ 	char*v=(char*)malloc(x);
+ 	if(v==nullptr)return true;
+ 	un->yb=yb;un->xb=xb;un->ye=ye;un->xe=x;
+@@ -674,10 +687,10 @@ static bool undo_del_backward(eundo*un,s
+ 	cpymembuf(yb,xb,ye,xe,v);
+ 	return false;
+ }
+-bool undo_add_del(size_t yb,size_t xb,size_t ye,size_t xe){
++bool undo_add_del(size_t yb,row_dword xb,size_t ye,row_dword xe){
+ 	if(undo_expand()/*true*/){
+-		size_t x=sizemembuf(yb,xb,ye,xe);
+-		size_t dif=x&row_pad;
++		row_dword x=sizemembuf(yb,xb,ye,xe);
++		char dif=x&row_pad;
+ 		if(dif!=0)dif=(dif^row_pad)+1;
+ 		char*v=(char*)malloc(x+dif);
+ 		if(v!=nullptr){
+@@ -721,43 +734,43 @@ void undo_free(){
+ 		free(undos);
+ 	}
+ }
+-static bool undo_add_replace(size_t cursor){
++static bool undo_add_replace(bar_byte cursor){
+ 	if(undo_expand()/*true*/){
+-		char*d=(char*)malloc(1+sizeof(cursor)+cursor);
++		char*d=(char*)malloc(1+sizeof(row_dword)+cursor);
+ 		if(d!=nullptr){
+ 			undo_newway();
+ 			eundo*un=&undos[undos_tot];
+ 			un->yb=ytext;un->xb=xtext;
+ 			un->ye=un->yb;un->xe=cursorr;
+ 			un->data=d;
+-			d[0]=ln_term[0];((size_t*)((void*)&d[1]))[0]=cursor;
++			d[0]=ln_term[0];((row_dword*)((void*)&d[1]))[0]=cursor;//is not bar_byte because at first is, but at undo replace there will be the replace that is bigger
+ 			//memcpy(&d[1]+sizeof(cursor),inputf,cursor);inputf can be insensitive
+-			memcpy(&d[1]+sizeof(cursor),&rows[ytext].data[xtext],cursor);
++			memcpy(&d[1]+sizeof(row_dword),&rows[ytext].data[xtext],cursor);
+ 			undo_ok();return false;}}
+ 	return true;
+ }
+-static bool undo_replace(eundo*un,char*data,size_t yb,size_t xb,size_t xe,bool is_undo){
+-	size_t*sz_p=(size_t*)((void*)&data[1]);
+-	size_t sz2=sz_p[0];
++static bool undo_replace(eundo*un,char*data,size_t yb,row_dword xb,row_dword xe,bool is_undo){
++	row_dword*sz_p=(row_dword*)((void*)&data[1]);
++	row_dword sz2=sz_p[0];
+ 	row*r=&rows[yb];
+-	int memdif=(int)(sz2-xe);
+-	size_t sz=r->sz;
+-	if(memdif>0){
+-		if(row_alloc(r,sz,(size_t)memdif,0)/*true*/)return true;
++	long memdif=(long)sz2-xe;//is big only if is a long write at replace. strange is that at char the cast is not required
++	row_dword sz=r->sz;
++	if(memdif>0){//here will be row_dword at max
++		if(row_alloc(r,sz,memdif,0)/*true*/)return true;
+ 	}
+ 	else if(xe>sz2&&is_undo/*true*/){
+-		data=(char*)realloc(data,1+sizeof(xe)+xe);
++		data=(char*)realloc(data,1+sizeof(row_dword)+xe);
+ 		if(data==nullptr)return true;
+-		un->data=data;sz_p=(size_t*)((void*)&data[1]);
++		un->data=data;sz_p=(row_dword*)((void*)&data[1]);
+ 	}
+ 	char*a=&r->data[xb];
+ 	char*b=(char*)(sz_p+1);
+-	if(memdif>0){
++	if(memdif>0){//here will be row_dword at max
+ 		for(size_t i=0;i<xe;i++){
+ 			char c=a[i];a[i]=b[i];b[i]=c;
+ 		}
+-		size_t left=xb+xe;
+-		row_set(r,left,(size_t)memdif,sz-left,&b[xe]);
++		row_dword left=xb+xe;
++		row_set(r,left,memdif,sz-left,&b[xe]);
+ 	}else{
+ 		for(size_t i=0;i<sz2;i++){
+ 			char c=a[i];a[i]=b[i];b[i]=c;
+@@ -775,7 +788,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 	char*d=un->data;
+ 	size_t y1=un->yb;size_t y2=un->ye;
+ 	if(y1<=y2){
+-		size_t xb=un->xb;size_t xe=un->xe;
++		row_dword xb=un->xb;row_dword xe=un->xe;
+ 		if(d!=nullptr){
+ 			if(y1==y2&&d[0]==ln_term[0]){
+ 				if(undo_replace(un,d,y1,xb,xe,vl!=1)/*true*/)return false;
+@@ -816,7 +829,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 			if(mem==nullptr)return false;
+ 			undo_ind_del(un,y2,y1,(char*)mem);
+ 			for(size_t i=y2;i<y1;i++){
+-				size_t n=rows[i].sz;char*dt=rows[i].data;
++				row_dword n=rows[i].sz;char*dt=rows[i].data;
+ 				for(size_t j=1;j<=n;j++)dt[j-1]=dt[j];
+ 				rows[i].sz--;
+ 			}
+@@ -856,7 +869,7 @@ void redo(WINDOW*w){
+ 	}
+ }
+ void undo_save(){undos_save=undos_tot;}
+-bool undo_type(size_t yb,size_t xb,size_t ye,size_t xe){
++bool undo_type(size_t yb,row_dword xb,size_t ye,row_dword xe){
+ 	if(undos_tot!=0){
+ 		eundo*un=&undos[undos_tot-1];
+ 		if(un->data==nullptr&&un->yb<=un->ye){
+@@ -869,7 +882,7 @@ bool undo_type(size_t yb,size_t xb,size_
+ 	}
+ 	return undo_add(yb,xb,ye,xe);
+ }
+-bool undo_bcsp(size_t yb,size_t xb,size_t ye,size_t xe){
++bool undo_bcsp(size_t yb,row_dword xb,size_t ye,row_dword xe){
+ 	if(undos_tot!=0){
+ 		eundo*un=&undos[undos_tot-1];
+ 		if(un->data!=nullptr&&un->yb<=un->ye){
+@@ -890,7 +903,7 @@ bool undo_bcsp(size_t yb,size_t xb,size_
+ 	}
+ 	return undo_add_del(yb,xb,ye,xe);
+ }
+-bool undo_delk(size_t yb,size_t xb,size_t ye,size_t xe){
++bool undo_delk(size_t yb,row_dword xb,size_t ye,row_dword xe){
+ 	if(undos_tot!=0){
+ 		eundo*un=&undos[undos_tot-1];
+ 		if(un->data!=nullptr&&un->yb<=un->ye){
+@@ -918,7 +931,7 @@ void undo_loop(WINDOW*w){
+ 		else break;
+ 	}
+ }
+-static bool replace(size_t cursor){
++static bool replace(bar_byte cursor){
+ 	row*r=&rows[ytext];
+ 	if(cursorr>cursor)if(row_alloc(r,r->sz,cursorr-cursor,0)/*true*/)return true;
+ 	if(undo_add_replace(cursor)==false){
+@@ -974,8 +987,8 @@ static void finds(bool phase,int number,
+ 	wnoutrefresh(stdscr);
+ }
+ 
+-static bool delim_touch(size_t y1,size_t x1,size_t c){return ytext==y1&&(xtext==x1||(xtext<x1&&xtext+c>x1));}
+-static bool delimiter(size_t y1,size_t x1,int y,size_t pos,size_t sz,size_t c,bool phase){
++static bool delim_touch(size_t y1,size_t x1,bar_byte c){return ytext==y1&&(xtext==x1||(xtext<x1&&xtext+c>x1));}
++static bool delimiter(size_t y1,size_t x1,int y,bar_byte pos,bar_byte sz,bar_byte c,bool phase){
+ 	if(delim_touch(y1,x1,c)/*true*/){
+ 		colorfind(color_b,y,pos,sz);
+ 		wnoutrefresh(stdscr);
+@@ -989,9 +1002,9 @@ static bool delimiter(size_t y1,size_t x
+ }
+ 
+ #define quick_get(z) ((WINDOW**)((void*)z))[1]
+-#define find_returner return a==KEY_RESIZE?-2:1;
++#define find_returner return a==KEY_RESIZE?command_resize:command_ok;
+ 
+-static void finds_total(int number,size_t y1,size_t x1,size_t xr,size_t xc,bool untouched,size_t cursor,WINDOW*w){
++static void finds_total(int number,size_t y1,row_dword x1,size_t xr,row_dword xc,bool untouched,bar_byte cursor,WINDOW*w){
+ 	//set a limit
+ 	const size_t max=100;
+ 	size_t n;
+@@ -1032,8 +1045,8 @@ static void finds_total(int number,size_
+ }
+ 
+ //1,0cancel,-2resz
+-static int find_core(WINDOW*w,size_t cursor,int y,size_t pos,size_t sz){
+-	size_t y1=ytext;size_t x1=xtext;
++static command_char find_core(WINDOW*w,bar_byte cursor,int y,bar_byte pos,bar_byte sz){
++	size_t y1=ytext;row_dword x1=xtext;
+ 
+ 	finds_total(0,ytext,xtext,0,0,true,cursor,w);
+ 	ytext=y1;xtext=x1;
+@@ -1044,7 +1057,7 @@ static int find_core(WINDOW*w,size_t cur
+ 	bool forward=true;
+ 	bool phase=false;
+ 	wnoutrefresh(stdscr);
+-	size_t xr;size_t xc;
++	size_t xr;row_dword xc;
+ 	centering(w,&xr,&xc)
+ 	bool untouched=true;bool delimiter_touched=false;
+ 	char prev_key=' ';
+@@ -1067,7 +1080,7 @@ static int find_core(WINDOW*w,size_t cur
+ 			}
+ 			forward=false;
+ 		}else if(a==KEY_LEFT){
+-			size_t iferrory=ytext;size_t iferrorx=xtext;
++			size_t iferrory=ytext;row_dword iferrorx=xtext;
+ 			if(number3!=getmaxx(stdscr)){//in second case this can be if total is requested
+ 				finds_big_clean();//wnoutrefresh when not on delimiter
+ 			}
+@@ -1102,18 +1115,18 @@ static int find_core(WINDOW*w,size_t cur
+ 				else{centering(w,&xr,&xc)}
+ 				continue;
+ 			}
+-			return 1;
++			return command_ok;
+ 		}else if(a=='r'){
+ 			cursorr=0;wattrset(w,COLOR_PAIR(color_b));
+ 			int rstart=getcury(w);
+-			if(replace_text(w,rstart,getcurx(w),rstart,rstart+1)/*true*/)return -2;
++			if(replace_text(w,rstart,getcurx(w),rstart,rstart+1)/*true*/)return command_resize;
+ 			continue;
+ 		}else if(a=='c'){
+-			return 0;
++			return command_false;
+ 		}else if(a==KEY_RIGHT){
+ 			if(number2==0){//only when not knowing the total
+ 				if(delimiter_touched==false){//to omit last replace return if that can happen at this point
+-					size_t storeytext=ytext;size_t storextext=xtext;
++					size_t storeytext=ytext;row_dword storextext=xtext;
+ 					finds_total(number,y1,x1,xr,xc,untouched,cursor,w);
+ 					ytext=storeytext;xtext=storextext;
+ 				}
+@@ -1123,17 +1136,17 @@ static int find_core(WINDOW*w,size_t cur
+ 			wattrset(w,COLOR_PAIR(color_b));
+ 			int yb=getcury(w);int xb=getcurx(w);
+ 			int rstart=yb;int rstop=yb+1;
+-			for(size_t i=0;i<cursorr;i++){
++			for(bar_byte i=0;i<cursorr;i++){
+ 				replace_text_add(w,inputr[i],&rstart,&rstop);
+ 			}
+-			if(replace_text(w,yb,xb,rstart,rstop)/*true*/)return -2;
++			if(replace_text(w,yb,xb,rstart,rstop)/*true*/)return command_resize;
+ 			continue;
+ 		}else{
+ 			find_returner
+ 		}
+ 		if(finding(cursor,xr,xc,forward)==false){
+ 			//was last replace
+-			return 1;
++			return command_ok;
+ 		}
+ 		phase=delimiter(y1,x1,y,pos,sz,cursor,phase);
+ 
+@@ -1157,7 +1170,7 @@ static int find_core(WINDOW*w,size_t cur
+ 	}
+ }
+ //same
+-static int find(char*z,size_t cursor,size_t pos,size_t visib,int y){
++static command_char find(char*z,bar_byte cursor,bar_byte pos,int visib,int y){
+ 	//warning: cast from 'char *' to 'size_t *' (aka 'unsigned int *') increases required alignment from 1 to 4
+ 	//warning: arithmetic on a pointer to void is a GNU extension
+ 	//z+=sizeof(void*);
+@@ -1165,22 +1178,22 @@ static int find(char*z,size_t cursor,siz
+ 	size_t xr=(size_t)getcury(w);
+ 	size_t xc=c_to_xc(getcurx(w),(int)xr);
+ 	//
+-	size_t sz=cursor-pos;
++	bar_byte sz=cursor-pos;
+ 	if(sz>visib)sz=visib;
+ 	colorfind(color_a,y,pos,sz);
+ 	//
+ 	if(finding(cursor,xr,xc,true)/*true*/){
+-		int r=find_core(w,cursor,y,pos,sz);
++		char r=find_core(w,cursor,y,pos,sz);
+ 		finds_clean();
+ 		return r;
+ 	}
+ 	int a=getch();
+ 	if(a=='c'){
+-		return 0;
++		return command_false;
+ 	}
+ 	find_returner
+ }
+-static void command_rewrite(int y,int x,int pos,char*input,int cursor,int visib){
++static void command_rewrite(int y,int x,int pos,char*input,bar_byte cursor,int visib){
+ 	if(pos!=0)mvaddch(y,com_left-1,'<');
+ 	else move(y,com_left);
+ 	int len=cursor-pos;
+@@ -1192,13 +1205,13 @@ static void command_rewrite(int y,int x,
+ }
+ static int word_at_cursor(char*z){
+ 	WINDOW*w=quick_get(z);
+-	size_t y;size_t x;
++	size_t y;row_dword x;
+ 	fixed_yx(&y,&x,getcury(w),getcurx(w));
+ 	size_t sz=rows[y].sz;
+ 	if(x==sz)return 0;
+ 	char*d=rows[y].data;
+ 	if(is_word_char(d[x])==false){if(no_char(d[x])==false){*inputf=d[x];return 1;}return 0;}
+-	int cursor=0;
++	bar_byte cursor=0;
+ 	if(*z==com_nr_findword){
+ 		size_t xpos=x;
+ 		while(xpos>0&&is_word_char(d[xpos-1])/*true*/)xpos--;
+@@ -1217,14 +1230,14 @@ static int word_at_cursor(char*z){
+ }
+ 
+ //-2resize,-1no/quit,0er/fals,1ok
+-int command(comnrp_define comnrp){
++command_char command(comnrp_define comnrp){
+ 	int rightexcl=get_right;
+ 	int right=rightexcl-1;
+ 	int visib=rightexcl-com_left;
+-	if(visib<2)return 0;//phisical visib is 1
++	if(visib<2)return command_false;//phisical visib is 1
+ 	bar_clear();
+-	int y=getmaxy(stdscr)-1;int pos=0;
+-	char*input;int cursor;bool is_find=*comnrp<=com_nr_find_numbers;
++	int y=getmaxy(stdscr)-1;bar_byte pos=0;
++	char*input;bar_byte cursor;bool is_find=*comnrp<=com_nr_find_numbers;
+ 	if(is_find/*true*/){
+ 		if(*comnrp==com_nr_findagain)cursor=cursorf;
+ 		else cursor=*comnrp>=com_nr_findword?word_at_cursor(comnrp):0;
+@@ -1243,21 +1256,21 @@ int command(comnrp_define comnrp){
+ 	else{
+ 		command_rewrite(y,com_left+(cursor<visib?cursor:0),0,input,cursor,visib);
+ 	}
+-	int r;for(;;){
++	command_char r;for(;;){
+ 		int a=getch();
+ 		if(a==Char_Return){
+ 			char comnr=comnrp[0];
+ 			if(is_find/*true*/){
+ 				int ifback=getcurx(stdscr);
+-				r=find(comnrp,(size_t)cursor,(size_t)pos,(size_t)visib,y);
+-				if(r==-2)break;
++				r=find(comnrp,cursor,pos,visib,y);
++				if(r==command_resize)break;
+ 				int dif=rightexcl-getbegx(poswn);
+-				if(dif!=-1){
++				if(dif!=-1){//here when finding far away and position window is growing too much
+ 					right-=dif+1;rightexcl=right+1;
+ 					visib=rightexcl-com_left;
+ 					if(visib<2)break;
+ 				}
+-				if(r==0){
++				if(r==command_false){
+ 					//the text was highlighted
+ 					//but can be increased
+ 					//can be resized big,resized small
+@@ -1271,18 +1284,18 @@ int command(comnrp_define comnrp){
+ 			}else if(comnr==com_nr_save){
+ 				input[cursor]='\0';
+ 				r=saves();
+-				if(r==-1){
++				if(r==command_no){
+ 					int x=getcurx(stdscr);
+ 					clear_com(y,visib,pos,cursor);
+ 					r=question("Overwrite");
+-					if(r==1){
++					if(r==command_ok){
+ 						inputpath();
+ 						//new_f=false;
+ 						r=saving();
+-					}else if(r==0){
++					}else if(r==command_false){
+ 						command_rewrite(y,x,pos,input0,cursor,visib);
+ 						continue;
+-					}else if(r==-2)return -2;
++					}else if(r==command_resize)return command_resize;
+ 					wnoutrefresh(stdscr);
+ 					return r;
+ 				}
+@@ -1291,7 +1304,7 @@ int command(comnrp_define comnrp){
+ 				//((void(*)(char*,unsigned long int))(((comnrp_define*)comnrp)[1]))(input,cursor);
+ 				extdata*d=((extdata**)comnrp)[1];
+ 				pref_modify(d->orig,d->buf,d->sizedonly,input,cursor);
+-				r=1;
++				r=command_ok;
+ 			}
+ 			break;
+ 		}
+@@ -1309,7 +1322,9 @@ int command(comnrp_define comnrp){
+ 		}
+ 		else if(a==KEY_RIGHT){
+ 			int x=getcurx(stdscr);
+-			if(x<right){if(x<com_left+cursor)move(y,x+1);}
++			if(x<right){
++				if((x-com_left+pos)<cursor)move(y,x+1);
++			}
+ 			else if(pos+visib<=cursor){
+ 				if(pos==0)mvaddch(y,com_left-1,'<');
+ 				else move(y,com_left);
+@@ -1353,16 +1368,16 @@ int command(comnrp_define comnrp){
+ 			cursor=del(x-com_left+pos,input,cursor,rightexcl-x);
+ 			move(y,x);
+ 		}
+-		else if(a==KEY_RESIZE){r=-2;break;}
++		else if(a==KEY_RESIZE){r=command_resize;break;}
+ 		else{
+ 			const char*s=keyname(a);
+-			if(strcmp(s,"^Q")==0){r=-1;break;}
++			if(strcmp(s,"^Q")==0){r=command_no;break;}
+ 			if(cursor!=max_path){
+ 				char ch=(char)a;
+ 				if(no_char(ch)==false){
+ 					int x=getcurx(stdscr);
+-					int off=pos+(x-com_left);
+-					for(int i=cursor;i>off;i--){
++					bar_byte off=pos+(x-com_left);
++					for(bar_byte i=cursor;i>off;i--){
+ 						input[i]=input[i-1];
+ 					}
+ 					input[off]=ch;
+@@ -1373,7 +1388,7 @@ int command(comnrp_define comnrp){
+ 						pos++;
+ 						addnstr(input+pos,visib-1);
+ 					}else addch(ch);
+-					int d=cursor-off;
++					bar_byte d=cursor-off;
+ 					if(d!=0){
+ 						int n=right-x;
+ 						if(dif!=0)x++;else n++;
+@@ -1388,7 +1403,7 @@ int command(comnrp_define comnrp){
+ 			}
+ 		}
+ 	}
+-	if(r!=-2){
++	if(r!=command_resize){
+ 		clear_com(y,visib,pos,cursor);
+ 		wnoutrefresh(stdscr);
+ 	}
+@@ -1419,7 +1434,7 @@ char*ocode_extension=default_extension;
+ size_t aftercall_find(){
+ 	for(size_t i=0;i<rows_tot;i++){
+ 		row*r=&rows[i];
+-		size_t sz=r->sz;
++		row_dword sz=r->sz;
+ 		char*data=r->data;
+ 
+ 		//first must skip spaces
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -1,61 +1,61 @@
+ 
+ //main
+ //bar
+-size_t c_to_xc(int,int);
+-void cpymembuf(size_t,size_t,size_t,size_t,char*);
++int c_to_xc(int,int);
++void cpymembuf(size_t,row_dword,size_t,row_dword,char*);
+ void deleting(size_t,size_t,size_t,size_t);
+-bool deleting_init(size_t,size_t,size_t,size_t);
++bool deleting_init(size_t,row_dword,size_t,row_dword);
+ void editing_rebase();
+ void mod_set_off();
+ void mod_set_off_wrap();
+ void mod_set_on();
+ bool no_char(char);
+-bool paste(size_t,size_t,size_t*,char*,size_t,size_t,bool);
+-void pref_modify(char**,char**,bool,char*,size_t);
++bool paste(size_t,row_dword,row_dword*,char*,size_t,size_t,bool);
++void pref_modify(char**,char**,bool,char*,bar_byte);
+ void printinverted(const char*s);
+ void refreshrowsbot(WINDOW*,int,int);
+ #define refreshrows(w,i) refreshrowsbot(w,i,getmaxy(w))
+ void restore_rebase();
+-bool row_alloc(row*,size_t,size_t,size_t);
+-void row_set(row*,size_t,size_t,size_t,const char*);
+-size_t sizemembuf(size_t,size_t,size_t,size_t);
++bool row_alloc(row*,row_dword,size_t,row_dword);
++void row_set(row*,row_dword,row_dword,row_dword,const char*);
++size_t sizemembuf(size_t,row_dword,size_t,row_dword);
+ void vis(char,WINDOW*);
+ //tw
+ int xc_to_c(size_t,int);
+ //tit
+-void fixed_x(size_t,size_t*,int,int);
++void fixed_x(size_t,row_dword*,int,int);
+ //bar,tit
+ #define refreshpage(w) refreshrows(w,0)
+ //bar,tw,tit
+ void visual(char);
+-void fixed_yx(size_t*,size_t*,int,int);
++void fixed_yx(size_t*,row_dword*,int,int);
+ //tw,tit
+-int movment(int,WINDOW*);
++command_char movment(int,WINDOW*);
+ 
+ //bar
+ //main
+ void bar_init(void);
+-int save(void);
+-int saving_base(char*);
+-int question(const char*);
+-int command(char*);
++command_char save(void);
++command_char saving_base(char*);
++command_char question(const char*);
++command_char command(char*);
+ #define centering2(w,prw,pxc,right) position(0,0);centering3(w,prw,pxc,right);
+ #define centering(w,prw,pxc) centering2(w,prw,pxc,false)
+ #define centering_simple(w) centering(w,nullptr,nullptr)
+ WINDOW*position_init(void);
+ void position(int,int);
+ void position_reset(void);
+-bool undo_add(size_t,size_t,size_t,size_t);
+-bool undo_add_del(size_t,size_t,size_t,size_t);
++bool undo_add(size_t,row_dword,size_t,row_dword);
++bool undo_add_del(size_t,row_dword,size_t,row_dword);
+ bool undo_add_ind(size_t,size_t);
+ bool undo_add_ind_del(size_t,size_t);
+ void undo_free(void);
+ void undo(WINDOW*);
+ void redo(WINDOW*);
+ void undo_save(void);
+-bool undo_type(size_t,size_t,size_t,size_t);
+-bool undo_bcsp(size_t,size_t,size_t,size_t);
+-bool undo_delk(size_t,size_t,size_t,size_t);
++bool undo_type(size_t,row_dword,size_t,row_dword);
++bool undo_bcsp(size_t,row_dword,size_t,row_dword);
++bool undo_delk(size_t,row_dword,size_t,row_dword);
+ void undo_loop(WINDOW*);
+ bool new_visual(char*);
+ bool is_dir(int);
+@@ -67,9 +67,9 @@ void aftercall_draw(WINDOW*);
+ size_t init_aftercall();
+ //tw
+ void position_core(size_t,size_t);
+-void centering3(WINDOW*,size_t*,size_t*,bool);
++void centering3(WINDOW*,size_t*,row_dword*,bool);
+ //tit
+-void bar_char(char,WINDOW*);
++bool bar_char(char,WINDOW*,bool);
+ //main,tit
+ bool bar_clear(void);
+ //tw,tit
+@@ -87,6 +87,7 @@ bool titles(WINDOW*);
+ 
+ //split
+ //main
++char split_conditions(char*,bool);
+ bool split_grab(char**,size_t*,char*);
+ void split_writeprefs(int);
+ void split_readprefs(int);
+@@ -105,7 +106,7 @@ extern bool insensitive;
+ extern char*ocode_extension;
+ //bar,tw,tit
+ extern size_t ytext;
+-extern size_t xtext;
++extern row_dword xtext;
+ //tw,tit
+ extern bool ocompiler_flag;
+ extern size_t aftercall;
+@@ -120,6 +121,7 @@ extern size_t store_aftercall;
+ //split
+ //main
+ extern bool splits_flag;
++extern split_char split_read_atstart;
+ extern char*sdelimiter;
+ extern char*sdelimiter_new;
+ extern char*esdelimiter;
+--- edor-1.orig/s/headless
++++ edor-1/s/headless
+@@ -44,6 +44,6 @@ else
+ 	grep --color "${a}" mk
+ fi
+ 
+-make -f mk
++./mh
+ 
+ if [ -n "${2}" ]; then rm mk; fi
+--- edor-1.orig/s/inc/curses.h
++++ edor-1/s/inc/curses.h
+@@ -23,7 +23,6 @@ int waddch(WINDOW*,const chtype);
+ int mvaddch(int,int,const chtype);
+ int mvwaddch(WINDOW*,int,int,const chtype);
+ int addstr(const char*);
+-const char*keyname(int);
+ int wnoutrefresh(WINDOW*);
+ int wattrset(WINDOW*,int);
+ WINDOW*newwin(int,int,int,int);
+@@ -32,6 +31,7 @@ int getmaxx(const WINDOW*);
+ //main/bar/tit
+ int attrset(int);
+ int COLOR_PAIR(int);
++const char*keyname(int);
+ //main/bar/tw/tit
+ int getcurx(const WINDOW*);
+ int getcury(const WINDOW*);
+--- /dev/null
++++ edor-1/s/inc/split/stdlib.h
+@@ -0,0 +1,12 @@
++
++#include "inc/stdlib.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++char *realpath (const char *, char *);
++
++#ifdef __cplusplus
++}
++#endif
+--- /dev/null
++++ edor-1/s/inc/split/unistd.h
+@@ -0,0 +1,4 @@
++
++#include "inc/unistd.h"
++
++#define W_OK 2
+--- edor-1.orig/s/inc/stdlib.h
++++ edor-1/s/inc/stdlib.h
+@@ -20,7 +20,7 @@ void free(void*);
+ #endif
+ #endif
+ 
+-#if defined(is_main_c)||defined(is_bar_c)
++#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+--- edor-1.orig/s/inc/string.h
++++ edor-1/s/inc/string.h
+@@ -10,7 +10,7 @@ size_t strlen(const char*);
+ #endif
+ #endif
+ 
+-#if defined(is_main_c)||defined(is_bar_c)
++#if defined(is_main_c)||defined(is_bar_c)||defined(is_tit_c)
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+--- edor-1.orig/s/inc/unistd.h
++++ edor-1/s/inc/unistd.h
+@@ -1,26 +1,24 @@
+ 
+-#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
++//#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
+ typedef long int ssize_t;
+-#endif
+-
+-#if defined(is_main_c)||defined(is_bar_c)
+-#define F_OK 0
+ //#include "inc/stddef.h"
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ int access(const char*,int);
+ int close(int);
++ssize_t write(int,const void*,size_t);
+ #ifdef __cplusplus
+ }
+ #endif
+-#endif
++//#endif
+ 
+-#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
++#if defined(is_main_c)||defined(is_bar_c)
++#define F_OK 0
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-ssize_t write(int,const void*,size_t);
++int close(int);
+ #ifdef __cplusplus
+ }
+ #endif
+@@ -41,11 +39,3 @@ ssize_t read(int,void*,size_t);
+ }
+ #endif
+ #endif
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-int close(int);
+-#ifdef __cplusplus
+-}
+-#endif
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -29,7 +29,7 @@
+ \n    other key to return\
+ \nCtrl+u = undo; Alt+u = undo mode: left=undo,right=redo,other key to return\
+ \nCtrl+r = redo\
+-\nCtrl+h = titles (movement, Enter at done, other keys to search)\
++\nCtrl+h = titles (movement, Enter at done, ctrl+q, other keys to search)\
+ \nCtrl+w = text wrapping (movement. another key to return)\
+ \nCtrl+e = enable/disable internal mouse/touch\
+ \nCtrl+n = disable/enable indentation\
+@@ -183,13 +183,18 @@ static void __attribute__((noreturn)) si
+ #define ignored 0
+ #define no_clue (size_t)-1
+ 
++#define normalize_yes -1
++#define normalize_err 0
++#define normalize_ok 1
++#define normalize_char signed char
++
+ char ln_term[3]="\n";
+ size_t ln_term_sz=1;
+ char*textfile=nullptr;
+ row*rows=nullptr;
+ size_t rows_tot=1;
+ size_t ytext=0;
+-size_t xtext=0;
++row_dword xtext=0;//and what about when xtext + xc goes size_t ? is ok, nothing is lost, tested, (size_t)xtext cast is same without cast, but is recommended
+ bool mod_flag=true;
+ bool ocompiler_flag=false;
+ size_t aftercall;
+@@ -252,7 +257,7 @@ bool no_char(char z){return z<32||z>=127
+ static size_t tab_grow(WINDOW*w,char*a,size_t sz,int*ptr){
+ 	int c=0;int cr=0;
+ 	int max=getmaxx(w);
+-	size_t i=xtext;size_t j=i;
++	size_t i=(size_t)xtext;size_t j=i;
+ 	for(;i<sz&&cr<max;i++){
+ 		cr++;
+ 		char z=a[i];
+@@ -289,14 +294,14 @@ static void printsyntax(int pair,int y){
+ 	mvwaddch(syntaxcontent,y,0,' ');
+ }
+ void refreshrowsbot(WINDOW*w,int i,int maxy){
+-	size_t maxx=xtext+(size_t)getmaxx(w);
++	size_t maxx=(size_t)xtext+getmaxx(w);
+ 	do{
+ 		size_t j=ytext+(size_t)i;
+ 		int*ptr=&tabs[tabs_rsz*i];ptr[0]=0;
+ 		wmove(w,i,0);
+ 		char at_left=at_content_nomark;char at_right=at_content_nomark;
+ 		if(j<rows_tot){
+-			size_t sz=rows[j].sz;
++			row_dword sz=rows[j].sz;
+ 			if(xtext>0)if(sz>0)at_left=at_left_mark;//there is text at left
+ 
+ 			size_t maxsz=sz>maxx?maxx:sz;
+@@ -523,7 +528,7 @@ static bool helpin(WINDOW*w){
+ 		#ifdef BUTTON5_PRESSED
+ 			if((e.bstate&BUTTON5_PRESSED)!=0)
+ 		#else
+-			if(e.bstate==0)     // at wheel down (ncurses 6.1 at bionic)
++			if(e.bstate==0)     // at wheel down (libncurses5 at bionic)
+ 		#endif
+ 			hmove(1);
+ 		}else if(c==KEY_DOWN)hmove(1);
+@@ -571,25 +576,25 @@ static void srmove(WINDOW*w,int x,bool b
+ static int endmv(WINDOW*w,size_t r,bool minusone){
+ 	size_t sz=rows[r].sz;
+ 	if(minusone/*true*/&&sz>0)sz--;
+-	if(xtext>=sz){xtext=sz;return 0;}
++	if(xtext>=sz){xtext=sz;return 0;}//here xtext is not adjusted, is normal
+ 	char*b=rows[r].data;
+ 	char*s=b+sz;
+ 	int n=getmaxx(w)-1;int m=0;
+ 	do{
+ 		s--;m+=s[0]=='\t'?tab_sz:1;
+-		if((size_t)(s-b)==xtext)break;
++		if((s-b)==xtext)break;
+ 	}while(m<n);
+ 	if(m>n){
+ 		s++;m-=tab_sz;
+ 	}
+-	xtext=(size_t)(s-b);
++	xtext=(s-b);
+ 	return m;
+ }
+ #define end(w,r) endmv(w,r,false)
+ static void endmov(WINDOW*w,bool minusone){
+ 	int y=getcury(w);
+ 	size_t r=ytext+(size_t)y;
+-	size_t xcare=xtext;
++	row_dword xcare=xtext;
+ 	int x;if(r<rows_tot)x=endmv(w,r,minusone);
+ 	else{xtext=0;x=0;}
+ 	if(xtext!=xcare)refreshpage(w);
+@@ -624,7 +629,7 @@ int xc_to_c(size_t col,int r){
+ 	}
+ 	return(int)col;
+ }
+-size_t c_to_xc(int c,int r){
++int c_to_xc(int c,int r){
+ 	int*p=&tabs[tabs_rsz*r];
+ 	int n=p[0];int x=c;
+ 	for(int i=0;i<n;i++){
+@@ -633,7 +638,7 @@ size_t c_to_xc(int c,int r){
+ 		if((p[0]+(tab_sz-1))<c)x-=tab_sz-1;
+ 		else break;
+ 	}
+-	return (size_t)x;
++	return x;
+ }
+ 
+ static void fixmembuf(size_t*y,size_t*x){
+@@ -642,18 +647,26 @@ static void fixmembuf(size_t*y,size_t*x)
+ 		x[0]=rows[y[0]].sz;
+ 		return;
+ 	}
+-	size_t sz=rows[y[0]].sz;
++	row_dword sz=rows[y[0]].sz;
+ 	if(x[0]>sz)x[0]=sz;
+ }
+-void fixed_yx(size_t*y,size_t*x,int r,int c){
++static bool fixed_y(size_t*y,row_dword*x,int r){
+ 	*y=ytext+(size_t)r;
+-	*x=xtext+c_to_xc(c,r);
+-	fixmembuf(y,x);
++	if(*y>=rows_tot){
++		*y=rows_tot-1;
++		*x=rows[*y].sz;
++		return false;
++	}
++	return true;
+ }
+-void fixed_x(size_t y,size_t*x,int r,int c){
+-	*x=xtext+c_to_xc(c,r);
+-	size_t sz=rows[y].sz;
+-	if(*x>sz)*x=sz;
++void fixed_x(size_t y,row_dword*x,int r,int c){
++	size_t xc=(size_t)xtext+c_to_xc(c,r);
++	row_dword sz=rows[y].sz;
++	if(xc>sz)*x=sz;
++	else *x=xc;
++}
++void fixed_yx(size_t*y,row_dword*x,int r,int c){
++	if(fixed_y(y,x,r)/*true*/)fixed_x(*y,x,r,c);
+ }
+ 
+ static bool is_wordchar(char a){
+@@ -670,7 +683,7 @@ static void left(WINDOW*w,int c){
+ static void left_move(WINDOW*w,bool(*f)(char)){
+ 	int r=getcury(w);
+ 	int c=getcurx(w);
+-	size_t y;size_t x;
++	size_t y;row_dword x;
+ 	fixed_yx(&y,&x,r,c);
+ 	size_t sz=rows[y].sz;
+ 	char*d=rows[y].data;
+@@ -705,7 +718,7 @@ static size_t right_long(size_t x,char*d
+ static void right_move(WINDOW*w,bool(*f)(char)){
+ 	int r=getcury(w);
+ 	int c=getcurx(w);
+-	size_t y;size_t x;
++	size_t y;row_dword x;
+ 	fixed_yx(&y,&x,r,c);
+ 	size_t sz=rows[y].sz;
+ 	char*d=rows[y].data;
+@@ -735,7 +748,7 @@ static void right_move(WINDOW*w,bool(*f)
+ |BUTTON3_CLICKED|BUTTON3_PRESSED|BUTTON3_DOUBLE_CLICKED|BUTTON3_TRIPLE_CLICKED)
+ 
+ //1resize,0diff key,-1processed
+-int movment(int c,WINDOW*w){
++movement_char movment(int c,WINDOW*w){
+ 	if(c==KEY_MOUSE){
+ 		MEVENT e;
+ 		getmouse(&e);//==OK is when mousemask is 0, but then nothing at getch
+@@ -744,7 +757,7 @@ int movment(int c,WINDOW*w){
+ 	#ifdef BUTTON5_PRESSED
+ 		if((e.bstate&BUTTON5_PRESSED)!=0)
+ 	#else
+-		if(e.bstate==0)     // at wheel down (ncurses 6.1 at bionic)
++		if(e.bstate==0)     // at wheel down (libncurses5 at bionic)
+ 	#endif
+ 		vd1move(w,getcury(w));
+ 		else if((e.bstate&click)!=0)amove(w,e.y-topspace,e.x-leftspace);//return -2;}
+@@ -796,7 +809,7 @@ int movment(int c,WINDOW*w){
+ 		int y=getcury(w);
+ 		int x=getcurx(w);
+ 		size_t r=ytext+(size_t)y;
+-		size_t xcare=xtext;
++		row_dword xcare=xtext;
+ 		if(r<rows_tot)endmv(w,r,false);
+ 		else xtext=0;
+ 		if(xtext!=xcare)refreshpage(w);
+@@ -804,7 +817,7 @@ int movment(int c,WINDOW*w){
+ 	}else if(c==KEY_SR)vu1move(w,getcury(w));
+ 	else if(c==KEY_SF)vd1move(w,getcury(w));
+ 	else if(c==KEY_RESIZE){
+-		return 1;
++		return movement_resize;
+ 	}
+ 	else{
+ 		const char*s=keyname(c);
+@@ -815,7 +828,7 @@ int movment(int c,WINDOW*w){
+ 		else if(strcmp(s,"kHOM3")==0){
+ 			int y=getcury(w);
+ 			size_t r=ytext+(size_t)y;
+-			size_t xcare=xtext;
++			row_dword xcare=xtext;
+ 			int x;if(r<rows_tot)x=home(w,r);
+ 			else{xtext=0;x=0;}
+ 			if(xcare!=xtext)refreshpage(w);
+@@ -832,7 +845,7 @@ int movment(int c,WINDOW*w){
+ 			}
+ 			wmove(w,0,0);
+ 		}else if(strcmp(s,"kEND5")==0){
+-			bool ycare;size_t xcare=xtext;
++			bool ycare;row_dword xcare=xtext;
+ 			int val=(int)rows_tot-getmaxy(w);
+ 			if((int)ytext<val){ytext=(size_t)val;ycare=true;}
+ 			else ycare=false;
+@@ -846,11 +859,11 @@ int movment(int c,WINDOW*w){
+ 		else if(strcmp(s,"kDN6")==0)vdNmove(w,getcury(w),ctrl_jump);
+ 		else if(strcmp(s,"kUP4")==0)vuNmove(w,getcury(w),alt_jump);
+ 		else if(strcmp(s,"kDN4")==0)vdNmove(w,getcury(w),alt_jump);
+-		else return 0;
++		else return movement_diffkey;
+ 	}
+-	return -1;
++	return movement_processed;
+ }
+-size_t sizemembuf(size_t ybsel,size_t xbsel,size_t yesel,size_t xesel){
++size_t sizemembuf(size_t ybsel,row_dword xbsel,size_t yesel,row_dword xesel){
+ 	if(ybsel==yesel)return xesel-xbsel;
+ 	size_t size=rows[ybsel].sz-xbsel+ln_term_sz;
+ 	for(size_t i=ybsel+1;i<yesel;i++){
+@@ -858,18 +871,18 @@ size_t sizemembuf(size_t ybsel,size_t xb
+ 	}
+ 	return size+xesel;
+ }
+-void cpymembuf(size_t ybsel,size_t xbsel,size_t yesel,size_t xesel,char*buf){
++void cpymembuf(size_t ybsel,row_dword xbsel,size_t yesel,row_dword xesel,char*buf){
+ 	row*b=&rows[ybsel];
+ 	if(ybsel==yesel){
+ 		memcpy(buf,b->data+xbsel,xesel-xbsel);
+ 		return;
+ 	}
+-	size_t sz1=b->sz-xbsel;
++	row_dword sz1=b->sz-xbsel;
+ 	memcpy(buf,b->data+xbsel,sz1);
+ 	memcpy(buf+sz1,ln_term,ln_term_sz);
+-	size_t sz=sz1+ln_term_sz;
++	row_dword sz=sz1+ln_term_sz;
+ 	for(size_t i=ybsel+1;i<yesel;i++){
+-		size_t s=rows[i].sz;
++		row_dword s=rows[i].sz;
+ 		memcpy(buf+sz,rows[i].data,s);
+ 		sz+=s;
+ 		memcpy(buf+sz,ln_term,ln_term_sz);
+@@ -882,7 +895,7 @@ static bool writemembuf(size_t ybsel,siz
+ 	fixmembuf(&yesel,&xesel);
+ 	if(xesel==rows[yesel].sz){if(yesel<rows_tot-1){yesel++;xesel=0;}}
+ 	else xesel++;
+-	size_t size=sizemembuf(ybsel,xbsel,yesel,xesel);
++	row_dword size=sizemembuf(ybsel,xbsel,yesel,xesel);
+ 	if(cutbuf_spc<size){
+ 		void*v=realloc(cutbuf,size);
+ 		if(v==nullptr)return false;
+@@ -895,7 +908,7 @@ static bool writemembuf(size_t ybsel,siz
+ static int mid(int r,int max){
+ 	size_t y=ytext+(size_t)r;
+ 	if(y<rows_tot){
+-		size_t sz=rows[y].sz;
++		row_dword sz=rows[y].sz;
+ 		if(sz<xtext)return 0;
+ 		sz-=xtext;
+ 		int w=tabs[r*tabs_rsz]*(tab_sz-1)+(int)sz;
+@@ -941,11 +954,11 @@ static void sel(WINDOW*w,int c1,int c2,i
+ }
+ static size_t v_l_x(size_t y,size_t x,size_t rmax,WINDOW*w){
+ 	if(y<rmax){
+-		size_t ok=xtext+(size_t)getmaxx(w)-1;
++		size_t ok=(size_t)xtext+getmaxx(w)-1;
+ 		if(ok<rows[y].sz)return rows[y].sz;
+ 		return ok;
+ 	}else if(y==rmax){
+-		size_t sz=rows[y].sz;
++		row_dword sz=rows[y].sz;
+ 		if(sz!=0&&x<sz-1)return sz-1;
+ 	}
+ 	return x;
+@@ -960,8 +973,8 @@ static void setmembuf(size_t y,size_t x,
+ 			}else{
+ 				if(y<rmax&&x>rows[y].sz)x=rows[y].sz;
+ 				if(yb[0]<rmax&&xb[0]==rows[yb[0]].sz){
+-					size_t max=(size_t)getmaxx(w)-1;
+-					if(rows[yb[0]].sz<xtext+max)xb[0]=xtext+max;
++					int max=getmaxx(w)-1;
++					if(rows[yb[0]].sz<(size_t)xtext+max)xb[0]=(size_t)xtext+max;
+ 				}
+ 			}
+ 			ye[0]=yb[0];yb[0]=y;
+@@ -970,13 +983,13 @@ static void setmembuf(size_t y,size_t x,
+ 		}
+ 		else if(y>yb[0]||xb[0]<=x){
+ 			if(v_l/*true*/)x=v_l_x(y,x,rmax,w);
+-			else if(y<rmax&&x>=rows[y].sz)x=xtext+(size_t)getmaxx(w)-1;
++			else if(y<rmax&&x>=rows[y].sz)x=(size_t)xtext+getmaxx(w)-1;
+ 			ye[0]=y;xe[0]=x;
+ 		}
+ 		else{
+ 			if(yb[0]<rmax&&xb[0]==rows[yb[0]].sz){
+ 				size_t max=(size_t)getmaxx(w)-1;
+-				if(rows[yb[0]].sz<xtext+max)xb[0]=xtext+max;
++				if(rows[yb[0]].sz<(size_t)xtext+max)xb[0]=(size_t)xtext+max;
+ 			}
+ 			ye[0]=yb[0];
+ 			xe[0]=xb[0];xb[0]=x;
+@@ -989,7 +1002,7 @@ static void setmembuf(size_t y,size_t x,
+ 				x=v_l_x(y,x,rmax,w);}
+ 			else{
+ 				if(ye[0]<rmax&&xe[0]>rows[ye[0]].sz)xe[0]=rows[ye[0]].sz;
+-				if(y<rmax&&x>=rows[y].sz)x=xtext+(size_t)getmaxx(w)-1;}
++				if(y<rmax&&x>=rows[y].sz)x=(size_t)xtext+getmaxx(w)-1;}
+ 			yb[0]=ye[0];ye[0]=y;
+ 			xb[0]=xe[0];xe[0]=x;
+ 			orig[0]=true;
+@@ -998,13 +1011,13 @@ static void setmembuf(size_t y,size_t x,
+ 			if(v_l/*true*/){if(y<=rmax)x=0;}
+ 			else if(y<rmax&&x>rows[y].sz)x=rows[y].sz;
+ 			if(ye[0]<rmax&&xe[0]>=rows[ye[0]].sz){
+-				size_t max=(size_t)getmaxx(w)-1;
+-				if(rows[ye[0]].sz<xtext+max)xe[0]=xtext+max;
++				int max=getmaxx(w)-1;
++				if(rows[ye[0]].sz<(size_t)xtext+max)xe[0]=(size_t)xtext+max;
+ 			}
+ 			yb[0]=y;xb[0]=x;
+ 		}
+ 		else if(xe[0]<x){
+-			if(y<rmax&&x>=rows[y].sz)x=xtext+(size_t)getmaxx(w)-1;
++			if(y<rmax&&x>=rows[y].sz)x=(size_t)xtext+getmaxx(w)-1;
+ 			yb[0]=ye[0];
+ 			xb[0]=xe[0];xe[0]=x;
+ 			orig[0]=true;
+@@ -1050,7 +1063,7 @@ static void printsel(WINDOW*w,size_t ybs
+ 	else{
+ 		rb=(int)(ybsel-ytext);
+ 		if(xbsel<=xtext)cb=0;
+-		else if(xbsel<=xtext+c_to_xc(cright,rb))cb=xc_to_c(xbsel-xtext,rb);
++		else if(xbsel<=(size_t)xtext+c_to_xc(cright,rb))cb=xc_to_c(xbsel-xtext,rb);
+ 		else{rb++;cb=0;}
+ 	}
+ 	int re;int ce;
+@@ -1060,7 +1073,7 @@ static void printsel(WINDOW*w,size_t ybs
+ 		re=rdown;ce=cright;}
+ 	else{
+ 		re=(int)(yesel-ytext);
+-		if(xtext+c_to_xc(cright,re)<=xesel)ce=cright;
++		if((size_t)xtext+c_to_xc(cright,re)<=xesel)ce=cright;
+ 		else if(xtext<=xesel)ce=xc_to_c(xesel-xtext,re);
+ 		else{re--;ce=cright;}
+ 	}
+@@ -1081,8 +1094,10 @@ static void printsel(WINDOW*w,size_t ybs
+ 	_rb=rb;_cb=cb;
+ 	_re=re;_ce=ce;
+ }
++#define visual_write_at(a,b) mvaddch(getmaxy(stdscr)-1,getmaxx(stdscr)-b,a);
++#define visual_write(a) visual_write_at(a,2)
+ void visual(char a){
+-	mvaddch(getmaxy(stdscr)-1,getmaxx(stdscr)-2,a);
++	visual_write(a)
+ 	wnoutrefresh(stdscr);
+ }
+ static void refreshrowscond(WINDOW*w,size_t y,size_t x,size_t r,size_t n){
+@@ -1090,9 +1105,9 @@ static void refreshrowscond(WINDOW*w,siz
+ 	else refreshrowsbot(w,(int)r,n!=0?getmaxy(w):(int)r+1);
+ }
+ static void pasted(size_t r,size_t x,WINDOW*w){
+-	size_t z1=ytext;size_t z2=xtext;size_t z3=r;
++	size_t z1=ytext;row_dword z2=xtext;size_t z3=r;
+ 	size_t rws=cutbuf_r-1;
+-	r+=rws;size_t maxy=(size_t)getmaxy(w);
++	r+=rws;int maxy=getmaxy(w);
+ 	if(maxy<=r){
+ 		ytext+=r-maxy+1;
+ 		r=maxy-1;
+@@ -1109,7 +1124,7 @@ static void pasted(size_t r,size_t x,WIN
+ 			if(b==s)break;
+ 		}while(c<maxx);
+ 		if(c>maxx){s++;c-=tab_sz;}
+-		xtext=(size_t)(s-d);
++		xtext=(s-d);
+ 	}
+ 	refreshrowscond(w,z1,z2,z3,rws);
+ 	wmove(w,(int)r,c);
+@@ -1129,17 +1144,18 @@ static void text_free(size_t b,size_t e)
+ 		if(d<text_init_b||text_init_e<=d)free(d);//the check is if the text was not modified from the start in this case will be free at exit(all initial lines)
+ 	}
+ }
+-static size_t row_pad_sz(size_t sz){
++static row_dword row_pad_sz(row_dword sz){
+ 	sz++;//[i]=0;addstr;=aux
+-	size_t dif=sz&row_pad;
++	char dif=sz&row_pad;
+ 	if(dif!=0)return sz+((dif^row_pad)+1);
+ 	return sz;
+ }
+-bool row_alloc(row*rw,size_t l,size_t c,size_t r){
++bool row_alloc(row*rw,row_dword l,size_t c,row_dword r){//c at pasting is coming from cutbuf
+ 	size_t sz=l+c+r;
+ 	if(sz>=rw->spc){//[i]=0;addstr;=aux
+ 		char*src=rw->data;char*dst;
+-		size_t size=row_pad_sz(sz);
++		row_dword size=row_pad_sz(sz);
++		if(sz>size)return true;//this and another safety like this, for segmentations
+ 		if(text_init_b<=src&&src<text_init_e){
+ 			dst=(char*)malloc(size);
+ 			if(dst==nullptr)return true;
+@@ -1155,9 +1171,9 @@ bool row_alloc(row*rw,size_t l,size_t c,
+ 	}//else dst=src;
+ 	return false;
+ }
+-void row_set(row*rw,size_t l,size_t c,size_t r,const char*mid){
++void row_set(row*rw,row_dword l,row_dword c,row_dword r,const char*mid){
+ 	char*d=rw->data;
+-	size_t j=l+c;size_t i=j+r;size_t k=rw->sz;
++	size_t j=l+c;size_t i=j+r;row_dword k=rw->sz;
+ 	rw->sz=i;
+ 	while(j<i){
+ 		i--;k--;d[i]=d[k];
+@@ -1218,7 +1234,7 @@ static void easytime(){
+ 	hardtime=0;
+ }
+ static void mod_visual(chtype ch){
+-	mvaddch(getmaxy(stdscr)-1,getmaxx(stdscr)-1,ch);
++	visual_write_at(ch,1)
+ 	wnoutrefresh(stdscr);
+ }
+ static void mod_set(bool flag,chtype ch){
+@@ -1275,13 +1291,13 @@ static void hardtime_resolve_returner(WI
+ 			//set restore file path
+ 			if(restorefile_path(textfile)/*true*/){
+ 				//save at path
+-				if(saving_base(restorefile_buf)==command_return_ok){
++				if(saving_base(restorefile_buf)==command_ok){
+ 					restorefile=restorefile_buf;
+ 					restore_visual();
+ 				}else err_set(w);
+ 			}
+ 		}else{
+-			if(saving_base(restorefile)==command_return_ok)restore_visual();
++			if(saving_base(restorefile)==command_ok)restore_visual();
+ 			else err_set(w);
+ 		}
+ 	}
+@@ -1323,7 +1339,7 @@ void editing_rebase(){
+ void deleting(size_t ybsel,size_t xbsel,size_t yesel,size_t xesel){
+ 	row*r1=&rows[ybsel];
+ 	if(ybsel==yesel){
+-		size_t sz=r1->sz;
++		row_dword sz=r1->sz;
+ 		size_t dif=xesel-xbsel;
+ 		char*d=rows[ybsel].data;
+ 		for(size_t i=xesel;i<sz;i++){
+@@ -1335,21 +1351,21 @@ void deleting(size_t ybsel,size_t xbsel,
+ 		row_del(ybsel+1,yesel,-1);
+ 	}
+ }
+-bool deleting_init(size_t ybsel,size_t xbsel,size_t yesel,size_t xesel){
++bool deleting_init(size_t ybsel,row_dword xbsel,size_t yesel,row_dword xesel){
+ 	if(ybsel!=yesel){
+-		size_t se=rows[yesel].sz-xesel;
+-		size_t sb=rows[ybsel].sz-xbsel;
++		row_dword se=rows[yesel].sz-xesel;
++		row_dword sb=rows[ybsel].sz-xbsel;
+ 		if(se>sb){//need deleting part at undo
+ 			return row_alloc(&rows[ybsel],rows[ybsel].sz,se-sb,0);
+ 		}
+ 	}
+ 	return false;
+ }
+-static bool deletin(size_t ybsel,size_t xbsel,size_t yesel,size_t xesel,int*rw,int*cl,WINDOW*w,bool many){
++static bool deletin(size_t ybsel,row_dword xbsel,size_t yesel,row_dword xesel,int*rw,int*cl,WINDOW*w,bool many){
+ 	if(deleting_init(ybsel,xbsel,yesel,xesel)==false){
+ 		if(undo_add_del(ybsel,xbsel,yesel,xesel)==false){
+ 			deleting(ybsel,xbsel,yesel,xesel);
+-			size_t z1=ytext;size_t z2=xtext;
++			size_t z1=ytext;row_dword z2=xtext;
+ 			deleted(ybsel,xbsel,rw,cl,w);
+ 			refreshrowscond(w,z1,z2,ybsel-ytext,many);
+ 			return true;
+@@ -1375,7 +1391,7 @@ static bool delet(size_t ybsel,size_t xb
+ 	size_t yend=yesel;
+ 	size_t rend=rows_tot;
+ 	size_t wasy=ytext;
+-	size_t wasx=xtext;
++	row_dword wasx=xtext;
+ 	bool b=deleti(ybsel,xbsel,yesel,xesel,rw,cl,w);
+ 	//unselect all
+ 	if(yend>=rend&&wasy==ytext&&wasx==xtext){
+@@ -1407,10 +1423,10 @@ static void rows_insert(row*d,size_t sz,
+ 		if(aftercall>=(off-1))aftercall+=sz;  //example enter at 0,0 off will be 1
+ 	}
+ }
+-static size_t pasting(row*d,size_t y,size_t x,size_t*xe,char*buf,size_t buf_sz,size_t buf_r,bool fromcopy){
++static size_t pasting(row*d,size_t y,row_dword x,row_dword*xe,char*buf,size_t buf_sz,size_t buf_r,bool fromcopy){
+ 	bool one=buf_r==1;
+-	size_t szc;size_t sz1r;size_t l;
+-	size_t szr=rows[y].sz-x;
++	size_t szc;size_t l;
++	row_dword sz1r;row_dword szr=rows[y].sz-x;
+ 	size_t max=buf_r-1;
+ 	if(one/*true*/){
+ 		szc=buf_sz;sz1r=szr;
+@@ -1419,15 +1435,15 @@ static size_t pasting(row*d,size_t y,siz
+ 	else{
+ 		char*a=memtrm(buf)+ln_term_sz;
+ 		sz1r=0;
+-		size_t sz=(size_t)(a-buf);
++		size_t sz=a-buf;
+ 		szc=sz-ln_term_sz;
+ 		size_t n=max-1;
+ 		//inter
+ 		for(size_t i=0;i<n;i++){
+ 			char*b=memtrm(a)+ln_term_sz;
+-			size_t ln=(size_t)(b-a);
+-			size_t len=ln-ln_term_sz;
+-			size_t spc_sz=row_pad_sz(len);
++			size_t ln=b-a;
++			row_dword len=ln-ln_term_sz;//this will not stop at something big but will trunc
++			row_dword spc_sz=row_pad_sz(len);
+ 			void*v=malloc(spc_sz);
+ 			if(v==nullptr)return i+1;
+ 			memcpy(v,buf+sz,len);
+@@ -1440,7 +1456,8 @@ static size_t pasting(row*d,size_t y,siz
+ 		//last
+ 		l=buf_sz-sz;
+ 		size_t sizen=l+szr;
+-		size_t spc_sz=row_pad_sz(sizen);
++		row_dword spc_sz=row_pad_sz(sizen);
++		if(sizen>spc_sz)return max;//here something big will stop(example at a big cutbuf)
+ 		char*rn=(char*)malloc(spc_sz);
+ 		if(rn==nullptr)return max;
+ 		memcpy(rn,buf+sz,l);
+@@ -1460,7 +1477,7 @@ static size_t pasting(row*d,size_t y,siz
+ 	}
+ 	return buf_r;
+ }
+-bool paste(size_t y,size_t x,size_t*xe,char*buf,size_t buf_sz,size_t buf_r,bool fromcopy){
++bool paste(size_t y,row_dword x,row_dword*xe,char*buf,size_t buf_sz,size_t buf_r,bool fromcopy){
+ 	row*d;
+ 	if(buf_r>1){d=(row*)malloc((buf_r-1)*sizeof(row));
+ 		if(d==nullptr)return false;}
+@@ -1477,9 +1494,9 @@ bool paste(size_t y,size_t x,size_t*xe,c
+ static void past(WINDOW*w){
+ 	if(cutbuf_sz!=0){
+ 		int r=getcury(w);
+-		size_t y;size_t x;
++		size_t y;row_dword x;
+ 		fixed_yx(&y,&x,r,getcurx(w));
+-		size_t xe;
++		row_dword xe;
+ 		if(paste(y,x,&xe,cutbuf,cutbuf_sz,cutbuf_r,true)/*true*/){
+ 			pasted(y-ytext,xe,w);
+ 			mod_set_off_wrap();
+@@ -1537,7 +1554,7 @@ static void rowfixdel(WINDOW*w,int r,int
+ 	char*d=rw->data;
+ 	int*t=&tabs[tabs_rsz*r];
+ 	int a=t[0]+1;
+-	size_t mx=rw->sz;
++	row_dword mx=rw->sz;
+ 	while(i<mx){
+ 		char ch=d[i];
+ 		if(ch!='\t'){
+@@ -1554,7 +1571,7 @@ static void rowfixdel(WINDOW*w,int r,int
+ 	}
+ 	x_right[r]=mx!=0;
+ }
+-static bool del_key(size_t y,size_t x,int r,int*cc,WINDOW*w,bool reverse){
++static bool del_key(size_t y,row_dword x,int r,int*cc,WINDOW*w,bool reverse){
+ 	row*r1=&rows[y];int maxx=getmaxx(w);int c=*cc;
+ 	int margin_val=c+view_margin;
+ 	bool margin=margin_val>maxx;
+@@ -1564,7 +1581,7 @@ static bool del_key(size_t y,size_t x,in
+ 		}
+ 		refreshpage(w);*cc=c;
+ 	}
+-	size_t sz=r1->sz;
++	row_dword sz=r1->sz;
+ 	if(x==sz){
+ 		size_t yy=y+1;
+ 		if(yy==rows_tot){
+@@ -1601,15 +1618,15 @@ static bool del_key(size_t y,size_t x,in
+ 	return true;
+ }
+ #define delete_key(y,x,r,cc,w) del_key(y,x,r,cc,w,false)
+-static bool bcsp(size_t y,size_t x,int*rw,int*cl,WINDOW*w){
++static bool bcsp(size_t y,row_dword x,int*rw,int*cl,WINDOW*w){
+ 	int c=cl[0];
+ 	if(xtext==0&&c==0){
+ 		if(y==0)return true;//to not continue
+ 		size_t yy=y-1;
+ 		row*r0=&rows[yy];
+ 		row*r1=&rows[y];
+-		size_t sz0=r0->sz;
+-		size_t xx=xtext;c=end(w,yy);
++		row_dword sz0=r0->sz;
++		row_dword xx=xtext;c=end(w,yy);
+ 		if(row_alloc(r0,sz0,r1->sz,0)==false){
+ 			if(undo_add_del(yy,sz0,y,0)==false){
+ 				row_set(r0,sz0,r1->sz,0,r1->data);
+@@ -1634,7 +1651,7 @@ static bool bcsp(size_t y,size_t x,int*r
+ 	}
+ 	if(undo_bcsp(y,x-1,y,x)==false){
+ 		row*r=&rows[y];
+-		char*data=r->data;size_t sz=r->sz;
++		char*data=r->data;row_dword sz=r->sz;
+ 		c-=data[x-1]=='\t'?tab_sz:1;
+ 		for(size_t i=x;i<sz;i++){
+ 			data[i-1]=data[i];
+@@ -1662,7 +1679,7 @@ static bool bcsp(size_t y,size_t x,int*r
+ 	}
+ 	return true;
+ }
+-static bool enter(size_t y,size_t x,int*r,int*c,WINDOW*w){
++static bool enter(size_t y,row_dword x,int*r,int*c,WINDOW*w){
+ 	if(rows_expand(1)/*true*/)return true;
+ 	char*b=rows[y].data;
+ 	char*d=b;
+@@ -1670,10 +1687,10 @@ static bool enter(size_t y,size_t x,int*
+ 		char*e=b+x;
+ 		while(d<e&&d[0]=='\t')d++;
+ 	}
+-	size_t tb=(size_t)(d-b);
+-	size_t s=rows[y].sz-x;
+-	size_t sze=tb+s;
+-	size_t spc=row_pad_sz(sze);
++	row_dword tb=d-b;
++	row_dword s=rows[y].sz-x;
++	row_dword sze=tb+s;
++	row_dword spc=row_pad_sz(sze);
+ 	char*v=(char*)malloc(spc);
+ 	if(v==nullptr)return true;
+ 	if(undo_add(y,x,y+1,tb)==false){
+@@ -1716,13 +1733,13 @@ static bool enter(size_t y,size_t x,int*
+ 	return true;
+ }
+ #define multidel(fn,r,x,y,cl,rw,w)\
+-	char*d=r->data;size_t sz=r->sz;\
++	char*d=r->data;row_dword sz=r->sz;\
+ 	if(right_short(fn,x,d,sz)){if(delete_key(y,x,rw,&cl,w)/*true*/)return;}\
+ 	else if(deletin(y,x,y,right_long(x,d,sz,fn)+1,&rw,&cl,w,false)==false)return;
+ static void type(int cr,WINDOW*w){
+ 	int cl=getcurx(w);
+ 	int rwnr=getcury(w);
+-	size_t x=xtext+c_to_xc(cl,rwnr);
++	size_t x=(size_t)xtext+c_to_xc(cl,rwnr);
+ 	size_t y=ytext+(size_t)rwnr;
+ 	size_t xx=x;fixmembuf(&y,&x);
+ 	row*r=&rows[y];
+@@ -1838,7 +1855,7 @@ static void indent(bool b,size_t ybsel,s
+ 		if(something/*true*/){
+ 			if(undo_add_ind_del(ybsel,ye)/*true*/)return;
+ 			for(size_t i=ybsel;i<ye;i++){
+-				row*r=&rows[i];size_t sz=r->sz;
++				row*r=&rows[i];row_dword sz=r->sz;
+ 				if(sz!=0){
+ 					char*d=r->data;
+ 					for(size_t j=1;j<sz;j++)d[j-1]=d[j];
+@@ -1897,11 +1914,11 @@ static bool visual_mode(WINDOW*w,bool v_
+ 	if(v_l/*true*/){
+ 		if(ybsel<rmax){
+ 			xbsel=0;
+-			xesel=xtext+(size_t)getmaxx(w)-1;
++			xesel=(size_t)xtext+getmaxx(w)-1;
+ 			if(xesel<rows[yesel].sz)xesel=rows[yesel].sz;
+ 		}
+ 		else{
+-			xesel=xtext+(size_t)cl;
++			xesel=(size_t)xtext+cl;
+ 			if(ybsel==rmax){
+ 				xbsel=0;
+ 				size_t sz=rows[yesel].sz;
+@@ -1909,23 +1926,23 @@ static bool visual_mode(WINDOW*w,bool v_
+ 			}else xbsel=xesel;
+ 		}
+ 	}else{
+-		xbsel=xtext+c_to_xc(cl,rw);xesel=xbsel;
++		xbsel=(size_t)xtext+c_to_xc(cl,rw);xesel=xbsel;
+ 		if(yesel<rmax&&xesel>=rows[yesel].sz){
+ 			xbsel=rows[ybsel].sz;
+-			xesel=xtext+(size_t)getmaxx(w)-1;
++			xesel=(size_t)xtext+getmaxx(w)-1;
+ 		}
+ 	}
+ 	printsel(w,ybsel,xbsel,yesel,xesel,true);
+ 	wmove(w,rw,cl);
+-	int z;
++	movement_char z;
+ 	do{
+ 		int b=wgetch(w);
+-		size_t ycare=ytext;size_t xcare=xtext;
++		size_t ycare=ytext;row_dword xcare=xtext;
+ 		z=movment(b,w);
+-		if(z==1)return true;
++		if(z==movement_resize)return true;
+ 		else{
+ 			int r=getcury(w);int c=getcurx(w);
+-			if(z==0){
++			if(z==movement_diffkey){
+ 				if(b=='I'){z=-1;indent(true,ybsel,&xbsel,yesel,&xesel,w);}
+ 				else if(b=='U'){
+ 					z=-1;
+@@ -1960,44 +1977,45 @@ static bool visual_mode(WINDOW*w,bool v_
+ 					}
+ 					visual(v);
+ 				}
+-			}else{
++			}else{//movement_processed
+ 				position(getcury(w),getcurx(w));
+-				size_t y=ytext+(size_t)r;size_t x=xtext+c_to_xc(c,r);
++				size_t y=ytext+(size_t)r;size_t x=(size_t)xtext+c_to_xc(c,r);
+ 				setmembuf(y,x,&orig,&ybsel,&xbsel,&yesel,&xesel,w,v_l);
+ 				printsel(w,ybsel,xbsel,yesel,xesel,ytext!=ycare||xtext!=xcare);
+ 			}
+ 			wmove(w,r,c);
+ 		}
+-	}while(z!=0);
++	}while(z!=movement_diffkey);
+ 	return false;
+ }
+ #define quick_pack(nr,w) comnrp_define args[2];((comnrp_define)args)[0]=nr;args[1]=(comnrp_define)w;
+ static bool find_mode(int nr,WINDOW*w){
+ 	quick_pack((long)nr,w)
+-	int r=command((comnrp_define)args);
+-	if(r==-2)return true;
+-	else if(r!=0){
+-		wmove(w,getcury(w),getcurx(w));//at 0 (false not err) will remain on the bar
+-	}
++	command_char r=command((comnrp_define)args);
++	if(r==command_resize)return true;
++	//if(r==command_no){//only at quit from the bar, but at command_ok also to update stdscr, and at command_false visib<2 at finds
++	//	only at first command_false visib<2 is extra, to find that will be extra in extra
++	wmove(w,getcury(w),getcurx(w));
++	//}
+ 	return false;
+ }
+ static bool goto_mode(char*args,WINDOW*w){
+-	int r=command(args);
+-	if(r==1){
++	command_char r=command(args);
++	if(r==command_ok){
+ 		centering_simple(w)
+ 	}
+-	else if(r>-2)wmove(w,getcury(w),getcurx(w));//-1 quit and 0 err
++	else if(r>command_resize)wmove(w,getcury(w),getcurx(w));//-1 quit and 0 nothing
+ 	return true;//-2
+ 	//return false;
+ }
+ static bool savetofile(WINDOW*w,bool has_file){
+ 	char*d=textfile;
+-	int ret;
++	command_char ret;
+ 	if(has_file){
+ 		ret=save();
+ 	}else{char aa=com_nr_save;ret=command(&aa);}
+-	if(ret!=0){
+-		if(ret==1){
++	if(ret!=command_false){
++		if(ret==command_ok){
+ 			if(d!=textfile){
+ 				//text_file=textfile;//now is a title
+ 				topspace_clear();
+@@ -2014,7 +2032,7 @@ static bool savetofile(WINDOW*w,bool has
+ 			mod_set_on();
+ 			undo_save();
+ 		}
+-		else if(ret==-2)return true;
++		else if(ret==command_resize)return true;
+ 	}else err_set(w);
+ 	wmove(w,getcury(w),getcurx(w));
+ 	return false;
+@@ -2049,7 +2067,7 @@ static void setprefs(int flag,bool set){
+ 	}
+ }
+ 
+-void pref_modify(char**pref_orig,char**pref_buf,bool sizedonly,char*newinput,size_t cursor){
++void pref_modify(char**pref_orig,char**pref_buf,bool sizedonly,char*newinput,bar_byte cursor){
+ 	if(cursor==0)if(sizedonly/*true*/)return;
+ 	if(*pref_buf!=nullptr){
+ 		size_t len=strlen(*pref_buf);
+@@ -2071,8 +2089,8 @@ void pref_modify(char**pref_orig,char**p
+ static bool pref_change(WINDOW*w,char**pref_orig,char**pref_buf,bool sizedonly){
+ 	extdata d={pref_orig,pref_buf,sizedonly};
+ 	quick_pack(com_nr_ext,&d)
+-	int nr=command((char*)args);
+-	if(nr>-2){
++	command_char nr=command((char*)args);
++	if(nr>command_resize){
+ 		wmove(w,getcury(w),getcurx(w));//ok/quit/err
+ 		return false;
+ 	}
+@@ -2105,10 +2123,10 @@ static bool loopin(WINDOW*w){
+ 		}
+ 		wtimeout(w,-1);
+ 
+-		int a=movment(c,w);
+-		if(a==1)return true;
+-		if(a!=0){
+-			if(visual_bool/*true*/){
++		movement_char a=movment(c,w);
++		if(a==movement_resize)return true;
++		if(a!=movement_diffkey){
++			if(visual_bool/*true*/){//here only when C/S at visual
+ 				visual_bool=false;
+ 				visual(' ');
+ 			}else if(bar_clear()/*true*/)wnoutrefresh(stdscr);
+@@ -2117,26 +2135,30 @@ static bool loopin(WINDOW*w){
+ 			nodelay(w,true);
+ 			int z=wgetch(w);
+ 			nodelay(w,false);
+-			if(z=='v'){if(visual_mode(w,true)/*true*/)return true;}
+-			else if(z=='p'){
+-				int y=getcury(w);
+-				if(xtext!=0){xtext=0;refreshpage(w);}
+-				wmove(w,y,0);past(w);
+-			}
+-			else if(z=='g'){
+-				quick_pack(com_nr_goto_alt,w)
+-				if(goto_mode((char*)args,w)/*true*/)return true;
+-			}
+-			else if(z=='f'){if(find_mode(com_nr_findagain,w)/*true*/)return true;}
+-			else if(z=='c'){if(find_mode(com_nr_findwordfrom,w)/*true*/)return true;}
+-			else if(z=='u'){vis('U',w);undo_loop(w);vis(' ',w);}
+-			else if(z=='s'){bool b=savetofile(w,false);if(b/*true*/)return true;}
+-			else if(z=='a'){aftercall=aftercall_find();aftercall_draw(w);}
+-			else if(z=='j'){if(pref_change(w,&sdelimiter,&sdelimiter_new,true)/*true*/)return true;}//don't allow no size delimiters
+-			else if(z=='o'){if(pref_change(w,&split_out,&split_out_new,false)/*true*/)return true;}
+-			else if(z=='A'){if(pref_change(w,&ocode_extension,&ocode_extension_new,false)/*true*/)return true;}
+-			else if(z=='J'){if(pref_change(w,&esdelimiter,&esdelimiter_new,true)/*true*/)return true;}//don't allow no size delimiters
+-			else if(z=='O'){if(pref_change(w,&split_extension,&split_extension_new,false)/*true*/)return true;}
++			int y;bool b;
++			switch(z){ //reread from mem or a special register? gcc same as if-else, from mem
++				case 'v': if(visual_mode(w,true)/*true*/)return true;break;
++				case 'p':
++					y=getcury(w);
++					if(xtext!=0){xtext=0;refreshpage(w);}
++					wmove(w,y,0);past(w);
++					break;
++				case 'g':
++					quick_pack(com_nr_goto_alt,w)
++					if(goto_mode((char*)args,w)/*true*/)return true;
++					break;
++				case 'f':
++					if(find_mode(com_nr_findagain,w)/*true*/)return true;break;
++				case 'c': if(find_mode(com_nr_findwordfrom,w)/*true*/)return true;break;
++				case 'u': vis('U',w);undo_loop(w);vis(' ',w);break;
++				case 's': b=savetofile(w,false);if(b/*true*/)return true;break;
++				case 'a': aftercall=aftercall_find();aftercall_draw(w);break;
++				case 'j': if(pref_change(w,&sdelimiter,&sdelimiter_new,true)/*true*/)return true;break;           //don't allow no size delimiters
++				case 'o': if(pref_change(w,&split_out,&split_out_new,false)/*true*/)return true;break;
++				case 'A': if(pref_change(w,&ocode_extension,&ocode_extension_new,false)/*true*/)return true;break;
++				case 'J': if(pref_change(w,&esdelimiter,&esdelimiter_new,true)/*true*/)return true;break;         //don't allow no size delimiters
++				case 'O': if(pref_change(w,&split_extension,&split_extension_new,false)/*true*/)return true;//break;
++			}
+ 		}else{
+ 			//QWERTyUioP
+ 			//ASdFGHJkl
+@@ -2164,13 +2186,13 @@ static bool loopin(WINDOW*w){
+ 			}else if(strcmp(s,"^Q")==0){
+ 				if(mod_flag==false){
+ 					bar_clear();//errors
+-					int q=question("And save");
+-					if(q==1){
++					command_char q=question("And save");
++					if(q==command_ok){
+ 						q=save();
+-						if(q==0)err_set(w);
++						if(q==command_false)err_set(w);
+ 					}
+-					if(q==-2)return true;
+-					else if(q==0){
++					if(q==command_resize)return true;
++					else if(q==command_false){
+ 						wnoutrefresh(stdscr);
+ 						wmove(w,getcury(w),getcurx(w));
+ 						continue;
+@@ -2231,32 +2253,32 @@ static bool loopin(WINDOW*w){
+ 	}
+ }
+ //-1 to normalize, 0 errors, 1 ok
+-static int normalize(char**c,size_t*size,size_t*r){
+-	int ok=0;
++static normalize_char normalize(char**c,size_t*size,size_t*r){
++	normalize_char ok=normalize_err;
+ 	char*text_w=c[0];
+ 	size_t sz=size[0];
+ 	char*norm=(char*)malloc(2*sz+1); //+1, there are many curses addstr
+ 	if(norm!=nullptr){
+-		size_t j=0;ok=1;
++		size_t j=0;ok=normalize_ok;
+ 		for(size_t i=0;i<sz;i++){
+ 			char a=text_w[i];
+ 			if(a=='\n'){
+ 				r[0]++;
+ 				if(ln_term_sz==2){
+-					norm[j]='\r';j++;ok=-1;
++					norm[j]='\r';j++;ok=normalize_yes;
+ 				}
+-				else if(ln_term[0]=='\r'){a='\r';ok=-1;}
++				else if(ln_term[0]=='\r'){a='\r';ok=normalize_yes;}
+ 			}else if(a=='\r'){
+ 				r[0]++;
+ 				if(ln_term_sz==2){
+ 					if(((i+1)<sz)&&text_w[i+1]=='\n'){
+ 						norm[j]=a;j++;i++;
+ 						a='\n';}
+-					else{norm[j]=a;j++;a='\n';ok=-1;}
++					else{norm[j]=a;j++;a='\n';ok=normalize_yes;}
+ 				}
+ 				else if(ln_term[0]=='\n'){
+ 					if(((i+1)<sz)&&text_w[i+1]=='\n')i++;
+-					a='\n';ok=-1;
++					a='\n';ok=normalize_yes;
+ 				}
+ 			}
+ 			norm[j]=a;j++;
+@@ -2267,11 +2289,11 @@ static int normalize(char**c,size_t*size
+ 	return ok;
+ }
+ //same as normalize
+-static int normalize_split(char**c,size_t*s,size_t*r,char*argfile){
+-	if(split_grab(c,s,argfile)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
++static normalize_char normalize_split(char**c,size_t*s,size_t*r,char*argfile){
++	if(argfile==nullptr||split_grab(c,s,argfile)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
+ 		return normalize(c,s,r);
+ 	}
+-	return 0;
++	return normalize_err;
+ }
+ static void rows_init(size_t size){
+ 	char*b=&text_init_b[size];
+@@ -2279,13 +2301,13 @@ static void rows_init(size_t size){
+ 	z->data=text_init_b;size_t sz;
+ 	char*a=text_init_b;
+ 	for(size_t i=1;i<rows_tot;i++){
+-		sz=(size_t)(memtrm(a)-a);
++		sz=memtrm(a)-a;
+ 		z->sz=sz;z->spc=0;
+ 		a+=sz+ln_term_sz;
+ 		z=&rows[i];
+ 		z->data=a;
+ 	}
+-	z->sz=(size_t)(b-a);z->spc=0;
++	z->sz=b-a;z->spc=0;
+ 	rows_spc=rows_tot;
+ }
+ static bool grab_file(char*f,size_t*text_sz){
+@@ -2354,16 +2376,16 @@ static bool valid_ln_term(int argc,char*
+ 	return false;
+ }
+ //same as normalize
+-static int startfile(char*argfile,int argc,char**argv,size_t*text_sz,bool no_file,bool no_input,bool not_forced){
+-	if(no_file==false)if(grab_file(argfile,text_sz)/*true*/)return 0;
++static normalize_char startfile(char*argfile,int argc,char**argv,size_t*text_sz,bool no_file,bool no_input,bool not_forced){
++	if(no_file==false)if(grab_file(argfile,text_sz)/*true*/)return normalize_err;
+ 	if(no_input==false){
+ 		if(no_file/*true*/){
+ 			text_init_b=(char*)malloc(1);//1 is for some systems that at malloc(0) are returning null
+-			if(text_init_b==nullptr)return 0;
++			if(text_init_b==nullptr)return normalize_err;
+ 			*text_sz=0;
+ 		}
+ 		//else will be appended to existing file
+-		if(grab_input(text_sz)/*true*/)return 0;
++		if(grab_input(text_sz)/*true*/)return normalize_err;
+ 	}
+ 
+ 	if(not_forced/*true*/){
+@@ -2385,8 +2407,8 @@ static int startfile(char*argfile,int ar
+ 		}
+ 		return normalize_split(&text_init_b,text_sz,&rows_tot,argfile);
+ 	}
+-	if(normalize_split(&text_init_b,text_sz,&rows_tot,argfile)!=0)return 1;
+-	return 0;
++	if(normalize_split(&text_init_b,text_sz,&rows_tot,argfile)!=normalize_err)return normalize_ok;
++	return normalize_err;
+ }
+ static bool help_init(char*f,size_t szf){
+ 	size_t sz1=sizeof(hel1)-1;
+@@ -2417,7 +2439,7 @@ static void getfilebuf(char*cutbuf_file)
+ 			if(v!=nullptr){
+ 				lseek(f,0,SEEK_SET);
+ 				cutbuf_sz=(size_t)read(f,v,sz);
+-				if(normalize(&v,&cutbuf_sz,&cutbuf_r)!=0){
++				if(normalize(&v,&cutbuf_sz,&cutbuf_r)!=normalize_err){
+ 					cutbuf=v;cutbuf_spc=cutbuf_sz;
+ 				}else free(v);
+ 			}
+@@ -2558,9 +2580,15 @@ static void proced(char*cutbuf_file,WIND
+ 						if(r<=old_r)clrtoeol();//resize to up,is over text
+ 						//or =, clear bar,visual and saves
+ 						old_r=r;
++
++						if(split_read_atstart==split_yes){
++							visual_write('S')
++							split_read_atstart=split_no;
++							visual_bool=true;//to clear at a next key
++						}
+ 						if(mod_flag==false){
+-							if(hardtime==0)restore_visual();
+-							else mod_visual(modif_visual);
++							if(hardtime==0)restore_visual();//has wnoutrefresh(stdscr)
++							else mod_visual(modif_visual);//has wnoutrefresh(stdscr)
+ 						}
+ 						else wnoutrefresh(stdscr);
+ 
+@@ -2697,7 +2725,7 @@ static void action_go(int argc,char**arg
+ 	fds[0].fd = known_stdin;
+ 	fds[0].events = POLLIN;
+ 	bool no_input=poll(fds, 1, 0)<1;
+-	int ok=0;
++	normalize_char ok=0;
+ 	if(no_file/*true*/&&no_input/*true*/){
+ 		text_init_b=(char*)malloc(1);
+ 		if(text_init_b!=nullptr){
+@@ -2713,8 +2741,8 @@ static void action_go(int argc,char**arg
+ 		}
+ 	}else{
+ 		ok=startfile(argfile,argc,argv,&text_sz,no_file,no_input,not_forced);
+-		if(ok!=0){
+-			if(ok<1){
++		if(ok!=normalize_err){
++			if(ok==normalize_yes){
+ 				//entering \r in printf at %s will return to the start
+ 				const char*a;const char*b;
+ 				if(ln_term[0]=='\r'){
+@@ -2722,20 +2750,20 @@ static void action_go(int argc,char**arg
+ 					if(ln_term[1]=='\n')b="\\n";else b="";
+ 				}else{a="n";b="";}
+ 				printf("Normalize line endings to \\%s%s? Y/n\n",a,b);
+-				if(get_answer('n')/*true*/)ok=0;
++				if(get_answer('n')/*true*/)ok=normalize_err;
+ 			}
+-			if(ok!=0){
++			if(ok!=normalize_err){
+ 				rows=(row*)malloc(rows_tot*sizeof(row));
+ 				if(rows!=nullptr){
+ 					rows_init(text_sz);
+ 					textfile=argfile;
+ 					text_init_e=text_init_b+text_sz+1;
+ 				}
+-				else ok=0;
++				else ok=normalize_err;
+ 			}
+ 		}
+ 	}
+-	if(ok!=0){
++	if(ok!=normalize_err){
+ 		WINDOW*w1=initscr();
+ 		if(w1!=nullptr){
+ 			if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
+--- /dev/null
++++ edor-1/s/md
+@@ -0,0 +1 @@
++make CFLAGS=-g
+\ No newline at end of file
+--- /dev/null
++++ edor-1/s/mdh
+@@ -0,0 +1,2 @@
++
++extraflags="CFLAGS=-g" ./mh
+--- /dev/null
++++ edor-1/s/mdhd
+@@ -0,0 +1 @@
++extraflags="CFLAGS=-g" ./headless
+--- /dev/null
++++ edor-1/s/mh
+@@ -0,0 +1 @@
++make -f mk ${extraflags}
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -16,7 +16,7 @@
+ #ifdef HAVE_STDLIB_H
+ #include<stdlib.h>
+ #else
+-#include"inc/stdlib.h"
++#include"inc/split/stdlib.h"
+ #endif
+ #ifdef HAVE_STRING_H
+ #include<string.h>
+@@ -26,7 +26,7 @@
+ #ifdef HAVE_UNISTD_H
+ #include<unistd.h>
+ #else
+-#include"inc/unistd.h"
++#include"inc/split/unistd.h"
+ #endif
+ #ifdef HAVE_FCNTL_H
+ #include<fcntl.h>
+@@ -37,20 +37,30 @@
+ #include "def.h"
+ 
+ bool splits_flag=false;
++split_char split_read_atstart=split_no;
+ 
+ char*sdelimiter=(char*)"|||";// iso forbids
+ char*esdelimiter=(char*)"///";
+ char* sdelimiter_new=nullptr;
+ char* esdelimiter_new=nullptr;
+-char*split_out=(char*)"";
++char*split_out=(char*)"osrc";
+ char*split_out_new=nullptr;
+ char*split_extension=default_extension;
+ char*split_extension_new=nullptr;
+ 
+ //char*fulldelim;
+ //unsigned short fulldelim_size;
+-unsigned char sdelimiter_size;
+-unsigned char esdelimiter_size;
++static unsigned char sdelimiter_size;
++static unsigned char esdelimiter_size;
++
++static char*split_out_alloc1;
++static char*split_out_alloc2;
++static char*split_out_path1;
++static char*split_out_path2;
++static char*split_out_path3;
++static char*split_out_path4;
++static unsigned char split_out_size1;
++static size_t split_out_size2;
+ 
+ static int split_out_file;
+ 
+@@ -76,9 +86,74 @@ static void split_add(char**text,char*ne
+ 	*text+=dif;*newtext+=dif;*remaining_size-=dif;
+ }
+ 
++//-1 no, 0 errors, 1 yes the split_out is at realpath dirname or in an ancestor folder
++static split_char split_conditions_out(char*filename,bool free_paths){
++	if(*split_out!='\0'){
++		split_out_alloc1=realpath(filename,nullptr);
++		if(split_out_alloc1!=nullptr){
++			size_t s=strlen(split_out_alloc1);
++			split_out_path1=split_out_alloc1+s;
++			split_out_path2=split_out_path1;
++			while(split_out_alloc1!=split_out_path2){
++				split_out_path2--;if(*split_out_path2==path_separator){
++					split_out_size1=strlen(split_out)+1;
++					split_out_path3=split_out_path2+1;
++					size_t size=split_out_path3-split_out_alloc1;
++					split_out_size2=size+split_out_size1;
++					split_out_alloc2=(char*)malloc(split_out_size2);//this at maximum but can be smaller if two ancestors until match
++					if(split_out_alloc2!=nullptr){
++						memcpy(split_out_alloc2,split_out_alloc1,size);
++						char*d=split_out_alloc2-1;//also, look in root
++						split_out_path4=split_out_alloc2+(split_out_path2-split_out_alloc1);
++						split_out_path2=split_out_path4;//this is for split write to not loop again there
++						while(d!=split_out_path4){
++							if(*split_out_path4==path_separator){
++								memcpy(split_out_path4+1,split_out,split_out_size1);
++								if(access(split_out_alloc2,W_OK)==0){
++									//special cases with bad overwrites:
++									//	1. split out is the same folder: out and main file will collide. change split out folder
++									//	2. split out is another folder: out and a split can collide. change the split location
++									//	3. a split is same as main file will be a collision. change the split location
++									//	4. two same splits will be a collision
++									//		can be tolerated if one is equal or included. else change the split location
++									//anyway, who will wrong these? don't write extra code for the moment
++									if(free_paths/*true*/){
++										free(split_out_alloc1);
++										free(split_out_alloc2);
++									}
++									return split_yes;
++								}
++								split_out_path2=split_out_path4;//this is for split write to not loop again there
++							}
++							split_out_path4--;
++						}
++						free(split_out_alloc1);free(split_out_alloc2);
++						return split_no;
++					}
++					free(split_out_alloc1);
++					return split_err;
++				}
++			}
++			free(split_out_alloc1);
++		}
++		return split_err;
++	}
++	return split_no;
++}
++split_char split_conditions(char*filename,bool free_paths){
++	if(splits_flag/*true*/){
++		if(is_extension_ok(split_extension,filename)/*true*/){
++			return split_conditions_out(filename,free_paths);
++		}
++	}
++	return split_no;
++}
++
++//false on errors
+ bool split_grab(char**p_text,size_t*p_size,char*argfile){
+-	if(is_extension_ok(split_extension,argfile)/*true*/){
+-		if(splits_flag/*true*/){
++	split_read_atstart=split_conditions(argfile,true);
++	if(split_read_atstart!=split_err){
++		if(split_read_atstart==split_yes){
+ 			char*text;size_t size;int cmp;char*next;
+ 			char a=*sdelimiter;
+ 			unsigned char sdelimsize=strlen(sdelimiter);//at file read only one byte for size
+@@ -206,8 +281,9 @@ bool split_grab(char**p_text,size_t*p_si
+ 				return false;
+ 			}
+ 		}
++		return true;
+ 	}
+-	return true;
++	return false;
+ }
+ 
+ void split_writeprefs(int f){
+@@ -294,21 +370,33 @@ bool split_write_init(char*orig_filename
+ 	esdelimiter_size=strlen(esdelimiter);
+ 	//unsigned char s2=strlen(esdelimiter);fulldelim_size=sdelimiter_size+s2;fulldelim=(char*)malloc(fulldelim_size);if(fulldelim!=nullptr){memcpy(fulldelim,esdelimiter,s2);memcpy(fulldelim+s2,sdelimiter,sdelimiter_size);
+ 	if(*split_out!='\0'){
+-		size_t a=strlen(split_out);
+-		size_t b=a+1;
+-		size_t c=strlen(orig_filename);
+-		char*d=(char*)malloc(b+c+1);
+-		if(d!=nullptr){
+-			memcpy(d,split_out,a);
+-			d[a]=path_separator;
+-			memcpy(d+b,orig_filename,c);
+-			d[b+c]='\0';
+-			split_out_file=open_or_new(d);
+-			free(d);
++		size_t ancestors_diff=split_out_path2-split_out_path4;
++		split_out_path2=split_out_alloc1+(split_out_path2-split_out_alloc2);
++		split_out_path4+=split_out_size1;
++		do{
++			*split_out_path4=path_separator;
++			split_out_path2++;split_out_path4++;
++			if(split_out_path2==split_out_path3)break;
++			char*a=split_out_path2;
++			do{a++;}while(*a!=path_separator);
++			size_t sz=a-split_out_path2;
++			memcpy(split_out_path4,split_out_path2,sz);
++			split_out_path2+=sz;split_out_path4+=sz;
++		}while(true);
++		size_t size=split_out_path1-split_out_path3+1;
++		split_out_size2-=ancestors_diff;
++		char*a=(char*)realloc(split_out_alloc2,split_out_size2+size);
++		if(a!=nullptr){
++			memcpy(a+split_out_size2,split_out_path3,size);
++			free(split_out_alloc1);
++			split_out_file=open_or_new(a);
++			free(a);
+ 			if(split_out_file!=-1){
+ 				return true;
+ 			}
++			return false;
+ 		}
++		free(split_out_alloc1);free(split_out_alloc2);
+ 		return false;
+ 	}
+ 	return true;
+--- /dev/null
++++ edor-1/s/test
+@@ -0,0 +1 @@
++cc -c -I. ${1}.c
+--- edor-1.orig/s/tit.c
++++ edor-1/s/tit.c
+@@ -27,10 +27,11 @@
+ 
+ #include "base.h"
+ 
+-static void titcolor(char b,char*color,WINDOW*w){
+-	bar_char(b,w);
++static bool titcolor(char b,char*color,WINDOW*w,bool singlechar){
++	singlechar=bar_char(b,w,singlechar);
+ 	if(*color==color_0)*color=color_a;else *color=color_0;
+ 	attrset(COLOR_PAIR(*color));
++	return singlechar;
+ }
+ 
+ bool titles(WINDOW*w){
+@@ -76,7 +77,7 @@ bool titles(WINDOW*w){
+ 			}
+ 		}
+ 
+-		size_t orig_ytext;size_t orig_xtext;
++		size_t orig_ytext;row_dword orig_xtext;
+ 		fixed_yx(&orig_ytext,&orig_xtext,getcury(w),getcurx(w));
+ 
+ 		rows=rowswrap;rows_tot=n;
+@@ -90,12 +91,12 @@ bool titles(WINDOW*w){
+ 
+ 		//loop
+ 		char color=color_0;
+-		int z;
++		movement_char z;bool singlechar=true;
+ 		do{
+ 			int b=wgetch(w);
+ 			z=movment(b,w);
+-			if(z==1){extra_unlock(orig_ytext,orig_xtext,w);return true;}
+-			else if(z==-1)continue;
++			if(z==movement_resize){extra_unlock(orig_ytext,orig_xtext,w);return true;}
++			else if(z==movement_processed)continue;
+ 			int r=getcury(w);
+ 			size_t y=ytext+r;
+ 			if(b==Char_Return){
+@@ -104,12 +105,14 @@ bool titles(WINDOW*w){
+ 				}
+ 				break;
+ 			}
++			if(strcmp(keyname(b),"^Q")==0)break;
++
+ 			//find next row start same as [0,x)+b and wmove there
+-			titcolor(b,&color,w);
++			singlechar=titcolor(b,&color,w,singlechar);
+ 			if(y<rows_tot){
+ 				row*rw=&rows[y];
+ 				char*data=rw->data;
+-				size_t sz;
++				row_dword sz;
+ 				int c=getcurx(w);
+ 				fixed_x(y,&sz,r,c);
+ 				y++;
+@@ -130,7 +133,7 @@ bool titles(WINDOW*w){
+ 		}while(true);
+ 
+ 		if(color!=color_0)attrset(color_0);//reset back
+-		bar_char(' ',w);//and clear, can set new_v or err for later clear but is extra
++		bar_char(' ',w,singlechar);//and clear, can set new_v or err for later clear but is extra
+ 		visual(' ');
+ 		extra_unlock(orig_ytext,orig_xtext,w);
+ 	}
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -17,10 +17,14 @@ enum{false=0!=0,true=1==1};
+ #include "null.h"
+ #endif
+ 
++#define bar_byte unsigned char
++#define bar_byte_plus short
++#define row_dword unsigned int
++
+ typedef struct{
+ 	char*data;
+-	unsigned int spc;//at row_alloc(type,undo,...),pasting,enter, must be +1 for curses addstr and at split where right part is the file name
+-	unsigned int sz;
++	row_dword spc;//at row_alloc(type,undo,...),pasting,enter, must be +1 for curses addstr and at split where right part is the file name
++	row_dword sz;//at memtrm to work more to avoid 64 bit rows?
+ }row;
+ //typedef struct {}rowwrap;
+ 
+@@ -52,7 +56,21 @@ typedef struct{
+ #define max_path 0xff
+ #define max_path_0 max_path+1
+ 
+-#define command_return_ok 1
++#define command_resize -2
++#define command_no -1 //(char)-1 but there is at least a r> comparation
++#define command_false 0
++#define command_ok 1
++#define command_char signed char
++
++#define movement_processed -1
++#define movement_diffkey 0
++#define movement_resize 1
++#define movement_char signed char
++
++#define split_no -1
++#define split_err 0
++#define split_yes 1
++#define split_char signed char
+ 
+ #define comnrp_define char*
+ 
+--- edor-1.orig/s/tw.c
++++ edor-1/s/tw.c
+@@ -24,7 +24,7 @@
+ 
+ typedef struct{
+ 	size_t ytext;
+-	size_t xtext;
++	row_dword xtext;
+ }rowwrap;//is used as an array allocated, to combine need to add this at row, memory waste
+ 
+ row*rowswrap;
+@@ -57,7 +57,7 @@ bool text_wrap(WINDOW*w){
+ 		row*r=&rows[i];
+ 		if(r->sz==0)n++;
+ 		else{
+-			unsigned int sz=r->sz;
++			row_dword sz=r->sz;
+ 
+ 			//add tabs
+ 			char*s=r->data;
+@@ -79,12 +79,12 @@ bool text_wrap(WINDOW*w){
+ 		rowwrap*rowswrap_add=(rowwrap*)(&rowswrap[n]);
+ 
+ 		//non-wrapped x,y
+-		size_t realy;size_t realx;
++		size_t realy;row_dword realx;
+ 		fixed_yx(&realy,&realx,getcury(w),getcurx(w));
+ 		//and to stay in wrapped view
+ 		if(realx==rows[realy].sz&&realx!=0)realx--;
+ 
+-		size_t y,x;
++		size_t y;row_dword x;
+ 		size_t j=0;
+ 		for(size_t i=0;i<rows_tot;i++){
+ 			if(i==realy){
+@@ -144,15 +144,15 @@ bool text_wrap(WINDOW*w){
+ 		wmove(w,r,xc_to_c(x,r));
+ 
+ 		//loop
+-		int z;
++		movement_char z;
+ 		do{
+ 			int b=wgetch(w);
+ 			z=movment(b,w);
+-			if(z==1){extra_unlock(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x,w);return true;}
++			if(z==movement_resize){extra_unlock(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x,w);return true;}
+ 
+ 			fixed_yx(&y,&x,getcury(w),getcurx(w));
+ 			position_core(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x);
+-		}while(z!=0);
++		}while(z!=movement_diffkey);
+ 
+ 		visual(' ');
+ 		extra_unlock(rowswrap_add[y].ytext,rowswrap_add[y].xtext+x,w);
