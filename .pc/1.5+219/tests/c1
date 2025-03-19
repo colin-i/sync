@@ -1,0 +1,30 @@
+
+if [ -z "${1}" ]; then echo error; exit 1; fi
+
+current=${1}.oc
+exp=.expected/
+
+a=${current}.log
+aa=${exp}${a}
+diff ${a} ${aa}
+
+xxd="xxd -c 48 -g 4 "
+
+comp () {
+	echo ${1}
+	b=${1}
+	${xxd}${b} > 1
+	bb=${exp}${b}
+	bbb=${bb}.txt
+	base64 -d ${bbb} > 2
+	${xxd}2 > 3
+	diff 3 1
+	rm 1 2 3
+}
+
+if [ -e "${1}.o" ]; then
+	comp ${1}.o
+else
+	comp ${1}.exe
+fi
+comp ${current}.x
