@@ -1,0 +1,105 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-130) bionic; urgency=medium
+ .
+   * pkg-config
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-03-28
+
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -56,11 +56,11 @@ lib:
+ link:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		if [ "${conv_64}" = "1" ]; then \
+-			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -lz -L${_L} -l:${libname}; \
++			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc `pkg-config --libs zlib` -L${_L} -l:${libname}; \
+ 		elif [ -z "${ldprefer}" ]; then \
+-			$(CC) ${linkerflags} ${name}.o -o ${name} -lz -L${_L} -l:${libname}; \
++			$(CC) ${linkerflags} ${name}.o -o ${name} `pkg-config --libs zlib` -L${_L} -l:${libname}; \
+ 		else \
+-			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc -lz -L${_L} -l:${libname}; \
++			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc `pkg-config --libs zlib` -L${_L} -l:${libname}; \
+ 		fi \
+ 	else \
+ 		if [ "${conv_64}" = "1" ]; then \
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -13,8 +13,9 @@ else
+ 	linker=--dynamic-linker=/lib/ld-linux.so.2
+ 	launcher=q
+ fi
++l_z=`pkg-config --libs zlib`
+ ${OCOMP} a.oc ${OFLAGS} logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc -lz -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out x
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -6,22 +6,28 @@ elif [ ${conv_64} = 1 ]; then
+ 		inc=
+ 	fi
+ fi
++l_z=`pkg-config --libs zlib`
+ o a.oc logfile 0 conv_64 ${conv_64} ${inc} && {
+ 	if [ ${conv_64} = 1 ]; then
+ 		if [ -z "${inc}" ]; then #cross
+ 			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
+-				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -lz -L${_L}../src -lactionswf
++				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc ${l_z} -L${_L}../src -lactionswf
+ 		else
+-			cc a.o -lz -L${_L}../src -lactionswf
++			echo cc a.o ${l_z} -L${_L}../src -lactionswf
++			cc a.o ${l_z} -L${_L}../src -lactionswf
+ 		fi
+ 	else
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then
+-			cc a.o -lz -L${_L}../src -lactionswf #local cc has -lz? bionic i386 cc has no -lz? who cares
++			#local cc has -lz? bionic i386 cc has no -lz? who cares
++			echo cc a.o ${l_z} -L${_L}../src -lactionswf
++			cc a.o ${l_z} -L${_L}../src -lactionswf
+ 		else
+-			cc a.o -lz -L${LD_LIBRARY_PATH} -lactionswf
++			echo cc a.o ${l_z} -L${LD_LIBRARY_PATH} -lactionswf
++			cc a.o ${l_z} -L${LD_LIBRARY_PATH} -lactionswf
+ 		fi
+ 	fi && {
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../src; fi
++		echo LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
+ 		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
+ 	}
+ }
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -3,8 +3,10 @@
+ 
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
++l_z=`pkg-config --libs zlib`
++
+ ${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc -lz -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+ 	if [ ${a} = 0 ]; then exit; fi
+ 	if [ -n "${wait}" ]; then read; fi
