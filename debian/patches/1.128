@@ -1,0 +1,1117 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-128) bionic; urgency=medium
+ .
+   * flagpre_mix flag_pool_read_unlink flagpre_write_no flag_compress
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-03-28
+
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -1,7 +1,7 @@
+ 
+ #define flag_forin1 0x20
+ #define flag_framesAsShows 0x40
+-#define flag_pool_write 0x100
++#define flagpre_pool_write 0x100
+ #define flag_pool_read 0x200
+ 
+ #ifdef __cplusplus
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -1,21 +1,28 @@
+ 
+-const debug_none=0
+-const debug_log=0x1
+-const debug_alt=0x2
+-const debug_titles=0x4
+-const debug_x=0x8
+-const debug_x_pad=0x10
++#init order is: pool x log alt titles asShows forin
++#a good workflow(for ffdec and oadbg): prexx_flags|flagpre_mix|flagpre_write_no,xx_flags|flag_titles,xx_flags|flag_compress,oaalternative with flag_alt|flag_pool_read_unlink|flag_compress
++#or:                              prexx_flags|flagpre_mix,oaalternative with flag_alt|flag_pool_read,xx_flags|flag_titles  ,xx_flags|flag_pool_read_unlink|flag_compress
+ 
++const flag_none=0
++const flagpre_log=0x1
++const flag_alt=0x2
++const flag_titles=0x4
++const flagpre_x=0x8           #oaalternative will try to if the log has prexx data
++const flagpre_x_pad=0x10
+ const flag_forin1=0x20
+ const flag_framesAsShows=0x40
++const flag_x=0x80             #will turn off antix_read flags
++const flagpre_pool_write=0x100
++const flag_pool_read=0x200    #will turn off flag_pool_write
++const flagpre_mix=0x400
++const flag_pool_read_unlink=0x800
++const flagpre_write_no=0x1000
++const flag_compress=0x2000
+ 
+-const flag_x=0x80           #will turn off antix_read flags
+-const flag_pool_write=0x100
+-const flag_pool_read=0x200  #will turn off flag_pool_write
+-
+-const debug_xpad=debug_x|debug_x_pad
+-const flags_pool=flag_pool_write|flag_pool_read
+-const flags_x=debug_x|flag_x
+-const prexx_flags=debug_log|flag_pool_write|debug_x
+-const xx_flags=debug_log|flag_pool_read|flag_x
+-const antix_read=debug_log|debug_alt|debug_xpad
++const debug_xpad=flagpre_x|flagpre_x_pad
++const flags_pool=flagpre_pool_write|flag_pool_read
++const flags_x=flagpre_x|flag_x
++const prexx_flags=flagpre_log|flagpre_pool_write|flagpre_x #will turn off antixx_write
++const xx_flags=flag_pool_read|flag_x
++const antix_read=flagpre_log|flag_alt|debug_xpad
++const antixx_write=flag_titles                             #oad and ffdec are counting on this
+--- actionswf-1.orig/dev/import.oh
++++ actionswf-1/dev/import.oh
+@@ -1,3 +1,4 @@
+ 
+ include "flags.oh"
++const flag_pool_uread=flag_pool_read|flag_pool_read_unlink
+ include "importf.oh"
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -17,6 +17,9 @@ sfile=${name}.swf
+ OFLAGS=conv_64 ${conv_64}
+ linkname=actionswf
+ linkfile=${linkname}.lib
++ifndef _L
++	_L=../src
++endif
+ 
+ ifeq (${platform},win)
+ 	OFLAGS += inplace_reloc 0
+@@ -32,9 +35,6 @@ else
+ 	endif
+ 	#exit_end 1 #same problem as ocompiler, even at qemu-amd64
+ 	#endif
+-	ifndef _L
+-		_L=../src
+-	endif
+ endif
+ 
+ all: build exe
+@@ -56,28 +56,33 @@ lib:
+ link:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		if [ "${conv_64}" = "1" ]; then \
+-			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -L${_L} -l:${libname}; \
++			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc -lz -L${_L} -l:${libname}; \
+ 		elif [ -z "${ldprefer}" ]; then \
+ 			$(CC) ${linkerflags} ${name}.o -o ${name} -L${_L} -l:${libname}; \
+ 		else \
+-			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc -L${_L} -l:${libname}; \
++			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc -lz -L${_L} -l:${libname}; \
+ 		fi \
+ 	else \
+ 		if [ "${conv_64}" = "1" ]; then \
+ 			i686-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
+ 		else \
+-			x86_64-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
++			x86_64-w64-mingw32-gcc ${linkerflags} ${name}.o -o ${name}.exe -L. -l${linkname}; \
+ 		fi \
+ 	fi
+ #launchpad amd64 is segmentation with ld instead of cc
+ #				$(CC) ${linkerflags} -m32 ${name}.o -o ${name} -L../src -l:${libname}; \
++#x86_64-w64-mingw32-ld ${linkerflags} ${name}.o -entry main -lmsvcrt -o ${name}.exe -L. -l${linkname}; \
++#at win gcc-mingw-w64-x86-64-win32 , because ld will not argc first argument
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} && \
+-		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} x; \
++		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} x ${x3}; \
++	else \
++		export WINEPATH=${WINEPATH}\;${_L}; \
++		${launcher} ./${name}.exe && \
++		${launcher} ./${name}.exe x ${x3}; \
+ 	fi
+-#\? is 0x3f log,alt,titles,x , inside -0x30, 0 is 0x30, \; to 0xb log,alt,x , = is 0xd log,titles,x
+ 
+ %: %.oc
+ 	${OCOMP} $< ${OFLAGS} ${OFLAGSEXTRA}
+@@ -92,6 +97,7 @@ clean:
+ 	-rm -f ${sfile}.x ${sfile}.xx
+ 	-rm -f ${sfile}
+ 	-rm -f ${sfile}.data
++	-rm -f expected.swf
+ 
+ distclean: clean
+ 
+@@ -101,8 +107,13 @@ install:
+ uninstall:
+ 	echo "No uninstall"
+ 
+-test:
++expected.swf:
++	ffdec -decompress expected.c.swf $@
++test: expected.swf
+ 	diff ${sfile} expected.swf
++expected.c.swf: build
++	$(MAKE) -f Makefile x3=x
++	mv example.swf $@
+ 
+ .PHONY: all build uns lib link exe install clean distclean uninstall test
+ 
+--- actionswf-1.orig/example/entry.oc
++++ actionswf-1/example/entry.oc
+@@ -1,8 +1,11 @@
+ 
+ entryraw main(sd argc,sd *argv0,ss *argv1)
+-sd flags=debug_log|flag_pool_write|debug_xpad
+-if argc!=1
+-	or flags (flag_pool_read|flag_x) #for tests/data
+-	or flags (debug_titles)
++sd flags
++if argc=1
++	set flags (flags1)
++elseif argc=2
++	set flags (flags2)
++else
++	set flags (flags3)
+ end
+ #sub argv1# 0x30
+--- actionswf-1.orig/example/entry_arg.oc
++++ actionswf-1/example/entry_arg.oc
+@@ -1,8 +1,11 @@
+ 
+ entry main(sd argc,sv *argv)
+-sd flags=debug_log|flag_pool_write|debug_xpad
+-if argc!=1
+-	or flags (flag_pool_read|flag_x) #for tests/data
+-	or flags (debug_titles)
++sd flags
++if argc=1
++	set flags (flags1)
++elseif argc=2
++	set flags (flags2)
++else
++	set flags (flags3)
+ end
+ #incst argv;ss argv1;set argv1 argv#;sub argv1# 0x30
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -2,7 +2,7 @@ format elfobj64
+ 
+ #a simple shape moving on the stage example
+ 
+-importx "_sprintf" sprintf
++importx "sprintf" sprintf
+ importx "_exit" exit
+ 
+ einclude "../dev/import.oh"
+@@ -13,6 +13,11 @@ const shape_lat=40
+ 
+ ####################
+ 
++const flags1=flagpre_log|flagpre_pool_write|debug_xpad
++#|flagpre_write_no
++const flags2=flag_pool_uread|flag_x   ;#for tests/data . flag_compress is at ffdec test, and here will compare from 2 different(maybe) zlibs
++const flags3=flags2|flag_compress
++
+ include "entry_arg.oc" "entry.oc"
+ call xlog_pad_set(0x30)
+ 
+--- actionswf-1.orig/example/m64d
++++ actionswf-1/example/m64d
+@@ -1,2 +1,2 @@
+ 
+-make linkerflags= OFLAGSEXTRA+="nul_res_pref 1" $@
++make linkerflags= OFLAGSEXTRA+="nul_res_pref 1" "$@"
+--- actionswf-1.orig/example/mrd
++++ actionswf-1/example/mrd
+@@ -1,5 +1,5 @@
+ 
+-launcher="qq" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1
++launcher="qq" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1 "$@"
+ 
+ ##!/bin/bash
+ #LD_LIBRARY_PATH+=:/home/bc/before/lib
+--- /dev/null
++++ actionswf-1/example/mrwd
+@@ -0,0 +1,2 @@
++
++WINEPATH=${HOME}/x86_64_lib_mingw launcher=wine64 linkerflags= ./makewin64 "$@"
+--- actionswf-1.orig/include/ascii.h
++++ actionswf-1/include/ascii.h
+@@ -66,7 +66,7 @@ Const Questionmark=0x3F
+ #Const Atsymbol=0x40
+ Const A=0x41
+ Const B=0x42
+-#Const C=0x43
++Const C=0x43
+ Const D=0x44
+ #Const E=0x45
+ Const F=0x46
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -9,6 +9,8 @@ shift
+ cd .. && \
+ mkdir actionswf && \
+ mv src/actionswf.dll actionswf && \
++ln ${depend_dll_path}/libzlib1.dll actionswf && \
++ln ${depend_dll_path}/libssp-0.dll actionswf && \
+ cd src && \
+ ./makewin${ver} clean && \
+ cd .. && \
+--- actionswf-1.orig/makewin64
++++ actionswf-1/makewin64
+@@ -1,4 +1,4 @@
+ 
+-./makewin 64 $@
++depend_dll_path=${HOME}/x86_64_lib_mingw ./makewin 64 $@
+ 
+ #when diff these dlls, expect alt least time/date (twice) and checksum
+--- actionswf-1.orig/oaalternative
++++ actionswf-1/oaalternative
+@@ -1,7 +1,9 @@
++#!/bin/bash
+ 
+ #1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
+ #isdebug=
+ #wait=
++#no_number_check=
+ 
+ if [ -z "${1}" ]; then echo file path required; exit 1; fi
+ 
+@@ -10,14 +12,17 @@ cd ${dname} || exit 1
+ 
+ bname=`basename ${1}`
+ 
+-log=${bname}.log
+-if [ ! -e ${log} ]; then echo no log; exit 1; fi
++log=${bname}.log.log
++if [ ! -e ${log} ]; then
++	log=${bname}.log
++	if [ ! -e ${log} ]; then echo no log; exit 1; fi
++fi
+ 
+ folder="${bname%.*}"
+ if [ -n "${isdebug}" ]; then echo ${folder}; fi
+ 
+ if [ -z "${isdebug}" ]; then
+-	ffdec -export script ${folder} ${1} > /dev/null || exit 1  #silent somehow
++	ffdec -export script ${folder} ${1} > /dev/null || exit 1
+ else
+ 	echo ffdec -export script ${folder} ${1}
+ 	ffdec -export script ${folder} ${1} || exit 1
+@@ -29,9 +34,6 @@ mkdir -p ${out}
+ 
+ cd ${folder}
+ 
+-v=
+-if [ -n "${isdebug}" ]; then v=-v; fi
+-
+ move () {
+ 	mv ${v} "${1}" ${2}
+ 	if [ -n "${isdebug}" ]; then
+@@ -51,7 +53,15 @@ doaction () {
+ 		move ${var} ../${out}/${f}
+ 	done
+ }
++number_expected () {
++	if [ -z "${no_number_check}" ]; then
++		case ${p} in
++			''|*[!0-9]*) echo "error: Not a number"; exit 1 ;;
++		esac #This rejects empty strings and strings containing non-digits
++	fi
++}
+ new_tag () {
++	number_expected
+ 	s=${p}
+ 	t= #type
+ 	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
+@@ -60,6 +70,8 @@ new_tag () {
+ ainits_counter=1
+ ainits=( )
+ s= #id
++v=
++if [ -n "${isdebug}" ]; then v=-v; fi #; set -x
+ while read p; do
+ 	if [ -z "${s}" ]; then
+ 		new_tag
+@@ -68,6 +80,7 @@ while read p; do
+ 			if [ -z "${p}" ]; then
+ 				t=1 #can be show or done
+ 			else
++				number_expected
+ 				t=2 #action
+ 				at=${p}
+ 				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
+@@ -78,6 +91,7 @@ while read p; do
+ 				echo show
+ 			else
+ 			#done
++				number_expected
+ 				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
+ 				if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
+ 					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"`
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -85,8 +85,8 @@ import "print_einline" print_einline
+ import "prints_inline" prints_inline
+ import "printt" printt
+ 
+-function branch_code(ssu code,valueu end,ss _a,ss _b,ss form)
+-	ssu start;set start code
++function branch_code(ss code,valueu end,ss _a,ss _b,ss form)
++	ss start;set start code
+ 	charx a#1;charx b#1
+ 	set a _a#;set b _b#
+ 	add end code
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -103,7 +103,7 @@ function memdec(ss start,value end)
+ 	return val
+ end
+ #end
+-function memhex_parse_withinc(ssu start,swu out) #arecordheader,function,if,jump are 15/16 bits at max
++function memhex_parse_withinc(ss start,swu out) #arecordheader,function,if,jump are 15/16 bits at max
+ 	inc start
+ 	ss a;set a start
+ 	whiletrue #the action row is ending in new line
+--- actionswf-1.orig/oad/mds
++++ actionswf-1/oad/mds
+@@ -1,11 +1,3 @@
+ 
+-if [ -n "${1}" ]; then
+-	OCOMP="q ~/o/ocompiler-1/src/o";
+-	if [ ${1} = 0 ]; then
+-		shift
+-		OCOMP=${OCOMP} ./md $@
+-		exit
+-	fi
+-	shift
+-fi
+-OCONV=~/o/ocompiler-1/otoc/otoc OCOMP=${OCOMP} ./md $@
++#if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; if [ ${1} = 0 ]; then shift; OCOMP=${OCOMP} ./md $@; exit; fi; shift; fi
++OCONV=~/o/ocompiler-1/otoc/otoc OCOMP="q ~/o/ocompiler-1/src/o" ./md $@
+--- actionswf-1.orig/oad/oadbgdatas.oh
++++ actionswf-1/oad/oadbgdatas.oh
+@@ -6,13 +6,13 @@ constif TRUE=1
+ function oadata()
+ 	valuexu sprites#1
+ 	dataxu sprites_size#1 ;#1(root)+ui16 *: ,for free
+-	#dtitles has a constant pool end recognizer for frame_one/frame
+ 
+ 	#these are pointers to actions
+ 	valuexu functions#1   #is this in conflict with for3 same sign? no, there will be another offset, remembering that offset at functions is at start
+ 	dataxu functions_size#1  #anyway is using a counter at appending (preferred instead of null), DefineFunction is at minimum 8 same as : then swfsizeui32 minus some tags
+ 	#can stay outside, anyway is good for info
+-	#here dtitles has a push/pop recognizer
++	#dtitles has a constant pool end recognizer for frame_one(ainit,button)/frame
++	#for functions, dtitles has a push/pop recognizer
+ 
+ 	valueu marks#1
+ 	valueu size#1
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -10,7 +10,7 @@ SpriteId
+ ActionInitBool
+ TextLinesNumber
+ TextLines
+-{*NumberAXsNumberB1-NumberBN}
++{*NumberAX...sNumberB1-NumberBN}
+ 
+ Or:
+ 
+@@ -32,4 +32,4 @@ these are at prexx_flags:
+ 	TextLinesNumber is the number of lines that TextLines has.
+ 	TextLines is the text like in action[_sprite] call.
+ 	* NumberA1-NumberAN lines from TextLinesNumber
+-	s is ,/|^*@ and NumberBX: example 1F,,F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
++	... ? the notation is at include/xlog.oh ,there are special chars and numbers, a minimal example: ,1F,,F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -66,9 +66,9 @@ OFLAGS += inplace_reloc 0 include_sec 1
+ all: compile ounused link def
+ link:
+ 	if [ "${conv_64}" = "1" ]; then \
+-		i686-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
++		i686-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt ${L} -lzlib1 -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+ 	else \
+-		x86_64-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
++		x86_64-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt ${L} -lzlib1 -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+ 	fi
+ #on 64 is mingw-w64-x86-64-dev
+ 
+@@ -82,13 +82,14 @@ OFLAGS += underscore_pref 1
+ all: ${libname}
+ 
+ ifeq (${conv_64},1)
+-ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+ 
+ else
+ #same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+-ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} ${L} -lc -L. -l:${exte} --exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} ${L} -lc `pkg-config --libs zlib` -L. -l:${exte} --exclude-libs ${exte}
++#and pkg-config for -lc? is not in libc6-dev. where is?
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -61,7 +61,9 @@ function pool_init(sd flags)
+ 		else
+ 			set pool_data.write (FALSE) #most of are write else read
+ 			set pool_data.read (TRUE)
+-			and flags (~flag_pool_write)
++			wordx read_unlink#1;set read_unlink (flag_pool_read_unlink)
++			and read_unlink flags
++			and flags (~flagpre_pool_write)
+ 		end
+ 		return flags
+ 	end
+@@ -159,7 +161,9 @@ function pool_read(sd id,sd frame_nr)
+ 			add mem (pool_cursor_size)
+ 			call fread(mem,sz,1,f)
+ 			call fclose(f)
+-			call unlink(name)
++			if pool_init.read_unlink!=0
++				call unlink(name)
++			end
+ 		end
+ 		call free(name)
+ 	end
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -44,8 +44,8 @@ function alt_init(sd flags,sd path)
+ 	if alt_join.folder!=(NULL)
+ 		call error("swf started, alt not closed")
+ 	end
+-	and flags (debug_alt)
+-	if flags=(debug_alt)
++	and flags (flag_alt)
++	if flags=(flag_alt)
+ 		sd size;setcall size strlen(path)
+ 		sd r;set r strrchr(path,(Period))
+ 		if r!=(NULL)
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -39,7 +39,7 @@ import "f_close" f_close
+ 
+ function debug_data()
+ 	value file=NULL
+-	const p_debug_file^file
++	value file2=NULL
+ 
+ 	#now is a string #datax a#1  #65535
+ 	value mem=NULL
+@@ -55,6 +55,9 @@ function debug_data()
+ 
+ 	if file!=(NULL)
+ 		call f_close(#file)
++		if file2!=(NULL)
++			call f_close(#file2)
++		end
+ 		if debug_mark_get.offsets!=(NULL)
+ 			call mem_free(#debug_mark_get.offsets)
+ 			if mem!=(NULL)
+@@ -148,6 +151,7 @@ import "pool_init" pool_init
+ importx "fseek" fseek
+ importx "fread" fread
+ importx "fprintf" fprintf
++importx "free" free
+ 
+ #aftercallimport ebool
+ 
+@@ -155,13 +159,13 @@ import "memalloc" memalloc
+ import "alt_init" alt_init
+ import "dtitles_init" dtitles_init
+ import "x_init" x_init
+-import "f_open_mem" f_open_mem
++import "f_open_mem_ex" f_open_mem_ex
+ import "strlen_of" strlen_of
+ 
+ function flags_init(sd flags,sd path)
+ 	set flags pool_init(flags)
+ 	set flags x_init(flags,path)
+-	call log_init(flags,path)
++	set flags log_init(flags,path)
+ 	call alt_init(flags,path)
+ 	call dtitles_init(flags)
+ 
+@@ -169,30 +173,43 @@ function flags_init(sd flags,sd path)
+ 	call for_in(flags)
+ endfunction
+ 
+-function log_init(datax prexx,sd path)
++function log_init(sd flags,sd path)
+ 	if debug_data.file!=(NULL)
+ 		call error("swf started, log not closed")
+ 	end
+-	sd test=debug_log
+-	and test prexx
+-	if test=(debug_log)
+-		sd size;setcall size strlen_of(path,4+1)
++	datax prexx#1
++	set prexx flags
++	and prexx (prexx_flags)
++	sd test=flagpre_log
++	and test flags
++	if test=(flagpre_log)
++		sd size=4;addcall size strlen_of(path,4+1)
+ 		sd b;setcall b memalloc(size)
+-		call sprintf(b,"%s.log",path)
+-		sv file%p_debug_file
+-		setcall file# f_open_mem(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character
++		vstr lg="%s.log"
++		call sprintf(b,lg,path)
++		setcall debug_data.file f_open_mem_ex(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character
+ 
+-		and prexx (prexx_flags)
+ 		if prexx=(prexx_flags)
++			set test (flagpre_mix) #first log is with prexx, second log is for alt
++			and test flags
++			if test!=0
++				call sprintf(b,lg,b)
++				set debug_data.file2 f_open_mem_ex(b,"wb")
++			end
++			call free(b)
++
+ 			setcall debug_mark_get.offsets memalloc(1)  #0 on some systems can be NULL return
+ 			#
+ 			setcall debug_data.mem memalloc(1)
+ 			#this is later #set debug_data.size 0
+ 			set debug_data.all_size 1
++
++			and flags (~antixx_write)
++		else
++			call free(b)
+ 		end
+-	else
+-		and prexx (prexx_flags)
+ 	end
++	return flags
+ end
+ 
+ import "f_printf" f_printf
+@@ -212,9 +229,8 @@ function debug_action_init(ss ac)
+ 			endwhile
+ 
+ 			#out rows\nac\n
+-			sv file%p_debug_file
+ 			char f={Percent,l,u,xlog_nl,Percent,s,xlog_nl,Nullchar}
+-			call f_printf((fprintf_min+2),file#,#f,row,start)
++			call f_printf((fprintf_min+2),debug_data.file,#f,row,start)
+ 
+ 			mult row :
+ 			import "memrealloc" memrealloc
+@@ -276,9 +292,8 @@ function debug_phase_code_flush()
+ 		#there are rows with only one action_one, example in tests/ffdec
+ 			#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+ 			#will not bother concludefunction where is asking with ftell
+-			sv file%p_debug_file
+ 			char format=xlog_actions;char *="%lu"
+-			call f_printf((fprintf_min+1),file#,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
++			call f_printf((fprintf_min+1),debug_data.file,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
+ 			call debug_phase_code_flush_part(debug_phase_code.size)
+ 			set debug_data.rows 0
+ 		end
+@@ -292,27 +307,35 @@ function debug_phase_code_flush_end()
+ 	end
+ end
+ 
++function debug_printf(sd ix)
++	vstr u="%u\n"
++	call f_printf((fprintf_min+1),debug_data.file,u,ix)
++	if debug_data.file2!=(NULL)
++		callg f_printf((fprintf_min+1),debug_data.file2,u,ix)
++	end
++end
+ function debug_base_core(sd id)
+-	sv file%p_debug_file
+-	call f_printf((fprintf_min+1),file#,"%u\n",id) #swf_button is calling action_sprite
++	callg debug_printf(id) #swf_button is calling action_sprite
+ end
+ function debug_base(sd id)
+ 	if debug_data.file!=(NULL)
+ 		call debug_base_core(id)
+ 		sd ai;set ai ainit()
+-		call f_printf((fprintf_min+1),debug_data.file,"%u\n",ai)
++		callg debug_printf(ai)
+ 	end
+ end
+ function debug_show(sd id)
+ 	if debug_data.file!=(NULL)
+ 		call debug_base_core(id)
+ 		char a={xlog_nl,xlog_nl}
+-		call debug_write(#a,2)
++		callg debug_write(#a,2)
+ 	end
+ end
+ function debug_write(ss s,sd d)
+-	sv file%p_debug_file
+-	call f_write(file#,s,d)
++	call f_write(debug_data.file,s,d)
++	if debug_data.file2!=(NULL)
++		callg f_write(debug_data.file2,s,d)
++	end
+ end
+ function debug_spritedone(sd p,sd i)
+ 	if debug_data.file!=(NULL)
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -63,7 +63,7 @@ function dtitles_conclude_record(sd mem,
+ end
+ 
+ function dtitles_init(sd flags)
+-	and flags (debug_titles)
++	and flags (flag_titles)
+ 	if flags!=0
+ 		set dtitles_conclude.bool (TRUE)
+ 		dataxu func#1 #like ui32 swf size
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -71,12 +71,17 @@ function f_open(sd path,sd format)
+ end
+ #file
+ function f_open_mem(sd path,sd format)
++	sd f;set f f_open_mem_ex(path,format)
++	call free(path)
++	return f
++endfunction
++#file
++function f_open_mem_ex(sd path,sd format)
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
+ 		call free(path)
+ 		call error(f_open.err)
+ 	endif
+-	call free(path)
+ 	return f
+ endfunction
+ 
+@@ -153,18 +158,23 @@ endfunction
+ #write
+ 
+ function file_write(sd file,sd buffer,sd size)
+-    if size=0
+-        ret
+-    endif
+-    sd len
+-    setcall len write(file,buffer,size)
+-    if len=size
+-        ret
+-    endif
+-    vstr er="File write error"
+-    call error(er)
++	sd len
++	setcall len write(file,buffer,size)
++	if len=size
++		ret
++	endif
++	vstr er="File write error"
++	call error(er)
++endfunction
++function file_write_mem(sd file,sd buffer,sd size)
++	sd len
++	setcall len write(file,buffer,size)
++	call free(buffer)
++	if len=size
++		ret
++	endif
++	call error(file_write.er)
+ endfunction
+-
+ 
+ function f_printf(sd nr,sd file) #,sd *format,sd a1...,sd aN
+ 	sd r;set r f_printf_in(#file,nr)
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -66,7 +66,7 @@ vdata hd_pack2%hd2
+ 
+ 	import "flags_init" flags_init
+ 	call flags_init(flags,path)
+-    call swf_mem((mem_exp_init),path,(file_sz_off-hd_start))
++	call swf_mem((mem_exp_init),path,(file_sz_off-hd_start),flags)
+ 
+     #identifiers for swf
+     call identifiers_set(0);#font with id 0 isn't visible in the placements
+--- actionswf-1.orig/src/makewin64
++++ actionswf-1/src/makewin64
+@@ -1,4 +1,5 @@
+ 
+-make platform=win conv_64=2 $@
++if [ -z "${depend_dll_path}" ]; then depend_dll_path="${HOME}/x86_64_lib_mingw"; fi
++L="-L${depend_dll_path}" make platform=win conv_64=2 $@
+ 
+ #make platform=win link
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -5,6 +5,11 @@ include "../include/prog.h"
+ #win32 with _
+ importx "memcpy" memcpy
+ 
++const Z_OK=0
++importx "compressBound" compressBound
++importx "compress" compress
++importx "free" free
++
+ #this is throwless here
+ import "struct_ids" struct_ids
+ import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+@@ -110,24 +115,24 @@ import "struct_ids_action_set" struct_id
+ import "mem_block_add" mem_block_add
+ import "def_mem" def_mem
+ import "debug_show" debug_show
++import "memalloc" memalloc
+ 
+-function swf_mem(sd proc,sd arg,sd len)
+-    vdata path_mem=NULL
+-    #4-7 is 0
+-    data path_size#1
+-    data filelength_offset#1
+-    data file_out=fd_error
++function swf_mem(sd proc,sd arg,sd len,sd flags)
++	vdata path_mem=NULL
++	#4-7 is 0
++	charx filelength_offseted#1
++	data file_out=fd_error
+ 
+-    data id#1
++	data id#1
+ 	#data main_id#1 #was moved to a throwless location
+-    value call_struct#1;vdata c_main^struct_ids;vdata c_pool^struct_ids_actionpool
++	value call_struct#1;vdata c_main^struct_ids;vdata c_pool^struct_ids_actionpool
+ 
+-    data id_stack#1
++	data id_stack#1
+ 
+ 	if proc=(mem_exp_change_back)
+-        set id swf_frames_reg.main_id
+-        set call_struct c_main
+-        ret
++		set id swf_frames_reg.main_id
++		set call_struct c_main
++		ret
+ 	endif
+ 	if proc=(mem_exp_change_pool)  #this can be stackable, at debug titles, at normal usage is back at the main id
+ 	#is after action_code_values_init
+@@ -144,11 +149,12 @@ function swf_mem(sd proc,sd arg,sd len)
+ 	if proc=(mem_exp_init)
+ 		#arg is file
+ 		#len is filelength offset
++		#flags
+ 		if path_mem!=(NULL)
+ 			call error("The previous swf was not ended.")
+ 		endif
+ 		#0
+-		import "memalloc" memalloc
++		svu path_size
+ 		setcall path_size strlen_of(arg,1)
+ 		setcall path_mem memalloc(path_size)
+ 		call memcpy(path_mem,arg,path_size)
+@@ -168,7 +174,21 @@ function swf_mem(sd proc,sd arg,sd len)
+ 		import "push_init" push_init
+ 		call push_init()
+ 		#
+-		set filelength_offset len
++		sd test=flagpre_write_no;and test flags
++		charx is_file_write#1
++		if test=0
++			set filelength_offseted len
++			set is_file_write (TRUE)
++			and flags (flag_compress)
++			charx is_compress#1
++			if flags!=0
++				set is_compress (TRUE)
++			else
++				set is_compress (FALSE)
++			end
++		else
++			set is_file_write (FALSE)
++		end
+ 		#
+ 		ret
+ 	endif
+@@ -193,36 +213,58 @@ function swf_mem(sd proc,sd arg,sd len)
+ 		endif
+ 		ret
+ 	endif
+-    if path_mem=(NULL)
+-    #swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+-        call error("there isn't a swf started")
+-    endif
+-    if proc=(mem_exp_add)
+-        #blockMain blockPool
+-        sv p_block
+-        setcall p_block call_struct((ids_get_pointer),id)
+-        call mem_block_add(p_block,arg,len)
+-    elseif proc=(mem_exp_change)
++	if path_mem=(NULL)
++	#swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
++		call error("there isn't a swf started")
++	endif
++	if proc=(mem_exp_add)
++		#blockMain blockPool
++		sv p_block
++		setcall p_block call_struct((ids_get_pointer),id)
++		call mem_block_add(p_block,arg,len)
++	elseif proc=(mem_exp_change)
+ 		set id arg
+ 		set call_struct c_main
+-    else
+-    #if proc==(mem_exp_done)
+-        call swf_tag_end()
+-
+-        sd block
+-        setcall block call_struct((ids_get),swf_frames_reg.main_id)
+-        sd mem;sd size;call block_get_mem_size(block,#mem,#size)
+-
+-        sd pointer
+-        set pointer mem
+-        add pointer filelength_offset
+-        set pointer# size
+-
+-        import "file_open" file_open
+-        setcall file_out file_open(path_mem,(_open_write))
+-        import "file_write" file_write
+-        call file_write(file_out,mem,size)
+-    endelse
++	else
++	#if proc==(mem_exp_done)
++		if is_file_write=(TRUE)
++			call swf_tag_end()
++
++			sd block
++			setcall block call_struct((ids_get),swf_frames_reg.main_id)
++			ss mem;sd size;call block_get_mem_size(block,#mem,#size)
++
++			sd pointer
++			set pointer mem
++			add pointer filelength_offseted
++			set pointer# size
++
++			import "file_open" file_open
++			setcall file_out file_open(path_mem,(_open_write))
++
++			import "file_write" file_write
++			if is_compress=(TRUE)
++				set mem# (C)
++				add filelength_offseted (DWORD)
++				call file_write(file_out,mem,filelength_offseted)
++				sub size filelength_offseted
++				ss dest
++				sv destsize
++				set destsize compressBound(size)
++				set dest memalloc(destsize)
++				add pointer (DWORD)
++				sd er;set er compress(dest,#destsize,pointer,size)
++				if er=(Z_OK)
++					import "file_write_mem" file_write_mem
++					callret file_write_mem(file_out,dest,destsize) #will compress at least a RECT,ui16,ui16 + a tag(9) with the background colors
++				end
++				call free(dest)
++				call error("compress error")
++			else
++				call file_write(file_out,mem,size)
++			end
++		end
++	endelse
+ endfunction
+ function swf_mem_add(ss dest,sd size)
+     call swf_mem((mem_exp_add),dest,size)
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -36,7 +36,7 @@ import "identifiers_get" identifiers_get
+ 
+ functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
+ 	valuex bp#1;base bp;call ebase(bp)
+-	callg swf_new_ex_local(path,width,height,backgroundcolor,fps,(debug_none))
++	callg swf_new_ex_local(path,width,height,backgroundcolor,fps,(flag_none))
+ endfunction
+ 
+ import "swf_button_base" swf_button_base
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -135,7 +135,7 @@ function x_init(sd flags,sd path)
+ 		if test=0 #save
+ 			set x_data.f f_open_mem(b,"wb") #'b' on windows is not 't' that can change line ends and is working more there
+ 			datax flag#1
+-			set flag (debug_x_pad)
++			set flag (flagpre_x_pad)
+ 			and flag flags
+ 		else #restore ,no parse, no log/alt
+ 			sd file;set file f_open_mem(b,"rb")
+@@ -169,7 +169,7 @@ function debug_x_pointers(valuex start,v
+ 
+ 		inc size  ##is on last \0
+ 		sub size start
+-		if x_init.flag=(debug_x_pad)
++		if x_init.flag=(flagpre_x_pad)
+ 			set mark f_tell(x_data.f) #long
+ 			add mark (xlog_strings_size)
+ 			add mark size    ##overflow is same
+@@ -204,7 +204,7 @@ function debug_x_pointers(valuex start,v
+ 		end
+ 		set mark f_tell(x_data.f)
+ 		call f_write(x_data.f,start,size)  #write now? is not ready ..str\0.. . the system will write something anyway and if error is good for visual debug, and fseek needs an extra check with this size that can have 0x10000 one string * multiple pointers
+-		if x_init.flag=(debug_x_pad)
++		if x_init.flag=(flagpre_x_pad)
+ 			if pad!=0
+ 				char zero={0,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0,   0,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0,0,   0,0,0,0, 0,0,0,0,  0,0,0,0, 0,0,0} #47 pad is maximum
+ 				call f_write(x_data.f,#zero,pad)
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -14,7 +14,7 @@ else
+ 	launcher=q
+ fi
+ ${OCOMP} a.oc ${OFLAGS} logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc -lz -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out x
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -8,11 +8,13 @@ einclude "../dev/import.oh"
+ include "entryraw.oc" "entry.oc"
+ call xlog_pad_set(0x30)
+ 
+-sd f=debug_log|flag_pool_write|debug_xpad
+-if argc=2
++sd f
++if argc=1
++	set f (flagpre_log|flagpre_pool_write|debug_xpad|flagpre_write_no)
++else
+ 	importx "puts" puts
+-	call puts("flag_x flag_pool_read")
+-	or f (flag_pool_read|flag_x|debug_titles)
++	call puts("flag_pool_uread flag_x flag_titles")
++	set f (flag_pool_uread|flag_x|flag_titles)
+ end
+ call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+ 
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -10,7 +10,7 @@ o a.oc logfile 0 conv_64 ${conv_64} ${in
+ 	if [ ${conv_64} = 1 ]; then
+ 		if [ -z "${inc}" ]; then #cross
+ 			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
+-				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -L${_L}../src -lactionswf
++				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc -lz -L${_L}../src -lactionswf
+ 		else
+ 			cc a.o -L${_L}../src -lactionswf
+ 		fi
+@@ -22,6 +22,6 @@ o a.oc logfile 0 conv_64 ${conv_64} ${in
+ 		fi
+ 	fi && {
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../src; fi
+-		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out
++		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
+ 	}
+ }
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -6,16 +6,17 @@ importx "_exit" exit
+ einclude "../../dev/import.oh"
+ 
+ include "../entryraw.oc" "../entry.oc"
+-
+-sd f=debug_titles
++sd f
++importx "puts" puts
+ if argc=1
+-	set f (debug_log|flag_pool_write)
++	call puts("prexx_flags flagpre_mix flagpre_write_no")
++	set f (prexx_flags|flagpre_mix|flagpre_write_no)
++elseif argc=2
++	call puts("xx_flags flag_compress")
++	set f (xx_flags|flag_compress)
+ else
+-	importx "puts" puts
+-	call puts("debug_alt flag_pool_read")
+-	set f (debug_alt|flag_pool_read)
+-	sub a1# (0x30)
+-	or f a1#
++	call puts("flag_alt flag_pool_uread flag_compress")
++	set f (flag_alt|flag_pool_uread|flag_compress)
+ end
+ 
+ call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+@@ -68,7 +69,7 @@ if(a>1){}
+ if(a<1){}
+ if(a>=1){a=5;}
+ else if(a<=1){a=3;}
+-else{a=4;}
++else{x=4;}
+ 
+ while(a<9){a=eval('a')+1;}
+ 
+--- actionswf-1.orig/tests/ffdec/as
++++ actionswf-1/tests/ffdec/as
+@@ -1,3 +1,5 @@
+ 
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+-isdebug=x _L=../ /bin/bash ../asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} /bin/bash ../../oaalternative a.swf "./a.out 1" && cat a.swf.log
++isdebug=x _L=../ /bin/bash ../asv && \
++extra=x isdebug=x _L=../ /bin/bash ../asv && \
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} /bin/bash ../../oaalternative a.swf "./a.out x x" && cat a.swf.log
+--- actionswf-1.orig/tests/ffdec/c
++++ actionswf-1/tests/ffdec/c
+@@ -1,2 +1,3 @@
+ rm -f a.o a.out a.swf a.swf.log a.swf.orig
+ rm -fr a
++rm -f a.swf.x a.swf.xx a.swf.log.log
+--- actionswf-1.orig/tests/ffdec/f
++++ actionswf-1/tests/ffdec/f
+@@ -1 +1 @@
+-a=1 ./ff && cat a.swf.log
+\ No newline at end of file
++a=2 ./ff && cat a.swf.log
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -4,15 +4,19 @@
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+ ${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc -lz -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+-	if [ -z "${a}" ]; then a=0
+-	elif [ ${a} = -1 ]; then exit; fi
+-	isdebug=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ../../oaalternative a.swf "qq ./a.out ${a}" || {
+-		swfdump -D${1} a.swf.orig > 1
+-		swfdump -D${1} a.swf > 2
+-		diff 1 2 --color
+-		rm 1 2
+-		exit 1
++	if [ ${a} = 0 ]; then exit; fi
++	if [ -n "${wait}" ]; then read; fi
++	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out x && {
++		if [ ${a} = 1 ]; then exit; fi
++		if [ -n "${wait}" ]; then read; fi
++		isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${bashdbg} ../../oaalternative a.swf "qq ./a.out x x" || {
++			swfdump -D${1} a.swf.orig > 1
++			swfdump -D${1} a.swf > 2
++			diff 1 2 --color
++			rm 1 2
++			exit 1
++		}
+ 	}
+ }
