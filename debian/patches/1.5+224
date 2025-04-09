@@ -1,0 +1,542 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+224) xenial; urgency=medium
+ .
+   * fix column error print
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-09
+
+--- ocompiler-1.orig/.github/workflows/appimage.yml
++++ ocompiler-1/.github/workflows/appimage.yml
+@@ -18,7 +18,7 @@ jobs:
+  # This workflow contains a single job called "build"
+  build:
+   # The type of runner that the job will run on
+-  runs-on: ubuntu-20.04
++  runs-on: ubuntu-22.04
+   # Steps represent a sequence of tasks that will be executed as part of the job
+   steps:
+    - uses: actions/checkout@v3
+@@ -101,7 +101,7 @@ jobs:
+        echo launcher
+        cd usr/bin
+        cat > ${name} <<EOF
+-      #!/bin/bash
++      #!/bin/sh
+       if [ "\${1}" != "0" ] && [ "\${1}" != "1" ] && [ "\${1}" != "2" ] && [ "\${1}" != "3" ] ; then
+        echo first argument: 0 for ocompiler, 1 for ounused, 2 for otoc, 3 for ostrip
+        exit 1
+--- ocompiler-1.orig/Makefile
++++ ocompiler-1/Makefile
+@@ -26,15 +26,15 @@ $(SUBDIRS):
+ verify_comp_with_link:
+ 	cd ./src; ${launcher} ../ounused/ounused ./linux/obj.oc.log
+ version.h:
+-	/bin/bash ./versionscript
++	RUN__SHELL=$(SHELL) . ./shl && $${RUN__SHELL} ./versionscript
+ #s=`pwd`; cd ${s} is working here, is not working on launchpad
+ 
+ test:
+-	cd tests; /bin/bash ./tests
++	RUN__SHELL=$(SHELL) . ./shl && cd tests && RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./tests
+ 
+ clean:
+ 	-rm -f version.h
+-	cd tests; /bin/bash ./c
++	RUN__SHELL=$(SHELL) . ./shl && cd tests && $${RUN__SHELL} ./c
+ 
+ #phony only in this file not in subdirs, then can write extra for a PHONYTOPTARGETS
+ .PHONY: all install $(TOPTARGETS) $(SUBDIRS) verify_comp_with_link
+--- ocompiler-1.orig/arh/pub
++++ ocompiler-1/arh/pub
+@@ -9,7 +9,7 @@ last=`curl https://api.github.com/repos/
+ ~/test/arh2 ${last} && \
+ ~/test/arhpub ${last} && \
+ #here must arh fast to push changelog + old file same time
+-afterversion=./test32 ~/test/debinit2 "${1}" && \
++afterversion=./test32local ~/test/debinit2 "${1}" && \
+ #there are problems at amd64xenial, not at bionic. can use xi386 amd64 at b but then will be a mess to copy both x and normal version from bionic onward
+ ~/test/deb && \
+ arch=i386 ~/test/publp && \
+--- ocompiler-1.orig/localtest
++++ ocompiler-1/localtest
+@@ -1 +1 @@
+-1-5+223
++1-5+224
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,3 +1,4 @@
++<p>ocompiler-1-5+223.x86_64.rpm,1U_3uKRBFS5DiKyo3kVh7ymqdtQuXEa0T,2025-04-09T05:48:39.510Z,87327,https://drive.google.com/uc?id=1U_3uKRBFS5DiKyo3kVh7ymqdtQuXEa0T&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+221.x86_64.rpm,1San8HfTXi-_wdgNm2YmYFcLHxFW7QDza,2025-03-26T05:54:01.700Z,87290,https://drive.google.com/uc?id=1San8HfTXi-_wdgNm2YmYFcLHxFW7QDza&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+219.x86_64.rpm,1oSJWtZvU1Pk-uIHbD0IBJhOmgu3ipNZA,2025-03-21T06:31:14.532Z,86695,https://drive.google.com/uc?id=1oSJWtZvU1Pk-uIHbD0IBJhOmgu3ipNZA&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+218.x86_64.rpm,1lGuMlghq3mT9Hzo-G9yvBSdIC1fJOQ7i,2025-03-19T08:35:22.962Z,86523,https://drive.google.com/uc?id=1lGuMlghq3mT9Hzo-G9yvBSdIC1fJOQ7i&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+--- ocompiler-1.orig/otoc/ascii.h
++++ ocompiler-1/otoc/ascii.h
+@@ -14,7 +14,7 @@ const asciicomma=0x2c            #,
+ const asciihyphen=0x2d           ;#-
+ const asciidot=0x2e              #.
+ const asciislash=0x2f            ;#/
+-const asciizero=0x30             #0
++const zr=0x30                    #0
+ const asciione=0x31              #1
+ const asciisemicolon=0x3b        #;
+ const asciileft=0x3c             ;#<
+@@ -29,7 +29,6 @@ const asciin=0x6e                #n
+ const asciio=0x6f                #o
+ const asciir=0x72                #r
+ const asciit=0x74                #t
+-const x=0x78                     #x
+ const asciicurlyleft=0x7b        #{
+ const asciior=0x7c               ;#|
+ const asciicurlyright=0x7d       #}
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -99,7 +99,7 @@ function var(sv pbuffer,sd outfile)
+ 			call writer(outfile)
+ 		end
+ 		call writesl(outfile)
+-		char a=asciizero
++		char a=zr
+ 		call write(outfile,#a,1)
+ 		call writesr(outfile)
+ 	else
+@@ -165,14 +165,14 @@ function write_string(sd outfile,sd is_m
+ 		ret
+ 	end
+ 	call writeq(outfile)
+-	char map1={x,x,            x,x,x,x,x,x,x,asciit,asciin,x,x,asciir,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,      x,x,x} #at 0 can be asciizero but \000 at c is 0
+-	char    *={0,0,asciidquote,0,0,0,0,0,0,0,0,     0,     0,0,       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,      0,0,0}
+-	char    *={0,0,            0,0,0,0,0,0,0,0,     0,     0,0,0,     0,0,0,0,0,0,0,0,0,0,0,0,0,0,asciibs,0,0,0}
+-	char    *={0,0,            0,0,0,0,0,0,0,0,     0,     0,0,0,     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,      0,0,x}
+-	char    *={x,x,            x,x,x,x,x,x,x,x,     x,     x,x,x,     x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,      x,x,x}
+-	char    *={x,x,            x,x,x,x,x,x,x,x,     x,     x,x,x,     x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,      x,x,x}
+-	char    *={x,x,            x,x,x,x,x,x,x,x,     x,     x,x,x,     x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,      x,x,x}
+-	char    *={x,x,            x,x,x,x,x,x,x,x,     x,     x,x,x,     x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,      x,x,x}
++	char map1={zr,zr,           zr,zr,zr,zr,zr,zr,zr,asciit,asciin,zr,zr,asciir,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,      zr,zr,zr} #at 0 can be asciizero but \000 at c is 0
++	char    *={0, 0,asciidquote,0, 0, 0, 0, 0, 0, 0, 0,     0,     0, 0, 0,     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,       0, 0, 0} #\xhh... , then \x0acan't will be \x0aca
++	char    *={0, 0,            0, 0, 0, 0, 0, 0, 0, 0,     0,     0, 0, 0,     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, asciibs, 0, 0, 0}
++	char    *={0, 0,            0, 0, 0, 0, 0, 0, 0, 0,     0,     0, 0, 0,     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,       0, 0, zr}
++	char    *={zr,zr,           zr,zr,zr,zr,zr,zr,zr,zr,    zr,    zr,zr,zr,    zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,      zr,zr,zr}
++	char    *={zr,zr,           zr,zr,zr,zr,zr,zr,zr,zr,    zr,    zr,zr,zr,    zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,      zr,zr,zr}
++	char    *={zr,zr,           zr,zr,zr,zr,zr,zr,zr,zr,    zr,    zr,zr,zr,    zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,      zr,zr,zr}
++	char    *={zr,zr,           zr,zr,zr,zr,zr,zr,zr,zr,    zr,    zr,zr,zr,    zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,zr,      zr,zr,zr}
+ 	sd term;set term pointer;add term sz
+ 	sd start;set start pointer
+ 	while pointer!=term
+@@ -183,10 +183,10 @@ function write_string(sd outfile,sd is_m
+ 				sd c;set c pointer;sub c start
+ 				call write(outfile,start,c)
+ 			end
+-			char bs=asciibs;char b#1;char h1#1;char *#1
++			char bs=asciibs;char b#1;char *#2
+ 			set b map#
+-			if b=(x)
+-				call sprintf(#h1,"%02x",pointer#)
++			if b=(zr)
++				call sprintf(#b,"%03o",pointer#)
+ 				call write(outfile,#bs,4)
+ 			else
+ 				call write(outfile,#bs,2)
+--- /dev/null
++++ ocompiler-1/shl
+@@ -0,0 +1,16 @@
++
++if [ -n "$(test "${RUN__SHELL}" != "/bin/bash" && echo x)" ] && [ -n "$(test "${RUN__SHELL}" != "/bin/sh" && echo x)" ]; then
++	if [ $(test -x /bin/bash) ]; then
++		RUN__SHELL="/bin/bash"
++		echo "set /bin/bash"
++	elif [ $(test -x /bin/sh) ]; then
++		RUN__SHELL="/bin/sh"
++		echo "set /bin/sh"
++	else
++		RUN__SHELL="${RUN__SHELL}"
++		echo "is ${RUN__SHELL}"
++	fi
++else
++	RUN__SHELL="${RUN__SHELL}"
++	echo "ok ${RUN__SHELL}"
++fi
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -115,7 +115,7 @@ test-obj:
+ test: test-obj
+ 	cd linux; ../o o.oc nul_res_pref 1; mv o z; \
+ 	if [ -z "${testlinker}" ]; then \
+-		cd ../../; /bin/bash ./test32; \
++		RUN__SHELL=$(SHELL) . ../../shl && cd ../../ && $${RUN__SHELL} ./test32; \
+ 	else \
+ 		LD_LIBRARY_PATH=${testlinker} ${testlinker}/ld-linux.so.2 ./z o.oc nul_res_pref 1; \
+ 		diff o z; \
+--- ocompiler-1.orig/src/files/actions/main/index.oc
++++ ocompiler-1/src/files/actions/main/index.oc
+@@ -1,16 +1,14 @@
+ 
+ sd comsize#1
+ 
+-sd newlines
+-sd totalnewlines=0
+-
+ Data pcontent^content
+ Data pcomsize^comsize
+ 
+-Str textlinestart#1
+ if dot_comma_end=0
+ 	Set textlinestart content
+ endif
++set first_textlinestart textlinestart
++set totalnewlines 0
+ 
+ #test the line size and set the size of line break
+ Char newline=asciireturn
+@@ -77,8 +75,7 @@ while loop=2
+ 		endelse
+ 	elseif is_comment=0
+ 		if pointer#=(asciidoublequote)
+-			setcall errormsg quotes_forward(#pointer,last,#newlines,#textlinestart)
+-			add totalnewlines newlines  ##this is also good when error
++			setcall errormsg quotes_forward(#pointer,last) #,#totalnewlines,#textlinestart)
+ 			if errormsg!=(noerror)
+ 				set loop 1
+ 				set content pointer
+@@ -103,6 +100,9 @@ if errormsg=(noerror)
+ 
+ 	ss was_whitespaces
+ 	If comsize!=0
++		set textlinestart first_textlinestart
++		set totalnewlines 0
++
+ 		Data pointtosearchat%compointersloc
+ 		SetCall commandset getcommand(pcontent,pcomsize,ptrsubtype,_errormsg,pointtosearchat)
+ 		If errormsg=noerr
+@@ -274,7 +274,7 @@ if errormsg=(noerror)
+ 					endelseIf
+ 				endIf
+ 			EndIf
+-		EndIf
++		endif
+ 	Elseif cursor_start!=content
+ 		#if parses==(pass_write) if all parses then extra code for wrongers (only at not w_as_e)
+ 		#this is only whitespace
+--- ocompiler-1.orig/src/files/functions/actions/fn.oc
++++ ocompiler-1/src/files/functions/actions/fn.oc
+@@ -275,7 +275,9 @@ Function parsefunction(data ptrcontent,d
+ 				return err
+ 			endif
+ 		endelseif
+-	Else
++	Else #push, hex is at fndecandgroup
++		sd lines;set lines main.totalnewlines
++		set main.linesadd (BACKWARD)
+ 		if parses=(pass_init)
+ 			if sz!=zero
+ 				SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 7 more arguments but are not used
+@@ -292,10 +294,9 @@ Function parsefunction(data ptrcontent,d
+ 				else
+ 					if sz!=zero
+ 						setcall p nr_of_args_64need_p_get();set p# 0
+-						SetCall err enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 7 more arguments but are not used
+-						if err=noerr
+-							setcall err align_ante(p#)
+-						endif
++						Call enumcommas(ptrcontent,ptrsize,sz,is_declare,parses) #there are 7 more arguments but are not used
++						#there is no err at push,passcalls,enumcommas
++						setcall err align_ante(p#)
+ 					else
+ 						setcall err align_ante(0)
+ 					endelse
+@@ -354,6 +355,8 @@ Function parsefunction(data ptrcontent,d
+ 				if err!=noerr;return err;endif
+ 			endelse
+ 		endelse
++		set main.linesadd (FORWARD)
++		set main.totalnewlines lines
+ 	EndElse
+ 	Call stepcursors(ptrcontent,ptrsize)
+ 	Return noerr
+--- ocompiler-1.orig/src/files/functions/commons/strcommons.oc
++++ ocompiler-1/src/files/functions/commons/strcommons.oc
+@@ -343,7 +343,9 @@ function quotinmem_err(ss content,sd pqu
+ 			sd dif
+ 			set byte bytescaped(#content,content,#dif)
+ 			add pescapes# dif
+-		endif
++		else
++			call quotes_new_line(content)
++		endelse
+ 		if byte=bnull
+ 			if null_ok=(FALSE)
+ 				return "Null will break the include/import/library statement."
+@@ -400,8 +402,15 @@ function maxpathverif(str safecurrentdir
+ 	return err
+ endfunction
+ 
++function quotes_new_line(ss content)
++	if content#=(asciireturn)
++		inc content
++		set main.textlinestart content
++		add main.totalnewlines main.linesadd
++	end
++endfunction
+ #err
+-function quotes_forward(sd p_content,ss last,sd p_newlines,sd p_lastlinestart)
++function quotes_forward(sd p_content,ss last)#,sd p_newlines,sd p_lastlinestart)
+ #this version is knowing that the first char is "
+ 	char delim=asciidoublequote
+ 	ss content
+@@ -412,7 +421,6 @@ function quotes_forward(sd p_content,ss
+ 	if content=last
+ 		return unend
+ 	endif
+-	sd newlines=0
+ 	while content#!=delim
+ 		char escape_c=asciibs
+ 		while content#=escape_c
+@@ -424,34 +432,24 @@ function quotes_forward(sd p_content,ss
+ 			inc content
+ 			if content=last
+ 				set p_content# content
+-				if p_newlines!=0;set p_newlines# newlines;endif
+ 				return unend
+ 			endif
+ 		endwhile
+-		char newline=asciireturn
+-		if content#=newline
+-			if p_newlines!=0
+-				inc newlines
+-				set p_lastlinestart# content
+-				inc p_lastlinestart#
+-			endif
+-		endif
+ 		if escapes=1
+ 			inc content
+ 			set escapes 0
+-		elseif content#!=delim
+-			inc content
+-		endelseif
++		else
++			if content#!=delim
++				call quotes_new_line(content)
++				inc content
++			endif
++		endelse
+ 		if content=last
+ 			set p_content# content
+-			if p_newlines!=0;set p_newlines# newlines;endif
+ 			return unend
+ 		endif
+ 	endwhile
+ 	inc content
+ 	set p_content# content
+-	if p_newlines!=0
+-		set p_newlines# newlines
+-	endif
+ 	return (noerror)
+ endfunction
+--- ocompiler-1.orig/src/files/functions/values/numbersandconstants.oc
++++ ocompiler-1/src/files/functions/values/numbersandconstants.oc
+@@ -456,14 +456,18 @@ function parenthesis_size(ss content,sd
+ 	set mark content
+ 	set last content
+ 	add last size
++
+ 	while content!=last
+-		if content#=(asciidoublequote)
++		while content#=(asciidoublequote) #else will strange error on a strange "multiline""" kind of input
+ 			sd er
+-			setcall er quotes_forward(#content,last,0)
++			setcall er quotes_forward(#content,last)
+ 			if er!=(noerror)
+ 				return er
+ 			endif
+-		endif
++			if content=last
++				return closeerr
++			endif
++		endwhile
+ 		if content=last
+ 			return closeerr
+ 		endif
+--- ocompiler-1.orig/src/files/headers/header.h
++++ ocompiler-1/src/files/headers/header.h
+@@ -580,3 +580,8 @@ datax varargs#1
+ charx is_constif#1
+ 
+ charx callret_end_warn#1
++
++#for errors
++vStrx textlinestart#1;datax totalnewlines#1
++vstrx first_textlinestart#1
++data linesadd=FORWARD
+--- ocompiler-1.orig/src/test32
++++ ocompiler-1/src/test32
+@@ -1,4 +1,4 @@
+-
++#!/bin/sh
+ make && \
+ testlinker=/home/bc/Desktop/out/libc6/lib32 make test && \
+ if [ $? = 0 ]; then
+--- ocompiler-1.orig/test32
++++ ocompiler-1/test32
+@@ -1,4 +1,2 @@
+ 
+-echo a key when local test is ready
+-read -n1 -t $((60*60*24))
+ test `cat debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"` = `cat localtest`
+--- /dev/null
++++ ocompiler-1/test32local
+@@ -0,0 +1,4 @@
++
++echo a key when local test is ready
++read -n1 -t $((60*60*24))
++./test32
+--- ocompiler-1.orig/tests/.expected/a.out.c
++++ ocompiler-1/tests/.expected/a.out.c
+@@ -65,7 +65,7 @@ long*main(int* argc,...){
+ 	c1=(long)c1&(long)1;
+ 	c1=(long)c1|(long)1;
+ 	b=(long)b^(long)1;
+-	intern(1,"0\n1\r2\t3\x004\\5\"6x3g07",a,a);
++	intern(1,"0\n1\r2\t3\0004\5\"6x3g07",a,a);
+ 	b=(long)puts();
+ 	if(1==1){
+ 		//elseif 1!!1
+--- ocompiler-1.orig/tests/c
++++ ocompiler-1/tests/c
+@@ -1,5 +1,6 @@
+-
+-if [ -z "${1}" ]; then is_del=1;
++#!/bin/bash
++if [ -z "${1}" ]; then
++	is_del=1
+ else
+ 	is_del=0
+ 	is_diff=${1}   # ./c 1 is diff, else(example: 0) to populate .expected
+@@ -56,10 +57,12 @@ switch () {
+ 	fi
+ }
+ sw () {
+-	n=( `find -maxdepth 1 -name "*${1}"` )
+-	for v in "${n[@]}"; do
+-		switch ${v:2}
+-	done
++	n="$(find -maxdepth 1 -name "*${1}")"
++	if [ -n "${n}" ]; then
++		for v in ${n}; do
++			switch $(expr substr ${v} 3 $(echo $(echo -n ${v} | wc -m)-2 | bc))  #switch ${v:2}
++		done
++	fi
+ }
+ del () {
+ 	sw .o
+@@ -68,10 +71,11 @@ del () {
+ 	sw .exe       #by ocomp
+ 	switch a.out  #when ld also a.out.oc
+ }
+-a=( `ls` )
+-for var in "${a[@]}"; do
++a="`ls`"
++_e_=$(expr substr ${e} 1 $(echo $(echo -n ${e} | wc -m)-1 | bc))   #${e::-1}
++for var in ${a}; do
+ 	if [ -d "${var}" ]; then
+-		if [ "${var}" != "${e::-1}" ]; then
++		if [ "${var}" != "${_e_}" ]; then
+ 			cd "${var}"
+ 				exp=../${e}${var}/
+ 				if [ ${is_del} = 0 ]; then
+@@ -101,8 +105,8 @@ if [ ${is_del} = 0 ]; then
+ 				fi
+ 			fi
+ 		}
+-		tests=( `find -name "*.oc"` )
+-		n=${#tests[@]}
++		tests="$(find -name "*.oc")"
++		n=`echo ${tests} | wc -w`
+ 		n=$((n*3))   #is .oc .log and .x
+ 		echo ${n} ${diffs}
+ 		if [ ${n} = ${diffs} ]; then
+@@ -115,10 +119,12 @@ if [ ${is_del} = 0 ]; then
+ 	fi
+ else
+ 	#remove otoc files
+-	a=( `find -maxdepth 1 -name "*.c"` )
+-	for var in "${a[@]}"; do
+-		rm ${var}
+-	done
++	a="$(find -maxdepth 1 -name "*.c")"
++	if [ -n "${a}" ]; then
++		for var in ${a}; do
++			rm ${var}
++		done
++	fi
+ 
+ 	#remoce cc output, will be different, based on distribution/architecture
+ 	if [ -e ./cc ]; then
+@@ -127,8 +133,10 @@ else
+ 
+ 	#remove base64 troubles #or remove them after diff
+ 	cd ${e}
+-	a=( `find . -type f ! -name "*.txt" ! -name "*.log" ! -name "*.c"` )
+-	for var in "${a[@]}"; do
+-		rm ${var}
+-	done
++	a="$(find . -type f ! -name "*.txt" ! -name "*.log" ! -name "*.c")"
++	if [ -n "${a}" ]; then
++		for var in ${a}; do
++			rm ${var}
++		done
++	fi
+ fi
+--- ocompiler-1.orig/tests/compile
++++ ocompiler-1/tests/compile
+@@ -1,14 +1,14 @@
+ 
+-source ./inits
++. ./inits
+ 
+-tests=( `find -name "*.oc"` )
++tests="$(find -name "*.oc")"
+ 
+-for file in "${tests[@]}"; do
++for file in ${tests}; do
+ 	OFLAGS="x_file 1 nul_res_pref 1 includedir 0 relative_path 1"
+ 	#includedir 0 relative_path 1   to test on launchpad at <<PKGBUILDDIR>> that is not the real folder there. and ounused is also working with this
+ 
+ 	echo ${file} | grep "\.w" > /dev/null
+-	if [ $? = 0 ]; then OFLAGS+=" inplace_reloc 0 conv_64 2"; fi
++	if [ $? = 0 ]; then OFLAGS="${OFLAGS} inplace_reloc 0 conv_64 2"; fi
+ 	echo ${OCOMP} ${file} ${OFLAGS}
+ 	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${OCOMP} ${file} ${OFLAGS} || exit 1
+ done
+--- ocompiler-1.orig/tests/tests
++++ ocompiler-1/tests/tests
+@@ -1,3 +1,3 @@
+-
+-/bin/bash ./compile && \
+-/bin/bash ./c 1
++#!/bin/bash
++${RUN__SHELL} ./compile && \
++${RUN__SHELL} ./c 1
+--- ocompiler-1.orig/versionscript
++++ ocompiler-1/versionscript
+@@ -1,2 +1,2 @@
+-
++#!/bin/sh
+ echo char version=\"`cat ./debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"`\" > ./version.h
