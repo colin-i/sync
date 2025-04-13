@@ -1,0 +1,24 @@
+
+#1 d will be full diff
+
+if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+l_z=`pkg-config --libs zlib`
+
+${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+	if [ ${a} = 0 ]; then exit; fi
+	if [ -n "${wait}" ]; then read; fi
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out x && {
+		if [ ${a} = 1 ]; then exit; fi
+		if [ -n "${wait}" ]; then read; fi
+		isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${bashdbg} ../../oaalternative a.swf "qq ./a.out x x" || {
+			swfdump -D${1} a.swf.orig > 1
+			swfdump -D${1} a.swf > 2
+			diff 1 2 --color
+			rm 1 2
+			exit 1
+		}
+	}
+}

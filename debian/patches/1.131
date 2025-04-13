@@ -1,0 +1,832 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-131) bionic; urgency=medium
+ .
+   * small change with flag_pool_read
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-13
+
+--- actionswf-1.orig/.github/workflows/uponrpm.yml
++++ actionswf-1/.github/workflows/uponrpm.yml
+@@ -41,4 +41,4 @@ jobs:
+       upload_url: ${{ env.up_url }}
+       asset_path: ./${{ env.file }}
+       asset_name: ${{ env.file }}
+-      asset_content_type: application/x-executable
++      asset_content_type: application/x-rpm
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -14,10 +14,11 @@ $(SUBDIRS):
+ 	$(MAKE) -C $@ conv_64=${conv_64} $(MAKECMDGOALS)
+ 
+ test:
+-	cd tests && conv_64=${conv_64} /bin/bash ./as && conv_64=${conv_64} /bin/bash ./c 1 && cd ffdec && conv_64=${conv_64} /bin/bash ./as && \
+-	cd ../data && conv_64=${conv_64} /bin/bash ./test x && echo tests ok
++	RUN__SHELL=$(SHELL) . ./shl && cd tests && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
++	cd ffdec && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
++	cd ../data && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./test x && echo tests ok
+ clean:
+-	cd tests; /bin/bash ./c; cd ffdec; /bin/bash ./c; cd ../data; /bin/bash ./c
++	RUN__SHELL=$(SHELL) . ./shl && cd tests && $${RUN__SHELL} ./c && cd ffdec && $${RUN__SHELL} ./c && cd ../data && $${RUN__SHELL} ./c
+ install:
+ 	install -D oaalternative $(DESTDIR)$(prefix)/bin/oaalternative
+ uninstall:
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -18,7 +18,8 @@ last=$(curl https://api.github.com/repos
+ ~/test/lp x && \
+ ~/test/arh2 ${last} 1
+ 
+-#trace(1,2) is error
++#trace(1,2) is error, use this.trace only
++#breakpoint at web? add opcode (trace opcode, change .x or change .as file), rebuild, restart. or find a solution to change avm1.output_json_code at runtime
+ 
+ #is
+ #"a=1; //dsfdsffsd
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -2,7 +2,10 @@
+ #define flag_forin1 0x20
+ #define flag_framesAsShows 0x40
+ #define flagpre_pool_write 0x100
+-#define flag_pool_read 0x200
++#define flag_pool_read_unlink 0x800
++#define flag_compress 0x2000
++
++
+ 
+ #ifdef __cplusplus
+ extern "C" {
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -1,28 +1,29 @@
+ 
+ #init order is: pool x log alt titles asShows forin
+-#a good workflow(for ffdec and oadbg): prexx_flags|flagpre_mix|flagpre_write_no,xx_flags|flag_titles,xx_flags|flag_compress,oaalternative with flag_alt|flag_pool_read_unlink|flag_compress
+-#or:                              prexx_flags|flagpre_mix,oaalternative with flag_alt|flag_pool_read,xx_flags|flag_titles  ,xx_flags|flag_pool_read_unlink|flag_compress
++#a good workflow(for ffdec and oadbg): like in bench1
++#or:                                   like in bench2
++#a test/fasts result: 5.159259578 10.291831766
+ 
+ const flag_none=0
+ const flagpre_log=0x1
+ const flag_alt=0x2
+ const flag_titles=0x4
+-const flagpre_x=0x8           #oaalternative will try to if the log has prexx data
++const flagpre_x=0x8               #oaalternative will try to stop if the log has prexx data
+ const flagpre_x_pad=0x10
+ const flag_forin1=0x20
+ const flag_framesAsShows=0x40
+-const flag_x=0x80             #will turn off antix_read flags
++const flag_x=0x80                 #will turn off antix_read flags
+ const flagpre_pool_write=0x100
+-const flag_pool_read=0x200    #will turn off flag_pool_write
++const flag_pool_read=0x200        #will turn off flag_pool_write
+ const flagpre_mix=0x400
+-const flag_pool_read_unlink=0x800
++const flag_pool_read_unlink=0x800 #will turn off flag_pool_write
+ const flagpre_write_no=0x1000
+ const flag_compress=0x2000
+ 
+ const debug_xpad=flagpre_x|flagpre_x_pad
+-const flags_pool=flagpre_pool_write|flag_pool_read
++const flags_pool=flagpre_pool_write|flag_pool_read|flag_pool_read_unlink
++const flags_pool_read=flag_pool_read|flag_pool_read_unlink
+ const flags_x=flagpre_x|flag_x
+ const prexx_flags=flagpre_log|flagpre_pool_write|flagpre_x #will turn off antixx_write
+-const xx_flags=flag_pool_read|flag_x
+ const antix_read=flagpre_log|flag_alt|debug_xpad
+ const antixx_write=flag_titles                             #oad and ffdec are counting on this
+--- actionswf-1.orig/dev/import.oh
++++ actionswf-1/dev/import.oh
+@@ -1,4 +1,6 @@
+-
+-include "flags.oh"
+-const flag_pool_uread=flag_pool_read|flag_pool_read_unlink
+-include "importf.oh"
++
++include "flags.oh"
++const xx_flags=flag_x|flag_pool_read
++const xxu_flags=flag_x|flag_pool_read_unlink
++
++include "importf.oh"
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -56,11 +56,11 @@ lib:
+ link:
+ 	if [ "${platform}" = "lin" ]; then \
+ 		if [ "${conv_64}" = "1" ]; then \
+-			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc `pkg-config --libs zlib` -L${_L} -l:${libname}; \
++			$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${name}.o -entry main -o ${name} -lc ${L} `pkg-config --libs zlib` -L${_L} -l:${libname}; \
+ 		elif [ -z "${ldprefer}" ]; then \
+ 			$(CC) ${linkerflags} ${name}.o -o ${name} `pkg-config --libs zlib` -L${_L} -l:${libname}; \
+ 		else \
+-			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} ${L} -lc `pkg-config --libs zlib` -L${_L} -l:${libname}; \
++			$(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${name}.o -entry main -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L${_L} -l:${libname}; \
+ 		fi \
+ 	else \
+ 		if [ "${conv_64}" = "1" ]; then \
+@@ -76,8 +76,8 @@ link:
+ 
+ exe:
+ 	if [ "${platform}" = "lin" ]; then \
+-		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} && \
+-		LD_LIBRARY_PATH=${_L} ${launcher} ./${name} x ${x3}; \
++		LD_LIBRARY_PATH=${_L}${_L2} ${launcher} ./${name} && \
++		LD_LIBRARY_PATH=${_L}${_L2} ${launcher} ./${name} x ${x3}; \
+ 	else \
+ 		export WINEPATH=${WINEPATH}\;${_L}; \
+ 		${launcher} ./${name}.exe && \
+@@ -98,6 +98,7 @@ clean:
+ 	-rm -f ${sfile}
+ 	-rm -f ${sfile}.data
+ 	-rm -f expected.swf
++	-rm -f expected.c.swf
+ 
+ distclean: clean
+ 
+@@ -108,12 +109,15 @@ uninstall:
+ 	echo "No uninstall"
+ 
+ expected.swf:
++	base64 -d expected.c.swf.txt > expected.c.swf
+ 	ffdec -decompress expected.c.swf $@
+ test: expected.swf
+ 	diff ${sfile} expected.swf
+ expected.c.swf: build
+ 	x3=x $(MAKE) exe
+-	mv example.swf $@
++	mv ${sfile} $@
++expected.c.swf.txt: expected.c.swf
++	base64 $< > $@
+ 
+ .PHONY: all build uns lib link exe install clean distclean uninstall test
+ 
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -15,7 +15,7 @@ const shape_lat=40
+ 
+ const flags1=flagpre_log|flagpre_pool_write|debug_xpad
+ #|flagpre_write_no
+-const flags2=flag_pool_uread|flag_x   ;#for tests/data . flag_compress is at ffdec test, and here will compare from 2 different(maybe) zlibs
++const flags2=xxu_flags   ;#for tests/data . flag_compress is at ffdec test, and here will compare from 2 different(maybe) zlibs
+ const flags3=flags2|flag_compress
+ 
+ include "entry_arg.oc" "entry.oc"
+--- /dev/null
++++ actionswf-1/example/expected.c.swf.txt
+@@ -0,0 +1,15 @@
++Q1dTCKcGAAB4nI1Uz0sbURD+3mazuzGbxKitHtYiKYgXQRQKgj+xUKUmSmmh9LKsZk1StCvJ2iaH
++glho00PBU6hIL15aeu0fUA89eOyll0LBS48tCO2123lvN2ZTlZof+2bnfd/MvJl5U4UyA3QdAn0M
++cxLSGNcY7iMPtgsG7+cfjw0h7WW89PDQ4dujncEqUP0+242JmyibLw+AzLjz6TCdAuDFYhIg0fe5
++ojCiYwbTkRNa61kkseE8tvGklHeLKNqlQtHFukV/e82F62yiLFQrjus6G3CLpQrMKsyy47iomquO
++vQazhpovNVRoUHvI5wQXmbotBaKkHrNAjKhDAiBDkzUYQog2BUVjRkMikBHnC4y4UKuadEZNqyaU
++sRx/Ksb8GwnXweUOg5PifKW3eK4RherRR1/ak3AD/1Jlo0DUa/+hBizajVEAAVZg9LDBW0utN12Y
++V89ElgioiYsj86nRM5GdR21FprdFlghHplNkVHjgT1JCXadu8IvoOgX4OfVLRggsBQp6suwLKlx2
++kWQZ2dzyEjqSjMjUNSUbuh4heNSsWI8qwJQmo4jeTbBf1GVpL+2xI77U08OlztGnSWuOGjql/NjZ
++Zsd1JOufDwYA7dnW7AzrnADnR0P89+kM59Nyeb4S9p/xhP+Md1m+HVNP+a9GIthl/PZIaH7uOoXC
++uo2P2hd60eiKgcn8OkGKgqN0BTwdKZVS1UV3FQJW7yZtK9emn7lQhkUluZmFLir26DnVUKH6tgRB
++yjUUoMIv551eapv5M8bQNDbcZoxdaGxz3aqRMT4gxMmmI1foQPURRJvxbjhl23SsvOnaFbcCCyti
++GJj0e7hVcU1LbKCRQHMsCHcTXFELK/ZjEEighP0OIY/Sy200BnwEufddqjyZsFzXWi1mhWayNzhO
++DHwKqflQr3JVranS/TMG1id7A0djpPqKRjy0y2328eTwAgr/QsJsuUwpmRFjhhn3+CVoUN8vUFJf
++g181SUawKdJo5AbPgU4LaERGvz+9eHGkZnFSp7A+UBlPvJa5CJkj1QfPt93WID0+jYu/vebOFKEf
++eLzMsjibCE1eNJb7/QHXZiHK3X3zWjunIV1FW+rGKDt7AV483nlihPwFd2RG4Q==
+--- actionswf-1.orig/example/mr32d
++++ actionswf-1/example/mr32d
+@@ -1,2 +1,3 @@
+ 
+-launcher="q" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
++_L=${HOME}/i386_lib
++launcher="q" LD=/usr/i686-linux-gnu/bin/ld L=-L${_L} _L2=:${_L} OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
+--- actionswf-1.orig/example/mrd
++++ actionswf-1/example/mrd
+@@ -1,7 +1,8 @@
+ 
+-launcher="qq" LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1 "$@"
++_L=/home/bc/x86_64_lib/cross
++launcher="qq" LD=/usr/x86_64-linux-gnu/bin/ld L=-L${_L} _L2=:${_L} OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1 "$@"
+ 
+-##!/bin/bash
++##!/bin/sh
+ #LD_LIBRARY_PATH+=:/home/bc/before/lib
+ #LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qemu-amd64 /home/bc/before/lib/ld-linux-x86-64.so.2 "$@"
+ ##here again in case is not global
+--- actionswf-1.orig/example/mrwd
++++ actionswf-1/example/mrwd
+@@ -1,2 +1,2 @@
+ 
+-WINEPATH=${HOME}/x86_64_lib_mingw launcher=wine64 linkerflags= ./makewin64 "$@"
++WINEPATH=${HOME}/a/x86_64_lib_mingw launcher=wine64 linkerflags= ./makewin64 "$@"
+--- actionswf-1.orig/makewin64
++++ actionswf-1/makewin64
+@@ -1,4 +1,4 @@
+ 
+-depend_dll_path=${HOME}/x86_64_lib_mingw ./makewin 64 $@
++depend_dll_path=${HOME}/a/x86_64_lib_mingw ./makewin 64 $@
+ 
+ #when diff these dlls, expect alt least time/date (twice) and checksum
+--- actionswf-1.orig/mrd
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib \
+-	make launcher="qq" OFLAGSEXTRA+=" inplace_reloc 0 function_name 1 nul_res_pref 1" ldprefer=1 linkerflags=
+--- actionswf-1.orig/oaalternative
++++ actionswf-1/oaalternative
+@@ -1,4 +1,4 @@
+-#!/bin/bash
++#!/bin/sh
+ 
+ #1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
+ #isdebug=
+@@ -48,8 +48,10 @@ doaction () {
+ 	fi
+ 	for var in "${@}"; do
+ 		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
+-		f=${f::-1}
+-		f=${to}_${f:6}
++		f=$(expr substr ${f} 1 $(echo $(echo -n ${f} | wc -m)-1 | bc))
++		#f=${f::-1}
++		f=${to}_$(expr substr ${f} 7 $(echo $(echo -n ${f} | wc -m)-6 | bc))
++		#f=${to}_${f:6}
+ 		move ${var} ../${out}/${f}
+ 	done
+ }
+@@ -67,8 +69,30 @@ new_tag () {
+ 	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
+ }
+ 
++ainits_ar_key=
++ainits_ar_val=
++ainits_ar_set () {
++	ainits_ar_key="${ainits_ar_key} $1"
++	ainits_ar_val="${ainits_ar_val} $2"
++}
++ainits_ar_get () {
++	i=0
++	for a in ${ainits_ar_key}; do
++		if [ $a = $s ]; then
++			break
++		fi
++		i=$((i+1))
++	done
++	j=0
++	for a in ${ainits_ar_val}; do
++		if [ $j = $i ]; then
++			return $a
++		fi
++		j=$((j+1))
++	done
++}
++#ainits=( )
+ ainits_counter=1
+-ainits=( )
+ s= #id
+ v=
+ if [ -n "${isdebug}" ]; then v=-v; fi #; set -x
+@@ -84,7 +108,8 @@ while read p; do
+ 				t=2 #action
+ 				at=${p}
+ 				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
+-				ainits[${s}]=${at}
++				ainits_ar_set ${s} ${at}
++				#ainits[${s}]=${at}
+ 			fi
+ 		elif [ ${t} = 1 ]; then
+ 			if [ -z "${p}" ]; then
+@@ -93,7 +118,8 @@ while read p; do
+ 			#done
+ 				number_expected
+ 				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
+-				if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
++				ainits_ar_get ${s}; if [ $? = 1 ]; then #button or DoInitAction sprite
++				#if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
+ 					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"`
+ 					if [ -n "${f}" ]; then #is a button
+ 						d=../${out}/${s}
+--- actionswf-1.orig/s32
++++ actionswf-1/s32
+@@ -10,7 +10,7 @@ reln () {
+ }
+ reln a.swf.x32.txt
+ reln data32.txt
+-reln example.swf.data32
++reln example.swf.data32.txt
+ 
+ if [ -n "${mirror}" ]; then git pull local master; fi && \
+ if [ -z "${1}" ]; then make clean && cd src && ./mr32d && cd ../example && ./mr32d && cd ..; fi && \
+--- actionswf-1.orig/s64
++++ actionswf-1/s64
+@@ -1,3 +1,3 @@
+ 
+-if [ -z "${1}" ]; then make clean && cd example && ./mrdi && cd ..; fi && \
++if [ -z "${1}" ]; then make clean && cd src && ./mrd && cd ../example && ./mrd && cd ..; fi && \
+ cd ./tests/data && ./b
+--- /dev/null
++++ actionswf-1/shl
+@@ -0,0 +1,16 @@
++
++if [ -n "$(test "${RUN__SHELL}" != "/bin/bash" && echo x)" ] && [ -n "$(test "${RUN__SHELL}" != "/bin/sh" && echo x)" ]; then
++	if [ $(test -x /bin/bash) ]; then
++		RUN__SHELL="/bin/bash"
++		echo "set /bin/bash"
++	elif [ $(test -x /bin/sh) ]; then
++		RUN__SHELL="/bin/sh"
++		echo "set /bin/sh"
++	else
++		RUN__SHELL="${RUN__SHELL}"
++		echo "is ${RUN__SHELL}"
++	fi
++else
++	RUN__SHELL="${RUN__SHELL}"
++	echo "ok ${RUN__SHELL}"
++fi
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -82,13 +82,13 @@ OFLAGS += underscore_pref 1
+ all: ${libname}
+ 
+ ifeq (${conv_64},1)
+-ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc ${L} `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+ 
+ else
+ #same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+-ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} ${L} -lc `pkg-config --libs zlib` -L. -l:${exte} --exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L. -l:${exte} --exclude-libs ${exte}
+ #and pkg-config for -lc? is not in libc6-dev. where is?
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -54,7 +54,7 @@ function pool_init(sd flags)
+ 	sd test=flags_pool
+ 	and test flags
+ 	if test!=0
+-		and test (flag_pool_read)
++		and test (flags_pool_read)
+ 		if test=0
+ 			set pool_data.write (TRUE)
+ 			set pool_data.read (FALSE)  #is a read alone test case
+--- actionswf-1.orig/src/makewin64
++++ actionswf-1/src/makewin64
+@@ -1,5 +1,5 @@
+ 
+-if [ -z "${depend_dll_path}" ]; then depend_dll_path="${HOME}/x86_64_lib_mingw"; fi
++if [ -z "${depend_dll_path}" ]; then depend_dll_path="${HOME}/a/x86_64_lib_mingw"; fi
+ L="-L${depend_dll_path}" make platform=win conv_64=2 $@
+ 
+ #make platform=win link
+--- actionswf-1.orig/src/mr32d
++++ actionswf-1/src/mr32d
+@@ -1,2 +1,9 @@
+ 
+-LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/i686-linux-gnu-ld.bfd OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
++#again, binutils focal for i386 multi o link, zlib1g is ok latest will also run with latest, glibc jammy for ocompiler foramt elf test
++LD_LIBRARY_PATH=${HOME}/Desktop/binutils-arm64-i686-focal/usr/lib/aarch64-linux-gnu LD=${HOME}/Desktop/binutils-arm64-i686-focal/usr/i686-linux-gnu/bin/ld \
++	L=-L${HOME}/i386_lib OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
++#is at colin-i/prezenta, can launchpad backport if important, only backport is amd64/i386 atm
++
++#LD_LIBRARY_PATH=${HOME}/Desktop/binutils-i386-focal/lib/i386-linux-gnu:${HOME}/i386_lib LD="q ${HOME}/Desktop/binutils-i386-focal/bin/i686-gnu-ld.bfd" \
++#	OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
++#binutils-i686-gnu_2.34-6ubuntu1.6~bpo20.04.1~ppa1_i386.deb from test ppa
+--- actionswf-1.orig/src/mrcd
++++ actionswf-1/src/mrcd
+@@ -1,3 +1,2 @@
+ 
+-make clean && \
+-LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d
++make clean && ./mrd
+--- actionswf-1.orig/src/mrd
++++ actionswf-1/src/mrd
+@@ -1,2 +1,2 @@
+ 
+-LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA+=" inplace_reloc 0" ./m64d $@
++LD=/usr/x86_64-linux-gnu/bin/ld L=-L/home/bc/x86_64_lib/cross OFLAGSEXTRA+=" inplace_reloc 0" ./m64d $@
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -148,9 +148,9 @@ function x_init(sd flags,sd path)
+ 			set actionx.pointer x_data.mem
+ 			add actionx.end actionx.pointer
+ 
+-			sd xx=xx_flags
++			sd xx=flags_pool_read
+ 			and xx flags
+-			if xx=(xx_flags)
++			if xx!=0
+ 				inc size
+ 				set b memalloc(size)
+ 				call sprintf(b,"%s.xx",path)
+--- /dev/null
++++ actionswf-1/tests/.expected/example.swf.data.txt
+@@ -0,0 +1,56 @@
++AwAAAQABPQB4X2NvZWYAeV9jb2VmAG1vdmllAGF0dGFjaE1vdmllAF94AF95AHRlc3QyAHRlc3QA
++QXJyYXkAdGVzdDMALgBfbW92aWUAbW9yZV9vYWRfdGVzdHMAYQBiAHRoaXNfaXNfanVzdF9hX3Rl
++c3QARAAAADwAAAAFAAAAAAAAAAcAAAABAAAA/////zwAAAASAAAAAAAAAAcAAAABAAAA/////zAw
++A/MkAAAAAAAAAAAAAAAAAAAAFAAAADAwA/OLAAAAAAAAAAAAAAAAAAAALAAAADwAAABOAQAAAAAA
++AAcAAAAAAAAA/////wYGBUUcAAAAagEAAAAAAAD/////AAAAAAIAAAAUAAAAMDAD8zQAAAAAAAAA
++AAAAAAAAAAAcAAAAEBAB8XkAAAAAAAAA7u7u/gAAAAAAAAAACAgHRwAAAAABAAAAoAAAABAQAfE8
++AAAAAAAAAAcAAAABAAAA/////wgAAABRAAAAAAAAAP////8IAAAASQAAAAAAAAD/////7u7u/gAA
++AAAAAAAATwAAAFwAAAAAAAAAYwAAAAAAAAAAAAAAAAAAALu7u/sHAAAAZAAAAP////9PAAAAagAA
++AAAAAABxAAAAAAAAAAAAAAAAAAAAu7u7+wcAAABkAAAA/////wgIB0cAAAAAAAAAAAAAZAAAABAQ
++AfGTAAAAAAAAAO7u7v4AAAAAAAAAADwAAACeAAAAAAAAAEBABPSxAAAAAAAAAAcAAAACAAAA////
++/wcAAAABAAAA/////+7u7v4AAAAAAAAAAODgDv4cAAAAyQAAAAAAAAAAAAAAAAAAAAFsAAAAPAAA
++AMQAAAAAAAAAEBAB8QAAAAAAAAAA2QAAAAAAAABOAAAA3wAAAAAAAAAAAAAAAAAAAFBQBfUcAAAA
++7gAAAAAAAAD/////AAAAAAAAAAC7u7v7/////+7u7v7g4A7+HAAAAPsAAAAAAAAAAAAAAAAAAAAB
++NAAAAB0AAAD2AAAAAAAAAJ0AAAAcAAAADgEAAAAAAABwcAf3SQAAAAAAAAAHAAAAAgAAAP////8A
++AAAAAAAAAAEIAAAAkJAJ+QQEA0MAAAAAAAAAAAFUAAAAEBAB8QAAAAAAAAAAGwEAAAAAAABOAAAA
++IQEAAAAAAAAAAAAAAAAAAFBQBfUcAAAAMAEAAAAAAAD/////AAAAAAAAAAC7u7v7/////+7u7v7d
++3d39AAAAAAAAAAABKAAAAJ0AAAAcAAAAOAEAAAAAAABwcAf3SQAAAAAAAAAHAAAAAQAAAP////8A
++AAAAAAAAAAEUAAAAPgAAAAcAAAABAAAA/////wQEA0MAAAAAAAAAAAEEAAAA3d3d/QAAAAAAAAAA
++AQQAAAAICAdHAAAAAAAAAAAAATgAAAAdAAAAcAEAAAAAAABQAAAAnQAAABwAAACJAQAAAAAAAHBw
++B/dJAAAAAAAAAAcAAAABAAAA/////wAAAAAAAAAAAQgAAACgoAr6BAQDQwAAAAAAAAAAASgAAACd
++AAAAHAAAAK4BAAAAAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////AAAAAAAAAAABHAAAABAQAfHG
++AQAAAAAAAO7u7v4AAAAAAAAAAAQEA0MAAAAAAAAAAAEQAAAADg4NTZCQCfnMzMz8AQAAAAAAAAAA
++AAAAAQQAAADd3d39AAAAAAAAAAABBAAAAP////8AAAAAAAAAAAABAAAKAF9yb290AHRvZwAwAAAA
++TwAAAAEAAAAAAAAABwAAAAAAAAAAAAAAAAAAALu7u/sHAAAAAAAAAP//////////KAAAAE8AAAAB
++AAAAAAAAAAcAAAAAAAAAAAAAAAAAAAC7u7v7UAAAAP////8AAAAAAAAAAAACAAABAABLAG1vdmUA
++d2lkdGgAaGVpZ2h0AGxhdABsZWZ0AHRvcAByaWdodABib3R0b20AdGhpcwBfeABfcm9vdAB4X2Nv
++ZWYAX3kAeV9jb2VmABQBAAA8AAAABQAAAAAAAAAHAAAAFAAAAP////88AAAAEQAAAAAAAAAHAAAA
++gAIAAP////88AAAAHwAAAAAAAAAHAAAA4AEAAP////88AAAALgAAAAAAAAAHAAAAKAAAAP////88
++AAAAOQAAAAAAAAAcAAAAPgAAAAAAAAD/////PAAAAEcAAAAAAAAAHAAAAEsAAAAAAAAA/////zwA
++AABUAAAAAAAAABwAAABaAAAAAAAAAAsAAAAcAAAAYAAAAAAAAAALAAAAHAAAAGQAAAAAAAAA////
++/zwAAABtAAAAAAAAABwAAAB0AAAAAAAAAAsAAAAcAAAAewAAAAAAAAALAAAAHAAAAH8AAAAAAAAA
++//////////9AAAAAnQAAAE4AAAAEAAAAAAAAAAkAAAAAAAAAAAAAAAAAAAC7u7v7cHAH90gAAAAS
++AAAAHAAAAA0AAAAAAAAA/////wAAAAAAAAAAAVQAAABPAAAAEwAAAAAAAAAZAAAAAAAAAAAAAAAA
++AAAAu7u7+04AAAAgAAAAAAAAACYAAAAAAAAAAAAAAAAAAAC7u7v7DAAAAAcAAAD//////////wQE
++A0MAAAAAAAAAAAFEAAAADg4NTZ0AAABOAAAAOAAAAAAAAAA9AAAAAAAAAAAAAAAAAAAAu7u7+3Bw
++B/dnAAAAEgAAABwAAABBAAAAAAAAAP////8AAAAAAAAAAAFUAAAATwAAAEYAAAAAAAAATAAAAAAA
++AAAAAAAAAAAAALu7u/tOAAAAUwAAAAAAAABZAAAAAAAAAAAAAAAAAAAAu7u7+wwAAAAHAAAA////
++//////8EBANDAAAAAAAAAAABwAAAAMzMzPwBAAAATwAAAGMAAAAAAAAAaAAAAAAAAAAAAAAAAAAA
++ALu7u/scAAAAawAAAAAAAAAMAAAATgAAAHAAAAAAAAAAdgAAAAAAAAAAAAAAAAAAALu7u/tHAAAA
++TgAAAH0AAAAAAAAAggAAAAAAAAAAAAAAAAAAALu7u/v/////nQAAAE4AAACIAAAAAAAAAI0AAAAA
++AAAAAAAAAAAAAAC7u7v7cHAH90gAAAASAAAAHAAAAJEAAAAAAAAA/////wAAAAAAAAAAAVQAAABP
++AAAAmAAAAAAAAACeAAAAAAAAAAAAAAAAAAAAu7u7+04AAAClAAAAAAAAAKsAAAAAAAAAAAAAAAAA
++AAC7u7v7DAAAAAcAAAD//////////wQEA0MAAAAAAAAAAAFEAAAADg4NTZ0AAABOAAAAvQAAAAAA
++AADCAAAAAAAAAAAAAAAAAAAAu7u7+3BwB/dnAAAAEgAAABwAAADGAAAAAAAAAP////8AAAAAAAAA
++AAFUAAAATwAAAMoAAAAAAAAA0AAAAAAAAAAAAAAAAAAAALu7u/tOAAAA1wAAAAAAAADdAAAAAAAA
++AAAAAAAAAAAAu7u7+wwAAAAHAAAA//////////8EBANDAAAAAAAAAAABhAAAAMzMzPwBAAAATwAA
++AOcAAAAAAAAA7AAAAAAAAAAAAAAAAAAAALu7u/scAAAA7wAAAAAAAAAMAAAATgAAAPQAAAAAAAAA
+++gAAAAAAAAAAAAAAAAAAALu7u/tHAAAATgAAAAEBAAAAAAAABgEAAAAAAAAAAAAAAAAAALu7u/v/
++/////////wAAAAAAAAAAAAEKAHN0b3AAcGxheQARAF9yb290AHRvZwBfbW92aWUAPAAAAJ0AAABO
++AAAABAAAAAAAAAAKAAAAAAAAAAAAAAAAAAAAu7u7+3BwB/dJAAAAAAAAAAcAAAABAAAA/////wAA
++AAAAAAAAAVwAAABPAAAAEgAAAAAAAAAYAAAAAAAAAAAAAAAAAAAAu7u7+wcAAAAAAAAA/////xAQ
++AfErAAAAAAAAAO7u7v4eAAAAAAAAACQAAAAAAAAAAAAAAAAAAAC7u7v7BAQDQwAAAAAAAAAAAUAA
++AAAODg1NnQAAAE4AAAA6AAAAAAAAAEAAAAAAAAAAAAAAAAAAAAC7u7v7cHAH90kAAAAAAAAABwAA
++AAAAAAD/////AAAAAAAAAAABXAAAAE8AAABIAAAAAAAAAE4AAAAAAAAAAAAAAAAAAAC7u7v7BwAA
++AAEAAAD/////EBAB8WEAAAAAAAAA7u7u/lQAAAAAAAAAWgAAAAAAAAAAAAAAAAAAALu7u/sEBAND
++AAAAAAAAAAABDAAAAMzMzPwBAAAA/////wAAAAAAAAAAAAAA
+--- /dev/null
++++ actionswf-1/tests/.expected/example.swf.data32.txt
+@@ -0,0 +1,45 @@
++AwAAAQABPQB4X2NvZWYAeV9jb2VmAG1vdmllAGF0dGFjaE1vdmllAF94AF95AHRlc3QyAHRlc3QA
++QXJyYXkAdGVzdDMALgBfbW92aWUAbW9yZV9vYWRfdGVzdHMAYQBiAHRoaXNfaXNfanVzdF9hX3Rl
++c3QANAAAADwAAAAFAAAABwAAAAEAAAD/////PAAAABIAAAAHAAAAAQAAAP////8wMAPzJAAAAAAA
++AAAMAAAAMDAD84sAAAAAAAAAJAAAADwAAABOAQAABwAAAAAAAAD/////BgYFRRwAAABqAQAA////
++/wAAAAACAAAADAAAADAwA/M0AAAAAAAAABQAAAAQEAHxeQAAAO7u7v4AAAAACAgHRwAAAAABAAAA
++eAAAABAQAfE8AAAABwAAAAEAAAD/////CAAAAFEAAAD/////CAAAAEkAAAD/////7u7u/gAAAABP
++AAAAXAAAAGMAAAAAAAAAu7u7+wcAAABkAAAA/////08AAABqAAAAcQAAAAAAAAC7u7v7BwAAAGQA
++AAD/////CAgHRwAAAAAAAAAAAABMAAAAEBAB8ZMAAADu7u7+AAAAADwAAACeAAAAQEAE9LEAAAAH
++AAAAAgAAAP////8HAAAAAQAAAP/////u7u7+AAAAAODgDv4cAAAAyQAAAAAAAAAAAAAAAUwAAAA8
++AAAAxAAAABAQAfEAAAAA2QAAAE4AAADfAAAAAAAAAFBQBfUcAAAA7gAAAP////8AAAAAu7u7+///
++///u7u7+4OAO/hwAAAD7AAAAAAAAAAAAAAABLAAAAB0AAAD2AAAAnQAAABwAAAAOAQAAcHAH90kA
++AAAAAAAABwAAAAIAAAD/////AAAAAAAAAAABCAAAAJCQCfkEBANDAAAAAAAAAAABPAAAABAQAfEA
++AAAAGwEAAE4AAAAhAQAAAAAAAFBQBfUcAAAAMAEAAP////8AAAAAu7u7+//////u7u7+3d3d/QAA
++AAAAAAAAASQAAACdAAAAHAAAADgBAABwcAf3SQAAAAAAAAAHAAAAAQAAAP////8AAAAAAAAAAAEU
++AAAAPgAAAAcAAAABAAAA/////wQEA0MAAAAAAAAAAAEEAAAA3d3d/QAAAAAAAAAAAQQAAAAICAdH
++AAAAAAAAAAAAATAAAAAdAAAAcAEAAFAAAACdAAAAHAAAAIkBAABwcAf3SQAAAAAAAAAHAAAAAQAA
++AP////8AAAAAAAAAAAEIAAAAoKAK+gQEA0MAAAAAAAAAAAEkAAAAnQAAABwAAACuAQAAcHAH90kA
++AAAAAAAABwAAAAIAAAD/////AAAAAAAAAAABFAAAABAQAfHGAQAA7u7u/gAAAAAEBANDAAAAAAAA
++AAABEAAAAA4ODU2QkAn5zMzM/AEAAAAAAAAAAAAAAAEEAAAA3d3d/QAAAAAAAAAAAQQAAAD/////
++AAAAAAAAAAAAAQAACgBfcm9vdAB0b2cAJAAAAE8AAAABAAAABwAAAAAAAAC7u7v7BwAAAAAAAAD/
++/////////xwAAABPAAAAAQAAAAcAAAAAAAAAu7u7+1AAAAD/////AAAAAAAAAAAAAgAAAQAASwBt
++b3ZlAHdpZHRoAGhlaWdodABsYXQAbGVmdAB0b3AAcmlnaHQAYm90dG9tAHRoaXMAX3gAX3Jvb3QA
++eF9jb2VmAF95AHlfY29lZgDUAAAAPAAAAAUAAAAHAAAAFAAAAP////88AAAAEQAAAAcAAACAAgAA
++/////zwAAAAfAAAABwAAAOABAAD/////PAAAAC4AAAAHAAAAKAAAAP////88AAAAOQAAABwAAAA+
++AAAA/////zwAAABHAAAAHAAAAEsAAAD/////PAAAAFQAAAAcAAAAWgAAAAsAAAAcAAAAYAAAAAsA
++AAAcAAAAZAAAAP////88AAAAbQAAABwAAAB0AAAACwAAABwAAAB7AAAACwAAABwAAAB/AAAA////
++//////8wAAAAnQAAAE4AAAAEAAAACQAAAAAAAAC7u7v7cHAH90gAAAASAAAAHAAAAA0AAAD/////
++AAAAAAAAAAABPAAAAE8AAAATAAAAGQAAAAAAAAC7u7v7TgAAACAAAAAmAAAAAAAAALu7u/sMAAAA
++BwAAAP//////////BAQDQwAAAAAAAAAAATQAAAAODg1NnQAAAE4AAAA4AAAAPQAAAAAAAAC7u7v7
++cHAH92cAAAASAAAAHAAAAEEAAAD/////AAAAAAAAAAABPAAAAE8AAABGAAAATAAAAAAAAAC7u7v7
++TgAAAFMAAABZAAAAAAAAALu7u/sMAAAABwAAAP//////////BAQDQwAAAAAAAAAAAYgAAADMzMz8
++AQAAAE8AAABjAAAAaAAAAAAAAAC7u7v7HAAAAGsAAAAMAAAATgAAAHAAAAB2AAAAAAAAALu7u/tH
++AAAATgAAAH0AAACCAAAAAAAAALu7u/v/////nQAAAE4AAACIAAAAjQAAAAAAAAC7u7v7cHAH90gA
++AAASAAAAHAAAAJEAAAD/////AAAAAAAAAAABPAAAAE8AAACYAAAAngAAAAAAAAC7u7v7TgAAAKUA
++AACrAAAAAAAAALu7u/sMAAAABwAAAP//////////BAQDQwAAAAAAAAAAATQAAAAODg1NnQAAAE4A
++AAC9AAAAwgAAAAAAAAC7u7v7cHAH92cAAAASAAAAHAAAAMYAAAD/////AAAAAAAAAAABPAAAAE8A
++AADKAAAA0AAAAAAAAAC7u7v7TgAAANcAAADdAAAAAAAAALu7u/sMAAAABwAAAP//////////BAQD
++QwAAAAAAAAAAAVwAAADMzMz8AQAAAE8AAADnAAAA7AAAAAAAAAC7u7v7HAAAAO8AAAAMAAAATgAA
++APQAAAD6AAAAAAAAALu7u/tHAAAATgAAAAEBAAAGAQAAAAAAALu7u/v//////////wAAAAAAAAAA
++AAEKAHN0b3AAcGxheQARAF9yb290AHRvZwBfbW92aWUAMAAAAJ0AAABOAAAABAAAAAoAAAAAAAAA
++u7u7+3BwB/dJAAAAAAAAAAcAAAABAAAA/////wAAAAAAAAAAAUAAAABPAAAAEgAAABgAAAAAAAAA
++u7u7+wcAAAAAAAAA/////xAQAfErAAAA7u7u/h4AAAAkAAAAAAAAALu7u/sEBANDAAAAAAAAAAAB
++NAAAAA4ODU2dAAAATgAAADoAAABAAAAAAAAAALu7u/twcAf3SQAAAAAAAAAHAAAAAAAAAP////8A
++AAAAAAAAAAFAAAAATwAAAEgAAABOAAAAAAAAALu7u/sHAAAAAQAAAP////8QEAHxYQAAAO7u7v5U
++AAAAWgAAAAAAAAC7u7v7BAQDQwAAAAAAAAAAAQwAAADMzMz8AQAAAP////8AAAAAAAAAAAAAAA==
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -4,18 +4,20 @@ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ 
+ if [ -z "${conv_64}" ] || [ ${conv_64} = 0 ]; then
+ 	OFLAGS="inplace_reloc 0"
+-	LD=x86_64-linux-gnu-ld.bfd
++	LD=/usr/x86_64-linux-gnu/bin/ld
++	_L=/home/bc/x86_64_lib/cross
+ 	linker=--dynamic-linker=/lib64/ld-linux-x86-64.so.2
+ 	launcher=qq
+ else
+ 	OFLAGS="conv_64 ${conv_64}"
+-	LD=i686-linux-gnu-ld.bfd
++	LD=/usr/i686-linux-gnu/bin/ld
++	_L=/home/bc/i386_lib
+ 	linker=--dynamic-linker=/lib/ld-linux.so.2
+ 	launcher=q
+ fi
+ l_z=`pkg-config --libs zlib`
+ ${OCOMP} a.oc ${OFLAGS} logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/${LD} ${linker} a.o -L/home/bc/before/lib -lc ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++${LD} ${linker} a.o -L/home/bc/before/lib -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out && \
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out x
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out && \
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out x
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -13,8 +13,8 @@ if argc=1
+ 	set f (flagpre_log|flagpre_pool_write|debug_xpad|flagpre_write_no)
+ else
+ 	importx "puts" puts
+-	call puts("flag_pool_uread flag_x flag_titles")
+-	set f (flag_pool_uread|flag_x|flag_titles)
++	call puts("flag_pool_read_unlink flag_x flag_titles")
++	set f (xxu_flags|flag_titles)
+ end
+ call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+ 
+--- actionswf-1.orig/tests/as
++++ actionswf-1/tests/as
+@@ -1,3 +1,3 @@
+-
++#!/bin/sh
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
+-/bin/bash ./asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
++${RUN__SHELL} ./asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -1,4 +1,4 @@
+-
++#!/bin/sh
+ inc="include_sec 1"
+ if [ -z "${conv_64}" ]; then conv_64=0
+ elif [ ${conv_64} = 1 ]; then
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -1,4 +1,4 @@
+-
++#!/bin/bash
+ # 0 is diff and move else is diff or exit, without ${1} is clean
+ 
+ if [ -z "${1}" ]; then
+@@ -7,11 +7,11 @@ if [ -z "${1}" ]; then
+ 	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+ 	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
+ else
+-source ./xxd
++. ./xxd
+ smart_diff () {
+ 	diff ${1} ${2}
+ 	if [ $? = 0 ]; then
+-		ok+=" + `du -b ${1}`"
++		ok="${ok} + `du -b ${1}`"
+ 		return 0
+ 	fi
+ 	if [ -n "${3}" ]; then return 1; fi
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -1,4 +1,4 @@
+-
++#!/bin/sh
+ if [ -n "${1}" ]; then
+ 	g="gdb -ex start --args"
+ fi
+--- actionswf-1.orig/tests/data/c
++++ actionswf-1/tests/data/c
+@@ -1,2 +1,2 @@
+-
++#!/bin/sh
+ rm -f a.oc.log a.oc.x a.o a.c a.out
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -1,4 +1,4 @@
+-
++#!/bin/bash
+ # 1 cc conv_64 e g rd xxd_args
+ 
+ if [ -z "${CC}" ]; then
+@@ -12,13 +12,16 @@ fi
+ etest=../../example/example.swf.data
+ 
+ if [ ! -e ${etest} ]; then
+-	/bin/bash ./a || exit 1
++	${RUN__SHELL} ./a || exit 1
+ 	if [ -n "${rd}" ]; then
+ 		read -t $((60*60*24))
+ 	fi
+ fi
+ 
+-set -o pipefail && /bin/bash ./a ${g} | tee data.txt || exit 1
++{ ${RUN__SHELL} ./a ${g} ; echo $? > ./test.status ; } | tee data.txt
++status=`cat ./test.status`; rm ./test.status
++if [ ${status} != 0 ]; then  exit 1; fi          #set -o pipefail && a | tee || exit
++
+ diff ../.expected/data${e}.txt data.txt
+ if [ $? != 0 ]; then
+ 	if [ -n "${1}" ]; then exit 1; fi
+@@ -28,17 +31,19 @@ if [ $? != 0 ]; then
+ fi
+ 
+ etestexp=../.expected/example.swf.data${e}
++etestexpt=${etestexp}.txt
++base64 -d ${etestexpt} > ${etestexp}
+ diff ${etestexp} ${etest}
+ if [ $? -ne 0 ]; then
+ 	if [ -n "${1}" ]; then exit 1; fi
+-	source ../xxd
++	. ../xxd
+ 	xxd${xxd_args} ${etestexp} > 1
+ 	xxd${xxd_args} ${etest} > 2
+ 	diff --color 1 2
+ 	rm 1 2
+ 	echo y \?; read -n1 -t $((60*60*24)) ans
+ 	if [ "${ans}" != "y" ]; then exit 1; fi
+-	cp ${etest} ${etestexp}
++	base64 ${etest} > ${etestexpt}
+ fi
+ 
+-rm data.txt
++rm data.txt ${etestexp}
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -6,7 +6,7 @@ importx "_exit" exit
+ einclude "../../dev/import.oh"
+ 
+ include "../entryraw.oc" "../entry.oc"
+-sd f
++dataxu f#1
+ importx "puts" puts
+ if argc=1
+ 	call puts("prexx_flags flagpre_mix flagpre_write_no")
+@@ -14,9 +14,14 @@ if argc=1
+ elseif argc=2
+ 	call puts("xx_flags flag_compress")
+ 	set f (xx_flags|flag_compress)
++elseif argc=3
++	call puts("flag_alt flag_pool_read_unlink flag_compress")
++	set f (flag_alt|flag_pool_read_unlink|flag_compress)
+ else
+-	call puts("flag_alt flag_pool_uread flag_compress")
+-	set f (flag_alt|flag_pool_uread|flag_compress)
++	importx "sscanf" sscanf
++	call sscanf(a1,"%x",#f)  #long is only to test
++	importx "printf" printf
++	call printf("profiler %x\n",f)  #long is only to test
+ end
+ 
+ call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+--- actionswf-1.orig/tests/ffdec/as
++++ actionswf-1/tests/ffdec/as
+@@ -1,5 +1,5 @@
+-
++#!/bin/sh
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+-isdebug=x _L=../ /bin/bash ../asv && \
+-extra=x isdebug=x _L=../ /bin/bash ../asv && \
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} /bin/bash ../../oaalternative a.swf "./a.out x x" && cat a.swf.log
++isdebug=x _L=../ ${RUN__SHELL} ../asv && \
++extra=x isdebug=x _L=../ ${RUN__SHELL} ../asv && \
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${RUN__SHELL} ../../oaalternative a.swf "./a.out x x" && cat a.swf.log
+--- /dev/null
++++ actionswf-1/tests/ffdec/bench
+@@ -0,0 +1,34 @@
++
++export LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src
++level_index=1
++get_hexflag () {
++	b=`cat $1 | grep -Po "(?<=^const $2=)[^ ]*"`
++}
++srch () {
++	get_hexflag ../../dev/flags.oh $1
++	if [ -z "$b" ]; then
++		get_hexflag ../../dev/import.oh $1
++	fi
++	if [ `expr substr $b 1 1` != 0 ]; then
++		d=`echo $b | sed "s/|/ /g"`
++		for c in $d; do
++			srch $c
++		done
++		return
++	fi
++	z="${z} ${b}"
++}
++step () {
++	com=$1;shift
++	echo "$@"
++	z=
++	for a in $@; do
++		srch $a
++	done
++	n=$(echo $z | sed "s/ /|/g")
++	n="\$((${n}))"
++	n=`eval echo $n`
++	${com} "qq ./a.out 0x`printf "%x" $n` x x"
++	if [ -n "${level}" ] && [ ${level} = ${level_index} ]; then exit; fi
++	level_index=$((level_index+1))
++}
+--- /dev/null
++++ actionswf-1/tests/ffdec/bench1
+@@ -0,0 +1,4 @@
++eval prexx_flags flagpre_mix
++"../../oaalternative a.swf" flag_alt flag_pool_read
++eval xx_flags flag_titles
++eval xxu_flags flag_compress
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/ffdec/bench2
+@@ -0,0 +1,4 @@
++eval prexx_flags flagpre_mix flagpre_write_no
++eval xx_flags flag_titles
++eval xx_flags flag_compress
++"../../oaalternative a.swf" flag_alt flag_pool_read_unlink flag_compress
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/c
++++ actionswf-1/tests/ffdec/c
+@@ -1,3 +1,4 @@
++#!/bin/sh
+ rm -f a.o a.out a.swf a.swf.log a.swf.orig
+ rm -fr a
+ rm -f a.swf.x a.swf.xx a.swf.log.log
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -4,21 +4,26 @@
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+ l_z=`pkg-config --libs zlib`
++_L=/home/bc/x86_64_lib/cross
+ 
+ ${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+-LD_LIBRARY_PATH=/home/bc/before/lib /home/bc/before/x86_64-linux-gnu-ld.bfd --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -L/home/bc/before/lib -lc ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out && {
+-	if [ ${a} = 0 ]; then exit; fi
+-	if [ -n "${wait}" ]; then read; fi
+-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH} qq ./a.out x && {
+-		if [ ${a} = 1 ]; then exit; fi
+-		if [ -n "${wait}" ]; then read; fi
+-		isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${bashdbg} ../../oaalternative a.swf "qq ./a.out x x" || {
+-			swfdump -D${1} a.swf.orig > 1
+-			swfdump -D${1} a.swf > 2
+-			diff 1 2 --color
+-			rm 1 2
+-			exit 1
++/usr/x86_64-linux-gnu/bin/ld --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++{
++	if [ -z "${prepare_and_exit}" ]; then
++		LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} qq ./a.out && {
++			if [ ${a} = 0 ]; then exit; fi
++			if [ -n "${wait}" ]; then read; fi
++			LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} qq ./a.out x && {
++				if [ ${a} = 1 ]; then exit; fi
++				if [ -n "${wait}" ]; then read; fi
++				isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${bashdbg} ../../oaalternative a.swf "qq ./a.out x x" || {
++					swfdump -D${1} a.swf.orig > 1
++					swfdump -D${1} a.swf > 2
++					diff 1 2 --color
++					rm 1 2
++					exit 1
++				}
++			}
+ 		}
+-	}
++	fi
+ }
