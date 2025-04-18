@@ -1,0 +1,1692 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x69) focal; urgency=medium
+ .
+   * white indents, visual command indicators, change tab size
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-18
+
+--- edor-1.orig/.github/workflows/del.yml
++++ /dev/null
+@@ -1,20 +0,0 @@
+-
+-on:
+- # Allows you to run this workflow manually from the Actions tab
+- workflow_dispatch:
+-
+-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+-jobs:
+- # This workflow contains a single job called "build"
+- del:
+-  # The type of runner that the job will run on
+-  runs-on: ubuntu-18.04
+-  # Steps represent a sequence of tasks that will be executed as part of the job
+-  steps:
+-   - name: Remove asset
+-     uses: mknejp/delete-release-assets@v1
+-     env:
+-     with:
+-      token: ${{ secrets.PAT }}
+-      tag: refs/tags/${{ env.tag }}
+-      assets: ${{ env.file }}
+--- /dev/null
++++ edor-1/.github/workflows/deledor.yml
+@@ -0,0 +1,20 @@
++
++on:
++ # Allows you to run this workflow manually from the Actions tab
++ workflow_dispatch:
++
++# A workflow run is made up of one or more jobs that can run sequentially or in parallel
++jobs:
++ # This workflow contains a single job called "build"
++ del:
++  # The type of runner that the job will run on
++  runs-on: ubuntu-18.04
++  # Steps represent a sequence of tasks that will be executed as part of the job
++  steps:
++   - name: Remove asset
++     uses: mknejp/delete-release-assets@v1
++     env:
++     with:
++      token: ${{ secrets.PAT }}
++      tag: refs/tags/${{ env.tag }}
++      assets: ${{ env.file }}
+--- /dev/null
++++ edor-1/.github/workflows/pkg.yml
+@@ -0,0 +1,50 @@
++
++on:
++ workflow_dispatch:
++env:
++ #for upload
++ GITHUB_TOKEN: ${{ secrets.PAT }}
++
++jobs:
++  archbuild:
++    runs-on: ubuntu-latest
++    container: archlinux:latest
++
++    steps:
++    - name: Checkout
++      uses: actions/checkout@v3
++    - name: build
++      run: |
++        name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
++        here=`pwd`
++
++        useradd bot
++        cd /home
++        mkdir bot
++        chown bot:bot bot
++        cd bot
++
++        pacman -Sy --noconfirm --needed git base-devel wget
++        su bot -c 'git clone -n --depth=1 --filter=tree:0 https://github.com/colin-i/pkgbuilds'
++        #--filter in git-rev-list
++        cd pkgbuilds
++        su bot -c "git sparse-checkout set --no-cone /${name}"
++        su bot -c 'git checkout'
++        cd ${name}
++        pacman -S --noconfirm bc  #to not make bot with a password for -s --noconf
++        su bot -c makepkg
++        ls
++        nm=`ls | grep ".*\.zst$" | grep -v debug`
++        nm2=`echo ${nm} | sed s/-any/-arch-x86_64/`
++        mv ${nm} ${here}/${nm2}
++        echo "file=${nm2}" >> $GITHUB_ENV
++
++        wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
++        echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++    - name: Upload Release Asset
++      uses: actions/upload-release-asset@v1
++      with:
++        upload_url: ${{ env.up_url }}
++        asset_path: ./${{ env.file }}
++        asset_name: ${{ env.file }}
++        asset_content_type: application/zstd
+--- /dev/null
++++ edor-1/.github/workflows/pkgarm.yml
+@@ -0,0 +1,42 @@
++
++on:
++ workflow_dispatch:
++env:
++ #for upload
++ GITHUB_TOKEN: ${{ secrets.PAT }}
++
++jobs:
++  archarmbuild:
++    runs-on: ubuntu-24.04-arm
++    container: image0/archarm:latest
++
++    steps:
++    - name: Checkout
++      uses: actions/checkout@v3
++    - name: build
++      run: |
++        name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
++        here=`pwd`
++        cd /home/alarm
++
++        su alarm -c 'git clone -n --depth=1 --filter=tree:0 https://github.com/colin-i/pkgbuilds'
++        cd pkgbuilds
++        su alarm -c "git sparse-checkout set --no-cone /${name}"
++        su alarm -c 'git checkout'
++        cd ${name}
++        su alarm -c makepkg
++        ls
++        nm=`ls | grep ".*\.xz$" | grep -v debug`
++        nm2=`echo ${nm} | sed s/-any/-arch-aarch64/`
++        mv ${nm} ${here}/${nm2}
++        echo "file=${nm2}" >> $GITHUB_ENV
++
++        wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
++        echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++    - name: Upload Release Asset
++      uses: actions/upload-release-asset@v1
++      with:
++        upload_url: ${{ env.up_url }}
++        asset_path: ./${{ env.file }}
++        asset_name: ${{ env.file }}
++        asset_content_type: application/x-xz
+--- /dev/null
++++ edor-1/.github/workflows/uponpkg.yml
+@@ -0,0 +1,34 @@
++
++on:
++ workflow_dispatch:
++
++env:
++ #for gh and upload
++ GITHUB_TOKEN: ${{ secrets.PAT }}
++
++jobs:
++ uopbuild:
++  runs-on: ubuntu-latest
++  steps:
++   - uses: actions/checkout@v3
++   - name: Run a multi-line script
++     run: |
++      name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
++      wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
++      echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++      id=$(gh run list --workflow=pkg.yml -b $(git rev-parse --abbrev-ref HEAD) | cut -f7 | head -1)
++      repo_at_gh=`cat debian/control | grep "^Homepage" | grep -o [^/]*$`
++      url=`gh api -H "Accept: application/vnd.github.v3+json" /repos/colin-i/${repo_at_gh}/actions/runs/${id}/artifacts | jq ".artifacts[0].archive_download_url"`
++      url=${url:1:-1}
++      echo ${url}
++      curl -L -H "Authorization: token ${{ secrets.PAT }}" ${url} --output a.zip
++      file=`unzip -l a.zip | sed -n 4p | tr -s ' ' | cut -d ' ' -f5`
++      unzip ./a.zip
++      echo "file=${file}" >> $GITHUB_ENV
++   - name: Upload Release Asset
++     uses: actions/upload-release-asset@v1
++     with:
++      upload_url: ${{ env.up_url }}
++      asset_path: ./${{ env.file }}
++      asset_name: ${{ env.file }}
++      asset_content_type: application/zstd
+--- edor-1.orig/.github/workflows/uprpm.yml
++++ /dev/null
+@@ -1,24 +0,0 @@
+-
+-on:
+- workflow_dispatch:
+-
+-jobs:
+- urbuild:
+-  runs-on: ubuntu-18.04
+-  steps:
+-   - name: Run a multi-line script
+-     run: |
+-      if [ -n "${{ env.init }}" ]; then
+-       exit 1
+-      fi
+-      wget https://github.com/colin-i/test/releases/download/1.5/${{ env.proj }} -O 1.txt
+-      echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
+-   - name: Upload Release Asset
+-     uses: actions/upload-release-asset@v1
+-     env:
+-      GITHUB_TOKEN: ${{ secrets.PAT }}
+-     with:
+-      upload_url: ${{ env.up_url }}
+-      asset_path: ./${{ env.file }}
+-      asset_name: ${{ env.file }}
+-      asset_content_type: application/x-rpm
+--- /dev/null
++++ edor-1/.github/workflows/uprpmedor.yml
+@@ -0,0 +1,24 @@
++
++on:
++ workflow_dispatch:
++
++jobs:
++ urbuild:
++  runs-on: ubuntu-18.04
++  steps:
++   - name: Run a multi-line script
++     run: |
++      if [ -n "${{ env.init }}" ]; then
++       exit 1
++      fi
++      wget https://github.com/colin-i/test/releases/download/1.5/${{ env.proj }} -O 1.txt
++      echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++   - name: Upload Release Asset
++     uses: actions/upload-release-asset@v1
++     env:
++      GITHUB_TOKEN: ${{ secrets.PAT }}
++     with:
++      upload_url: ${{ env.up_url }}
++      asset_path: ./${{ env.file }}
++      asset_name: ${{ env.file }}
++      asset_content_type: application/x-rpm
+--- edor-1.orig/arh/pub
++++ edor-1/arh/pub
+@@ -8,14 +8,15 @@ last=$(curl https://api.github.com/repos
+ ~/test/publp && \
+ ~/test/ai && \
+ ~/test/rpm && \
+-~/test/pub appimage rpm && \
+ ~/test/del && \
+ ~/test/rel && \
+-~/test/pub rel && \
++~/test/pub appimage rpm rel && \
+ ~/test/upapp && \
++~/test/pkg/onb && \
++~/test/pkg/onab && \
+ ~/test/rerpm && \
+ ~/test/uprpm && \
+-~/test/pub upapp && \
++~/test/pub upapp pkg pkgarm && \
+ ~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -14,7 +14,7 @@ sudo apt-get install edor
+ \
+ On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/edor/releases).
+ ```sh
+-yum install edor-*.*.rpm
++dnf install edor-*.*.rpm
+ ```
+ \
+ On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -51,29 +51,28 @@
+ 
+ #include"base.h"
+ 
+-#define err_len_min 2
++static char*err_s;
++static WINDOW*poswn;
++static int number2;//number is also negative
++static int number3;
++static int fprevnumber;
++static bool filewhites_reminder;//=false;
+ 
++#define err_len_min 2
+ bool insensitive=false;
+-
+ static int err_l=0;
+-static char*err_s;
+ #define b_inf_s "F1 for help"
+ #define quest_ex_s "? y/C/n"
+ static int com_left=sizeof(b_inf_s);
+ static char input1[max_path_0];
+ static char input2[max_path_0];
+ static char*input0=input1;
+-static WINDOW*poswn;
+ static char inputr[max_path_0];
+ static bar_byte cursorr=0;
+ #define get_right getbegx(poswn)-1
+ static char inputf[max_path_0];
+ static bar_byte cursorf=0;
+ 
+-static int number2;//number is also negative
+-static int number3;
+-static int fprevnumber;
+-
+ typedef struct{
+ 	size_t yb;
+ 	row_dword xb;
+@@ -115,20 +114,20 @@ static bool wrt_loop_split(int f,size_t
+ 		size_t m=i;
+ 		do{
+ 			i=m;
+-			char*errors=split_write(&m,f,_off,&majorerror);
++			const char*errors=split_write(&m,f,_off,&majorerror);
+ 			if(errors!=nullptr){
+-				print_error(errors);
++				print_error((char*)errors);
+ 				if(majorerror/*true*/)return false;
+ 				*no_errors=false;
+ 			}
+-			if(m==n)return true;//last row can also be blank
++			if(m==n)return true;//there are no possible splits on one row. last row can also be blank
+ 		}while(m!=i);
+ 		row*r=&rows[i];
+-		if(*_off!=0){
+-			if(swrite(f,r->data+*_off,r->sz-*_off)/*true*/)return false;
++		if(*_off!=0){//write rest of the line after split end
++			if(swrite(f,r->data+*_off,r->sz-*_off)==swrite_bad)return false;
+ 			*_off=0;
+-		}else if(swrite(f,r->data,r->sz)/*true*/)return false;
+-		if(swrite(f,ln_term,ln_term_sz)/*true*/)return false;
++		}else if(swwrite(f,r->data,r->sz)==swrite_bad)return false;
++		if(swrite(f,ln_term,ln_term_sz)==swrite_bad)return false;
+ 	}
+ 	return true;
+ }
+@@ -138,7 +137,10 @@ static command_char wrt_simple_split(int
+ 	unsigned int off=0;
+ 	bool no_errors=true;
+ 	if(wrt_loop_split(f,n,&off,&no_errors)/*true*/){
+-		if(swrite(f,rows[n].data+off,rows[n].sz-off)==swrite_ok){
++		swrite_char b;
++		if(off==0)b=swwrite(f,rows[n].data,rows[n].sz);//here if else because of filewhites_write
++		else b=swrite(f,rows[n].data+off,rows[n].sz-off);
++		if(b==swrite_ok){
+ 			if(no_errors/*true*/){
+ 				return command_ok;
+ 			}
+@@ -146,15 +148,40 @@ static command_char wrt_simple_split(int
+ 	}
+ 	return command_false;
+ }
+-//same
++
++static swrite_char awrite(int f,void*buf,row_dword size){
++	if(write(f,buf,size)==size)return swrite_ok;
++	return swrite_bad;
++}
++swrite_char wwrite(int f,char*buf,row_dword size,swrite_char(*fn)(int,void*,row_dword)){
++	if(filewhites_reminder/*true*/){
++		char*b=(char*)buf;
++		char*last=b+size;
++		while(b!=last&&*b=='\t')b++;//0 size is ok
++		if(b!=buf){
++			row_dword i=b-buf;
++			size-=i;
++			char w=' ';
++			while(i!=0){
++				if(fn(f,&w,1)==swrite_bad)return swrite_bad;
++				i--;
++			}
++			buf=b;
++		}
++	}
++	return fn(f,buf,size);
++}
++
++
++//command return
+ static command_char wrt_simple(int f){
+ 	size_t n=rows_tot-1;
+ 	for(size_t i=0;i<n;i++){
+ 		row*r=&rows[i];
+-		if(write(f,r->data,r->sz)!=r->sz)return command_false;
++		if(wwrite(f,r->data,r->sz,awrite)==swrite_bad)return command_false;
+ 		if(write(f,ln_term,ln_term_sz)!=ln_term_sz)return command_false;
+ 	}
+-	if(write(f,rows[n].data,rows[n].sz)==rows[n].sz)return command_ok;
++	if(wwrite(f,rows[n].data,rows[n].sz,awrite)==swrite_ok)return command_ok;
+ 	return command_false;
+ }
+ //same
+@@ -288,9 +315,10 @@ bool is_extension_ok(char*extension,char
+ }
+ //command return
+ command_char saving_base(char*dest){
+-	split_char r=split_conditions(dest,false);
+-	if(r!=split_err){
+-		if(r==split_yes)return wrt_split(dest);
++	split_reminder_c=split_conditions(dest,false);
++	if(split_reminder_c!=split_err){
++		filewhites_reminder=filewhites_flag&&is_extension_ok(filewhites_extension,dest);
++		if(split_reminder_c>=split_yes_mixless)return wrt_split(dest);
+ 		return wrt(dest);
+ 	}
+ 	return command_false;
+@@ -628,7 +656,7 @@ static void set_key(key_struct*from,char
+ 	}
+ }
+ #define is_a_z(p) input0[p]>='a'&&input0[p]<='z'
+-//same as goto
++//same as go_to
+ command_char change_key(bar_byte cursor){
+ 	if(is_a_z(0)){
+ 		if(is_a_z(1)){
+@@ -646,13 +674,23 @@ command_char change_key(bar_byte cursor)
+ 	}
+ 	return command_false;
+ }
++command_char change_tab_size(bar_byte cursor){
++	if(cursor==1){
++		if(tab_conditions(*input0)){
++			tab_sz=*input0-'0';
++			rewriteprefs;
++			return command_ok;
++		}
++	}
++	return command_false;
++}
+ 
+ command_char save(){
+ 	if(textfile!=nullptr){
+ 		return saving();
+ 	}
+ 	char a=com_nr_save;
+-	return command(&a);
++	return command(&a,(show_key_struct){key_save,0});
+ }
+ WINDOW*position_init(){
+ 	poswn=newwin(1,3,0,0);
+@@ -1257,7 +1295,7 @@ static int word_at_cursor(char*z){
+ }
+ 
+ //-2resize,-1no/quit,0er/fals,1ok
+-command_char command(comnrp_define comnrp){
++command_char command(comnrp_define comnrp,show_key_struct s){
+ 	int rightexcl=get_right;
+ 	int right=rightexcl-1;
+ 	int visib=rightexcl-com_left;
+@@ -1279,6 +1317,7 @@ command_char command(comnrp_define comnr
+ 		}
+ 		else cursor=0;
+ 	}
++	orig_key_show(&s);
+ 	if(cursor==0)move(y,com_left);
+ 	else{
+ 		command_rewrite(y,com_left+(cursor<visib?cursor:0),0,input,cursor,visib);
+@@ -1431,6 +1470,9 @@ command_char command(comnrp_define comnr
+ 		}
+ 	}
+ 	if(r!=command_resize){
++		visual(' ');//i'm cleaning this because if wanting to change flags will be confused about the previous same flags
++		//again, same wnoutrefresh here, because if not, will erase position, example Alt+y Ctrl+q
++
+ 		clear_com(y,visib,pos,cursor);
+ 		wnoutrefresh(stdscr);
+ 	}
+@@ -1456,7 +1498,7 @@ bool is_dir(int fd){
+ #define acall_size (1+2+2+2+2)
+ #define acallu     "AFTERCALL"
+ #define acall_size1 acall_size+1
+-char*ocode_extension=default_extension;
++char*ocode_extension=(char*)"oc";
+ 
+ size_t aftercall_find(){
+ 	for(size_t i=0;i<rows_tot;i++){
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -1,4 +1,74 @@
+ 
++
++//can add //comment if a macro in a set is only for a file but don't spread them and make a mess
++
++//main,bar
++#define bar_byte unsigned char
++#define bar_byte_plus short
++#define com_nr_find 0
++#define com_nr_findagain 1
++#define com_nr_findword 2
++#define com_nr_findwordfrom 3
++	#define com_nr_find_numbers com_nr_findwordfrom
++#define com_nr_goto 4
++#define com_nr_goto_alt 5
++#define com_nr_swkey 6
++#define com_nr_tab 7
++	#define com_nr_passcursor_numbers com_nr_tab
++#define com_nr_save 8
++#define com_nr_ext 9
++#define comnrp_define char*
++#define command_resize -2
++#define command_no -1 //(char)-1 but there is at least a r> comparation
++#define command_false 0
++#define command_ok 1
++#define command_char signed char
++typedef struct{
++	char**orig;
++	char**buf;
++	bool sizedonly;
++}extdata;
++#define is_KEY_BACKSPACE(a) a==KEY_BACKSPACE||a==0x7f //can be 127(ascii Delete) or 263, note: Ctrl+h generates 263
++#define is_word_char(a) ('0'<=a&&(a<='9'||('A'<=a&&(a<='Z'||(a=='_'||('a'<=a&&a<='z'))))))
++#define max_path 0xff
++#define max_path_0 max_path+1
++#define protocol_simple "%u"
++#ifdef PLATFORM64
++#define protocol "%lu"
++#else
++#define protocol protocol_simple
++#endif
++#define row_pad 0xF
++#define tab_conditions_low '2'
++#define tab_conditions_high '9'
++#define tab_conditions(a) a>=tab_conditions_low&&a<=tab_conditions_high
++#define tab_conditions_nr(a) a>=(tab_conditions_low-'0')&&a<=(tab_conditions_high-'0')
++typedef struct{
++	char* key_location;
++	unsigned short*pos;
++	char pos_total;
++	unsigned short upos;
++	char index;
++}key_struct;
++typedef struct{
++	char key;
++	char add;
++}show_key_struct;
++//main,bar,tit
++#define Char_Return 0xd  //main bar tit
++#define Char_Escape 0x1b //main
++#define Char_Ctrl 0x5e   //main bar tit
++#define color_0 0
++#define color_a 1
++#define color_b 2
++#define color_c 3
++#define color_d 4
++//main,tw,tit
++#define movement_processed -1
++#define movement_diffkey 0
++#define movement_resize 1
++#define movement_char signed char
++
+ //main
+ //bar
+ int c_to_xc(int,int);
+@@ -11,6 +81,7 @@ void mod_set_off();
+ void mod_set_off_wrap();
+ void mod_set_on();
+ bool no_char(char);
++void orig_key_show(show_key_struct*);
+ bool paste(size_t,row_dword,row_dword*,char*,size_t,size_t,bool);
+ void pref_modify(char**,char**,bool,char*,bar_byte);
+ void printinverted(const char*s);
+@@ -25,17 +96,37 @@ void row_set(row*,row_dword,row_dword,ro
+ void setprefs(int,bool);
+ size_t sizemembuf(size_t,row_dword,size_t,row_dword);
+ void vis(char,WINDOW*);
+-//tw
+-int xc_to_c(size_t,int);
+-//tit
+-void fixed_x(size_t,row_dword*,int,int);
+-//bar,tit
+-#define refreshpage(w) refreshrows(w,0)
++extern bool filewhites_flag;
++extern char*filewhites_extension;
++extern bool insensitive;
++extern key_struct*keys;
++extern char key_save;
++extern char*keys_row;
++extern bool mod_flag;
++extern char*ocode_extension;
++extern char*textfile;
++//bar,tw
++extern char tab_sz;
+ //bar,tw,tit
+ void visual(char);
+ void fixed_yx(size_t*,row_dword*,int,int);
++extern size_t ytext;
++extern row_dword xtext;
++//bar,tit
++#define refreshpage(w) refreshrows(w,0)
++extern char key_quit;
++//tw
++int xc_to_c(size_t,int);
++extern char key_wrap;
+ //tw,tit
+ command_char movment(int,WINDOW*);
++char orig_key(char,char);
++#define orig_upkey(a) orig_key(a,0)
++extern bool ocompiler_flag;
++extern size_t aftercall;
++//tit
++void fixed_x(size_t,row_dword*,int,int);
++extern char key_titles;
+ 
+ //bar
+ //main
+@@ -44,7 +135,8 @@ command_char save(void);
+ command_char saving_base(char*);
+ command_char question(const char*);
+ command_char change_key(bar_byte);
+-command_char command(char*);
++command_char change_tab_size(bar_byte);
++command_char command(char*,show_key_struct);
+ #define centering2(w,prw,pxc,right) position(0,0);centering3(w,prw,pxc,right);
+ #define centering(w,prw,pxc) centering2(w,prw,pxc,false)
+ #define centering_simple(w) centering(w,nullptr,nullptr)
+@@ -87,6 +179,10 @@ void position_core(size_t,row_dword);
+ bool text_wrap(WINDOW*);
+ //tit
+ void extra_unlock(size_t,size_t,WINDOW*);
++extern row*rowswrap;
++extern row*store_rows;
++extern size_t store_rows_tot;
++extern size_t store_aftercall;
+ 
+ //tit
+ //main
+@@ -95,44 +191,15 @@ bool titles(WINDOW*);
+ //split
+ //main
+ char split_conditions(char*,bool);
+-bool split_grab(char**,size_t*,char*);
++bool split_grab(char**,size_t*);
+ bool split_writeprefs(int);
+ bool split_readprefs(int);
+ void split_freeprefs();
+ bool split_write_init(char*);
+-char* split_write(size_t*,int,unsigned int*,bool*);
++const char* split_write(size_t*,int,unsigned int*,bool*);
+ void split_write_free();
+-//bar
+-bool swrite(int,void*,unsigned int);
+-
+-//main
+-//bar
+-extern char*textfile;
+-extern bool mod_flag;
+-extern bool insensitive;
+-extern char*ocode_extension;
+-extern key_struct*keys;
+-extern char*keys_row;
+-//bar,tit
+-extern char key_quit;
+-//bar,tw,tit
+-extern size_t ytext;
+-extern row_dword xtext;
+-//tw,tit
+-extern bool ocompiler_flag;
+-extern size_t aftercall;
+-
+-//tw
+-//tit
+-extern row*rowswrap;
+-extern row*store_rows;
+-extern size_t store_rows_tot;
+-extern size_t store_aftercall;
+-
+-//split
+-//main
+ extern bool splits_flag;
+-extern split_char split_read_atstart;
++extern split_char split_reminder_c;
+ extern char*sdelimiter;
+ extern char*sdelimiter_new;
+ extern char*esdelimiter;
+@@ -141,5 +208,8 @@ extern char*split_out;
+ extern char*split_out_new;
+ extern char*split_extension;
+ extern char*split_extension_new;
++//bar
++swrite_char swrite(int,void*,unsigned int);
++
+ 
+ #include "def.h"
+--- edor-1.orig/s/def.h
++++ edor-1/s/def.h
+@@ -15,7 +15,12 @@ extern size_t clue;
+ //split
+ bool is_extension_ok(char*,char*);
+ int open_or_new(char*);
++swrite_char wwrite(int,char*,row_dword,swrite_char(*)(int,void*,row_dword));
+ 
+ //sep
+ //main,split
+ extern char path_separator;
++
++//split
++//bar
++#define swwrite(a,b,c) wwrite(a,b,c,swrite)
+--- edor-1.orig/s/inc/bar/fcntl.h
++++ edor-1/s/inc/bar/fcntl.h
+@@ -1,9 +1,4 @@
+ 
+ #include"inc/asm-generic/fcntl.h"
+-#define O_CREAT 00000100
+-
+-//linux/stat.h
+-#define S_IRUSR 00400
+-#define S_IWUSR 00200
+ 
+ #include"inc/fcntl.h"
+--- edor-1.orig/s/inc/fcntl.h
++++ edor-1/s/inc/fcntl.h
+@@ -1,4 +1,12 @@
+ 
++#if defined(is_main_c)||defined(is_bar_c)
++#define O_CREAT 00000100
++
++//linux/stat.h
++#define S_IRUSR 00400
++#define S_IWUSR 00200
++#endif
++
+ #if defined(is_main_c)||defined(is_split_c)
+ #define O_RDONLY 00000000
+ #endif
+--- edor-1.orig/s/inc/main/fcntl.h
++++ edor-1/s/inc/main/fcntl.h
+@@ -1,4 +1,6 @@
+ 
++#define O_RDWR 02
++
+ #include"inc/asm-generic/fcntl.h"
+ 
+ #include"inc/fcntl.h"
+--- edor-1.orig/s/inc/main/unistd.h
++++ edor-1/s/inc/main/unistd.h
+@@ -1,10 +1,13 @@
+ 
++#define SEEK_CUR 1
++
+ #include "inc/unistd.h"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
++int ftruncate(int,off_t);
+ int rmdir(const char *);
+ int unlink(const char*);
+ 
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -7,7 +7,6 @@
+ #endif
+ 
+ #include "top.h"
+-#include "main.h"
+ 
+ #ifdef HAVE_CURSES_H
+ #include<curses.h>
+@@ -140,6 +139,7 @@ static void __attribute__((noreturn)) si
+ #endif
+ 
+ #include"base.h"
++#include "main.h"
+ 
+ #define no_clue (size_t)-1
+ 
+@@ -180,14 +180,15 @@ static char editingfile_buf2[max_path_0]
+ 
+ static mmask_t stored_mouse_mask=0;
+ #define stored_mouse_mask_q stored_mouse_mask!=0
+-static bool indent_flag=true;
++static bool indent_flag=false;
+ #define mask_size 1
+ //#define mask_nomask 0
+ #define mask_mouse 1
+ #define mask_indent 2
+ #define mask_insensitive 4
+ #define mask_ocompiler 8
+-#define mask_splits 16
++#define mask_splits 0x10
++#define mask_filewhites 0x20
+ static char prefs_file[max_path_0]={'\0'};//only the first byte is set
+ static char*ocode_extension_new=nullptr;
+ 
+@@ -212,20 +213,15 @@ static char at_right_mark='>';
+ static char at_left_mark='<';
+ static char at_content_nomark=' ';
+ static WINDOW*syntaxcontent=nullptr;
++bool filewhites_flag=false;
++char*filewhites_extension=(char*)"yml";
++static char*filewhites_extension_new=nullptr;
++#define tab_protocol char
++tab_protocol tab_sz=6;
+ 
+-static bool split_reminder=false;
+-#define mouseevents_enabled 'E'
+-#define mouseevents_disabled 'e'
+-#define indent_enabled 'N'
+-#define indent_disabled 'n'
+-#define insensitive_enabled 'T'
+-#define insensitive_disabled 't'
+-#define ocompiler_enabled 'A'
+-#define ocompiler_disabled 'a'
+-#define splits_enabled 'J'
+-#define splits_disabled 'j'
+ #define splits_activated 'S'
+-#define splits_deactivated 's'
++#define splits_activated_mixless 'h'
++#define splits_deactivated '_'
+ 
+ bool no_char(char z){return z<32||z>=127;}
+ static size_t tab_grow(WINDOW*w,char*a,size_t sz,int*ptr){
+@@ -478,21 +474,42 @@ static int helpshow(int n){
+ 	if(x!=0)for(int i=max-x;i!=max;i++)addch(' ');
+ 	return y;
+ }
++
++#define visual_write_at(a,b) mvaddch(getmaxy(stdscr)-1,getmaxx(stdscr)-b,a)
++#define visual_write(a) visual_write_at(a,2)
++void visual(char a){
++	visual_write(a);
++	wnoutrefresh(stdscr);
++}
++
++char orig_key(char now_key,char mod){
++	key_struct*now=&keys[now_key-'A'];
++	char ix=now->index;
++	char orig=keys_row_orig[ix]+'A';
++	return orig+mod;
++}
++#define orig_lowkey(a) orig_key(a,A_to_a)
++void orig_key_show(show_key_struct*s){
++	visual(orig_key(s->key,s->add));//it looks like only mvaddch is enough but at a command_rewrite(example Alt+g) will erase the cursor window if not calling wnoutrefresh now
++}
++
+ static void helpshowlastrow(int rw){
+ 	int i=3;//with respect to helpposition
+ 	move(rw,i);
+-	char stats=6;
++	char stats=5+1+2;
+ 	int max=getmaxx(stdscr)-stats;
+ 	while(i<max){
+ 		addch(' ');
+ 		i++;
+ 	}
+-	addch(stored_mouse_mask_q?mouseevents_enabled:mouseevents_disabled);//maybe on touchscreen tablet is dominant
+-	addch(indent_flag/*true*/?indent_enabled:indent_disabled);
+-	addch(insensitive/*true*/?insensitive_enabled:insensitive_disabled);
+-	addch(ocompiler_flag/*true*/?ocompiler_enabled:ocompiler_disabled);//i'm using otoc with gdb for new code
+-	addch(splits_flag/*true*/?splits_enabled:splits_disabled);
+-	addch(split_reminder/*true*/?splits_activated:splits_deactivated);
++	addch(stored_mouse_mask_q?orig_upkey(key_mouse):orig_lowkey(key_mouse));//maybe on touchscreen tablet is dominant
++	addch(indent_flag/*true*/?orig_upkey(key_indents):orig_lowkey(key_indents));
++	addch(insensitive/*true*/?orig_upkey(key_insens):orig_lowkey(key_insens));
++	addch(ocompiler_flag/*true*/?orig_upkey(key_ocomp):orig_lowkey(key_ocomp));//i'm using otoc with gdb for new code
++	addch(splits_flag/*true*/?orig_upkey(key_actswf):orig_lowkey(key_actswf));
++	addch(filewhites_flag/*true*/?orig_upkey(key_whites):orig_lowkey(key_whites));
++	addch(' ');
++	addch(split_reminder_c>=split_yes_mixless?(split_reminder_c==split_yes_mix?splits_activated:splits_activated_mixless):splits_deactivated);
+ 	//1@: else at my compilers, and also gcc, is faster: if is with new asm jump instruction. but still not counting on that and aspire to fast first
+ 	//is same asm speed with/without false, still why at two of these first is the beta?
+ 	//is beta at me, someone else can use this code. at me 1@ is ok for them.
+@@ -1094,12 +1111,6 @@ static void printsel(WINDOW*w,size_t ybs
+ 	_rb=rb;_cb=cb;
+ 	_re=re;_ce=ce;
+ }
+-#define visual_write_at(a,b) mvaddch(getmaxy(stdscr)-1,getmaxx(stdscr)-b,a);
+-#define visual_write(a) visual_write_at(a,2)
+-void visual(char a){
+-	visual_write(a)
+-	wnoutrefresh(stdscr);
+-}
+ static void refreshrowscond(WINDOW*w,size_t y,row_dword x,size_t r,size_t n){
+ 	if(y!=ytext||x!=xtext)refreshpage(w);
+ 	else refreshrowsbot(w,(int)r,n!=0?getmaxy(w):(int)r+1);
+@@ -1234,7 +1245,7 @@ static void easytime(){
+ 	hardtime=0;
+ }
+ static void mod_visual(chtype ch){
+-	visual_write_at(ch,1)
++	visual_write_at(ch,1);
+ 	wnoutrefresh(stdscr);
+ }
+ static void mod_set(bool flag,chtype ch){
+@@ -1715,7 +1726,7 @@ static bool enter(size_t y,row_dword x,i
+ 					p--;
+ 				}
+ 				t[0]-=z-p;
+-				c[0]=(int)(tb-xtext)*tab_sz;
++				c[0]=(tb-xtext)*tab_sz;
+ 
+ 				wclrtoeol(w);
+ 				no_content_at_right_if(row)
+@@ -1725,7 +1736,7 @@ static bool enter(size_t y,row_dword x,i
+ 				return false;
+ 			}
+ 		}
+-		if(fix/*true*/)c[0]=(int)(tb-xtext)*tab_sz;
++		if(fix/*true*/)c[0]=(tb-xtext)*tab_sz;
+ 		else{xtext=tb;c[0]=0;}
+ 		refreshpage(w);
+ 		return false;
+@@ -1904,7 +1915,7 @@ static void indent(bool b,size_t ybsel,s
+ }
+ //true resize
+ static bool visual_mode(WINDOW*w,bool v_l){
+-	visual('V');
++	visual(orig_upkey(key_visual));
+ 	int rw=getcury(w);int cl=getcurx(w);
+ 	size_t ybsel=ytext+(size_t)rw;
+ 	size_t yesel=ybsel;
+@@ -1993,7 +2004,7 @@ static bool visual_mode(WINDOW*w,bool v_
+ #define quick_pack3(nr,fn,w) comnrp_define args[3];((comnrp_define)args)[0]=nr;args[1]=(comnrp_define)fn;args[2]=(comnrp_define)w;
+ static bool find_mode(int nr,WINDOW*w){
+ 	quick_pack((long)nr,w)
+-	command_char r=command((comnrp_define)args);
++	command_char r=command((comnrp_define)args,(show_key_struct){key_find,0});
+ 	if(r==command_resize)return true;
+ 	//if(r==command_no){//only at quit from the bar, but at command_ok also to update stdscr, and at command_false visib<2 at finds
+ 	//	only at first command_false visib<2 is extra, to find that will be extra in extra
+@@ -2002,7 +2013,7 @@ static bool find_mode(int nr,WINDOW*w){
+ 	return false;
+ }
+ static bool goto_mode(char*args,WINDOW*w){
+-	command_char r=command(args);
++	command_char r=command(args,(show_key_struct){key_goto,0});
+ 	if(r==command_ok){
+ 		centering_simple(w)
+ 	}
+@@ -2015,7 +2026,7 @@ static bool savetofile(WINDOW*w,bool has
+ 	command_char ret;
+ 	if(has_file){
+ 		ret=save();
+-	}else{char aa=com_nr_save;ret=command(&aa);}
++	}else{char aa=com_nr_save;ret=command(&aa,(show_key_struct){key_save,0});}
+ 	if(ret!=command_false){
+ 		if(ret==command_ok){
+ 			if(d!=textfile){
+@@ -2046,39 +2057,45 @@ static bool savetofile(WINDOW*w,bool has
+ }
+ static void writeprefs(int f,char mask){
+ 	if(write(f,&mask,mask_size)==mask_size){
+-		unsigned char sz=strlen(ocode_extension);//at prefs one byte is taken, and also input has 255 max
++		bar_byte sz=strlen(ocode_extension);//at prefs one byte is taken, and also input has 255 max
+ 		if(write(f,&sz,extlen_size)==extlen_size){
+ 			if(write(f,ocode_extension,sz)==sz){
+ 				if(split_writeprefs(f)/*true*/){
+ 					char k=0;
+ 					if(memcmp(keys_row,keys_row_orig,number_of_keys)!=0)k=number_of_keys;
+ 					if(write(f,&k,sizeof(char))==sizeof(char)){
+-						#pragma GCC diagnostic push
+-						#pragma GCC diagnostic ignored "-Wunused-result"
+-						write(f,keys_row,k);
+-						#pragma GCC diagnostic pop
++						if(write(f,keys_row,k)==k){
++							sz=strlen(filewhites_extension);
++							if(write(f,&sz,extlen_size)==extlen_size){
++								if(write(f,filewhites_extension,sz)==sz){
++									#pragma GCC diagnostic push
++									#pragma GCC diagnostic ignored "-Wunused-result"
++									write(f,&tab_sz,sizeof(tab_protocol));
++									#pragma GCC diagnostic pop
++								}
++							}
++						}
+ 					}
+ 				}
+ 			}
+ 		}
+ 	}
+-	close(f);
+ }
+ void setprefs(int flag,bool set){
+ 	if(prefs_file[0]!='\0'){
+-		//can use O_RDWR and lseek SEEK_SET and ftruncate(newsize)
+-		int f=open(prefs_file,O_RDONLY);
++		int f=open(prefs_file,O_RDWR|O_CREAT,S_IRUSR|S_IWUSR);
+ 		if(f!=-1){
+ 			char mask;
+-			if(read(f,&mask,mask_size)==mask_size){
+-				close(f);
+-				if(flag!=(mask_nomask)){
+-					if(set/*true*/)mask|=flag;
+-					else mask&=~flag;
+-				}
+-				f=open(prefs_file,O_WRONLY|O_TRUNC);
+-				if(f!=-1)writeprefs(f,mask);
+-			}
++			if(read(f,&mask,mask_size)!=mask_size)mask=mask_nomask;
++			else lseek(f,0,SEEK_SET);
++			if(flag!=(mask_nomask)){
++				if(set/*true*/)mask|=flag;
++				else mask&=~flag;
++			}
++			writeprefs(f,mask);
++			unsigned short nowsize=lseek(f,0,SEEK_CUR);//now is 7 bar_bytes and a mask, not 256
++			ftruncate(f,nowsize);
++			close(f);
+ 		}
+ 	}
+ }
+@@ -2102,10 +2119,10 @@ void pref_modify(char**pref_orig,char**p
+ 	*pref_orig=*pref_buf;//at start extension_new is not 100%
+ 	rewriteprefs;
+ }
+-static bool pref_change(WINDOW*w,char**pref_orig,char**pref_buf,bool sizedonly){
++static bool pref_change(WINDOW*w,char**pref_orig,char**pref_buf,bool sizedonly,char k,char add){
+ 	extdata d={pref_orig,pref_buf,sizedonly};
+ 	quick_pack(com_nr_ext,&d)
+-	command_char nr=command((char*)args);
++	command_char nr=command((char*)args,(show_key_struct){k,add});
+ 	if(nr>command_resize){
+ 		wmove(w,getcury(w),getcurx(w));//ok/quit/err
+ 		return false;
+@@ -2184,11 +2201,12 @@ static bool loopin(WINDOW*w){
+ 			else if(z==(key_undo+A_to_a)){vis('U',w);undo_loop(w);vis(' ',w);}
+ 			else if(z==(key_save+A_to_a)){b=savetofile(w,false);if(b/*true*/)return true;}
+ 			else if(z==(key_ocomp+A_to_a)){aftercall=aftercall_find();aftercall_draw(w);}
+-			else if(z==(key_actswf+A_to_a)){if(pref_change(w,&sdelimiter,&sdelimiter_new,true)/*true*/)return true;}           //don't allow no size delimiters
+-			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_out,&split_out_new,false)/*true*/)return true;}
+-			else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false)/*true*/)return true;}
+-			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true)/*true*/)return true;}         //don't allow no size delimiters
+-			else if(z==key_actswf2){if(pref_change(w,&split_extension,&split_extension_new,false)/*true*/)return true;}
++			else if(z==(key_actswf+A_to_a)){if(pref_change(w,&sdelimiter,&sdelimiter_new,true,key_actswf,A_to_a)/*true*/)return true;}//don't allow no size delimiters
++			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_out,&split_out_new,false,key_actswf2,A_to_a)/*true*/)return true;}
++			else if(z==key_whites+A_to_a){if(pref_change(w,&filewhites_extension,&filewhites_extension_new,false,key_whites,A_to_a)/*true*/)return true;}
++			else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
++			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
++			else if(z==key_actswf2){if(pref_change(w,&split_extension,&split_extension_new,false,key_actswf2,0)/*true*/)return true;}
+ 		}else{
+ 			const char*s=keyname(c);
+ 			if(*s==Char_Ctrl){//seems that all cases are ^ a letter \0
+@@ -2231,39 +2249,49 @@ static bool loopin(WINDOW*w){
+ 					return false;
+ 				}else if(chr==key_insens){
+ 					bool b;char c;
+-					if(insensitive/*true*/){insensitive=false;c=insensitive_disabled;}
+-					else{insensitive=true;c=insensitive_enabled;}
++					if(insensitive/*true*/){insensitive=false;c=orig_lowkey(key_insens);}
++					else{insensitive=true;c=orig_upkey(key_insens);}
+ 					setprefs(mask_insensitive,insensitive);//here the bit is set on full insensitive search
+ 					vis(c,w);//is not showing on stdscr without wnoutrefresh(thisWindow)
+ 				}else if(chr==key_mouse){
+ 					bool b;char c;
+-					if(stored_mouse_mask_q){stored_mouse_mask=mousemask(0,nullptr);c=mouseevents_disabled;setprefs(mask_mouse,false);}
+-					else{stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);c=mouseevents_enabled;setprefs(mask_mouse,true);}
++					if(stored_mouse_mask_q){stored_mouse_mask=mousemask(0,nullptr);c=orig_lowkey(key_mouse);setprefs(mask_mouse,false);}
++					else{stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);c=orig_upkey(key_mouse);setprefs(mask_mouse,true);}
+ 					vis(c,w);
+ 				}else if(chr==key_indents){
+ 					char c;
+-					if(indent_flag/*true*/){indent_flag=false;c=indent_disabled;}
+-					else{indent_flag=true;c=indent_enabled;}
++					if(indent_flag/*true*/){indent_flag=false;c=orig_lowkey(key_indents);}
++					else{indent_flag=true;c=orig_upkey(key_indents);}
+ 					setprefs(mask_indent,indent_flag);
+ 					vis(c,w);//is not showing on stdscr without wnoutrefresh(thisWindow)
+ 				}else if(chr==key_ocomp){
+-					if(ocompiler_flag/*true*/){ocompiler_flag=false;c=ocompiler_disabled;}
+-					else{ocompiler_flag=true;c=ocompiler_enabled;
++					if(ocompiler_flag/*true*/){ocompiler_flag=false;c=orig_lowkey(key_ocomp);}
++					else{ocompiler_flag=true;c=orig_upkey(key_ocomp);
+ 						aftercall=aftercall_find();}
+ 					setprefs(mask_ocompiler,ocompiler_flag);
+ 					visual(c);//addch for more info, first to window, then wnoutrefresh to virtual, then doupdate to phisical
+ 					aftercall_draw(w);
+ 				}else if(chr==key_actswf){//joins //alt j is set delimiter,alt J escape delimiter
+ 					char c;
+-					if(splits_flag/*true*/){splits_flag=false;c=splits_disabled;}
+-					else{splits_flag=true;c=splits_enabled;}
++					if(splits_flag/*true*/){splits_flag=false;c=orig_lowkey(key_actswf);}
++					else{splits_flag=true;c=orig_upkey(key_actswf);}
+ 					setprefs(mask_splits,splits_flag);
+ 					vis(c,w);
++				}else if(chr==key_whites){
++					char c;
++					if(filewhites_flag/*true*/){filewhites_flag=false;c=orig_lowkey(key_whites);}
++					else{filewhites_flag=true;c=orig_upkey(key_whites);}
++					setprefs(mask_filewhites,filewhites_flag);
++					vis(c,w);
+ 				}else if(chr==key_wrap){if(text_wrap(w)/*true*/)return true;}
+ 				else if(chr==key_swkey){
+ 					quick_pack(com_nr_swkey,change_key)
+-					if(command((char*)args)==command_resize)return true;
++					if(command((char*)args,(show_key_struct){key_swkey,0})==command_resize)return true;
+ 					wmove(w,getcury(w),getcurx(w));
++				}else if(chr==key_tab){
++					quick_pack(com_nr_tab,change_tab_size)
++					if(command((char*)args,(show_key_struct){key_tab,0})==command_false)wmove(w,getcury(w),getcurx(w));
++					else return true;
+ 				}else type(c,w);//enter, tab, ^, unknown ctrls
+ 			}else{
+ 				if(strcmp(s,"KEY_F(1)")==0){
+@@ -2325,7 +2353,7 @@ static normalize_char normalize(char**c,
+ }
+ //same as normalize
+ static normalize_char normalize_split(char**c,size_t*s,size_t*r,char*argfile){
+-	if(argfile==nullptr||split_grab(c,s,argfile)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
++	if(argfile==nullptr||split_grab(c,s)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
+ 		return normalize(c,s,r);
+ 	}
+ 	return normalize_err;
+@@ -2508,16 +2536,17 @@ static void getfilebuf(char*cutbuf_file)
+ 	}
+ }
+ static void getprefs(){
+-	char mask;
+ 	int f=open(prefs_file,O_RDONLY);
+ 	if(f!=-1){
++		char mask;
+ 		if(read(f,&mask,mask_size)==mask_size){
+ 			if((mask&mask_mouse)!=0)stored_mouse_mask=~0;
+-			if((mask&mask_indent)==0)indent_flag=false;
++			if((mask&mask_indent)!=0)indent_flag=true;
+ 			if((mask&mask_insensitive)!=0)insensitive=true;
+ 			if((mask&mask_ocompiler)!=0)ocompiler_flag=true;
+ 			if((mask&mask_splits)!=0)splits_flag=true;
+-			unsigned char len;
++			if((mask&mask_filewhites)!=0)filewhites_flag=true;
++			bar_byte len;
+ 			if(read(f,&len,extlen_size)==extlen_size){
+ 				ocode_extension_new=(char*)malloc(len+1);
+ 				if(ocode_extension_new!=nullptr){
+@@ -2525,11 +2554,23 @@ static void getprefs(){
+ 						ocode_extension=ocode_extension_new;
+ 						ocode_extension[len]='\0';
+ 						if(split_readprefs(f)/*true*/){
+-							unsigned char k;
+-							if(read(f,&k,sizeof(char))==sizeof(char)){
+-								if(k<=number_of_keys){
+-									if(read(f,keys_row_frompref,k)==k){
+-										getkeys(k);
++							if(read(f,&len,sizeof(char))==sizeof(char)){
++								if(len<=number_of_keys){
++									if(read(f,keys_row_frompref,len)==len){
++										getkeys(len);
++										if(read(f,&len,sizeof(char))==sizeof(char)){
++											filewhites_extension_new=(char*)malloc(len+1);
++											if(read(f,filewhites_extension_new,len)==len){
++												filewhites_extension=filewhites_extension_new;
++												filewhites_extension[len]='\0';
++												tab_protocol tabtest;
++												if(read(f,&tabtest,sizeof(tab_protocol))==sizeof(tab_protocol)){
++													if(tab_conditions_nr(tabtest)){
++														tab_sz=tabtest;
++													}
++												}
++											}
++										}
+ 									}
+ 								}
+ 							}
+@@ -2539,13 +2580,9 @@ static void getprefs(){
+ 			}
+ 		}
+ 		close(f);
+-		return;
+-	}
+-	f=open_new(prefs_file);
+-	if(f!=-1){
+-		mask=mask_indent;
+-		writeprefs(f,mask);
+ 	}
++	//is ok to have the default prefs always, even if is not popular, some features are good to be activated
++	//f=open_new(prefs_file);if(f!=-1){mask=mask_indent;writeprefs(f,mask);}
+ }
+ static bool help_cutbuffile_preffile(char*s,char*cutbuf_file){
+ #if ((!defined(USE_FS)) && (!defined(USE__FS)))
+@@ -2650,10 +2687,11 @@ static void proced(char*cutbuf_file,WIND
+ 						//or =, clear bar,visual and saves
+ 						old_r=r;
+ 
+-						if(split_read_atstart==split_yes){
+-							visual_write(splits_activated)
+-							split_read_atstart=split_no;//on resize is ok to not print again, can use F1 to remember, maybe was a save as and will lie here then
+-							split_reminder=true;
++						if(split_reminder_c>=split_yes_mixless){
++							if(split_reminder_c>=split_yes_mix)
++								visual_write(splits_activated);
++							else
++								visual_write(splits_activated_mixless);
+ 							//visual_bool=true;//to clear at a next key
+ 						}
+ 						if(mod_flag==false){
+@@ -2751,6 +2789,25 @@ static bool get_answer(char switcher){
+ 	while(c!='\n')c=getchar();
+ 	return a;
+ }
++
++static void filewhites_read(){
++	for(size_t i=0;i<rows_tot;i++){
++		row*r=&rows[i];
++		char*d=r->data;
++		void*last=d+r->sz;
++		while(d!=last){
++			if(*d!=' ')break;
++			*d='\t';
++			d++;
++		}
++	}
++}
++
++static void freeprefs(){//these if are not from start , they can be when user decides to enter new prefs, and an alloc is there
++	if(ocode_extension_new!=nullptr)free(ocode_extension_new);//also need it at change for view what is was
++	split_freeprefs();
++	if(filewhites_extension_new!=nullptr)free(filewhites_extension_new);
++}
+ static void action_go(int argc,char**argv,char*cutbuf_file,char*argfile){
+ 	if(prefs_file[0]!='\0')getprefs();//split is first that depends on prefs
+ 
+@@ -2787,7 +2844,8 @@ static void action_go(int argc,char**arg
+ 			}else editing_new();
+ 		}
+ 		if(valid_ln_term(argc,argv,&not_forced)/*true*/)return;
+-		if(no_file/*true*/)split_read_atstart=split_conditions(argfile,true);//need regardless of input
++		//if(no_file/*true*/)
++		split_reminder_c=split_conditions(argfile,true);//if or if not the file exists
+ 	}
+ 
+ 	struct pollfd fds[1];
+@@ -2827,6 +2885,7 @@ static void action_go(int argc,char**arg
+ 				rows=(row*)malloc(rows_tot*sizeof(row));
+ 				if(rows!=nullptr){
+ 					rows_init(text_sz);
++					if(argfile!=nullptr)if(filewhites_flag/*true*/)if(is_extension_ok(filewhites_extension,argfile))filewhites_read();
+ 					textfile=argfile;
+ 					text_init_e=text_init_b+text_sz+1;
+ 				}
+@@ -2864,10 +2923,6 @@ static void action_go(int argc,char**arg
+ 			endwin();
+ 
+ 			if(clue!=no_clue)printf("last row where was an error at split write was: " protocol "\n",clue);
+-			if(ocode_extension_new!=nullptr){
+-				free(ocode_extension_new);//also need it at change for view what is was
+-				split_freeprefs();
+-			}
+ 		}
+ 	}
+ 	if(text_init_b!=nullptr){
+@@ -2878,6 +2933,7 @@ static void action_go(int argc,char**arg
+ 		}
+ 		free(text_init_b);
+ 	}
++	freeprefs();
+ }
+ static void action(int argc,char**argv){
+ 	char cutbuf_file[max_path_0];
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -57,14 +57,16 @@ text="\ncommand mode: left,right,home,en
+ \n    other key to return\
+ \nCtrl+u = undo; Alt+u = undo mode: left=undo,right=redo,other key to return\
+ \nCtrl+r = redo\
+-\nCtrl+h = titles (movement, Enter at done, Ctrl+q, other keys to search)\
++\nCtrl+l = titles (movement, Enter at done, Ctrl+q, other keys to search)\
+ \nCtrl+w = text wrapping (movement. another key to return)\
+ \nCtrl+e = enable/disable internal mouse/touch\
+ \nCtrl+n = disable/enable indentation\
+ \nCtrl+t = enable/disable insensitive search\
+-\nCtrl+a = enable/disable O language syntax; Alt+a = syntax rescan; Alt+A = change extension name (blank is all)\
++\nCtrl+a = enable/disable O language syntax; Alt+a = syntax rescan; Alt+A = change rule extension name (blank is all)\
+ \nCtrl+j = enable/disable OA split syntax; Alt+j = change delimiter; Alt+J = change view delimiter\
+-\n    Alt+p = change splits folder; Alt+P = change extension name for splits (blank is all)\
++\n    Alt+p = change splits folder (blank is mixless); Alt+P = change rule extension name for splits (blank is all)\
++\nCtrl+y = enable/disable spaces->tabs indents at read, tabs->spaces at write; Alt+y = change rule extension name (blank is all)\
++\nCtrl+b = change tab size\
+ \nCtrl+z = switch keys, applies to Ctrl and lower/upper Alt (example: az , +a becomes +z and +z becomes +a)\
+ \nCtrl+q = quit\""
+ wr_n "${text}"
+@@ -73,11 +75,12 @@ if [ ${level} -eq ${level_help} ]; then
+ 	exit 0
+ fi
+ 
+-#QWERT U O y   ip
+-#AS FGHJ   dkl
+-# Z CV N   xb  m
++#QWERTYU O    ip
++#AS FG J L dk h
++# Z CVBN   x  m
+ # ^M is 13 that comes also at Enter, ^I is 9 that comes also at Tab
+ # ^P at docker, something is not ok with the redraw
++# ^H at termux is backspace
+ # ^A in termux is from Ctrl+Alt+a
+ 
+ textsed="$(echo "${text}" | sed "s/\\\n/n/g; s/\\\\\"/\"/g")"  # replace \n to n and \\\" to \"(this will go " at grep). \ at endings are 0
+@@ -127,27 +130,29 @@ find_pos () {
+ }
+ 
+ number_of_keys=0
+-_find_pos                 ocomp            97 1 1 1   #a
++_find_pos                 ocomp              97 1 1 1   #a
+ i=98
+ while [ $i -lt 123 ]; do
+ 	case $i in
+-		99) find_pos findword          $i 1 1;;   #c
+-		101) find_pos mouse            $i 1;;     #e
+-		102) find_pos find             $i 1 1;;   #f
+-		103) find_pos goto             $i 1 1;;   #g
+-		104) find_pos titles           $i 1;;     #h
+-		106) find_pos actswf           $i 1 1 1;; #j
+-		110) find_pos indents          $i 1;;     #n
+-		111) find_pos paste            $i 1 1;;   #o
+-		112) find_pos actswf2          $i 0 1 1;; #p
+-		113) is_extern=x find_pos quit $i 3;;     #q
+-		114) find_pos redo             $i 1;;     #r
+-		115) find_pos save             $i 1 1;;   #s
+-		116) find_pos insens           $i 1;;     #t
+-		117) find_pos undo             $i 1 1;;   #u
+-		118) find_pos visual           $i 1 1;;   #v
+-		119) find_pos wrap             $i 1;;     #w
+-		122) find_pos swkey            $i 1;;     #z
++		98) find_pos tab                 $i 1;;     #b
++		99) find_pos findword            $i 1 1;;   #c
++		101) find_pos mouse              $i 1;;     #e
++		102) find_pos find               $i 1 1;;   #f
++		103) find_pos goto               $i 1 1;;   #g
++		106) find_pos actswf             $i 1 1 1;; #j
++		108) is_extern=x find_pos titles $i 1;;     #l
++		110) find_pos indents            $i 1;;     #n
++		111) find_pos paste              $i 1 1;;   #o
++		112) find_pos actswf2            $i 0 1 1;; #p
++		113) is_extern=x find_pos quit   $i 3;;     #q
++		114) find_pos redo               $i 1;;     #r
++		115) is_extern=x find_pos save   $i 1 1;;   #s
++		116) find_pos insens             $i 1;;     #t
++		117) find_pos undo               $i 1 1;;   #u
++		118) find_pos visual             $i 1 1;;   #v
++		119) is_extern=x find_pos wrap   $i 1;;     #w
++		121) find_pos whites             $i 1 1;;   #y
++		122) find_pos swkey              $i 1;;     #z
+ 		*) wr2 ",${nothing}"; wr4 ",${nothing}";;
+ 	esac
+ 	i=$((i+1))
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -42,7 +42,7 @@
+ #include "def.h"
+ 
+ bool splits_flag=false;
+-split_char split_read_atstart=split_no;
++split_char split_reminder_c=split_no;
+ 
+ char*sdelimiter=(char*)"|||";// iso forbids
+ char*esdelimiter=(char*)"///";
+@@ -50,7 +50,7 @@ char* sdelimiter_new=nullptr;
+ char* esdelimiter_new=nullptr;
+ char*split_out=(char*)"osrc";
+ char*split_out_new=nullptr;
+-char*split_extension=default_extension;
++char*split_extension=(char*)"oac";
+ char*split_extension_new=nullptr;
+ 
+ //char*fulldelim;
+@@ -126,7 +126,7 @@ static char* real_path(char*pathname){
+ 	}
+ 	return a;
+ }
+-//-1 no, 0 errors, 1 yes the split_out is at realpath dirname or in an ancestor folder
++//0 errors, 1 yes no mix, 2 yes and mix the split_out is at realpath dirname or in an ancestor folder
+ static split_char split_conditions_out(char*filename,bool free_paths){
+ 	if(*split_out!='\0'){
+ 		split_out_alloc1=real_path(filename);
+@@ -161,24 +161,24 @@ static split_char split_conditions_out(c
+ 										free(split_out_alloc1);
+ 										free(split_out_alloc2);
+ 									}
+-									return split_yes;
++									return split_yes_mix;
+ 								}
+ 								split_out_path2=split_out_path4;//this is for split write to not loop again there
+ 							}
+ 							split_out_path4--;
+ 						}
+ 						free(split_out_alloc1);free(split_out_alloc2);
+-						return split_no;
++						return split_yes_mixless;
+ 					}
+ 					free(split_out_alloc1);
+ 					return split_err;
+ 				}
+ 			}
+ 			free(split_out_alloc1);
+-		}else if(errno==EACCES)return split_no;
++		}else if(errno==EACCES)return split_yes_mixless;
+ 		return split_err;
+ 	}
+-	return split_no;
++	return split_yes_mixless;
+ }
+ split_char split_conditions(char*filename,bool free_paths){
+ 	if(splits_flag/*true*/){
+@@ -190,10 +190,9 @@ split_char split_conditions(char*filenam
+ }
+ 
+ //false on errors
+-bool split_grab(char**p_text,size_t*p_size,char*argfile){
+-	split_read_atstart=split_conditions(argfile,true);
+-	if(split_read_atstart!=split_err){
+-		if(split_read_atstart==split_yes){
++bool split_grab(char**p_text,size_t*p_size){
++	if(split_reminder_c!=split_err){
++		if(split_reminder_c!=split_no){// yes_mixless or yes_mix
+ 			char*text;size_t size;int cmp;char*next;
+ 			char a=*sdelimiter;
+ 			unsigned char sdelimsize=strlen(sdelimiter);//at file read only one byte for size
+@@ -214,7 +213,7 @@ bool split_grab(char**p_text,size_t*p_si
+ 				next=(char*)memchr(text,a,size);
+ 				if(next==nullptr){split_error();return false;}
+ 				next++;size-=next-text;
+-				if(size<=(sdelimsize-1)){split_error();return false;}
++				if(size<(sdelimsize-1)){split_error();return false;} //can be equal and is last char of the file
+ 				cmp=memcmp(next,sdelimiter+1,sdelimsize-1);
+ 				if(cmp!=0){split_error();return false;}//it looks like the delimiter chars can't be in filename chars
+ 				text=next+(sdelimsize-1);size-=text-next;
+@@ -392,18 +391,10 @@ bool split_readprefs(int f){
+ 	return false;
+ }
+ void split_freeprefs(){
+-	if(sdelimiter_new!=nullptr){
+-		free(sdelimiter_new);
+-		if(esdelimiter_new!=nullptr){
+-			free(esdelimiter_new);
+-			if(split_out_new!=nullptr){
+-				free(split_out_new);
+-				if(split_extension_new!=nullptr){
+-					free(split_extension_new);
+-				}
+-			}
+-		}
+-	}
++	if(sdelimiter_new!=nullptr)free(sdelimiter_new);
++	if(esdelimiter_new!=nullptr)free(esdelimiter_new);
++	if(split_out_new!=nullptr)free(split_out_new);
++	if(split_extension_new!=nullptr)free(split_extension_new);
+ }
+ 
+ //true at ok
+@@ -411,7 +402,8 @@ bool split_write_init(char*orig_filename
+ 	sdelimiter_size=strlen(sdelimiter);
+ 	esdelimiter_size=strlen(esdelimiter);
+ 	//unsigned char s2=strlen(esdelimiter);fulldelim_size=sdelimiter_size+s2;fulldelim=(char*)malloc(fulldelim_size);if(fulldelim!=nullptr){memcpy(fulldelim,esdelimiter,s2);memcpy(fulldelim+s2,sdelimiter,sdelimiter_size);
+-	if(*split_out!='\0'){
++
++	if(split_reminder_c==split_yes_mix){
+ 		size_t ancestors_diff=split_out_path2-split_out_path4;
+ 		split_out_path2=split_out_alloc1+(split_out_path2-split_out_alloc2);
+ 		split_out_path4+=split_out_size1;
+@@ -425,11 +417,14 @@ bool split_write_init(char*orig_filename
+ 			memcpy(split_out_path4,split_out_path2,sz);
+ 			split_out_path2+=sz;split_out_path4+=sz;
+ 		}while(true);
+-		size_t size=split_out_path1-split_out_path3+1;
++		size_t size=split_out_path1-split_out_path3;// +1 will be with the existent null
++		const char outext[]=".out";
++		size_t sizeplusoutext=size+sizeof(outext);
+ 		split_out_size2-=ancestors_diff;
+-		char*a=(char*)realloc(split_out_alloc2,split_out_size2+size);
++		char*a=(char*)realloc(split_out_alloc2,split_out_size2+sizeplusoutext);
+ 		if(a!=nullptr){
+ 			memcpy(a+split_out_size2,split_out_path3,size);
++			memcpy(a+split_out_size2+size,outext,sizeof(outext));
+ 			free(split_out_alloc1);
+ 			split_out_file=open_or_new(a);
+ 			free(a);
+@@ -445,14 +440,14 @@ bool split_write_init(char*orig_filename
+ }
+ void split_write_free(){
+ 	//free(fulldelim);
+-	if(*split_out!='\0'){
++	if(split_reminder_c==split_yes_mix){
+ 		close(split_out_file);
+ 	}
+ }
+ 
+-bool swrite(int f,void*buf,unsigned int size){
++swrite_char swrite(int f,void*buf,row_dword size){
+ 	if(write(f,buf,size)==size){
+-		if(*split_out!='\0'){
++		if(split_reminder_c==split_yes_mix){
+ 			if(write(split_out_file,buf,size)==size){
+ 				return swrite_ok;
+ 			}
+@@ -462,6 +457,11 @@ bool swrite(int f,void*buf,unsigned int
+ 	}
+ 	return swrite_bad;
+ }
++static swrite_char swwrite_if(int f,char*buf,row_dword size,row_dword off){
++	if(off==0)return swwrite(f,buf,size);
++	return swrite(f,buf,size);
++}
++
+ //true if ok
+ static bool split_write_split(char*file,size_t start,size_t end,unsigned int size,bool*majorerror){
+ 	int f=open_or_new(file);
+@@ -469,11 +469,11 @@ static bool split_write_split(char*file,
+ 		for(size_t k=start;k<end;k++){
+ 			row*r=&rows[k];
+ 			unsigned int sz=r->sz;
+-			if(swrite(f,r->data,sz)/*true*/){close(f);*majorerror=true;return false;}
+-			if(swrite(f,ln_term,ln_term_sz)/*true*/){close(f);*majorerror=true;return false;}
++			if(swwrite(f,r->data,sz)==swrite_bad){close(f);*majorerror=true;return false;}
++			if(swrite(f,ln_term,ln_term_sz)==swrite_bad){close(f);*majorerror=true;return false;}
+ 		}
+ 		row*r=&rows[end];
+-		if(swrite(f,r->data,size)==swrite_ok){close(f);return true;}
++		if(swwrite(f,r->data,size)==swrite_ok){close(f);return true;}
+ 		close(f);*majorerror=true;return false;
+ 	}
+ 	clue=start;*majorerror=false;return false;
+@@ -486,7 +486,7 @@ static bool split_write_orig(int orig_fi
+ 	*majorerror=true;return false;
+ }
+ //null or error
+-const char* split_write(size_t*_index,int orig_file,unsigned int*_off,bool*majorerror){
++const char* split_write(size_t*_index,int orig_file,row_dword*_off,bool*majorerror){
+ 	size_t i=*_index;
+ 	row*rw=&rows[i];
+ 	char*data=rw->data+*_off;
+@@ -503,10 +503,11 @@ const char* split_write(size_t*_index,in
+ 				unsigned int sz=rw->sz;
+ 				char*marker=(char*)memmem(content,sz,esdelimiter,esdelimiter_size);//fulldelim,fulldelim_size
+ 				if(marker!=nullptr){
+-					unsigned int part=marker-content;
+-					*_index=j;*_off=part+esdelimiter_size;//fulldelim_size
++					if(swwrite_if(orig_file,data,pointer-data,*_off)==swrite_ok){
++						unsigned int part=marker-content;
++						*_index=j;
++						*_off=part+esdelimiter_size;
+ 
+-					if(swrite(orig_file,data,pointer-data)==swrite_ok){
+ 						//char aux=cursor[size];//also alloced rows have +1
+ 						cursor[size]='\0';//this is for unmodified where ln_term is there, for alloced is undefined there
+ 						//cursor[size]=aux;//is not important to have ln_term back there
+--- edor-1.orig/s/tit.c
++++ edor-1/s/tit.c
+@@ -107,7 +107,7 @@ bool titles(WINDOW*w){
+ 
+ 		//visual
+ 		bar_clear();
+-		visual('H');
++		visual(orig_upkey(key_titles));
+ 		refreshpage(w);//visual shows now only with this
+ 		wmove(w,0,0);  //                        or this
+ 		position_translated(w);//position_core(near_ytext,0);
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -17,8 +17,9 @@ enum{false=0!=0,true=1==1};
+ #include "null.h"
+ #endif
+ 
+-#define bar_byte unsigned char
+-#define bar_byte_plus short
++
++//these are going also in split
++
+ #define row_dword unsigned int
+ 
+ typedef struct{
+@@ -28,81 +29,14 @@ typedef struct{
+ }row;
+ //typedef struct {}rowwrap;
+ 
+-typedef struct{
+-	char**orig;
+-	char**buf;
+-	bool sizedonly;
+-}extdata;
+-
+-#define Char_Return 0xd  //main bar tit
+-#define Char_Escape 0x1b //main
+-#define Char_Ctrl 0x5e   //main bar tit
+-
+-#define row_pad 0xF
+-#define tab_sz 6
+-//can be 127(ascii Delete) or 263, note: Ctrl+h generates 263
+-#define is_KEY_BACKSPACE(a) a==KEY_BACKSPACE||a==0x7f
+-
+-#define com_nr_find 0
+-#define com_nr_findagain 1
+-#define com_nr_findword 2
+-#define com_nr_findwordfrom 3
+-	#define com_nr_find_numbers com_nr_findwordfrom
+-#define com_nr_goto 4
+-#define com_nr_goto_alt 5
+-#define com_nr_swkey 6
+-	#define com_nr_passcursor_numbers com_nr_swkey
+-#define com_nr_save 7
+-#define com_nr_ext 8
+-
+-#define is_word_char(a) ('0'<=a&&(a<='9'||('A'<=a&&(a<='Z'||(a=='_'||('a'<=a&&a<='z'))))))
+-
+-#define max_path 0xff
+-#define max_path_0 max_path+1
+-
+-#define command_resize -2
+-#define command_no -1 //(char)-1 but there is at least a r> comparation
+-#define command_false 0
+-#define command_ok 1
+-#define command_char signed char
+-
+-#define movement_processed -1
+-#define movement_diffkey 0
+-#define movement_resize 1
+-#define movement_char signed char
++#define swrite_bad -1
++#define swrite_ok 0
++#define swrite_char signed char
++
++#define extlen_size 1
+ 
+ #define split_no -1
+ #define split_err 0
+-#define split_yes 1
++#define split_yes_mixless 1
++#define split_yes_mix 2
+ #define split_char signed char
+-
+-#define comnrp_define char*
+-
+-#define color_0 0
+-#define color_a 1
+-#define color_b 2
+-#define color_c 3
+-#define color_d 4
+-
+-#define extlen_size 1
+-
+-#define swrite_ok false
+-#define swrite_bad true
+-
+-#define default_extension (char*)"oc"
+-
+-#define protocol_simple "%u"
+-#ifdef PLATFORM64
+-#define protocol "%lu"
+-#else
+-#define protocol protocol_simple
+-#endif
+-
+-//main,bar
+-typedef struct{
+-	char* key_location;
+-	unsigned short*pos;
+-	char pos_total;
+-	unsigned short upos;
+-	char index;
+-}key_struct;
+--- edor-1.orig/s/tw.c
++++ edor-1/s/tw.c
+@@ -129,7 +129,7 @@ bool text_wrap(WINDOW*w){
+ 		if(yy<y)x-=rowswrap_add[y].xtext;//x is on a wrap part
+ 
+ 		//visual
+-		visual('W');//without stdscr refresh is not ok
++		visual(orig_upkey(key_wrap));//without stdscr refresh is not ok
+ 
+ 		//tw store some variables
+ 		store_rows=rows;rows=rowswrap;
+--- edor-1.orig/termux
++++ edor-1/termux
+@@ -1,4 +1,4 @@
+-
++git pull origin master && \
+ autoreconf -i && \
+ if [ ! -e configure ]; then
+ 	pfx="--prefix=$PREFIX" ./cf
