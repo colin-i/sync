@@ -1,0 +1,1088 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-133) bionic; urgency=medium
+ .
+   * dev to actionswf instead of lib... to match pkg
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-22
+
+--- /dev/null
++++ actionswf-1/.github/workflows/pkg.yml
+@@ -0,0 +1,56 @@
++
++on:
++ workflow_dispatch:
++env:
++ #for upload
++ GITHUB_TOKEN: ${{ secrets.PAT }}
++
++jobs:
++ archbuild:
++  runs-on: ubuntu-latest
++  container: archlinux:latest
++
++  steps:
++  - name: Checkout
++    uses: actions/checkout@v3
++  - name: build
++    run: |
++     name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
++     here=`pwd`
++
++     useradd bot
++     cd /home
++     mkdir bot
++     chown bot:bot bot
++     cd bot
++     pacman -Sy --noconfirm --needed sudo git base-devel wget lib32-glibc bc
++     echo "ALL ALL=(ALL) NOPASSWD: /usr/bin/*" > /etc/sudoers.d/a  #needed at makepkg -i and yay makepkg calls
++
++     su bot -c 'git clone --depth 1 https://aur.archlinux.org/yay-bin.git'
++     cd yay-bin
++     su bot -c 'makepkg -i --noconfirm'
++
++     su bot -c 'yay -Sy --noconfirm --needed ffdec-bin ocompiler'
++
++     su bot -c 'git clone -n --depth=1 --filter=tree:0 https://github.com/colin-i/pkgbuilds'
++     cd pkgbuilds
++     su bot -c "git sparse-checkout set --no-cone /${name}"
++     su bot -c 'git checkout'
++
++     cd ${name}
++     su bot -c makepkg
++
++     nm=`ls | grep ".*\.zst$" | grep -v debug`
++     nm2=`echo ${nm} | sed s/-x86_64/-arch-x86_64/`
++     mv ${nm} ${here}/${nm2}
++     echo "file=${nm2}" >> $GITHUB_ENV
++
++     wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
++     echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++  - name: Upload Release Asset
++    uses: actions/upload-release-asset@v1
++    with:
++     upload_url: ${{ env.up_url }}
++     asset_path: ./${{ env.file }}
++     asset_name: ${{ env.file }}
++     asset_content_type: application/zstd
+--- /dev/null
++++ actionswf-1/.github/workflows/pkgarm.yml
+@@ -0,0 +1,50 @@
++
++on:
++ workflow_dispatch:
++env:
++ #for upload
++ GITHUB_TOKEN: ${{ secrets.PAT }}
++
++jobs:
++ archbuild:
++  runs-on: ubuntu-24.04-arm
++
++  steps:
++  - name: Checkout
++    uses: actions/checkout@v3
++    with:
++     path: src
++  - name: build
++    run: |
++     sudo apt update
++     sudo apt install -y pacman-package-manager qemu-user libc6-i386-cross libc6-amd64-cross makepkg libarchive-tools #libarchive-tools with bsdtar, called at makepkg
++     wget https://github.com/colin-i/o/releases/download/1-5%2B226/ocompiler-1.5+226-1-arch-x86_64.pkg.tar.zst
++     sudo pacman -U --arch x86_64 --assume-installed lib32-glibc --noconfirm ocompiler-1.5+226-1-arch-x86_64.pkg.tar.zst
++
++     cd src/oad
++     LD_LIBRARY_PATH=/usr/i686-linux-gnu/lib:/usr/x86_64-linux-gnu/lib \
++     OCOMP="qemu-i386 /usr/i686-linux-gnu/lib/ld-linux.so.2 /usr/bin/o" \
++     OCONV="qemu-amd64 /usr/x86_64-linux-gnu/lib/ld-linux-x86-64.so.2 /usr/bin/otoc" \
++     OLINK="qemu-i386 /usr/i686-linux-gnu/lib/ld-linux.so.2 /usr/bin/ounused" \
++     make
++
++     cd ..
++     name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
++
++     cd ..
++     wget https://raw.githubusercontent.com/colin-i/pkgbuilds/refs/heads/main/${name}-`uname -m`/PKGBUILD
++     makepkg
++
++     nm=`ls | grep ".*\.gz$"`
++     nm2=`echo ${nm} | sed "s/-aarch64/-ubuntu-aarch64/; s/${name}/liboadbgdata/"`
++     wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
++
++     echo "file=${nm2}" >> $GITHUB_ENV
++     echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++  - name: Upload Release Asset
++    uses: actions/upload-release-asset@v1
++    with:
++     upload_url: ${{ env.up_url }}
++     asset_path: ./${{ env.file }}
++     asset_name: ${{ env.file }}
++     asset_content_type: application/zstd
+--- actionswf-1.orig/.github/workflows/up.yml
++++ /dev/null
+@@ -1,25 +0,0 @@
+-
+-on:
+- workflow_dispatch:
+-
+-jobs:
+- ubuild:
+-  runs-on: ubuntu-18.04 #latest is ok but it must be downloaded first
+-  steps:
+-   - name: Run a multi-line script
+-     run: |
+-      if [ -n "${{ env.init }}" ]; then
+-       exit 1
+-      fi
+-      #get up_url
+-      wget https://github.com/colin-i/test/releases/download/1.5/${{ env.proj }} -O 1.txt
+-      echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
+-   - name: Upload Release Asset
+-     uses: actions/upload-release-asset@v1
+-     env:
+-      GITHUB_TOKEN: ${{ secrets.PAT }}
+-     with:
+-      upload_url: ${{ env.up_url }}
+-      asset_path: ./${{ env.proj }}.zip
+-      asset_name: ${{ env.proj }}.windows.zip
+-      asset_content_type: application/zip
+--- /dev/null
++++ actionswf-1/.github/workflows/upgenactionswf.yml
+@@ -0,0 +1,25 @@
++
++on:
++ workflow_dispatch:
++
++jobs:
++ ubuildgen:
++  runs-on: ubuntu-18.04 #latest is ok but it must be downloaded first
++  steps:
++   - name: Run a multi-line script
++     run: |
++      if [ -n "${{ env.init }}" ]; then
++       exit 1
++      fi
++      #get up_url
++      wget https://github.com/colin-i/test/releases/download/1.5/${{ env.proj }} -O 1.txt
++      echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++   - name: Upload Release Asset
++     uses: actions/upload-release-asset@v1
++     env:
++      GITHUB_TOKEN: ${{ secrets.PAT }}
++     with:
++      upload_url: ${{ env.up_url }}
++      asset_path: ./${{ env.proj }}.zip
++      asset_name: ${{ env.proj }}.windows.zip
++      asset_content_type: application/zip
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -7,13 +7,18 @@ else
+ conv_64=0
+ endif
+ 
+-SUBDIRS := src example oad
++SUBDIRS := src oad
++
++ifndef prefix
++prefix=/usr
++endif
+ 
+ $(TOPTARGETS): $(SUBDIRS)
+ $(SUBDIRS):
+ 	$(MAKE) -C $@ conv_64=${conv_64} $(MAKECMDGOALS)
+ 
+ test:
++	$(MAKE) -C example conv_64=${conv_64}
+ 	RUN__SHELL=$(SHELL) . ./shl && cd tests && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
+ 	cd ffdec && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
+ 	cd ../data && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./test x && echo tests ok
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -10,8 +10,10 @@ last=$(curl https://api.github.com/repos
+ ~/test/rel && \
+ ~/test/pub rpm rel && \
+ ~/test/uponrpm && \
+-~/test/up && \
+-~/test/pub uponrpm && \
++~/test/pkg/onb && \
++ask=x ~/test/pkg/onab && \
++~/test/upgen actionswf.zip && \
++~/test/pub uponrpm pkg pkgarm && \
+ ~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+--- actionswf-1.orig/clean
++++ actionswf-1/clean
+@@ -1,2 +1,2 @@
+ 
+-make clean && git status
++cd example && make clean && cd .. && make clean && git status
+--- /dev/null
++++ actionswf-1/mrd
+@@ -0,0 +1 @@
++cd src && ./mrd && cd ../oad && ./md
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -14,6 +14,12 @@ endif
+ ifndef compilerflags
+ compilerflags=${linkerflags}
+ endif
++ifndef EXTRA_CFLAGS
++include ./cflags
++endif
++ifndef prefix
++prefix=/usr
++endif
+ 
+ ifeq (${conv_64},1) #to cross compile
+ 	ifneq ($(CC),arm-linux-gnueabihf-gcc)
+@@ -60,7 +66,8 @@ ${libname}: main.o ${exte}
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS}
+ 	${OCONV} $<.x
+-	$(CC) ${model} -c -w -fPIC ${compilerflags} $*.c
++	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c
++#-Wno are a must at pkgbuild
+ #-fPIC since launchpad bionic build
+ #-Wimplicit-function-declaration is good but anyway when making .x, ocompiler is also checking for this error
+ %.ohi: %.oh
+@@ -89,13 +96,24 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	install -D ${libname} \
+-		$(DESTDIR)$(prefix)/lib/${libname}
++	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
++	if [ -e ../include_dev ]; then \
++		install -D oadbgdata.h $(DESTDIR)$(prefix)/include/actionswf/oadbgdata.h && \
++		install -D oadbgdatas.h $(DESTDIR)$(prefix)/include/actionswf/oadbgdatas.h && \
++		install -D oadbgdata.oh $(DESTDIR)$(prefix)/include/actionswf/oadbgdata.oh && \
++		install -D oadbgdatas.oh $(DESTDIR)$(prefix)/include/actionswf/oadbgdatas.oh; \
++	fi
+ 
+ install: all install-lib
+ 
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++	-if [ -e ../include_dev ]; then \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/oadbgdata.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/oadbgdatas.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/oadbgdata.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/oadbgdatas.oh; \
++	fi
+ 
+ #.PHONY targets are not default files, then, make will not try to test if a rule has an updated file on the disk (if has will skip that rule)
+ .PHONY: all install install-lib clean distclean uninstall test re
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -5,6 +5,7 @@ override include_sec 1
+ include "common.h" "common.oh"
+ 
+ importx "malloc" malloc
++importx "free" free
+ 
+ import "global_blog" global_blog
+ 
+@@ -202,8 +203,6 @@ end
+ 
+ import "tree_entrylive" tree_entrylive
+ 
+-importx "free" free
+-
+ function branch_free(valueu br,valueu logstart,dataxu indents)
+ 	if logstart!=(NULL)
+ 		call branch_log(br,logstart)
+--- /dev/null
++++ actionswf-1/oad/cflags
+@@ -0,0 +1,2 @@
++
++EXTRA_CFLAGS=-Wno-int-conversion -Wno-incompatible-pointer-types
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -131,11 +131,21 @@ import "print_unindent" print_unindent
+ import "print_hex_start" print_hex_start
+ import "print_hex" print_hex
+ import "print_lhex" print_lhex
++import "prints" prints
+ import "indent" indent
+ 
+ importx "printf" printf
+ importx "putchar" putchar
+ 
++function frame_print_top(charx ainit,datax log_index)
++	if ainit=(xlog_ainit_false)
++		call print("frame %u",log_index)
++	else
++		call prints("init")
++	end
++	call print_indent()
++end
++
+ function preframe_free(sv pf,charx ainit,datax log_index,valueu logstart)
+ 	charx log#1
+ 	#valuexu stroff#1
+@@ -247,7 +257,6 @@ function frame_init(valueu total)
+ end
+ 
+ import "print_text" print_text
+-import "prints" prints
+ 
+ function frame_print_action(valueu a,valueu b,charx c,charx d)
+ 	if a!=b
+@@ -347,15 +356,6 @@ function frame_free(sv f,charx ainit,dat
+ 	call free(f)
+ end
+ 
+-function frame_print_top(charx ainit,datax log_index)
+-	if ainit=(xlog_ainit_false)
+-		call print("frame %u",log_index)
+-	else
+-		call prints("init")
+-	end
+-	call print_indent()
+-end
+-
+ function nframe_init(sv pf,valueu total)
+ 	set pf# preframe_init()
+ 	if pf#!=(NULL)
+--- actionswf-1.orig/oad/log.oc
++++ actionswf-1/oad/log.oc
+@@ -15,21 +15,6 @@ function tree_exit()
+ 	return global.error
+ end
+ 
+-function tree_frame_init(valueu pf)
+-	set pf#:preframe.log_mem (NULL)
+-	set pf#:preframe.log_size 0
+-	set pf#:preframe.log_allsize 0
+-	set pf#:preframe.log_indents 0
+-end
+-importx "free" free
+-import "print_text" print_text
+-function tree_frame_free(valueu pf)
+-	if pf#:preframe.log_mem!=(NULL)
+-		call tree_entry_ex(pf,(output_nl))  #for memnl, if for prints will be '\0'
+-		call print_text(pf#:preframe.log_mem,pf#:preframe.log_size)
+-		call free(pf#:preframe.log_mem)
+-	end
+-end
+ const tree_pad=pad_default
+ const tree_pad_=(tree_pad-1)
+ const _tree_pad_=~tree_pad_
+@@ -49,7 +34,6 @@ function tree_resize(valueu pf,valueu sz
+ 	end
+ 	return (EXIT_SUCCESS)
+ end
+-
+ function tree_entry_ex(valueu pf,charx type)
+ 	charx ok#1;set ok tree_resize(pf,1)
+ 	if ok=(EXIT_SUCCESS)
+@@ -60,6 +44,22 @@ function tree_entry_ex(valueu pf,charx t
+ 	end
+ end
+ 
++function tree_frame_init(valueu pf)
++	set pf#:preframe.log_mem (NULL)
++	set pf#:preframe.log_size 0
++	set pf#:preframe.log_allsize 0
++	set pf#:preframe.log_indents 0
++end
++importx "free" free
++import "print_text" print_text
++function tree_frame_free(valueu pf)
++	if pf#:preframe.log_mem!=(NULL)
++		call tree_entry_ex(pf,(output_nl))  #for memnl, if for prints will be '\0'
++		call print_text(pf#:preframe.log_mem,pf#:preframe.log_size)
++		call free(pf#:preframe.log_mem)
++	end
++end
++
+ function tree_indents(valueu pf)
+ 	dataxu i#1;set i pf#:preframe.log_indents
+ 	while i!=0  #not at root, add indents
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -1,14 +1,80 @@
+ 
+ format elfobj64
+ 
++override include_sec 1
++include "common.h" "common.oh"
++
++#multithread unsafe
++char logpad=xlog_pad_default
++#
++
++#functions(except oadata_free,oadata_logpad) are returning 0(long) on success and != on failure (EXIT_FAILURE or another != (from extern calls))
++
++importx "puts" puts
++importx "printf" printf
++importx "free" free
++
++import "sprite_free" sprite_free
++
++import "print" print
++import "print_inline_done" print_inline_done
++
++functionx oadata_free(sv data,charx log)
++	if data!=(NULL)
++		sv sprites;set sprites data#:oadata.sprites
++		if sprites!=(NULL)
++			sv s;set s sprites
++			sv end;set end data#:oadata.sprites_size
++			add end s
++			if log=(TRUE)
++				call puts("sprites:")
++			end
++			while s!=end
++				if log!=(TRUE)
++					call sprite_free(s,(NULL))
++				else
++					call sprite_free(s,sprites)
++				end
++				incst s
++			end
++			call free(sprites)
++
++			sv functions;set functions data#:oadata.functions
++			if functions!=(NULL)
++				if log=(TRUE)
++					set s data#:oadata.functions_size
++					div s :
++					call print("functions: %u",s)
++				end
++				call free(functions)
++
++				sv marks;set marks data#:oadata.marks
++				if marks!=(NULL)
++					if log=(TRUE)
++						valueu sz#1;set sz data#:oadata.size
++						div sz \mark\
++						call printf("marks: %u",sz)
++						if sz>^\mark\
++							#log first and last
++							valueu tolog#1;set tolog marks
++							add tolog data#:oadata.size
++							sub tolog \mark\
++							call printf(": %d %u ... %u %d",marks#:mark.prev,marks#:mark.next,tolog#:mark.prev,tolog#:mark.next)
++						end
++						call print_inline_done()
++					end
++					call free(marks)
++				end
++			end
++		end
++		call free(data)
++	end
++end
++
+ importx "strlen" strlen
+ importx "malloc" malloc
+-importx "free" free
+ importx "memcpy" memcpy
+ 
+-override include_sec 1
+-include "common.h" "common.oh"
+-
+ import "fcontent" fcontent
+ import "loop" loop
+ import "inter" inter
+@@ -19,12 +85,6 @@ import "presprite_done" presprite_done
+ import "tree_init" tree_init
+ import "tree_exit" tree_exit
+ 
+-#multithread unsafe
+-char logpad=xlog_pad_default
+-#
+-
+-#functions(except oadata_logpad) are returning 0(long) on success and != on failure (EXIT_FAILURE or another != (from extern calls))
+-
+ functionx oadata_make(ss swf_fullpath,svu poadata,charx log)
+ 	set poadata# (NULL)
+ 	sd size;set size strlen(swf_fullpath)
+@@ -136,66 +196,6 @@ functionx oadata_ok(ss swf_fullpath)
+ 	return (EXIT_FAILURE)
+ end
+ 
+-importx "puts" puts
+-importx "printf" printf
+-
+-import "sprite_free" sprite_free
+-
+-import "print" print
+-import "print_inline_done" print_inline_done
+-
+-functionx oadata_free(sv data,charx log)
+-	if data!=(NULL)
+-		sv sprites;set sprites data#:oadata.sprites
+-		if sprites!=(NULL)
+-			sv s;set s sprites
+-			sv end;set end data#:oadata.sprites_size
+-			add end s
+-			if log=(TRUE)
+-				call puts("sprites:")
+-			end
+-			while s!=end
+-				if log!=(TRUE)
+-					call sprite_free(s,(NULL))
+-				else
+-					call sprite_free(s,sprites)
+-				end
+-				incst s
+-			end
+-			call free(sprites)
+-
+-			sv functions;set functions data#:oadata.functions
+-			if functions!=(NULL)
+-				if log=(TRUE)
+-					set s data#:oadata.functions_size
+-					div s :
+-					call print("functions: %u",s)
+-				end
+-				call free(functions)
+-
+-				sv marks;set marks data#:oadata.marks
+-				if marks!=(NULL)
+-					if log=(TRUE)
+-						valueu sz#1;set sz data#:oadata.size
+-						div sz \mark\
+-						call printf("marks: %u",sz)
+-						if sz>^\mark\
+-							#log first and last
+-							valueu tolog#1;set tolog marks
+-							add tolog data#:oadata.size
+-							sub tolog \mark\
+-							call printf(": %d %u ... %u %d",marks#:mark.prev,marks#:mark.next,tolog#:mark.prev,tolog#:mark.next)
+-						end
+-						call print_inline_done()
+-					end
+-					call free(marks)
+-				end
+-			end
+-		end
+-		call free(data)
+-	end
+-end
+-
+ functionx oadata_logpad_get()
+ 	return global.logpad
+ end
+--- actionswf-1.orig/oad/mds
++++ actionswf-1/oad/mds
+@@ -1,3 +1,3 @@
+ 
+ #if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; if [ ${1} = 0 ]; then shift; OCOMP=${OCOMP} ./md $@; exit; fi; shift; fi
+-OCONV=~/o/ocompiler-1/otoc/otoc OCOMP="q ~/o/ocompiler-1/src/o" ./md $@
++OCONV="qq ~/o/ocompiler-1/otoc/otoc" OCOMP="q ~/o/ocompiler-1/src/o" ./md $@
+--- actionswf-1.orig/oad/save.oc
++++ actionswf-1/oad/save.oc
+@@ -200,6 +200,7 @@ end
+ #read
+ 
+ importx "fread" fread
++importx "malloc" malloc
+ importx "free" free
+ 
+ function lowread(valueu file,valueu buf,charx sz)
+@@ -229,7 +230,79 @@ function iread(valueu file,sdu pn)
+ 	call lowread(file,pn,(DWORD))
+ end
+ 
+-importx "malloc" malloc
++function restore_strings_free(valueu constpool,svu strs,dataxu size)
++	if size!=0  #not always having strings
++		sv cursor;set cursor strs
++		valueu end#1;set end strs
++		add end size
++		while cursor!=end
++			call free(cursor#)
++			incst cursor
++		end
++		call free(strs)
++		call free(constpool)
++	end
++end
++function restore_branch_inners_free(valueu br)
++	sv cursor;set cursor br#:branch.innerbranches
++	valueu end#1;set end cursor
++	add end br#:branch.isize
++	while cursor!=end
++		call restore_branch_free(cursor#)
++		incst cursor
++	end
++end
++function restore_branch_cuts_free(valueu br)
++	valueu cursor#1;set cursor br#:branch.cuts
++	valueu end#1;set end cursor
++	add end br#:branch.size
++	while cursor!=end
++		call free(cursor#:branchcut.x)
++		add cursor \branchcut\
++	end
++	call free(br#:branch.cuts)
++end
++function restore_branch_free(valueu br)
++	call restore_branch_cuts_free(br)
++	call restore_branch_inners_free(br)
++	valueu sbr#1;set sbr br#:branch.subbranch
++	if sbr!=(NULL)
++		call restore_branch_free(sbr)
++	end
++	call free(br)
++end
++function restore_frame_free(valueu fr)
++	call restore_strings_free(fr#:preframe.restore_ustrings,fr#:preframe.ustrings,fr#:preframe.ussize)
++	call restore_strings_free(fr#:preframe.restore_dstrings,fr#:preframe.strings,fr#:preframe.ssize)
++	call restore_branch_free(fr#:preframe.abranch)
++end
++function restore_free(svu predata)
++	svu pss#1;set pss predata#:preoadata.presprites
++	valueu end#1;set end pss
++	add end predata#:preoadata.size
++	while pss!=end
++		valueu ps#1;set ps pss#
++		if ps#:presprite.apreframe!=(NULL)
++			call restore_frame_free(ps#:presprite.apreframe)
++		end
++		valueu fs#1;set fs ps#:presprite.preframes
++		sv f;set f fs
++		valueu fend#1;set fend f
++		add fend ps#:presprite.size
++		while f!=fend
++			if f#!=(NULL) #can be also showframe
++				call restore_frame_free(f#)
++			end
++			incst f
++		end
++		call free(fs)
++		call free(ps)
++		incst pss
++	end
++	call free(predata#:preoadata.presprites)
++	call free(predata)
++end
++
+ importx "printf" printf
+ 
+ import "re_alloc_add" re_alloc_add
+@@ -464,79 +537,3 @@ function restore_branch(valueu file)
+ 	end
+ 	return (NULL)
+ end
+-
+-function restore_free(svu predata)
+-	svu pss#1;set pss predata#:preoadata.presprites
+-	valueu end#1;set end pss
+-	add end predata#:preoadata.size
+-	while pss!=end
+-		valueu ps#1;set ps pss#
+-		if ps#:presprite.apreframe!=(NULL)
+-			call restore_frame_free(ps#:presprite.apreframe)
+-		end
+-		valueu fs#1;set fs ps#:presprite.preframes
+-		sv f;set f fs
+-		valueu fend#1;set fend f
+-		add fend ps#:presprite.size
+-		while f!=fend
+-			if f#!=(NULL) #can be also showframe
+-				call restore_frame_free(f#)
+-			end
+-			incst f
+-		end
+-		call free(fs)
+-		call free(ps)
+-		incst pss
+-	end
+-	call free(predata#:preoadata.presprites)
+-	call free(predata)
+-end
+-
+-function restore_frame_free(valueu fr)
+-	call restore_strings_free(fr#:preframe.restore_ustrings,fr#:preframe.ustrings,fr#:preframe.ussize)
+-	call restore_strings_free(fr#:preframe.restore_dstrings,fr#:preframe.strings,fr#:preframe.ssize)
+-	call restore_branch_free(fr#:preframe.abranch)
+-end
+-
+-function restore_strings_free(valueu constpool,svu strs,dataxu size)
+-	if size!=0  #not always having strings
+-		sv cursor;set cursor strs
+-		valueu end#1;set end strs
+-		add end size
+-		while cursor!=end
+-			call free(cursor#)
+-			incst cursor
+-		end
+-		call free(strs)
+-		call free(constpool)
+-	end
+-end
+-
+-function restore_branch_free(valueu br)
+-	call restore_branch_cuts_free(br)
+-	call restore_branch_inners_free(br)
+-	valueu sbr#1;set sbr br#:branch.subbranch
+-	if sbr!=(NULL)
+-		call restore_branch_free(sbr)
+-	end
+-	call free(br)
+-end
+-function restore_branch_cuts_free(valueu br)
+-	valueu cursor#1;set cursor br#:branch.cuts
+-	valueu end#1;set end cursor
+-	add end br#:branch.size
+-	while cursor!=end
+-		call free(cursor#:branchcut.x)
+-		add cursor \branchcut\
+-	end
+-	call free(br#:branch.cuts)
+-end
+-function restore_branch_inners_free(valueu br)
+-	sv cursor;set cursor br#:branch.innerbranches
+-	valueu end#1;set end cursor
+-	add end br#:branch.isize
+-	while cursor!=end
+-		call restore_branch_free(cursor#)
+-		incst cursor
+-	end
+-end
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -102,6 +102,10 @@ importx "fputc" fputc
+ function printn(sv s)
+ 	call fputc((output_nl),s)
+ end
++function print_inline_done()
++	sv so^stdout  #isn't at c an extra step? who cares, at o is not possible without this
++	call printn(so#)
++end
+ function printt(ss str)
+ 	svu so^stdout  #isn't at c an extra step? who cares, at o, to put stdout an arg is like putting the pointer
+ 	call fputs(str,so#)
+@@ -140,10 +144,6 @@ function prints_inline(ss format)
+ 	call putchar((Space))
+ 	call printt(format)
+ end
+-function print_inline_done()
+-	sv so^stdout  #isn't at c an extra step? who cares, at o is not possible without this
+-	call printn(so#)
+-end
+ 
+ import "memnl" memnl
+ 
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -11,9 +11,15 @@ sudo apt-get install actionswf
+ ```
+ There is also <i>libactionswf-dev</i>.\
+ \
++\
++On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/edor/releases). Or:
++```sh
++yay -Sy actionswf
++```
++\
+ On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/actionswf/releases).
+ ```sh
+-yum install actionswf-*.*.rpm
++dnf install actionswf-*.*.rpm
+ ```
+ \
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases) has the dll.
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -19,6 +19,9 @@ ifndef linkerflags
+ linkerflags=-O3 -s
+ #-O0 to 3 is same at .so here
+ endif
++ifndef prefix
++prefix=/usr
++endif
+ 
+ ifndef OSTRIP
+ OSTRIP=ostrip
+@@ -152,13 +155,24 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	install -D ${libname} \
+-		$(DESTDIR)$(prefix)/lib/${libname}
++	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
++	if [ -e ../include_dev ]; then \
++		install -D ../dev/actionswf.h $(DESTDIR)$(prefix)/include/${projname}/actionswf.h && \
++		install -D ../dev/import.oh $(DESTDIR)$(prefix)/include/${projname}/import.oh && \
++		install -D ../dev/importf.oh $(DESTDIR)$(prefix)/include/${projname}/importf.oh && \
++		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
++	fi
+ 
+ install: all install-lib
+ 
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++	-if [ -e ../include_dev ]; then \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/import.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/importf.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
++	fi
+ 
+ .PHONY: all compile ounused def install install-lib clean distclean uninstall test
+ 
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -2,7 +2,7 @@
+ inc="include_sec 1"
+ if [ -z "${conv_64}" ]; then conv_64=0
+ elif [ ${conv_64} = 1 ]; then
+-	if [ "`dpkg-architecture -qDEB_HOST_ARCH`" = "amd64" ]; then #cross
++	if [ "`dpkg-architecture -qDEB_HOST_ARCH`" != "i386" ]; then #cross
+ 		inc=
+ 	fi
+ fi
+--- actionswf-1.orig/tests/c
++++ actionswf-1/tests/c
+@@ -7,73 +7,75 @@ if [ -z "${1}" ]; then
+ 	if [ -e .expected/a.swf.x ]; then rm .expected/a.swf.x; fi
+ 	if [ -e .expected/a.swf.x32 ]; then rm .expected/a.swf.x32; fi
+ else
+-. ./xxd
+-smart_diff () {
+-	diff ${1} ${2}
+-	if [ $? = 0 ]; then
+-		ok="${ok} + `du -b ${1}`"
+-		return 0
+-	fi
+-	if [ -n "${3}" ]; then return 1; fi
+-	a=`stat --printf="%s" ${1}`
+-	b=`stat --printf="%s" ${2}`
+-	base64 ${1}
+-	echo
+-	base64 ${2}
+-	if [ ${a} = ${b} ]; then
+-		echo size equal ${a}
+-		if [ -n "`which xxd`" ]; then
+-			xxd${xxd_args}${1} > 1
+-			xxd${xxd_args}${2} > 2
+-			diff 1 2
+-			rm 1 2
+-		fi
+-	fi
+-	return 1
+-}
+-smart_ask () {
+-	stat --printf="\n%s\n" .expected/a.swf${1}
+-	stat --printf="%s\n" a.swf${2}
+-	echo y \? m \?; read -n1 -t $((60*60*24)) ans
+-	if [ "${ans}" = "m" ]; then
+-		if [ -z "${1}" ]; then
+-			swfdump -D .expected/a.swf${1} > 1
+-			swfdump -D a.swf${2} > 2
+-		else
+-			xxd${xxd_args}.expected/a.swf${1} > 1
+-			xxd${xxd_args}a.swf${2} > 2
+-		fi
+-		diff 1 2
+-		rm 1 2
+-		echo y \?; read -n1 -t $((60*60*24)) ans
+-	fi
+-	if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+-	base64 a.swf${2} > .expected/a.swf${1}.txt #this is ok with ln
+-}
+-	base64 -d .expected/a.swf.txt > .expected/a.swf || { echo not ok; exit 1; }
+-	smart_diff .expected/a.swf a.swf
+-	if [ $? != 0 ]; then
+-		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
+-		smart_ask
+-	fi
++	. ./integ && {
++		. ./xxd
++		smart_diff () {
++			diff ${1} ${2}
++			if [ $? = 0 ]; then
++				ok="${ok} + `du -b ${1}`"
++				return 0
++			fi
++			if [ -n "${3}" ]; then return 1; fi
++			a=`stat --printf="%s" ${1}`
++			b=`stat --printf="%s" ${2}`
++			base64 ${1}
++			echo
++			base64 ${2}
++			if [ ${a} = ${b} ]; then
++				echo size equal ${a}
++				if [ -n "`which xxd`" ]; then
++					xxd${xxd_args}${1} > 1
++					xxd${xxd_args}${2} > 2
++					diff 1 2
++					rm 1 2
++				fi
++			fi
++			return 1
++		}
++		smart_ask () {
++			stat --printf="\n%s\n" .expected/a.swf${1}
++			stat --printf="%s\n" a.swf${2}
++			echo y \? m \?; read -n1 -t $((60*60*24)) ans
++			if [ "${ans}" = "m" ]; then
++				if [ -z "${1}" ]; then
++					swfdump -D .expected/a.swf${1} > 1
++					swfdump -D a.swf${2} > 2
++				else
++					xxd${xxd_args}.expected/a.swf${1} > 1
++					xxd${xxd_args}a.swf${2} > 2
++				fi
++				diff 1 2
++				rm 1 2
++				echo y \?; read -n1 -t $((60*60*24)) ans
++			fi
++			if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++			base64 a.swf${2} > .expected/a.swf${1}.txt #this is ok with ln
++		}
+ 
+-	if [ "${conv_64}" = 1 ]; then
+-		v=32
+-	fi
+-	base64 -d .expected/a.swf.x${v}.txt > .expected/a.swf.x${v} || { echo not ok; exit 1; }
+-	smart_diff .expected/a.swf.x${v} a.swf.x
+-	if [ $? != 0 ]; then
+-		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
+-		smart_ask .x${v} .x
+-	fi
++		base64 -d .expected/a.swf.txt > .expected/a.swf || { echo not ok; exit 1; }
++		smart_diff .expected/a.swf a.swf
++		if [ $? != 0 ]; then
++			if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++			smart_ask
++		fi
+ 
+-	smart_diff .expected/a.swf.log a.swf.log x
+-	if [ $? != 0 ]; then
+-		if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
+-		echo y \?; read -n1 -t $((60*60*24)) ans
+-		if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
+-		mv a.swf.log .expected
+-	fi
++		if [ "${conv_64}" = 1 ]; then
++			v=32
++		fi
++		base64 -d .expected/a.swf.x${v}.txt > .expected/a.swf.x${v} || { echo not ok; exit 1; }
++		smart_diff .expected/a.swf.x${v} a.swf.x
++		if [ $? != 0 ]; then
++			if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++			smart_ask .x${v} .x
++		fi
+ 
++		smart_diff .expected/a.swf.log a.swf.log x
++		if [ $? != 0 ]; then
++			if [ ${1} != 0 ]; then { echo not ok; exit 1; } fi
++			echo y \?; read -n1 -t $((60*60*24)) ans
++			if [ "${ans}" != "y" ]; then { echo not ok; exit 1; } fi
++			mv a.swf.log .expected
++		fi
++	}
+ 	echo ${ok}
+ fi
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -1,4 +1,7 @@
+ #!/bin/sh
++
++CFLAGS=$(echo $(cat ../../oad/cflags) | grep -Poe "(?<==).*")
++
+ if [ -n "${1}" ]; then
+ 	g="gdb -ex start --args"
+ fi
+@@ -15,6 +18,6 @@ if [ -z "${f}" ]; then
+ fi
+ o a.oc x_file 1 && \
+ otoc a.oc.x && \
+-${CC} ${model} -w -g a.c -L../../oad -loadbgdata && \
++${CC} ${model} ${CFLAGS} -g a.c -L../../oad -loadbgdata && \
+ LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} || { echo a.out error; exit 1; }
+ #if [ -z "${d}" ]; then rm ${f}.data; else cp ${f}.data .; fi
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -22,28 +22,31 @@ fi
+ status=`cat ./test.status`; rm ./test.status
+ if [ ${status} != 0 ]; then  exit 1; fi          #set -o pipefail && a | tee || exit
+ 
+-diff ../.expected/data${e}.txt data.txt
+-if [ $? != 0 ]; then
+-	if [ -n "${1}" ]; then exit 1; fi
+-	echo y \?; read -n1 -t $((60*60*24)) ans
+-	if [ "${ans}" != "y" ]; then exit 1; fi
+-	cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
+-fi
++. ../integ && {
++	diff ../.expected/data${e}.txt data.txt
++	if [ $? != 0 ]; then
++		if [ -n "${1}" ]; then exit 1; fi
++		echo y \?; read -n1 -t $((60*60*24)) ans
++		if [ "${ans}" != "y" ]; then exit 1; fi
++		cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
++	fi
+ 
+-etestexp=../.expected/example.swf.data${e}
+-etestexpt=${etestexp}.txt
+-base64 -d ${etestexpt} > ${etestexp}
+-diff ${etestexp} ${etest}
+-if [ $? -ne 0 ]; then
+-	if [ -n "${1}" ]; then exit 1; fi
+-	. ../xxd
+-	xxd${xxd_args} ${etestexp} > 1
+-	xxd${xxd_args} ${etest} > 2
+-	diff --color 1 2
+-	rm 1 2
+-	echo y \?; read -n1 -t $((60*60*24)) ans
+-	if [ "${ans}" != "y" ]; then exit 1; fi
+-	base64 ${etest} > ${etestexpt}
+-fi
++	etestexp=../.expected/example.swf.data${e}
++	etestexpt=${etestexp}.txt
++	base64 -d ${etestexpt} > ${etestexp}
++	diff ${etestexp} ${etest}
++	if [ $? -ne 0 ]; then
++		if [ -n "${1}" ]; then exit 1; fi
++		. ../xxd
++		xxd${xxd_args} ${etestexp} > 1
++		xxd${xxd_args} ${etest} > 2
++		diff --color 1 2
++		rm 1 2
++		echo y \?; read -n1 -t $((60*60*24)) ans
++		if [ "${ans}" != "y" ]; then exit 1; fi
++		base64 ${etest} > ${etestexpt}
++	fi
+ 
+-rm data.txt ${etestexp}
++	rm ${etestexp}
++}
++rm data.txt
+--- /dev/null
++++ actionswf-1/tests/integ
+@@ -0,0 +1,9 @@
++
++return_status() {
++	if [ ! -e .expected ]; then
++		echo .expected comparisons only at https://launchpad.net/~colin-i/+archive/ubuntu/ppa
++		return 1
++	fi
++	return 0
++}
++return_status
