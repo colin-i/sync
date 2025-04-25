@@ -1,0 +1,162 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x70) focal; urgency=medium
+ .
+   * normalize clue
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-25
+
+--- edor-1.orig/.github/workflows/pkg.yml
++++ edor-1/.github/workflows/pkg.yml
+@@ -24,14 +24,14 @@ jobs:
+         chown bot:bot bot
+         cd bot
+ 
+-        pacman -Sy --noconfirm --needed git base-devel wget
++        pacman -Sy --noconfirm --needed git base-devel wget bc
+         su bot -c 'git clone -n --depth=1 --filter=tree:0 https://github.com/colin-i/pkgbuilds'
+         #--filter in git-rev-list
+         cd pkgbuilds
+         su bot -c "git sparse-checkout set --no-cone /${name}"
+         su bot -c 'git checkout'
+         cd ${name}
+-        pacman -S --noconfirm bc  #to not make bot with a password for -s --noconf
++
+         su bot -c makepkg
+         ls
+         nm=`ls | grep ".*\.zst$" | grep -v debug`
+--- edor-1.orig/.github/workflows/pkgarm.yml
++++ edor-1/.github/workflows/pkgarm.yml
+@@ -16,6 +16,14 @@ jobs:
+     - name: build
+       run: |
+         name=`cat debian/changelog | head -1 | grep -o ^[^\ ]*`
++        repo_at_gh=`cat debian/control | grep "^Homepage" | grep -o [^/]*$`
++        version=`cat debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"`
++        text=`curl https://api.github.com/graphql -X POST -H "Authorization: bearer ${{ secrets.PAT }}" -d '
++        {
++         "query": "query { repository ( owner: \"colin-i\", name: \"'"${repo_at_gh}"'\" ) { release ( tagName: \"'"${version}"'\" ) { databaseId }} }"
++        }'`
++        id=`echo ${text} | grep -Poe "(?<=databaseId\":)[^}]*"`
++        up_url=https://uploads.github.com/repos/colin-i/edor/releases/${id}/assets{?name,label}
+         here=`pwd`
+         cd /home/alarm
+ 
+@@ -29,10 +37,9 @@ jobs:
+         nm=`ls | grep ".*\.xz$" | grep -v debug`
+         nm2=`echo ${nm} | sed s/-any/-arch-aarch64/`
+         mv ${nm} ${here}/${nm2}
+-        echo "file=${nm2}" >> $GITHUB_ENV
+ 
+-        wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
+-        echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
++        echo "file=${nm2}" >> $GITHUB_ENV
++        echo "up_url=${up_url}" >> $GITHUB_ENV
+     - name: Upload Release Asset
+       uses: actions/upload-release-asset@v1
+       with:
+--- edor-1.orig/clean
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-git clean -xdf -e .pc/ -e debian/patches/ && git diff && echo git diff
+--- /dev/null
++++ edor-1/cln
+@@ -0,0 +1,2 @@
++
++git clean -xdf -e .pc/ -e debian/patches/ && git diff && echo git diff
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -12,6 +12,11 @@ Install:
+ sudo apt-get install edor
+ ```
+ \
++On Arch Linux, <i>.zst</i> or <i>.xz</i> file from [releases](https://github.com/colin-i/edor/releases), depending on architecture. Or:
++```sh
++yay -Sy edor
++```
++\
+ On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/edor/releases).
+ ```sh
+ dnf install edor-*.*.rpm
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -158,7 +158,7 @@ row_dword xtext=0;//and what about when
+ bool mod_flag=true;
+ bool ocompiler_flag=false;
+ size_t aftercall;
+-size_t clue=no_clue;
++size_t clue=no_clue;size_t normalize_clue=no_clue;
+ 
+ static char*mapsel=nullptr;
+ //static char*text_file=nullptr;
+@@ -2094,7 +2094,10 @@ void setprefs(int flag,bool set){
+ 			}
+ 			writeprefs(f,mask);
+ 			unsigned short nowsize=lseek(f,0,SEEK_CUR);//now is 7 bar_bytes and a mask, not 256
++			#pragma GCC diagnostic push
++			#pragma GCC diagnostic ignored "-Wunused-result"
+ 			ftruncate(f,nowsize);
++			#pragma GCC diagnostic pop
+ 			close(f);
+ 		}
+ 	}
+@@ -2315,6 +2318,7 @@ static bool loopin(WINDOW*w){
+ 		}
+ 	}
+ }
++#define normalize_yes_clue ok=normalize_yes;normalize_clue=*r;
+ //-1 to normalize, 0 errors, 1 ok
+ static normalize_char normalize(char**c,size_t*size,size_t*r){
+ 	normalize_char ok=normalize_err;
+@@ -2328,20 +2332,20 @@ static normalize_char normalize(char**c,
+ 			if(a=='\n'){
+ 				r[0]++;
+ 				if(ln_term_sz==2){
+-					norm[j]='\r';j++;ok=normalize_yes;
++					norm[j]='\r';j++;normalize_yes_clue
+ 				}
+-				else if(ln_term[0]=='\r'){a='\r';ok=normalize_yes;}
++				else if(ln_term[0]=='\r'){a='\r';normalize_yes_clue}
+ 			}else if(a=='\r'){
+ 				r[0]++;
+ 				if(ln_term_sz==2){
+ 					if(((i+1)<sz)&&text_w[i+1]=='\n'){
+ 						norm[j]=a;j++;i++;
+ 						a='\n';}
+-					else{norm[j]=a;j++;a='\n';ok=normalize_yes;}
++					else{norm[j]=a;j++;a='\n';normalize_yes_clue}
+ 				}
+ 				else if(ln_term[0]=='\n'){
+ 					if(((i+1)<sz)&&text_w[i+1]=='\n')i++;
+-					a='\n';ok=normalize_yes;
++					a='\n';normalize_yes_clue
+ 				}
+ 			}
+ 			norm[j]=a;j++;
+@@ -2922,6 +2926,7 @@ static void action_go(int argc,char**arg
+ 			}
+ 			endwin();
+ 
++			if(normalize_clue!=no_clue)printf("normalize clue: " protocol "\n",normalize_clue);
+ 			if(clue!=no_clue)printf("last row where was an error at split write was: " protocol "\n",clue);
+ 		}
+ 	}
