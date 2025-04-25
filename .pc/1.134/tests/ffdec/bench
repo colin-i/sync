@@ -1,0 +1,34 @@
+
+export LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src
+level_index=1
+get_hexflag () {
+	b=`cat $1 | grep -Po "(?<=^const $2=)[^ ]*"`
+}
+srch () {
+	get_hexflag ../../dev/flags.oh $1
+	if [ -z "$b" ]; then
+		get_hexflag ../../dev/import.oh $1
+	fi
+	if [ `expr substr $b 1 1` != 0 ]; then
+		d=`echo $b | sed "s/|/ /g"`
+		for c in $d; do
+			srch $c
+		done
+		return
+	fi
+	z="${z} ${b}"
+}
+step () {
+	com=$1;shift
+	echo "$@"
+	z=
+	for a in $@; do
+		srch $a
+	done
+	n=$(echo $z | sed "s/ /|/g")
+	n="\$((${n}))"
+	n=`eval echo $n`
+	${com} "qq ./a.out 0x`printf "%x" $n` x x"
+	if [ -n "${level}" ] && [ ${level} = ${level_index} ]; then exit; fi
+	level_index=$((level_index+1))
+}

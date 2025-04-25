@@ -1,0 +1,2311 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-134) bionic; urgency=medium
+ .
+   * more headers
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-25
+
+--- actionswf-1.orig/.github/workflows/pkgarm.yml
++++ actionswf-1/.github/workflows/pkgarm.yml
+@@ -37,9 +37,10 @@ jobs:
+ 
+      nm=`ls | grep ".*\.gz$"`
+      nm2=`echo ${nm} | sed "s/-aarch64/-ubuntu-aarch64/; s/${name}/liboadbgdata/"`
+-     wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
+-
++     mv ${nm} ${nm2}
+      echo "file=${nm2}" >> $GITHUB_ENV
++
++     wget https://github.com/colin-i/test/releases/download/1.5/${name} -O 1.txt
+      echo "up_url=`cat 1.txt`" >> $GITHUB_ENV
+   - name: Upload Release Asset
+     uses: actions/upload-release-asset@v1
+--- /dev/null
++++ actionswf-1/64.old/build.bat.old
+@@ -0,0 +1,26 @@
++
++::this was used in ocompiler < 1.4 only
++exit
++
++set files_src=src\
++
++goto go
++:sub1
++if "%1"=="" exit /b
++call :sub2 %files_src%%1
++shift
++goto :sub1
++
++:sub2
++objcopy --input-target=elf32-i386 "%1.o" --output-target=elf64-x86-64 "%1X.o"
++del "%1.o"
++move "%1X.o" "%1.o"
++exit /b
++
++:go
++
++set /p content=<./dev/f1.txt
++call :sub1 %content%
++set /p content=<./dev/f2.txt
++call :sub1 %content%
++call :sub2 shared\action_dllmain
+--- actionswf-1.orig/64/build.bat
++++ /dev/null
+@@ -1,26 +0,0 @@
+-
+-::this was used in ocompiler < 1.4 only
+-exit
+-
+-set files_src=src\
+-
+-goto go
+-:sub1
+-if "%1"=="" exit /b
+-call :sub2 %files_src%%1
+-shift
+-goto :sub1
+-
+-:sub2
+-objcopy --input-target=elf32-i386 "%1.o" --output-target=elf64-x86-64 "%1X.o"
+-del "%1.o"
+-move "%1X.o" "%1.o"
+-exit /b
+-
+-:go
+-
+-set /p content=<./dev/f1.txt
+-call :sub1 %content%
+-set /p content=<./dev/f2.txt
+-call :sub1 %content%
+-call :sub2 shared\action_dllmain
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -1,24 +1,27 @@
+-TOPTARGETS := all install clean distclean uninstall test
++
++MEDTARGETS := test clean distclean
++TOPTARGETS := all install uninstall
+ #distclean is called for configures (unexistent here, then, is deprecated for us)
+ 
++SUBDIRS := dev src oad
++ALLDIRS := example $(SUBDIRS)
++
++ifndef prefix
++prefix=/usr
++endif
++
+ ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), i386)
+ conv_64=1
+ else
+ conv_64=0
+ endif
+ 
+-SUBDIRS := src oad
+-
+-ifndef prefix
+-prefix=/usr
+-endif
+-
+ $(TOPTARGETS): $(SUBDIRS)
+-$(SUBDIRS):
++$(MEDTARGETS): $(ALLDIRS)
++$(ALLDIRS):
+ 	$(MAKE) -C $@ conv_64=${conv_64} $(MAKECMDGOALS)
+ 
+ test:
+-	$(MAKE) -C example conv_64=${conv_64}
+ 	RUN__SHELL=$(SHELL) . ./shl && cd tests && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
+ 	cd ffdec && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
+ 	cd ../data && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./test x && echo tests ok
+@@ -29,5 +32,5 @@ install:
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative
+ 
+-.PHONY: $(TOPTARGETS) $(SUBDIRS)
++.PHONY: $(TOPTARGETS) $(MEDTARGETS) $(ALLDIRS)
+ .NOTPARALLEL:
+--- actionswf-1.orig/clean
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-cd example && make clean && cd .. && make clean && git status
+--- /dev/null
++++ actionswf-1/cln
+@@ -0,0 +1,2 @@
++
++cd example && make clean && cd .. && make clean && git status
+--- /dev/null
++++ actionswf-1/dev/Makefile
+@@ -0,0 +1,43 @@
++
++ifndef OCOMP
++OCOMP=o
++endif
++ifndef OCONV
++OCONV=otoc
++endif
++
++all: flags.h flagss.h actionswf.oh
++
++%.h: %.ohi
++	${OCOMP} $< x_file 2 logfile 0
++	${OCONV} $<.x
++%.ohi: %.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	echo "override include_sec 1" >> $@
++	cat $< >> $@
++
++actionswf.oh: action_swf.oh
++	echo "include \"import.oh\"" > $@
++	sed "s/^#//g" $< >> $@
++
++test:
++	echo dev
++clean:
++	-rm -f flags.ohi.x flagss.ohi.x flags.ohi flagss.ohi flags.h flagss.h actionswf.oh
++distclean: clean
++
++install:
++	if [ -e ../include_dev ]; then \
++		install -D flags.h $(DESTDIR)$(prefix)/include/actionswf/flags.h && \
++		install -D flags.h $(DESTDIR)$(prefix)/include/actionswf/flagss.h && \
++		install -D actionswf.oh $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
++	fi
++uninstall:
++	-if [ -e ../include_dev ]; then \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/flags.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/flagss.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
++	fi
++
++.PHONY: all install clean distclean uninstall test
+--- /dev/null
++++ actionswf-1/dev/action_swf.oh
+@@ -0,0 +1,46 @@
++
++const StateMoveTo=1
++const StateFillStyle0=2*StateMoveTo
++const StateFillStyle1=2*StateFillStyle0
++const StateLineStyle=2*StateFillStyle1
++#const StateNewStyles=2*StateLineStyle
++
++const ButtonStateUp=1
++const ButtonStateOver=2*ButtonStateUp
++const ButtonStateDown=2*ButtonStateOver
++const ButtonStateHitTest=2*ButtonStateDown
++##ButtonData
++
++##text flags
++const HasText=0x80
++#const WordWrap=0x40
++#const Multiline=0x20
++#const Password=0x10
++const ReadOnly=0x8
++const HasTextColor=0x4
++const HasMaxLength=0x2
++const HasFont=0x1
++const HasFontClass=0x8000
++#const AutoSize=0x4000
++const HasLayout=0x2000
++const NoSelect=0x1000
++#const Border=0x800
++#const WasStatic=0x400
++#const HTML=0x200
++#const UseOutlines=0x100
++#
++#const layout_align_left=0
++#const layout_align_right=1
++const layout_align_center=2
++#const layout_align_justify=3
++
++##EditText
++
++const FontFlagsHasLayout=0x80
++#const FontFlagsShiftJIS=0x40
++#const FontFlagsSmallText=0x20
++#const FontFlagsANSI=0x10
++#const FontFlagsWideOffsets=8
++#const FontFlagsWideCodes=4
++#const FontFlagsItalic=2
++#const FontFlagsBold=1
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -1,9 +1,5 @@
+ 
+-#define flag_forin1 0x20
+-#define flag_framesAsShows 0x40
+-#define flagpre_pool_write 0x100
+-#define flag_pool_read_unlink 0x800
+-#define flag_compress 0x2000
++#include "flagss.h"
+ 
+ 
+ 
+@@ -18,6 +14,12 @@ extern "C" {
+ #define StateFillStyle1 2*StateFillStyle0
+ #define StateLineStyle 2*StateFillStyle1
+ #define StateNewStyles 2*StateLineStyle
++
++#define ButtonStateUp 1
++#define ButtonStateOver 2*ButtonStateUp
++#define ButtonStateDown 2*ButtonStateOver
++#define ButtonStateHitTest 2*ButtonStateDown
++
+ #pragma pack(push,4)
+ typedef struct ButtonData_str{
+     unsigned int def_fill;
+@@ -39,6 +41,7 @@ typedef struct ButtonData_str{
+     char* actions;
+ }ButtonData;
+ #pragma pack(pop)
++
+ #define HasText 0x80
+ #define WordWrap 0x40
+ #define Multiline 0x20
+@@ -55,6 +58,12 @@ typedef struct ButtonData_str{
+ #define WasStatic 0x400
+ #define HTML 0x200
+ #define UseOutlines 0x100
++
++#define layout_align_left 0
++#define layout_align_right 1
++#define layout_align_center 2
++#define layout_align_justify 3
++
+ #pragma pack(push,4)
+ typedef struct EditText_str
+ {
+@@ -71,6 +80,7 @@ typedef struct EditText_str
+     int layout_leading;
+ } EditText;
+ #pragma pack(pop)
++
+ #define FontFlagsHasLayout 0x80
+ #define FontFlagsShiftJIS 0x40
+ #define FontFlagsSmallText 0x20
+@@ -81,8 +91,8 @@ typedef struct EditText_str
+ #define FontFlagsBold 1
+ 
+ 
+-//swf
+ 
++//swf
+ 
+ //button
+ 
+@@ -173,7 +183,6 @@ void swf_exports_done();
+ 
+ //action
+ 
+-
+ //this/an action
+ 
+ void action(char* ac);
+@@ -188,7 +197,6 @@ void action_init_sprite(int sprite,char*
+ void actionf_init_sprite(int sprite,char* buffer,char* format,...);
+ 
+ 
+-
+ //tool
+ 
+ char erbool_get();
+--- actionswf-1.orig/dev/build.bat
++++ /dev/null
+@@ -1,18 +0,0 @@
+-o.exe "shared/action_dllmain.oc"
+-
+-set files_src=./src/
+-
+-set /p content=<./dev/f1.txt
+-call :sub1 %content%
+-goto go
+-:sub1
+-if "%1"=="" exit /b
+-
+-o.exe %files_src%%1.oc
+-
+-shift
+-goto :sub1
+-:go
+-
+-set /p content=<./dev/f2.txt
+-call :sub1 %content%
+--- /dev/null
++++ actionswf-1/dev/build.bat.old
+@@ -0,0 +1,18 @@
++o.exe "shared/action_dllmain.oc"
++
++set files_src=./src/
++
++set /p content=<./dev/f1.txt
++call :sub1 %content%
++goto go
++:sub1
++if "%1"=="" exit /b
++
++o.exe %files_src%%1.oc
++
++shift
++goto :sub1
++:go
++
++set /p content=<./dev/f2.txt
++call :sub1 %content%
+--- actionswf-1.orig/dev/clear.bat
++++ /dev/null
+@@ -1,19 +0,0 @@
+-
+-set /p content=<./dev/f1.txt
+-call :sub1 %content%
+-goto go
+-:sub1
+-if "%1"=="" exit /b
+-
+-del "src\\%1.o"
+-
+-shift
+-goto :sub1
+-:go
+-
+-set /p content=<./dev/f2.txt
+-call :sub1 %content%
+-
+-del "fix\\libc.a"
+-del "lib\\libactionswf.a"
+-del "shared\\action_dllmain.o"
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/dev/clear.bat.old
+@@ -0,0 +1,19 @@
++
++set /p content=<./dev/f1.txt
++call :sub1 %content%
++goto go
++:sub1
++if "%1"=="" exit /b
++
++del "src\\%1.o"
++
++shift
++goto :sub1
++:go
++
++set /p content=<./dev/f2.txt
++call :sub1 %content%
++
++del "fix\\libc.a"
++del "lib\\libactionswf.a"
++del "shared\\action_dllmain.o"
+\ No newline at end of file
+--- actionswf-1.orig/dev/files.bat
++++ /dev/null
+@@ -1,26 +0,0 @@
+-
+-set files_src=./src/
+-set files_export=
+-
+-set /p content=<./dev/f1.txt
+-call :sub1 %content%
+-goto go
+-:sub1
+-if "%1"=="" exit /b
+-set files_export=%files_export% "%files_src%%1.o"
+-shift
+-goto :sub1
+-:go
+-
+-set /a iter=1
+-set /p content=<./dev/f2.txt
+-call :sub2 %content%
+-goto go2
+-:sub2
+-if "%1"=="" exit /b
+-set files_%iter%="%files_src%%1.o"
+-set /a iter=%iter%+1
+-shift
+-goto :sub2
+-:go2
+-set files=%files_export% %files_1% %files_2% %files_3% %files_4% %files_5% %files_6% %files_7% %files_8% %files_9%
+--- /dev/null
++++ actionswf-1/dev/files.bat.old
+@@ -0,0 +1,26 @@
++
++set files_src=./src/
++set files_export=
++
++set /p content=<./dev/f1.txt
++call :sub1 %content%
++goto go
++:sub1
++if "%1"=="" exit /b
++set files_export=%files_export% "%files_src%%1.o"
++shift
++goto :sub1
++:go
++
++set /a iter=1
++set /p content=<./dev/f2.txt
++call :sub2 %content%
++goto go2
++:sub2
++if "%1"=="" exit /b
++set files_%iter%="%files_src%%1.o"
++set /a iter=%iter%+1
++shift
++goto :sub2
++:go2
++set files=%files_export% %files_1% %files_2% %files_3% %files_4% %files_5% %files_6% %files_7% %files_8% %files_9%
+--- /dev/null
++++ actionswf-1/dev/flagss.oh
+@@ -0,0 +1,4 @@
++
++include "flags.h" "flags.oh"
++const xx_flags=flag_x|flag_pool_read
++const xxu_flags=flag_x|flag_pool_read_unlink
+--- actionswf-1.orig/dev/import.oh
++++ actionswf-1/dev/import.oh
+@@ -1,6 +1,3 @@
+ 
+-include "flags.oh"
+-const xx_flags=flag_x|flag_pool_read
+-const xxu_flags=flag_x|flag_pool_read_unlink
+-
++include "flagss.oh"
+ include "importf.oh"
+--- actionswf-1.orig/dev/lib.bat
++++ /dev/null
+@@ -1,2 +0,0 @@
+-dlltool.exe --no-leading-underscore -d ./fix/c.def -l ./fix/libc.a
+-dlltool.exe -d ./lib/actionswf.def -l ./lib/libactionswf.a
+--- /dev/null
++++ actionswf-1/dev/lib.bat.old
+@@ -0,0 +1,2 @@
++dlltool.exe --no-leading-underscore -d ./fix/c.def -l ./fix/libc.a
++dlltool.exe -d ./lib/actionswf.def -l ./lib/libactionswf.a
+--- actionswf-1.orig/dev/link.bat
++++ /dev/null
+@@ -1,8 +0,0 @@
+-
+-::must have the "objects", example : set objects=./example/example.o
+-::and the "program" variable, example : set program=./example/example.exe
+-::"entrypoint" is the main function : set entrypoint=example_main
+-::     like the one in the example folder
+-
+-call ./dev/files.bat
+-ld -nostdlib -s -e %entrypoint% -o %program% %objects% %files% -L"./fix" -lc
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/dev/link.bat.old
+@@ -0,0 +1,8 @@
++
++::must have the "objects", example : set objects=./example/example.o
++::and the "program" variable, example : set program=./example/example.exe
++::"entrypoint" is the main function : set entrypoint=example_main
++::     like the one in the example folder
++
++call ./dev/files.bat
++ld -nostdlib -s -e %entrypoint% -o %program% %objects% %files% -L"./fix" -lc
+\ No newline at end of file
+--- actionswf-1.orig/dev/shared.bat
++++ /dev/null
+@@ -1,5 +0,0 @@
+-
+-
+-call ./dev/files.bat
+-
+-ld -nostdlib -s %files% ./shared/action_dllmain.o --no-leading-underscore -shared -entry DllMain -o ./actionswf.dll -L./fix -lc --exclude-modules-for-implib %files_1%,%files_2%,%files_3%,%files_4%,%files_5%,%files_6%,%files_7%,%files_8%,%files_9%,./shared/action_dllmain.o
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/dev/shared.bat.old
+@@ -0,0 +1,5 @@
++
++
++call ./dev/files.bat
++
++ld -nostdlib -s %files% ./shared/action_dllmain.o --no-leading-underscore -shared -entry DllMain -o ./actionswf.dll -L./fix -lc --exclude-modules-for-implib %files_1%,%files_2%,%files_3%,%files_4%,%files_5%,%files_6%,%files_7%,%files_8%,%files_9%,./shared/action_dllmain.o
+\ No newline at end of file
+--- actionswf-1.orig/example/change_format.c
++++ /dev/null
+@@ -1,51 +0,0 @@
+-#include <windows.h>
+-#include <stdio.h>
+-#include <direct.h>
+-#include <io.h>
+-#include <fcntl.h>
+-
+-#pragma comment(lib, "User32.lib")
+-#pragma warning( disable : 4995 )
+-#pragma warning( disable : 4996 )
+-
+-char* format;
+-void fwr(char* nm){
+-	FILE* f;
+-
+-	printf(nm);printf("\n");
+-	f=fopen(nm,"r+");
+-	fseek(f,0,SEEK_SET);
+-	fwrite(format,strlen(format),1,f);
+-	fclose(f);
+-}
+-void files(int x){
+-	char z[MAX_PATH];int f;char* content;long ln;int p;int i;long length;
+-
+-	sprintf(z,"../dev/f%u.txt",x);
+-	f=_open(z,_O_RDONLY|_O_BINARY);ln=_filelength(f);length=ln+1;
+-	content=malloc(length);_read(f,content,ln);_close(f);
+-	content[ln]=',';
+-
+-	p=0;
+-	for(i=0;i<length;i++){
+-		if(content[i]==','){
+-			content[i]=0;
+-			sprintf(z,"%s.oc",&content[p]);fwr(z);
+-			p=i+1;
+-		}
+-	}
+-	free(content);
+-}
+-
+-void main(int argc,char** argv)
+-{
+-
+-   if(argc<2)return;
+-	format=argv[1];
+-
+-	_chdir("../");_chdir("shared");
+-	fwr("action_dllmain.oc");
+-
+-	_chdir("../");_chdir("src");
+-	files(1);files(2);
+-}
+--- /dev/null
++++ actionswf-1/example/change_format.c.old
+@@ -0,0 +1,51 @@
++#include <windows.h>
++#include <stdio.h>
++#include <direct.h>
++#include <io.h>
++#include <fcntl.h>
++
++#pragma comment(lib, "User32.lib")
++#pragma warning( disable : 4995 )
++#pragma warning( disable : 4996 )
++
++char* format;
++void fwr(char* nm){
++	FILE* f;
++
++	printf(nm);printf("\n");
++	f=fopen(nm,"r+");
++	fseek(f,0,SEEK_SET);
++	fwrite(format,strlen(format),1,f);
++	fclose(f);
++}
++void files(int x){
++	char z[MAX_PATH];int f;char* content;long ln;int p;int i;long length;
++
++	sprintf(z,"../dev/f%u.txt",x);
++	f=_open(z,_O_RDONLY|_O_BINARY);ln=_filelength(f);length=ln+1;
++	content=malloc(length);_read(f,content,ln);_close(f);
++	content[ln]=',';
++
++	p=0;
++	for(i=0;i<length;i++){
++		if(content[i]==','){
++			content[i]=0;
++			sprintf(z,"%s.oc",&content[p]);fwr(z);
++			p=i+1;
++		}
++	}
++	free(content);
++}
++
++void main(int argc,char** argv)
++{
++
++   if(argc<2)return;
++	format=argv[1];
++
++	_chdir("../");_chdir("shared");
++	fwr("action_dllmain.oc");
++
++	_chdir("../");_chdir("src");
++	files(1);files(2);
++}
+--- actionswf-1.orig/example/example.bat
++++ /dev/null
+@@ -1,28 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-cd ..
+-
+-call dev\lib.bat
+-call dev\build.bat
+-call 64\build.bat
+-
+-cd example
+-
+-o example.oc
+-objcopy --input-target=elf32-i386 example.o --output-target=elf64-x86-64 exampleX.o
+-
+-cd ..
+-
+-set objects=./example/exampleX.o
+-
+-set program=./example/example.exe
+-
+-set entrypoint=example_main
+-
+-call ./dev/link.bat
+-
+-cd example
+-
+-example.exe
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/example/example.bat.old
+@@ -0,0 +1,28 @@
++
++::use Makefile
++exit
++
++cd ..
++
++call dev\lib.bat
++call dev\build.bat
++call 64\build.bat
++
++cd example
++
++o example.oc
++objcopy --input-target=elf32-i386 example.o --output-target=elf64-x86-64 exampleX.o
++
++cd ..
++
++set objects=./example/exampleX.o
++
++set program=./example/example.exe
++
++set entrypoint=example_main
++
++call ./dev/link.bat
++
++cd example
++
++example.exe
+\ No newline at end of file
+--- actionswf-1.orig/example/example32.bat
++++ /dev/null
+@@ -1,30 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-gcc change_format.c -o change_format.exe
+-
+-change_format.exe "Format ElfObj;#"
+-cd ..
+-
+-call dev\lib.bat
+-call dev\build.bat
+-
+-cd example
+-change_format.exe "Format ElfObj64"
+-
+-o example32.oc
+-
+-cd ..
+-
+-set objects=./example/example32.o
+-
+-set program=./example/example32.exe
+-
+-set entrypoint=example_main
+-
+-call ./dev/link.bat
+-
+-cd example
+-
+-example32.exe
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/example/example32.bat.old
+@@ -0,0 +1,30 @@
++
++::use Makefile
++exit
++
++gcc change_format.c -o change_format.exe
++
++change_format.exe "Format ElfObj;#"
++cd ..
++
++call dev\lib.bat
++call dev\build.bat
++
++cd example
++change_format.exe "Format ElfObj64"
++
++o example32.oc
++
++cd ..
++
++set objects=./example/example32.o
++
++set program=./example/example32.exe
++
++set entrypoint=example_main
++
++call ./dev/link.bat
++
++cd example
++
++example32.exe
+\ No newline at end of file
+--- actionswf-1.orig/example/mrd
++++ actionswf-1/example/mrd
+@@ -1,6 +1,5 @@
+ 
+-_L=/home/bc/x86_64_lib/cross
+-launcher="qq" LD=/usr/x86_64-linux-gnu/bin/ld L=-L${_L} _L2=:${_L} OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1 "$@"
++launcher="qq" LD=/usr/x86_64-linux-gnu/bin/ld L=-L/home/bc/x86_64_lib/cross _L2=:/home/bc/x86_64_lib/cross OFLAGSEXTRA+=" inplace_reloc 0" ./m64d ldprefer=1 "$@"
+ 
+ ##!/bin/sh
+ #LD_LIBRARY_PATH+=:/home/bc/before/lib
+--- actionswf-1.orig/example/shared_c++_example.bat
++++ /dev/null
+@@ -1,15 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-cd ..
+-
+-call dll.bat
+-
+-cd example
+-
+-g++ -o shared_c++_example.exe shared_c_example.c -L../lib -lactionswf
+-
+-PATH=..\;%PATH%
+-
+-shared_c++_example.exe
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/example/shared_c++_example.bat.old
+@@ -0,0 +1,15 @@
++
++::use Makefile
++exit
++
++cd ..
++
++call dll.bat
++
++cd example
++
++g++ -o shared_c++_example.exe shared_c_example.c -L../lib -lactionswf
++
++PATH=..\;%PATH%
++
++shared_c++_example.exe
+\ No newline at end of file
+--- actionswf-1.orig/example/shared_c_example.bat
++++ /dev/null
+@@ -1,15 +0,0 @@
+-
+-::use Makefile
+-exit
+-
+-cd ..
+-
+-call dll.bat
+-
+-cd example
+-
+-gcc -o shared_c_example.exe shared_c_example.c -L../lib -lactionswf
+-
+-PATH=..\;%PATH%
+-
+-shared_c_example.exe
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/example/shared_c_example.bat.old
+@@ -0,0 +1,15 @@
++
++::use Makefile
++exit
++
++cd ..
++
++call dll.bat
++
++cd example
++
++gcc -o shared_c_example.exe shared_c_example.c -L../lib -lactionswf
++
++PATH=..\;%PATH%
++
++shared_c_example.exe
+\ No newline at end of file
+--- actionswf-1.orig/example/shared_c_example.c
++++ /dev/null
+@@ -1,53 +0,0 @@
+-
+-//a simple shape moving on the stage example
+-
+-#include <stdio.h>
+-#include "../dev/actionswf.h"
+-
+-#define width 640
+-#define height 480
+-#define shape_lat 40
+-
+-#ifdef __cplusplus
+-    char* file_name_for_output_swf="shared_c++_example.swf";
+-#else
+-    char* file_name_for_output_swf="shared_c_example.swf";
+-#endif
+-
+-int main(){
+-	swf_new(file_name_for_output_swf,width,height,0x434343,24);
+-	unsigned int shape=swf_shape_basic(shape_lat,shape_lat,0xffeeFEff,0x11FF22ff);
+-	unsigned int movie_preid=swf_sprite_new();
+-
+-	swf_sprite_placeobject(movie_preid,shape,1);
+-	swf_sprite_showframe(movie_preid);
+-
+-	char ac[512];
+-	actionf_sprite(movie_preid,ac,"var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move",width,height,shape_lat);
+-
+-	action_sprite(movie_preid," \
+-		if(this._x>=right)_root.x_coef=_root.x_coef*-1;\n\
+-		else if(this._x<=left)_root.x_coef=_root.x_coef*-1;\n\
+-		this._x=move*_root.x_coef+this._x;\n\
+-		if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;\n\
+-		else if(this._y<=top)_root.y_coef=_root.y_coef*-1;\n\
+-		this._y=move*_root.y_coef+this._y;\n\
+-	");
+-
+-	swf_sprite_showframe(movie_preid);
+-
+-	unsigned int movie=swf_sprite_done(movie_preid);
+-	swf_exports_add(movie,"movie");
+-
+-	action("\
+-		var x_coef=1;\n\
+-		var y_coef=1;\n\
+-		this.attachMovie('movie','_movie',1);\n\
+-		_movie._x=100;\n\
+-		_movie._y=100;\n\
+-	");
+-
+-	swf_exports_done();swf_showframe();swf_done();
+-
+-	return 1;
+-}
+--- /dev/null
++++ actionswf-1/example/shared_c_example.c.old
+@@ -0,0 +1,53 @@
++
++//a simple shape moving on the stage example
++
++#include <stdio.h>
++#include "../dev/actionswf.h"
++
++#define width 640
++#define height 480
++#define shape_lat 40
++
++#ifdef __cplusplus
++    char* file_name_for_output_swf="shared_c++_example.swf";
++#else
++    char* file_name_for_output_swf="shared_c_example.swf";
++#endif
++
++int main(){
++	swf_new(file_name_for_output_swf,width,height,0x434343,24);
++	unsigned int shape=swf_shape_basic(shape_lat,shape_lat,0xffeeFEff,0x11FF22ff);
++	unsigned int movie_preid=swf_sprite_new();
++
++	swf_sprite_placeobject(movie_preid,shape,1);
++	swf_sprite_showframe(movie_preid);
++
++	char ac[512];
++	actionf_sprite(movie_preid,ac,"var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move",width,height,shape_lat);
++
++	action_sprite(movie_preid," \
++		if(this._x>=right)_root.x_coef=_root.x_coef*-1;\n\
++		else if(this._x<=left)_root.x_coef=_root.x_coef*-1;\n\
++		this._x=move*_root.x_coef+this._x;\n\
++		if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;\n\
++		else if(this._y<=top)_root.y_coef=_root.y_coef*-1;\n\
++		this._y=move*_root.y_coef+this._y;\n\
++	");
++
++	swf_sprite_showframe(movie_preid);
++
++	unsigned int movie=swf_sprite_done(movie_preid);
++	swf_exports_add(movie,"movie");
++
++	action("\
++		var x_coef=1;\n\
++		var y_coef=1;\n\
++		this.attachMovie('movie','_movie',1);\n\
++		_movie._x=100;\n\
++		_movie._y=100;\n\
++	");
++
++	swf_exports_done();swf_showframe();swf_done();
++
++	return 1;
++}
+--- actionswf-1.orig/fix/c.def
++++ /dev/null
+@@ -1,21 +0,0 @@
+-LIBRARY msvcrt.dll
+-EXPORTS
+-_close
+-_open
+-_write
+-_read
+-_lseek
+-__iob_func
+-fwrite
+-realloc
+-free
+-memcmp
+-memcpy
+-sscanf
+-sprintf
+-strcat
+-strchr
+-strcmp
+-strlen
+-strcspn
+-strpbrk
+--- /dev/null
++++ actionswf-1/fix/c.def.old
+@@ -0,0 +1,21 @@
++LIBRARY msvcrt.dll
++EXPORTS
++_close
++_open
++_write
++_read
++_lseek
++__iob_func
++fwrite
++realloc
++free
++memcmp
++memcpy
++sscanf
++sprintf
++strcat
++strchr
++strcmp
++strlen
++strcspn
++strpbrk
+--- actionswf-1.orig/include/action.h
++++ /dev/null
+@@ -1,110 +0,0 @@
+-
+-const no_pointer=0  #NULL
+-
+-const ActionReturn=0x3E            #1
+-const ActionIf=0x9D                #1
+-
+-const ActionDelete=0x3A            #2
+-const ActionDelete2=0x3B           #2
+-const ActionDefineLocal2=0x41      #2
+-
+-const ActionSetVariable=0x1D       #L
+-const ActionDefineLocal=0x3C       #L
+-const ActionSetMember=0x4F         #L
+-
+-const math_end=0xffFFffFF             #0 RG RH
+-const args_end=0xfeEEeeEE             #C
+-const whileblock_end=0xfdDDddDD       #1 FR
+-const block_else_end=0xfcCCccCC       #1
+-const member_end=0xfbBBbbBB           #M
+-
+-const no_action=0
+-const call_action_left=0xf1011010     #1
+-const call_action_right=0xf2022020    #RH
+-const function_action=0xf3033030      #1
+-const new_action=0xf4044040           #RG
+-const square_bracket_start=0xf5055050 #M
+-const mixt_equal=0xf6066060           #R
+-const compare_action=0xf7077070       #OC
+-const parenthesis_start=0xf8088080    #RH
+-const break_flag=0xf9099090           #1
+-const continue_flag=0xfa0AA0a0        #1
+-const for_three=0xfb0BB0b0            #FR
+-const inter_for=0xfc0CC0c0            #FR
+-const ifElse_start=0xfd0DD0d0         #RG
+-const for=0xfe0EE0e0                  #1
+-
+-const no_flag=0                        #code only
+-const consecutive_flag=0x80<<24        #parse only
+-const skip_flag=0x80<<24               #code only
+-const brace_blocks_function=0x7fFFffFF #code only
+-
+-const normal_marker=0x41010202        #parse only
+-const if_marker=0x43030404            #I
+-const while_marker=0x45050606         #1
+-const function_marker=0x47070808      #F
+-const forin_marker=0x49090a0a         #code only
+-const forwhiletrue_marker=0x4b0b0c0c  #code only
+-const else_marker=0x4d0d0e0e          #1
+-const top_marker=0x4f0f0e0e           #code only
+-
+-const ActionSubtract=0x0B      #OP
+-const ActionMultiply=0x0C      #OP
+-const ActionDivide=0x0D        #OP
+-const ActionAnd=0x10           #O
+-const ActionOr=0x11            #O
+-const ActionNot=0x12           #OC
+-const ActionGetVariable=0x1C   #RT
+-const ActionModulo=0x3F        #OP
+-const ActionAdd2=0x47          #OP
+-const ActionLess2=0x48         #OC
+-const ActionEquals2=0x49       #OC
+-const ActionGetMember=0x4E     #RT
+-const ActionIncrement=0x50     #R
+-const ActionDecrement=0x51     #R
+-const ActionBitAnd=0x60        #OP
+-const ActionBitOr=0x61         #OP
+-const ActionBitXor=0x62        #OP
+-const ActionBitLShift=0x63     #OP
+-const ActionBitRShift=0x64     #OP
+-const ActionBitURShift=0x65    #OP
+-const ActionGreater=0x67       #OC
+-const ActionPush=0x96
+-	const ap_String=0
+-	const ap_Float=1
+-	const ap_Null=2
+-	const ap_Undefined=3
+-	const ap_RegisterNumber=4
+-	const ap_Boolean=5
+-	const ap_Double=6        #RH
+-	const ap_Integer=7       #RH
+-	const ap_Constant8=8     #RH
+-	const ap_Constant16=9
+-
+-const ActionEndFlag=0           #at builtin case only to test(not to write)
+-const ActionNextFrame=0x04      #builtin
+-const ActionPreviousFrame=0x05  #builtin
+-const ActionPlay=0x06           #builtin
+-const ActionStop=0x07           #builtin
+-#const ActionAdd=0x0A
+-const ActionPop=0x17
+-const ActionToInteger=0x18      #builtin
+-const ActionTrace=0x26          #builtin
+-const ActionRandomNumber=0x30   #builtin
+-const ActionCharToAscii=0x32    #builtin
+-const ActionAsciiToChar=0x33    #builtin
+-const ActionCallFunction=0x3D
+-const ActionNewObject=0x40
+-const ActionTypeOf=0x44         #builtin
+-const ActionEnumerate=0x46
+-const ActionPushDuplicate=0x4C
+-const ActionStackSwap=0x4D
+-const ActionCallMethod=0x52
+-const ActionNewMethod=0x53
+-const ActionEnumerate2=0x55
+-const ActionGotoFrame=0x81      #builtin
+-const ActionStoreRegister=0x87
+-const ActionConstantPool=0x88
+-const ActionJump=0x99
+-const ActionDefineFunction=0x9B
+-#const ActionGotoFrame2=0x9F
+--- /dev/null
++++ actionswf-1/include/action.oh
+@@ -0,0 +1,110 @@
++
++const no_pointer=0  #NULL
++
++const ActionReturn=0x3E            #1
++const ActionIf=0x9D                #1
++
++const ActionDelete=0x3A            #2
++const ActionDelete2=0x3B           #2
++const ActionDefineLocal2=0x41      #2
++
++const ActionSetVariable=0x1D       #L
++const ActionDefineLocal=0x3C       #L
++const ActionSetMember=0x4F         #L
++
++const math_end=0xffFFffFF             #0 RG RH
++const args_end=0xfeEEeeEE             #C
++const whileblock_end=0xfdDDddDD       #1 FR
++const block_else_end=0xfcCCccCC       #1
++const member_end=0xfbBBbbBB           #M
++
++const no_action=0
++const call_action_left=0xf1011010     #1
++const call_action_right=0xf2022020    #RH
++const function_action=0xf3033030      #1
++const new_action=0xf4044040           #RG
++const square_bracket_start=0xf5055050 #M
++const mixt_equal=0xf6066060           #R
++const compare_action=0xf7077070       #OC
++const parenthesis_start=0xf8088080    #RH
++const break_flag=0xf9099090           #1
++const continue_flag=0xfa0AA0a0        #1
++const for_three=0xfb0BB0b0            #FR
++const inter_for=0xfc0CC0c0            #FR
++const ifElse_start=0xfd0DD0d0         #RG
++const for=0xfe0EE0e0                  #1
++
++const no_flag=0                        #code only
++const consecutive_flag=0x80<<24        #parse only
++const skip_flag=0x80<<24               #code only
++const brace_blocks_function=0x7fFFffFF #code only
++
++const normal_marker=0x41010202        #parse only
++const if_marker=0x43030404            #I
++const while_marker=0x45050606         #1
++const function_marker=0x47070808      #F
++const forin_marker=0x49090a0a         #code only
++const forwhiletrue_marker=0x4b0b0c0c  #code only
++const else_marker=0x4d0d0e0e          #1
++const top_marker=0x4f0f0e0e           #code only
++
++const ActionSubtract=0x0B      #OP
++const ActionMultiply=0x0C      #OP
++const ActionDivide=0x0D        #OP
++const ActionAnd=0x10           #O
++const ActionOr=0x11            #O
++const ActionNot=0x12           #OC
++const ActionGetVariable=0x1C   #RT
++const ActionModulo=0x3F        #OP
++const ActionAdd2=0x47          #OP
++const ActionLess2=0x48         #OC
++const ActionEquals2=0x49       #OC
++const ActionGetMember=0x4E     #RT
++const ActionIncrement=0x50     #R
++const ActionDecrement=0x51     #R
++const ActionBitAnd=0x60        #OP
++const ActionBitOr=0x61         #OP
++const ActionBitXor=0x62        #OP
++const ActionBitLShift=0x63     #OP
++const ActionBitRShift=0x64     #OP
++const ActionBitURShift=0x65    #OP
++const ActionGreater=0x67       #OC
++const ActionPush=0x96
++	const ap_String=0
++	const ap_Float=1
++	const ap_Null=2
++	const ap_Undefined=3
++	const ap_RegisterNumber=4
++	const ap_Boolean=5
++	const ap_Double=6        #RH
++	const ap_Integer=7       #RH
++	const ap_Constant8=8     #RH
++	const ap_Constant16=9
++
++const ActionEndFlag=0           #at builtin case only to test(not to write)
++const ActionNextFrame=0x04      #builtin
++const ActionPreviousFrame=0x05  #builtin
++const ActionPlay=0x06           #builtin
++const ActionStop=0x07           #builtin
++#const ActionAdd=0x0A
++const ActionPop=0x17
++const ActionToInteger=0x18      #builtin
++const ActionTrace=0x26          #builtin
++const ActionRandomNumber=0x30   #builtin
++const ActionCharToAscii=0x32    #builtin
++const ActionAsciiToChar=0x33    #builtin
++const ActionCallFunction=0x3D
++const ActionNewObject=0x40
++const ActionTypeOf=0x44         #builtin
++const ActionEnumerate=0x46
++const ActionPushDuplicate=0x4C
++const ActionStackSwap=0x4D
++const ActionCallMethod=0x52
++const ActionNewMethod=0x53
++const ActionEnumerate2=0x55
++const ActionGotoFrame=0x81      #builtin
++const ActionStoreRegister=0x87
++const ActionConstantPool=0x88
++const ActionJump=0x99
++const ActionDefineFunction=0x9B
++#const ActionGotoFrame2=0x9F
+--- actionswf-1.orig/include/ascii.h
++++ /dev/null
+@@ -1,129 +0,0 @@
+-
+-Const Nullchar=0x00
+-#Const StartofHeading=0x01
+-#Const StartofText=0x02
+-#Const EndofText=0x03
+-#Const EndofTransmission=0x04
+-#Const Enquiry=0x05
+-#Const Acknowledgment=0x06
+-#Const Bell=0x07
+-#Const BackSpace=0x08
+-Const HorizontalTab=0x09
+-#Const LineFeed=0x0A
+-#Const VerticalTab=0x0B
+-#Const FormFeed=0x0C
+-#Const CarriageReturn=0x0D
+-#Const ShiftOut=0x0E
+-#Const ShiftIn=0x0F
+-#Const DataLineEscape=0x10
+-#Const DeviceControl1=0x11
+-#Const DeviceControl2=0x12
+-#Const DeviceControl3=0x13
+-#Const DeviceControl4=0x14
+-#Const NegativeAcknowledgement=0x15
+-#Const SynchronousIdle=0x16
+-#Const EndofTransmitBlock=0x17
+-#Const Cancel=0x18
+-#Const EndofMedium=0x19
+-#Const Substitute=0x1A
+-#Const Escape=0x1B
+-#Const FileSeparator=0x1C
+-#Const GroupSeparator=0x1D
+-#Const RecordSeparator=0x1E
+-#Const UnitSeparator=0x1F
+-Const Space=0x20
+-Const Exclamationmark=0x21
+-#Const Doublequotes=0x22
+-#Const Number=0x23
+-#Const Dollar=0x24
+-Const Percent=0x25
+-Const Ampersand=0x26
+-#Const Singlequote=0x27
+-Const Openparenthesis=0x28
+-Const Closeparenthesis=0x29
+-Const Asterisk=0x2A
+-Const Plus=0x2B
+-#Const Comma=0x2C
+-Const Hyphen=0x2D
+-Const Period=0x2E
+-Const Slash=0x2F
+-Const _0=0x30
+-#Const _1=0x31
+-#Const _2=0x32
+-#Const _3=0x33
+-#Const _4=0x34
+-#Const _5=0x35
+-#Const _6=0x36
+-#Const _7=0x37
+-#Const _8=0x38
+-Const _9=0x39
+-Const Colon=0x3A
+-Const Semicolon=0x3B
+-Const Lessthan=0x3C
+-Const Equals=0x3D
+-Const Greaterthan=0x3E
+-Const Questionmark=0x3F
+-#Const Atsymbol=0x40
+-Const A=0x41
+-Const B=0x42
+-Const C=0x43
+-Const D=0x44
+-#Const E=0x45
+-Const F=0x46
+-#Const G=0x47
+-#Const H=0x48
+-#Const I=0x49
+-#Const J=0x4A
+-#Const K=0x4B
+-Const L=0x4C
+-#Const M=0x4D
+-#Const N=0x4E
+-#Const O=0x4F
+-#Const P=0x50
+-#Const Q=0x51
+-#Const R=0x52
+-Const S=0x53
+-#Const T=0x54
+-#Const U=0x55
+-#Const V=0x56
+-Const W=0x57
+-#Const X=0x58
+-#Const Y=0x59
+-Const Z=0x5A
+-Const Openingbracket=0x5B
+-#Const Backslash=0x5C
+-Const Closingbracket=0x5D
+-Const Caret=0x5E
+-Const _=0x5F
+-#Const Graveaccent=0x60
+-Const a=0x61
+-#Const b=0x62
+-#Const c=0x63
+-#Const d=0x64
+-#Const e=0x65
+-#Const f=0x66
+-#Const g=0x67
+-#Const h=0x68
+-#Const i=0x69
+-#Const j=0x6A
+-#Const k=0x6B
+-Const l=0x6C
+-#Const m=0x6D
+-#Const n=0x6E
+-#Const o=0x6F
+-#Const p=0x70
+-#Const q=0x71
+-#Const r=0x72
+-Const s=0x73
+-#Const t=0x74
+-Const u=0x75
+-#Const v=0x76
+-#Const w=0x77
+-#Const x=0x78
+-#Const y=0x79
+-Const z=0x7A
+-Const Openingbrace=0x7B
+-Const Verticalbar=0x7C
+-Const Closingbrace=0x7D
+-#Const Equivalencysign=0x7E
+-#Const Delete=0x7F
+--- /dev/null
++++ actionswf-1/include/ascii.oh
+@@ -0,0 +1,129 @@
++
++Const Nullchar=0x00
++#Const StartofHeading=0x01
++#Const StartofText=0x02
++#Const EndofText=0x03
++#Const EndofTransmission=0x04
++#Const Enquiry=0x05
++#Const Acknowledgment=0x06
++#Const Bell=0x07
++#Const BackSpace=0x08
++Const HorizontalTab=0x09
++#Const LineFeed=0x0A
++#Const VerticalTab=0x0B
++#Const FormFeed=0x0C
++#Const CarriageReturn=0x0D
++#Const ShiftOut=0x0E
++#Const ShiftIn=0x0F
++#Const DataLineEscape=0x10
++#Const DeviceControl1=0x11
++#Const DeviceControl2=0x12
++#Const DeviceControl3=0x13
++#Const DeviceControl4=0x14
++#Const NegativeAcknowledgement=0x15
++#Const SynchronousIdle=0x16
++#Const EndofTransmitBlock=0x17
++#Const Cancel=0x18
++#Const EndofMedium=0x19
++#Const Substitute=0x1A
++#Const Escape=0x1B
++#Const FileSeparator=0x1C
++#Const GroupSeparator=0x1D
++#Const RecordSeparator=0x1E
++#Const UnitSeparator=0x1F
++Const Space=0x20
++Const Exclamationmark=0x21
++#Const Doublequotes=0x22
++#Const Number=0x23
++#Const Dollar=0x24
++Const Percent=0x25
++Const Ampersand=0x26
++#Const Singlequote=0x27
++Const Openparenthesis=0x28
++Const Closeparenthesis=0x29
++Const Asterisk=0x2A
++Const Plus=0x2B
++#Const Comma=0x2C
++Const Hyphen=0x2D
++Const Period=0x2E
++Const Slash=0x2F
++Const _0=0x30
++#Const _1=0x31
++#Const _2=0x32
++#Const _3=0x33
++#Const _4=0x34
++#Const _5=0x35
++#Const _6=0x36
++#Const _7=0x37
++#Const _8=0x38
++Const _9=0x39
++Const Colon=0x3A
++Const Semicolon=0x3B
++Const Lessthan=0x3C
++Const Equals=0x3D
++Const Greaterthan=0x3E
++Const Questionmark=0x3F
++#Const Atsymbol=0x40
++Const A=0x41
++Const B=0x42
++Const C=0x43
++Const D=0x44
++#Const E=0x45
++Const F=0x46
++#Const G=0x47
++#Const H=0x48
++#Const I=0x49
++#Const J=0x4A
++#Const K=0x4B
++Const L=0x4C
++#Const M=0x4D
++#Const N=0x4E
++#Const O=0x4F
++#Const P=0x50
++#Const Q=0x51
++#Const R=0x52
++Const S=0x53
++#Const T=0x54
++#Const U=0x55
++#Const V=0x56
++Const W=0x57
++#Const X=0x58
++#Const Y=0x59
++Const Z=0x5A
++Const Openingbracket=0x5B
++#Const Backslash=0x5C
++Const Closingbracket=0x5D
++Const Caret=0x5E
++Const _=0x5F
++#Const Graveaccent=0x60
++Const a=0x61
++#Const b=0x62
++#Const c=0x63
++#Const d=0x64
++#Const e=0x65
++#Const f=0x66
++#Const g=0x67
++#Const h=0x68
++#Const i=0x69
++#Const j=0x6A
++#Const k=0x6B
++Const l=0x6C
++#Const m=0x6D
++#Const n=0x6E
++#Const o=0x6F
++#Const p=0x70
++#Const q=0x71
++#Const r=0x72
++Const s=0x73
++#Const t=0x74
++Const u=0x75
++#Const v=0x76
++#Const w=0x77
++#Const x=0x78
++#Const y=0x79
++Const z=0x7A
++Const Openingbrace=0x7B
++Const Verticalbar=0x7C
++Const Closingbrace=0x7D
++#Const Equivalencysign=0x7E
++#Const Delete=0x7F
+--- actionswf-1.orig/include/lin.h
++++ /dev/null
+@@ -1,10 +0,0 @@
+-
+-Const flag_O_BINARY=0
+-Const flag_O_CREAT=0x0040
+-
+-const S_IRUSR=0x100;const S_IWUSR=0x80
+-const S_IRGRP=0x20;const S_IWGRP=0x10
+-const S_IROTH=0x4;const S_IWOTH=0x2
+-Const flag_pmode=S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
+-
+-const path_separator=Slash
+--- /dev/null
++++ actionswf-1/include/lin.oh
+@@ -0,0 +1,10 @@
++
++Const flag_O_BINARY=0
++Const flag_O_CREAT=0x0040
++
++const S_IRUSR=0x100;const S_IWUSR=0x80
++const S_IRGRP=0x20;const S_IWGRP=0x10
++const S_IROTH=0x4;const S_IWOTH=0x2
++Const flag_pmode=S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
++
++const path_separator=Slash
+--- actionswf-1.orig/include/prog.h
++++ /dev/null
+@@ -1,152 +0,0 @@
+-
+-include "ascii.h"
+-
+-const TRUE=1
+-const FALSE=0
+-
+-const NULL=0
+-
+-#const MAX_PATH=260
+-
+-#const ENOENT=2
+-
+-const BYTE=1
+-const WORD=2
+-const DWORD=4
+-#const QWORD=8
+-
+-const SEEK_SET=0
+-const SEEK_CUR=1
+-const SEEK_END=2
+-
+-const maxuint16=0xffFF
+-const uint16_str_len=5
+-
+-const block_size=0x1000
+-
+-const mem_struct__size_off=4
+-const mem_struct__size_size=4
+-const mem_struct_size=mem_struct__size_off+mem_struct__size_size
+-
+-const mem_exp_init=0
+-const mem_exp_add=1
+-const mem_exp_done=2
+-const mem_exp_part_done=3
+-const mem_exp_change=4
+-const mem_exp_change_back=5
+-const mem_exp_change_pool=6
+-const mem_exp_change_back_pool=7
+-const mem_exp_get_block=8
+-const mem_exp_free=9
+-
+-const NBits_size=5
+-
+-const ids_set=0
+-const ids_free=1
+-const ids_get=2
+-const ids_get_pointer=3
+-const ids_all_free=4
+-const ids_counter=5
+-
+-#const negative_means_action_sprite_pool=0x80<<8<<8<<8
+-const fd_error=-1
+-const fd_none=fd_error
+-const not_an_id=-1
+-const any_id=~not_an_id
+-const dword_to_string_char=1+9+1
+-
+-const End=0
+-const ShowFrame=1
+-const SetBackGroundColor=9
+-const DoAction=12
+-const PlaceObject2=26
+-const RemoveObject2=28
+-const DefineShape3=32
+-            const no_fill=-1
+-        const solid_fill=0
+-        const repeating_bitmap_fill=0x40
+-const DefineBitsLossless=20
+-const DefineBitsJPEG2=21
+-const DefineButton2=34
+-const DefineBitsJPEG3=35
+-const DefineBitsLossless2=36
+-const DefineEditText=37
+-const DefineSprite=39
+-const DefineFont2=48
+-const ExportAssets=56
+-const DoInitAction=59
+-
+-include "action.h"
+-
+-const ButtonStateUp=1
+-const ButtonStateOver=2*ButtonStateUp
+-const ButtonStateDown=2*ButtonStateOver
+-const ButtonStateHitTest=2*ButtonStateDown
+-
+-include "text.h"
+-
+-const StateMoveTo=1
+-const StateFillStyle0=2*StateMoveTo
+-const StateFillStyle1=2*StateFillStyle0
+-const StateLineStyle=2*StateFillStyle1
+-#const StateNewStyles=2*StateLineStyle
+-
+-const FontFlagsHasLayout=0x80
+-#const FontFlagsShiftJIS=0x40
+-#const FontFlagsSmallText=0x20
+-#const FontFlagsANSI=0x10
+-#const FontFlagsWideOffsets=8
+-#const FontFlagsWideCodes=4
+-#const FontFlagsItalic=2
+-#const FontFlagsBold=1
+-
+-include "lin.h" "win.h"
+-include "../dev/flags.oh"
+-
+-Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
+-Const _open_read=_O_RDONLY|flag_O_BINARY
+-Const _open_write_base=_O_WRONLY|flag_O_BINARY|flag_O_CREAT
+-Const _open_write=_open_write_base|_O_TRUNC
+-
+-const fprintf_min=2  #file,format plus ...
+-
+-const from_show=0
+-const from_done=1
+-
+-const max_structures=999
+-const ids_str_len=3 #"999"
+-const ext_str_len=1+ids_str_len+1+uint16_str_len+1 # separator ids separator word_str_len null
+-
+-const action_code_values_unit=DWORD
+-
+-const recordheader_long_mark=0x3f
+-const recordheader_upperbits=recordheader_long_mark+1
+-
+-const action_debug_free=0
+-const action_debug_get=1
+-const action_debug_get_mem=2
+-
+-const actionjump_contentsize=2
+-const smallbackjump=-actionjump_contentsize
+-
+-const action_debug_comma=1
+-
+-const ret_cont_break_nothing=0
+-const ret_cont_break_something=1
+-const ret_cont_break_break=2
+-
+-const totalvalues=maxuint16
+-
+-const doubleH_exp=0x7fF00000
+-const doubleH_sign=0x80000000
+-
+-#const F_OK=0  # 0 2 4 6 are same as windows
+-const R_OK=4
+-
+-include "xlog.oh"
+-
+-const dblsignature_major=3
+-const dblsignature=dblsignature_major+1
+-const dblsize=4
+-const dblsize16=2
+-const dblformat=1
+--- /dev/null
++++ actionswf-1/include/prog.oh
+@@ -0,0 +1,132 @@
++
++include "ascii.oh"
++
++const TRUE=1
++const FALSE=0
++
++const NULL=0
++
++#const MAX_PATH=260
++
++#const ENOENT=2
++
++const BYTE=1
++const WORD=2
++const DWORD=4
++#const QWORD=8
++
++const SEEK_SET=0
++const SEEK_CUR=1
++const SEEK_END=2
++
++const maxuint16=0xffFF
++const uint16_str_len=5
++
++const block_size=0x1000
++
++const mem_struct__size_off=4
++const mem_struct__size_size=4
++const mem_struct_size=mem_struct__size_off+mem_struct__size_size
++
++const mem_exp_init=0
++const mem_exp_add=1
++const mem_exp_done=2
++const mem_exp_part_done=3
++const mem_exp_change=4
++const mem_exp_change_back=5
++const mem_exp_change_pool=6
++const mem_exp_change_back_pool=7
++const mem_exp_get_block=8
++const mem_exp_free=9
++
++const NBits_size=5
++
++const ids_set=0
++const ids_free=1
++const ids_get=2
++const ids_get_pointer=3
++const ids_all_free=4
++const ids_counter=5
++
++#const negative_means_action_sprite_pool=0x80<<8<<8<<8
++const fd_error=-1
++const fd_none=fd_error
++const not_an_id=-1
++const any_id=~not_an_id
++const dword_to_string_char=1+9+1
++
++const End=0
++const ShowFrame=1
++const SetBackGroundColor=9
++const DoAction=12
++const PlaceObject2=26
++const RemoveObject2=28
++const DefineShape3=32
++	const no_fill=-1
++	const solid_fill=0
++	const repeating_bitmap_fill=0x40
++const DefineBitsLossless=20
++const DefineBitsJPEG2=21
++const DefineButton2=34
++const DefineBitsJPEG3=35
++const DefineBitsLossless2=36
++const DefineEditText=37
++const DefineSprite=39
++const DefineFont2=48
++const ExportAssets=56
++const DoInitAction=59
++
++include "action.oh"
++
++include "../dev/flags.oh"
++include "../dev/action_swf.oh"
++
++include "lin.oh" "win.oh"
++
++Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
++Const _open_read=_O_RDONLY|flag_O_BINARY
++Const _open_write_base=_O_WRONLY|flag_O_BINARY|flag_O_CREAT
++Const _open_write=_open_write_base|_O_TRUNC
++
++const fprintf_min=2  #file,format plus ...
++
++const from_show=0
++const from_done=1
++
++const max_structures=999
++const ids_str_len=3 #"999"
++const ext_str_len=1+ids_str_len+1+uint16_str_len+1 # separator ids separator word_str_len null
++
++const action_code_values_unit=DWORD
++
++const recordheader_long_mark=0x3f
++const recordheader_upperbits=recordheader_long_mark+1
++
++const action_debug_free=0
++const action_debug_get=1
++const action_debug_get_mem=2
++
++const actionjump_contentsize=2
++const smallbackjump=-actionjump_contentsize
++
++const action_debug_comma=1
++
++const ret_cont_break_nothing=0
++const ret_cont_break_something=1
++const ret_cont_break_break=2
++
++const totalvalues=maxuint16
++
++const doubleH_exp=0x7fF00000
++const doubleH_sign=0x80000000
++
++#const F_OK=0  # 0 2 4 6 are same as windows
++const R_OK=4
++
++include "xlog.oh"
++
++const dblsignature_major=3
++const dblsignature=dblsignature_major+1
++const dblsize=4
++const dblsize16=2
++const dblformat=1
+--- actionswf-1.orig/include/text.h
++++ /dev/null
+@@ -1,21 +0,0 @@
+-const HasText=0x80
+-#const WordWrap=0x40
+-#const Multiline=0x20
+-#const Password=0x10
+-const ReadOnly=0x8
+-const HasTextColor=0x4
+-const HasMaxLength=0x2
+-const HasFont=0x1
+-const HasFontClass=0x8000
+-#const AutoSize=0x4000
+-const HasLayout=0x2000
+-const NoSelect=0x1000
+-#const Border=0x800
+-#const WasStatic=0x400
+-#const HTML=0x200
+-#const UseOutlines=0x100
+-
+-#const layout_align_left=0
+-#const layout_align_right=1
+-const layout_align_center=2
+-#const layout_align_justify=3
+--- actionswf-1.orig/include/win.h
++++ /dev/null
+@@ -1,8 +0,0 @@
+-
+-const flag_O_CREAT=0x0100;const flag_O_BINARY=0x8000
+-const flag_S_IREAD=0x100;const flag_S_IWRITE=0x80
+-Const flag_pmode=flag_S_IREAD|flag_S_IWRITE
+-
+-#only because it is not used in ascii.h
+-Const Backslash=0x5C
+-const path_separator=Backslash
+--- /dev/null
++++ actionswf-1/include/win.oh
+@@ -0,0 +1,8 @@
++
++const flag_O_CREAT=0x0100;const flag_O_BINARY=0x8000
++const flag_S_IREAD=0x100;const flag_S_IWRITE=0x80
++Const flag_pmode=flag_S_IREAD|flag_S_IWRITE
++
++#only because it is not used in ascii.oh
++Const Backslash=0x5C
++const path_separator=Backslash
+--- /dev/null
++++ actionswf-1/lib.old/actionswf.def.old
+@@ -0,0 +1,36 @@
++LIBRARY actionswf.dll
++EXPORTS
++swf_button
++swf_button_last
++swf_font
++swf_font_basic
++swf_text
++swf_shape
++swf_shape_basic
++swf_shape_bitmap
++swf_shape_border
++swf_image
++swf_image_ex
++swf_dbl
++swf_dbl_ex
++swf_dbl_width
++swf_dbl_height
++swf_done
++swf_new
++swf_new_ex
++swf_placeobject
++swf_placeobject_coords
++swf_removeobject
++swf_showframe
++swf_sprite_done
++swf_sprite_new
++swf_sprite_placeobject
++swf_sprite_placeobject_coords
++swf_sprite_removeobject
++swf_sprite_showframe
++swf_exports_add
++swf_exports_done
++action
++actionf
++action_sprite
++actionf_sprite
+--- actionswf-1.orig/lib/actionswf.def
++++ /dev/null
+@@ -1,36 +0,0 @@
+-LIBRARY actionswf.dll
+-EXPORTS
+-swf_button
+-swf_button_last
+-swf_font
+-swf_font_basic
+-swf_text
+-swf_shape
+-swf_shape_basic
+-swf_shape_bitmap
+-swf_shape_border
+-swf_image
+-swf_image_ex
+-swf_dbl
+-swf_dbl_ex
+-swf_dbl_width
+-swf_dbl_height
+-swf_done
+-swf_new
+-swf_new_ex
+-swf_placeobject
+-swf_placeobject_coords
+-swf_removeobject
+-swf_showframe
+-swf_sprite_done
+-swf_sprite_new
+-swf_sprite_placeobject
+-swf_sprite_placeobject_coords
+-swf_sprite_removeobject
+-swf_sprite_showframe
+-swf_exports_add
+-swf_exports_done
+-action
+-actionf
+-action_sprite
+-actionf_sprite
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -9,7 +9,7 @@ Or the *Manual installation step* from t
+ ```sh
+ sudo apt-get install actionswf
+ ```
+-There is also <i>libactionswf-dev</i>.\
++There is also <i>libactionswf-dev</i>. <i>liboadbgdata</i> <i>.gz</i> file from [releases](https://github.com/colin-i/actionswf/releases) is for aarch64 architecture.\
+ \
+ \
+ On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/edor/releases). Or:
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -2,7 +2,7 @@
+ Action Swf can create swf files.
+ The program is a set of objects made with O Language.
+ A swf with actionscript example is in the example folder for static o language.
+-The libactionswf-dev actionswf.h is for c/c++ language and import.oh are the imports for o language.
++The libactionswf-dev actionswf.h is for c/c++ languages and actionswf.oh is for for o language.
+ The files swf.es and action.es has the main functions that can be used; functions from tool.es can be used in rare situations.
+ When using the debug_log flag at swf_new_ex, action,action_sprite,swf_sprite_done calls are logged. The syntax is as follow:
+ 
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -157,10 +157,11 @@ test:
+ install-lib:
+ 	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
+ 	if [ -e ../include_dev ]; then \
+-		install -D ../dev/actionswf.h $(DESTDIR)$(prefix)/include/${projname}/actionswf.h && \
+-		install -D ../dev/import.oh $(DESTDIR)$(prefix)/include/${projname}/import.oh && \
++		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flags.oh && \
++		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flagss.oh && \
+ 		install -D ../dev/importf.oh $(DESTDIR)$(prefix)/include/${projname}/importf.oh && \
+-		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
++		install -D ../dev/import.oh $(DESTDIR)$(prefix)/include/${projname}/import.oh && \
++		install -D ../dev/actionswf.h $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+ 	fi
+ 
+ install: all install-lib
+@@ -168,10 +169,11 @@ install: all install-lib
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
+ 	-if [ -e ../include_dev ]; then \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/import.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/importf.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/flagss.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/importf.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/import.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+ 	fi
+ 
+ .PHONY: all compile ounused def install install-lib clean distclean uninstall test
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ import "for_in_ptr" for_in_ptr
+ import "is_ainit" is_ainit
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "strcmp" strcmp
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "strcspn" strcspn
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "strlen" strlen
+--- actionswf-1.orig/src/actionpush.oc
++++ actionswf-1/src/actionpush.oc
+@@ -3,7 +3,7 @@ format elfobj64
+ 
+ #ActionPush added to a query, and released at the action for them
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ import "mem_free" mem_free
+ 
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ importx "strrchr" strrchr
+ importx "strcpy" strcpy
+--- actionswf-1.orig/src/bits.oc
++++ actionswf-1/src/bits.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ function bits_packs(ss dest,sd packs)
+     sd i=0
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ import "stack_to_word_arg" stack_to_word_arg
+ 
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ function debug_mark()
+ 	valuex row#1
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ importx "sprintf" sprintf
+ importx "memcpy" memcpy
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ import "action_debug" action_debug
+ import "action_data" action_data
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ importx "_open" open
+ importx "_read" read
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ import "identifiers_set" identifiers_set
+ import "stack_to_word_arg" stack_to_word_arg
+@@ -94,7 +94,7 @@ endfunction
+ #id
+ function swf_font_local(ss fontname,sd font_flags)
+ #ss fontname    = a string with the browser font, for example "_sans"
+-#sd font_flags  = prog.h file is with the flags
++#sd font_flags  = prog.oh file is with the flags
+     const font_hd_start=\
+ 
+     char id#2
+@@ -143,7 +143,7 @@ function swf_text_local(sd bound_width,s
+ #sd bound_width  width of the text
+ #sd bound_height height
+ #ss variablename to change it with actionscript
+-#sd flags        see include/text.h
++#sd flags        see dev/action_swf.oh at text flags
+ #sv structure    see edittext_struct()  from character.oc, set the flags first
+     #CharacterID
+     sd size=2
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+--- actionswf-1.orig/src/tool.e.oc
++++ actionswf-1/src/tool.e.oc
+@@ -11,7 +11,7 @@ functionx erbool_reset()
+     set p# 0
+ endfunction
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ functionx freereset()
+ #this is called by user only if want to abort after some calls
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -10,7 +10,7 @@ importx "memcmp" memcmp
+ 
+ import "platform_iob" platform_iob
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ function printEr(ss msg)
+     sd len;setcall len strlen(msg)
+--- actionswf-1.orig/src/win.oc
++++ actionswf-1/src/win.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ #win32 with _
+ importx "__iob_func" iob_func
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.h"
++include "../include/prog.oh"
+ 
+ import "f_close" f_close
+ import "mem_free" mem_free
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -3,9 +3,11 @@ format elfobj64
+ 
+ importx "_exit" exit
+ 
++include "entryraw.oc" "entry.oc"
++
++override include_sec 1
+ einclude "../dev/import.oh"
+ 
+-include "entryraw.oc" "entry.oc"
+ call xlog_pad_set(0x30)
+ 
+ sd f
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -22,7 +22,7 @@ fi
+ status=`cat ./test.status`; rm ./test.status
+ if [ ${status} != 0 ]; then  exit 1; fi          #set -o pipefail && a | tee || exit
+ 
+-. ../integ && {
++at_folder=../ . ../integ && {
+ 	diff ../.expected/data${e}.txt data.txt
+ 	if [ $? != 0 ]; then
+ 		if [ -n "${1}" ]; then exit 1; fi
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -3,9 +3,11 @@ format elfobj64
+ 
+ importx "_exit" exit
+ 
++include "../entryraw.oc" "../entry.oc"
++
++override include_sec 1
+ einclude "../../dev/import.oh"
+ 
+-include "../entryraw.oc" "../entry.oc"
+ dataxu f#1
+ importx "puts" puts
+ if argc=1
+--- actionswf-1.orig/tests/ffdec/bench
++++ actionswf-1/tests/ffdec/bench
+@@ -7,7 +7,7 @@ get_hexflag () {
+ srch () {
+ 	get_hexflag ../../dev/flags.oh $1
+ 	if [ -z "$b" ]; then
+-		get_hexflag ../../dev/import.oh $1
++		get_hexflag ../../dev/flagss.oh $1
+ 	fi
+ 	if [ `expr substr $b 1 1` != 0 ]; then
+ 		d=`echo $b | sed "s/|/ /g"`
+--- actionswf-1.orig/tests/integ
++++ actionswf-1/tests/integ
+@@ -1,9 +1,9 @@
+ 
+ return_status() {
+-	if [ ! -e .expected ]; then
+-		echo .expected comparisons only at https://launchpad.net/~colin-i/+archive/ubuntu/ppa
+-		return 1
++	if [ -e ${at_folder}.expected ]; then
++		return 0
+ 	fi
+-	return 0
++	echo .expected comparisons only at https://launchpad.net/~colin-i/+archive/ubuntu/ppa
++	return 1
+ }
+ return_status
