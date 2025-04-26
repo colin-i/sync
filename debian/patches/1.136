@@ -1,0 +1,230 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-136) bionic; urgency=medium
+ .
+   * dbl1 > gif/jpeg, dbl2 > png/alphajpeg
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-26
+
+--- actionswf-1.orig/.github/workflows/pkgarm.yml
++++ actionswf-1/.github/workflows/pkgarm.yml
+@@ -18,8 +18,19 @@ jobs:
+     run: |
+      sudo apt update
+      sudo apt install -y pacman-package-manager qemu-user libc6-i386-cross libc6-amd64-cross makepkg libarchive-tools #libarchive-tools with bsdtar, called at makepkg
+-     wget https://github.com/colin-i/o/releases/download/1-5%2B226/ocompiler-1.5+226-1-arch-x86_64.pkg.tar.zst
+-     sudo pacman -U --arch x86_64 --assume-installed lib32-glibc --noconfirm ocompiler-1.5+226-1-arch-x86_64.pkg.tar.zst
++
++     git clone -n --depth=1 --filter=tree:0 https://github.com/colin-i/pkgbuilds
++     cd pkgbuilds
++     git sparse-checkout set --no-cone /ocompiler
++     git checkout
++     cd ocompiler
++     vera=`cat ./PKGBUILD | grep ^pkgver | grep -Po "(?<==).*"`
++     ver=`echo ${vera} | sed "s/\./-/"`
++     rel=`cat ./PKGBUILD | grep ^pkgrel | grep -Po "(?<==).*"`
++     cd ../..
++
++     wget https://github.com/colin-i/o/releases/download/${ver}/ocompiler-${vera}-${rel}-arch-x86_64.pkg.tar.zst
++     sudo pacman -U --arch x86_64 --assume-installed lib32-glibc --noconfirm ocompiler-${vera}-${rel}-arch-x86_64.pkg.tar.zst
+ 
+      cd src/oad
+      LD_LIBRARY_PATH=/usr/i686-linux-gnu/lib:/usr/x86_64-linux-gnu/lib \
+--- actionswf-1.orig/dev/Makefile
++++ actionswf-1/dev/Makefile
+@@ -6,6 +6,10 @@ ifndef OCONV
+ OCONV=otoc
+ endif
+ 
++ifndef prefix
++prefix=/usr
++endif
++
+ all: flags.h flagss.h actionswf.oh
+ 
+ %.h: %.ohi
+--- actionswf-1.orig/dev/f1.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-swf,action,tool
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/dev/f1.txt.old
+@@ -0,0 +1 @@
++swf,action,tool
+\ No newline at end of file
+--- actionswf-1.orig/dev/f2.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-util,character,actionutil,actionpool,actioncode,actionparse,storage,bits,file
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/dev/f2.txt.old
+@@ -0,0 +1 @@
++util,character,actionutil,actionpool,actioncode,actionparse,storage,bits,file
+\ No newline at end of file
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -8,17 +8,19 @@ const flag_none=0
+ const flagpre_log=0x1
+ const flag_alt=0x2
+ const flag_titles=0x4
+-const flagpre_x=0x8               #oaalternative will try to stop if the log has prexx data
++const flagpre_x=0x8                   #oaalternative will try to stop if the log has prexx data
+ const flagpre_x_pad=0x10
+ const flag_forin1=0x20
+ const flag_framesAsShows=0x40
+-const flag_x=0x80                 #will turn off antix_read flags
++const flag_x=0x80                     #will turn off antix_read flags
+ const flagpre_pool_write=0x100
+-const flag_pool_read=0x200        #will turn off flag_pool_write
++const flag_pool_read=0x200            #will turn off flag_pool_write
+ const flagpre_mix=0x400
+-const flag_pool_read_unlink=0x800 #will turn off flag_pool_write
++const flag_pool_read_unlink=0x800     #will turn off flag_pool_write
+ const flagpre_write_no=0x1000
+ const flag_compress=0x2000
++const flag_deprecation_no=0x4000
++const flag_deprecation_partial=0x8000 #will turn off flag_deprecation_no
+ 
+ const debug_xpad=flagpre_x|flagpre_x_pad
+ const flags_pool=flagpre_pool_write|flag_pool_read|flag_pool_read_unlink
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -96,7 +96,7 @@ ATLDCOM = $(LD) ${linkerflags} --dynamic
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+-	#is not with ln -s because will be one file install
++#is not with ln -s because will be one file install
+ else
+ ${libname}: ${name}
+ 	$(eval strp = )
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -137,6 +137,23 @@ function md_printf(sd c,sd format,sd val
+ 	return n
+ end
+ 
++import "string_nl_print" string_nl_print
++
++function deprecation_init(sd flags)
++	charx bool#1
++	charx full#1
++	and flags (flag_deprecation_no|flag_deprecation_partial)
++	if flags=(flag_none)
++		set bool (TRUE)
++		set full (TRUE)
++	elseif flags=(flag_deprecation_partial)
++		set bool (TRUE)
++		set full (FALSE)
++	else #flag_deprecation_no
++		set bool (FALSE)
++	end
++end
++
+ import "row_termination" row_termination
+ import "brace_blocks_get_memblock" brace_blocks_get_memblock
+ import "block_get_size" block_get_size
+@@ -171,6 +188,7 @@ function flags_init(sd flags,sd path)
+ 
+ 	call frames_as_shows(flags)
+ 	call for_in(flags)
++	call deprecation_init(flags)
+ endfunction
+ 
+ function log_init(sd flags,sd path)
+@@ -539,3 +557,14 @@ function debug_xlog_call()
+ 		callg debug_phase_code_add_one((xlog_call))
+ 	end
+ end
++
++function deprecation()
++	if deprecation_init.bool=(TRUE)
++		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG functions, flag_deprecation_partial, flag_deprecation_no"
++		if deprecation_init.full=(TRUE)
++			call error(e)
++		else
++			call string_nl_print(e)
++		end
++	end
++end
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -24,8 +24,12 @@ import "alt_action" alt_action
+ #this has throws but for mem_exp_change and back are not required
+ import "swf_actionblock" swf_actionblock
+ 
++import "deprecation" deprecation
++
+ importx "strlen" strlen
+ importx "memcpy" memcpy
++importx "fseek" fseek
++importx "fclose" fclose
+ 
+ #aftercalli
+ 
+@@ -462,13 +466,14 @@ import "word_swap" word_swap
+ function swf_dbl_ex_local(ss imagepath,sd p_wh)
+ #ss imagepath = path name for the dbl image
+ #sd p_wh = pointer width a dword and height next dword
++#include "/home/bc/games/this_is_for_testing"
+ 	sd id
+ 	sd mem
+ 	sd size
+ 	sd cursor
+ 	setcall mem file_get_content(imagepath,#size)
+ 	if size<(dblsignature+dblsize)
+-	call error("missing image header")
++		call error("missing image header")
+ 	endif
+ 	char hd_magic0={D,B,L,1};vdata magic0^hd_magic0
+ 	char hd_magic00={D,B,L,2};vdata magic00^hd_magic00
+@@ -531,12 +536,11 @@ function swf_dbl_ex_local(ss imagepath,s
+ 	endif
+ 	call swf_mem_add(cursor,image_size)
+ 	call file_get_content__resources_free()
++	call deprecation()
+ 	return id
+ endfunction
+ 
+ import "f_open" f_open
+-importx "fseek" fseek
+-importx "fclose" fclose
+ import "f_tell_errors" f_tell_errors
+ #id
+ function swf_jpeg_local(ss imagepath,sd tag,ss alphapath)
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -351,9 +351,11 @@ functionX swf_imagej_alpha(ss imagepath,
+ 	return shape_id
+ endfunction
+ 
+-#https://stackoverflow.com/questions/7676701/java-jpeg-converter-for-odd-image-types
++#libming is skipping at least FFE[0-F] , src/blocks/jpeg.c methodWriteJpegFile
+ #https://www.w3.org/Graphics/JPEG/jfif3.pdf
+-#FFD8, can skip FFE[0-F] bigendianSize(usually 0010) = skip 20 bytes, FFDB...FFD9
++#https://stackoverflow.com/questions/7676701/java-jpeg-converter-for-odd-image-types
++#but "Every jpeg without a JFIF header is essentially broken as there's no way of knowing what color coding is used."
++#and from the time when we wrote jpegs, there are 6 values there, more at https://raw.githubusercontent.com/colin-i/ostream/refs/heads/master/src/media/jpeg_enc.oc write_jpeg_headers_appinfo
+ #
+ #https://www.w3.org/Graphics/GIF/spec-gif89a.txt
+ #Transparent Color Flag
