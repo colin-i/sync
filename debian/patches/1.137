@@ -1,0 +1,186 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-137) bionic; urgency=medium
+ .
+   * don't default stop swf_dbl functions
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-04-27
+
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -8,19 +8,19 @@ const flag_none=0
+ const flagpre_log=0x1
+ const flag_alt=0x2
+ const flag_titles=0x4
+-const flagpre_x=0x8                   #oaalternative will try to stop if the log has prexx data
++const flagpre_x=0x8               #oaalternative will try to stop if the log has prexx data
+ const flagpre_x_pad=0x10
+ const flag_forin1=0x20
+ const flag_framesAsShows=0x40
+-const flag_x=0x80                     #will turn off antix_read flags
++const flag_x=0x80                 #will turn off antix_read flags
+ const flagpre_pool_write=0x100
+-const flag_pool_read=0x200            #will turn off flag_pool_write
++const flag_pool_read=0x200        #will turn off flag_pool_write
+ const flagpre_mix=0x400
+-const flag_pool_read_unlink=0x800     #will turn off flag_pool_write
++const flag_pool_read_unlink=0x800 #will turn off flag_pool_write
+ const flagpre_write_no=0x1000
+ const flag_compress=0x2000
+ const flag_deprecation_no=0x4000
+-const flag_deprecation_partial=0x8000 #will turn off flag_deprecation_no
++const flag_deprecation_yes=0x8000 #will turn off flag_deprecation_no
+ 
+ const debug_xpad=flagpre_x|flagpre_x_pad
+ const flags_pool=flagpre_pool_write|flag_pool_read|flag_pool_read_unlink
+--- /dev/null
++++ actionswf-1/include/linhome.oh
+@@ -0,0 +1 @@
++vstr homefolder="HOME"
+--- /dev/null
++++ actionswf-1/include/winhome.oh
+@@ -0,0 +1 @@
++vstr homefolder="USERPROFILE" #or HOMEDRIVE+HOMEPATH
+--- actionswf-1.orig/readme.txt
++++ actionswf-1/readme.txt
+@@ -4,7 +4,9 @@ The program is a set of objects made wit
+ A swf with actionscript example is in the example folder for static o language.
+ The libactionswf-dev actionswf.h is for c/c++ languages and actionswf.oh is for for o language.
+ The files swf.es and action.es has the main functions that can be used; functions from tool.es can be used in rare situations.
+-When using the debug_log flag at swf_new_ex, action,action_sprite,swf_sprite_done calls are logged. The syntax is as follow:
++To override a default flag without calling swf_new_ex, write in user home folder .actionswf file (example to override flagpre_log and flag_deprecation_yes, write 8001).
++When using the flagpre_log flag, action,action_sprite,swf_sprite_done calls are logged for oaalternative, more is logged at prexx_flags for debugging.
++The log will look like this:
+ 
+ SpriteId
+ ActionInitBool
+@@ -28,8 +30,9 @@ Where:
+ SpriteId or 0 for root.
+ ActionInitBool is a 0/1 digit.
+ FinalSpriteId is the id in the swf
+-these are at prexx_flags:
++
++these are only at prexx_flags:
+ 	TextLinesNumber is the number of lines that TextLines has.
+ 	TextLines is the text like in action[_sprite] call.
+-	* NumberA1-NumberAN lines from TextLinesNumber
+-	... ? the notation is at include/xlog.oh ,there are special chars and numbers, a minimal example: ,1F,,F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
++	*NumberA1-NumberAN lines from TextLinesNumber
++	... ? the notation is at dev/xlog.oh ,there are special chars and numbers, a minimal example: ,1F,,F -> 3 actions, first is an action with ACTIONRECORDHEADER of 0x1F Length, second has ActionCode < 0x80, third has Length 0xF
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -142,13 +142,13 @@ import "string_nl_print" string_nl_print
+ function deprecation_init(sd flags)
+ 	charx bool#1
+ 	charx full#1
+-	and flags (flag_deprecation_no|flag_deprecation_partial)
++	and flags (flag_deprecation_no|flag_deprecation_yes)
+ 	if flags=(flag_none)
+ 		set bool (TRUE)
+-		set full (TRUE)
+-	elseif flags=(flag_deprecation_partial)
+-		set bool (TRUE)
+ 		set full (FALSE)
++	elseif flags=(flag_deprecation_yes)
++		set bool (TRUE)
++		set full (TRUE)
+ 	else #flag_deprecation_no
+ 		set bool (FALSE)
+ 	end
+@@ -170,6 +170,13 @@ importx "fread" fread
+ importx "fprintf" fprintf
+ importx "free" free
+ 
++importx "getenv" getenv
++importx "strlen" strlen
++importx "malloc" malloc
++importx "fopen" fopen
++importx "fscanf" fscanf
++importx "fclose" fclose
++
+ #aftercallimport ebool
+ 
+ import "memalloc" memalloc
+@@ -560,7 +567,7 @@ end
+ 
+ function deprecation()
+ 	if deprecation_init.bool=(TRUE)
+-		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG functions, flag_deprecation_partial, flag_deprecation_no"
++		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG functions, flag_deprecation_no"
+ 		if deprecation_init.full=(TRUE)
+ 			call error(e)
+ 		else
+@@ -568,3 +575,37 @@ function deprecation()
+ 		end
+ 	end
+ end
++
++const EOF=-1
++
++function user_flags(sw pflags)
++	ss h
++include "../include/linhome.oh" "../include/winhome.oh"
++	set h getenv(homefolder)
++	if h!=(NULL)
++		ss sz;set sz strlen(h)
++		char prefs=".actionswf"^
++		sd len=1+\.prefs+1
++		add len sz
++		sd m;set m malloc(len)
++		if m!=(NULL)
++			call memcpy(m,h,sz)
++			add sz m
++			set sz# (path_separator)
++			inc sz
++			call memcpy(sz,#prefs,\.prefs)
++			add sz \.prefs
++			set sz# (Nullchar)
++			sd f;set f fopen(m,"rb")
++			if f!=(NULL)
++				data flags#1   ;#protocol %x is unsigned int
++				sd ret;set ret fscanf(f,"%x",#flags)
++				if ret!=(EOF)
++					or pflags# flags
++				end
++				call fclose(f)
++			end
++			call free(m)
++		end
++	end
++end
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -25,6 +25,7 @@ import "alt_action" alt_action
+ import "swf_actionblock" swf_actionblock
+ 
+ import "deprecation" deprecation
++import "user_flags" user_flags
+ 
+ importx "strlen" strlen
+ importx "memcpy" memcpy
+@@ -69,6 +70,7 @@ data size2=\-hd2
+ vdata hd_pack2%hd2
+ 
+ 	import "flags_init" flags_init
++	call user_flags(#flags)
+ 	call flags_init(flags,path)
+ 	call swf_mem((mem_exp_init),path,(file_sz_off-hd_start),flags)
+ 
