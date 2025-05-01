@@ -1,0 +1,288 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-138) bionic; urgency=medium
+ .
+   * new constants at headers
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-01
+
+--- actionswf-1.orig/arh/pub
++++ actionswf-1/arh/pub
+@@ -14,6 +14,7 @@ last=$(curl https://api.github.com/repos
+ ask=x ~/test/pkg/onab && \
+ ~/test/upgen actionswf.zip && \
+ ~/test/pub uponrpm pkg pkgarm && \
++~/test/pkg/aur && \
+ ~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+--- actionswf-1.orig/dev/action_swf.oh
++++ actionswf-1/dev/action_swf.oh
+@@ -1,4 +1,12 @@
+ 
++##shape
++const no_fill=-1
++const solid_fill=0
++const repeating_bitmap_fill=0x40
++#const clipped_bitmap_fill=0x41
++#const nonsmoothed_repeating_bitmap=0x42
++#const nonsmoothed_clipped_bitmap=0x43
++#
+ const StateMoveTo=1
+ const StateFillStyle0=2*StateMoveTo
+ const StateFillStyle1=2*StateFillStyle0
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -9,6 +9,13 @@ extern "C" {
+ 
+ 
+ 
++#define no_fill -1
++#define solid_fill 0
++#define repeating_bitmap_fill 0x40
++#define clipped_bitmap_fill 0x41
++#define nonsmoothed_repeating_bitmap 0x42
++#define nonsmoothed_clipped_bitmap 0x43
++//
+ #define StateMoveTo 1
+ #define StateFillStyle0 2*StateMoveTo
+ #define StateFillStyle1 2*StateFillStyle0
+@@ -58,7 +65,7 @@ typedef struct ButtonData_str{
+ #define WasStatic 0x400
+ #define HTML 0x200
+ #define UseOutlines 0x100
+-
++//
+ #define layout_align_left 0
+ #define layout_align_right 1
+ #define layout_align_center 2
+--- actionswf-1.orig/include/prog.oh
++++ actionswf-1/include/prog.oh
+@@ -62,9 +62,6 @@ const DoAction=12
+ const PlaceObject2=26
+ const RemoveObject2=28
+ const DefineShape3=32
+-	const no_fill=-1
+-	const solid_fill=0
+-	const repeating_bitmap_fill=0x40
+ const DefineBitsLossless=20
+ const DefineBitsJPEG2=21
+ const DefineButton2=34
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -154,6 +154,46 @@ function deprecation_init(sd flags)
+ 	end
+ end
+ 
++importx "getenv" getenv
++importx "strlen" strlen
++importx "malloc" malloc
++importx "fopen" fopen
++importx "fscanf" fscanf
++importx "fclose" fclose
++
++const EOF=-1
++function user_flags(sw pflags)
++	ss h
++include "../include/linhome.oh" "../include/winhome.oh"
++	set h getenv(homefolder)
++	if h!=(NULL)
++		ss sz;set sz strlen(h)
++		char prefs=".actionswf"^
++		sd len=1+\.prefs+1
++		add len sz
++		sd m;set m malloc(len)
++		if m!=(NULL)
++			call memcpy(m,h,sz)
++			add sz m
++			set sz# (path_separator)
++			inc sz
++			call memcpy(sz,#prefs,\.prefs)
++			add sz \.prefs
++			set sz# (Nullchar)
++			sd f;set f fopen(m,"rb")
++			if f!=(NULL)
++				data flags#1   ;#protocol %x is unsigned int
++				sd ret;set ret fscanf(f,"%x",#flags)
++				if ret!=(EOF)
++					or pflags# flags
++				end
++				call fclose(f)
++			end
++			call free(m)
++		end
++	end
++end
++
+ import "row_termination" row_termination
+ import "brace_blocks_get_memblock" brace_blocks_get_memblock
+ import "block_get_size" block_get_size
+@@ -170,12 +210,6 @@ importx "fread" fread
+ importx "fprintf" fprintf
+ importx "free" free
+ 
+-importx "getenv" getenv
+-importx "strlen" strlen
+-importx "malloc" malloc
+-importx "fopen" fopen
+-importx "fscanf" fscanf
+-importx "fclose" fclose
+ 
+ #aftercallimport ebool
+ 
+@@ -575,37 +609,3 @@ function deprecation()
+ 		end
+ 	end
+ end
+-
+-const EOF=-1
+-
+-function user_flags(sw pflags)
+-	ss h
+-include "../include/linhome.oh" "../include/winhome.oh"
+-	set h getenv(homefolder)
+-	if h!=(NULL)
+-		ss sz;set sz strlen(h)
+-		char prefs=".actionswf"^
+-		sd len=1+\.prefs+1
+-		add len sz
+-		sd m;set m malloc(len)
+-		if m!=(NULL)
+-			call memcpy(m,h,sz)
+-			add sz m
+-			set sz# (path_separator)
+-			inc sz
+-			call memcpy(sz,#prefs,\.prefs)
+-			add sz \.prefs
+-			set sz# (Nullchar)
+-			sd f;set f fopen(m,"rb")
+-			if f!=(NULL)
+-				data flags#1   ;#protocol %x is unsigned int
+-				sd ret;set ret fscanf(f,"%x",#flags)
+-				if ret!=(EOF)
+-					or pflags# flags
+-				end
+-				call fclose(f)
+-			end
+-			call free(m)
+-		end
+-	end
+-end
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -330,43 +330,44 @@ function swf_shape_local(sd width,sd hei
+     call rect_prepare(#rect,#rect_size,width,height)
+     add shape_size rect_size
+ 
+-    #SHAPEWITHSTYLE
+-    char FillStyleCount#1
+-        char FillStyleType#1
+-    #
+-        data data#3
+-    vdata fillstyles^FillStyleCount
+-    set FillStyleCount 0
+-    sd fillstyles_size=1
+-    if fillstyle!=(no_fill)
+-        set FillStyleCount 1
+-        set FillStyleType fillstyle
+-        add fillstyles_size 1
+-        if fillstyle=(solid_fill)
+-            setcall data dword_swap(fillarg)
+-            add fillstyles_size (DWORD)
+-        else
+-        #if fillstyle==(repeating_bitmap_fill)
+-        #clipped bitmap fill,non-smoothed repeating bitmap or non-smoothed clipped bitmap
+-            call stack_to_word_arg(fillarg,#data)
+-            sd fill_pointer^data
+-            add fill_pointer (WORD)
+-            #matrix,scaleX=20,scaleY=20,translateX=0,translateY=0
+-            #first bit: scaleX 0 and Y 0;or 1;=>0;else is 1
+-            #const FIXEDBITS=16
+-            #x and y=floor(scaleX*(1<<FIXEDBITS))=0x00140000
+-            #Nbits is 0x15 + 1(sign)
+-            const predef_nbits=0x16
+-            const predef_XYscale=0x00140000
+-            #rotate is 0
+-            #translate nbits is 0
+-            call bits_packs(fill_pointer,6,1,1,(predef_nbits),(NBits_size),(predef_XYscale),(predef_nbits),(predef_XYscale),(predef_nbits),0,1,0,(NBits_size))
+-            #char ref_id#2
+-            #char matrix#7
+-            add fillstyles_size (2+7)
+-        endelse
+-    endif
+-    add shape_size fillstyles_size
++	#SHAPEWITHSTYLE
++	char FillStyleCount#1
++	char FillStyleType#1
++	#
++	data data#3
++	vdata fillstyles^FillStyleCount
++	set FillStyleCount 0
++	sd fillstyles_size=1
++	if fillstyle!=(no_fill)
++		set FillStyleCount 1
++		set FillStyleType fillstyle
++		add fillstyles_size 1
++		if fillstyle=(solid_fill)
++			setcall data dword_swap(fillarg)
++			add fillstyles_size (DWORD)
++		#elseif linear gradient fill,radial gradient fill or focal radial gradient fill
++		else
++		#if fillstyle==(repeating_bitmap_fill)
++		#clipped bitmap fill,non-smoothed repeating bitmap or non-smoothed clipped bitmap
++			call stack_to_word_arg(fillarg,#data)
++			sd fill_pointer^data
++			add fill_pointer (WORD)
++			#matrix,scaleX=20,scaleY=20,translateX=0,translateY=0
++			#first bit: scaleX 0 and Y 0;or 1;=>0;else is 1
++			#const FIXEDBITS=16
++			#x and y=floor(scaleX*(1<<FIXEDBITS))=0x00140000
++			#Nbits is 0x15 + 1(sign)
++			const predef_nbits=0x16
++			const predef_XYscale=0x00140000
++			#rotate is 0
++			#translate nbits is 0
++			call bits_packs(fill_pointer,6,1,1,(predef_nbits),(NBits_size),(predef_XYscale),(predef_nbits),(predef_XYscale),(predef_nbits),0,1,0,(NBits_size))
++			#char ref_id#2
++			#char matrix#7
++			add fillstyles_size (2+7)
++		endelse
++	endif
++	add shape_size fillstyles_size
+     #
+     char LineStyleCount#1
+     char line_points#2
+@@ -468,7 +469,6 @@ import "word_swap" word_swap
+ function swf_dbl_ex_local(ss imagepath,sd p_wh)
+ #ss imagepath = path name for the dbl image
+ #sd p_wh = pointer width a dword and height next dword
+-#include "/home/bc/games/this_is_for_testing"
+ 	sd id
+ 	sd mem
+ 	sd size
+@@ -515,6 +515,7 @@ function swf_dbl_ex_local(ss imagepath,s
+ 		add cursor (WORD)
+ 		sub size (DWORD+WORD)
+ 	end
++#include "/home/bc/games/this_is_for_testing"
+ 	if image_size>size
+ 		call error("size error at dbl")
+ 	endif
