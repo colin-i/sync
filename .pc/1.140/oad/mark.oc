@@ -1,0 +1,318 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.oh"
+
+function mark_all(svu presprites,valueu end,valueu data)
+	charx ok#1
+	add end presprites
+	while presprites!=end
+		if presprites#!=(NULL) #here can have other tags, the map order is important when debugging
+			set ok mark_presprite(presprites#,data)
+			if ok!=(EXIT_SUCCESS)
+				return (EXIT_FAILURE)
+			end
+		end
+		incst presprites
+	end
+	return (EXIT_SUCCESS)
+end
+function mark_presprite(valueu ps,valueu data)
+	charx ok#1
+	valueu fr#1
+	if ps#:presprite.apreframe!=(NULL)
+		set fr ps#:presprite.apreframe
+		set ok mark_branch(fr#:preframe.abranch,data)
+		if ok=(EXIT_FAILURE)
+			return (EXIT_FAILURE)
+		end
+	end
+	svu frames;set frames ps#:presprite.preframes
+	valueu fend#1;set fend frames
+	add fend ps#:presprite.size
+	while frames!=fend
+		if frames#!=(NULL) #also with shows
+			set fr frames#
+			set ok mark_branch(fr#:preframe.abranch,data)
+			if ok=(EXIT_FAILURE)
+				return (EXIT_FAILURE)
+			end
+		end
+		incst frames
+	end
+	return (EXIT_SUCCESS)
+end
+function mark_branch(valueu br,valueu data)
+	charx ok#1;set ok mark_action_if(br#:branch.action_top,data)
+	if ok=(EXIT_SUCCESS)
+		svu ibrs;set ibrs br#:branch.innerbranches
+		valueu end#1;set end ibrs
+		add end br#:branch.isize
+		while ibrs!=end
+			set ok mark_branch(ibrs#,data)
+			if ok=(EXIT_FAILURE)
+				return (EXIT_FAILURE)
+			end
+			incst ibrs
+		end
+		if br#:branch.subbranch!=(NULL)
+			set ok mark_branch(br#:branch.subbranch,data)
+			if ok=(EXIT_FAILURE)
+				return (EXIT_FAILURE)
+			end
+		end
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+function mark_action_if(valueu act,valueu data)
+	if act!=(NULL) #can be trick branch, while(true){break} , then has subbranches with actions
+		charx ok#1;set ok mark_action(act,data)
+		return ok
+	end
+	return (EXIT_SUCCESS)
+end
+importx "realloc" realloc
+function mark_action(valueu act,valueu data)
+	valueu size#1;set size data#:oadata.size
+	valueu ix#1;set ix size
+	valueu index#1;set index ix
+	add size \mark\
+	svu marks;set marks realloc(data#:oadata.marks,size)
+	if marks!=(NULL)
+		set data#:oadata.marks marks
+		set data#:oadata.size size
+		div index \mark\
+		set act#:action.amark index
+
+		add ix marks
+		if ix=marks
+			set ix#:mark.prev (mark_nothing)
+			set ix#:mark.next (mark_nothing)
+		else
+			set ix#:mark.next (mark_nothing)
+			div size \mark\
+			dec size
+			set ix#:mark.prev size
+			dec ix#:mark.prev
+
+			sub ix \mark\
+			set ix#:mark.next size
+		end
+
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+function mark_string_branch(valueu br,valueu data)
+	valueu act#1;set act br#:branch.action_top
+	if act#:action.amark=(mark_nothing) #was already marked at another previous branch
+		charx ok#1;set ok mark_action(act,data)
+		return ok
+	end
+	return (EXIT_SUCCESS)
+end
+function mark_string_branches(valueu str,valueu data)
+	svu brs#1;valueu brsend#1;charx ok#1
+	set brs str#:string.branches
+	set brsend brs;add brsend str#:string.size
+	while brs!=brsend
+		set ok mark_string_branch(brs#,data)
+		if ok!=(EXIT_SUCCESS)
+			return (EXIT_FAILURE)
+		end
+		incst brs
+	end
+	return (EXIT_SUCCESS)
+end
+
+function mark_compare(valueu prevoadata,svu presprites,dataxu size,valueu data)
+	svu prevpresprites#1;set prevpresprites prevoadata#:preoadata.presprites
+	valueu prevend#1;set prevend prevpresprites;add prevend prevoadata#:preoadata.size
+	valueu end#1;set end presprites
+	add end size
+	while presprites!=end
+		if presprites#!=(NULL) #from parsed where the map to oadata out was
+			charx ok#1
+			valueu pvps#1
+			if prevpresprites!=prevend
+				set pvps prevpresprites#
+				valueu ps#1;set ps presprites#
+				valueu fr#1
+
+				if ps#:presprite.apreframe!=(NULL)
+					if pvps#:presprite.apreframe!=(NULL)
+						set ok mark_compare_frame(pvps#:presprite.apreframe,ps#:presprite.apreframe,data)
+					else
+						set fr ps#:presprite.apreframe
+						set ok mark_branch(fr#:preframe.abranch,data)
+					end
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+				end
+
+				svu prevfrs#1;set prevfrs pvps#:presprite.preframes
+				valueu prevfend#1;set prevfend prevfrs;add prevfend pvps#:presprite.size
+
+				svu frs;set frs ps#:presprite.preframes
+				valueu fend#1;set fend frs
+				add fend ps#:presprite.size
+				while frs!=fend
+					if prevfrs!=prevfend
+						if frs#!=(NULL) #shows
+							set ok mark_compare_frame(prevfrs#,frs#,data)
+						end
+						incst prevfrs
+					elseif frs#!=(NULL) #shows
+						set fr frs#
+						set ok mark_branch(fr#:preframe.abranch,data)
+					end
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+					incst frs
+				end
+
+				incst prevpresprites
+			else
+				set ok mark_presprite(presprites#,data)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+			end
+		end
+		incst presprites
+	end
+	return (EXIT_SUCCESS)
+end
+function mark_compare_frame(valueu prevpf,valueu pf,valueu data)
+	charx ok#1
+	set ok mark_compare_branch(prevpf#:preframe.abranch,pf#:preframe.abranch,data) #compare branch
+	if ok=(EXIT_SUCCESS) #strings are last because if where first then will ask for action.amark not mark_nothing at cuts
+		svu strs#1;valueu end#1;svu prevstrs;valueu prevend#1;valueu str#1;datax cmp#1
+		#compare ustrings, prev, action.amark!=mark_nothing and then same like strings, and then mark_action
+		set prevstrs prevpf#:preframe.ustrings
+		set prevend prevstrs;add prevend prevpf#:preframe.ussize
+		set strs pf#:preframe.ustrings
+		set end strs;add end pf#:preframe.ussize
+		while strs!=end
+			set str strs#
+			if prevstrs!=prevend
+				set cmp mark_compare_string(prevstrs#,str)
+				if cmp!=0
+					#restored string has no branches, that diff is observable at cuts
+					set ok mark_string_branch(str#:ustring.ubranch,data)
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+				end
+				incst prevstrs
+			else
+				set ok mark_string_branch(str#:ustring.ubranch,data)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+			end
+			incst strs
+		end
+		#compare strings, prev, here compare string first(strings without knowing null end) then branches action.amark!=mark_nothing, and then mark_action
+		set prevstrs prevpf#:preframe.strings
+		set prevend prevstrs;add prevend prevpf#:preframe.ssize
+		set strs pf#:preframe.strings
+		set end strs;add end pf#:preframe.ssize
+		while strs!=end
+			set str strs#
+			if prevstrs!=prevend
+				set cmp mark_compare_string(prevstrs#,str)
+				if cmp!=0
+					#restored string has no branches, that diff is observable at cuts
+					set ok mark_string_branches(str,data)
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+				end
+				incst prevstrs
+			else
+				set ok mark_string_branches(str,data)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+			end
+			incst strs
+		end
+	end
+	return ok
+end
+importx "memcmp" memcmp
+function mark_compare_branch(valueu prevbr,valueu br,valueu data)
+	charx ok#1
+
+	#compare cuts
+	if prevbr#:branch.size=br#:branch.size
+		svu prevcursor;svu cursor;valueu cutsend#1
+		set prevcursor prevbr#:branch.cuts
+		set cursor br#:branch.cuts
+		set cutsend cursor;add cutsend br#:branch.size
+		while cursor!=cutsend
+			if prevcursor#:branchcut.size=cursor#:branchcut.size
+				datax cmp#1;set cmp memcmp(prevcursor#:branchcut.x,cursor#:branchcut.x,cursor#:branchcut.size)
+				if cmp=0
+					add cursor \branchcut\
+					add prevcursor \branchcut\
+					continue
+				end
+			end
+			set ok mark_action_if(br#:branch.action_top,data)
+			if ok!=(EXIT_SUCCESS)
+				return (EXIT_FAILURE)
+			end
+			break
+		end
+	else
+		set ok mark_action_if(br#:branch.action_top,data) #one case can be: prev with size, this no size
+		if ok!=(EXIT_SUCCESS)
+			return (EXIT_FAILURE)
+		end
+	end
+
+	#inners
+	svu previns#1;set previns prevbr#:branch.innerbranches
+	valueu prevend#1;set prevend previns;add prevend prevbr#:branch.isize
+	svu ins#1;set ins br#:branch.innerbranches
+	valueu end#1;set end ins;add end br#:branch.isize
+	while ins!=end
+		if previns!=prevend
+			set ok mark_compare_branch(previns#,ins#,data)
+			incst previns
+		else
+			set ok mark_branch(ins#,data)
+		end
+		if ok!=(EXIT_SUCCESS)
+			return (EXIT_FAILURE)
+		end
+		incst ins
+	end
+
+	#subbranch
+	if br#:branch.subbranch!=(NULL)
+		if prevbr#:branch.subbranch!=(NULL)
+			set ok mark_compare_branch(prevbr#:branch.subbranch,br#:branch.subbranch,data)
+		else
+			set ok mark_branch(br#:branch.subbranch,data)
+		end
+		return ok
+	end
+	return (EXIT_SUCCESS)
+end
+importx "strcmp" strcmp
+function mark_compare_string(valueu prevstr,valueu str)
+	valueu s1#1;set s1 prevstr#:ustring.base
+	add s1 prevstr#:ustring.off
+	valueu s2#1;set s2 str#:ustring.base
+	add s2 str#:ustring.off
+	datax cmp#1;set cmp strcmp(s1,s2)
+	return cmp
+end

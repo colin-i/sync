@@ -1,0 +1,902 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-140) bionic; urgency=medium
+ .
+   * matching longs at oad
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-03
+
+--- actionswf-1.orig/oad/branch.oc
++++ actionswf-1/oad/branch.oc
+@@ -6,11 +6,30 @@ include "common.h" "common.oh"
+ 
+ importx "malloc" malloc
+ importx "free" free
+-
+ import "global_blog" global_blog
++#
++importx "realloc" realloc
++#
++importx "printf" printf
++importx "putchar" putchar
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++import "print_inline_start" print_inline_start
++import "prints_inline_start" prints_inline_start
++import "print_inline_done" print_inline_done
++import "print_einline" print_einline
++import "prints_inline" prints_inline
++import "printt" printt
++#
++import "oadata_logpad_get" oadata_logpad_get #importx without args
++import "print_lhex" print_lhex
++import "print_hex" print_hex
++import "print_hhex" print_hhex
++#
++import "tree_entrylive" tree_entrylive
+ 
+ #branch pointer
+-function branch_init(valueu pf,valueu ptbra,valueu pbra)
++function branch_init(valueu pf,valueu ptbra,valueu pbra) #3
+ 	valueu bra#1
+ 	set bra malloc((\branch\))
+ 	if bra!=(NULL)
+@@ -54,7 +73,6 @@ function branch_init(valueu pf,valueu pt
+ 	return (NULL)
+ end
+ 
+-importx "realloc" realloc
+ function branch_add(sv pf,dataxu size,dataxu offset,valueu code)
+ 	sub size offset
+ 	sv br;set br pf#:preframe.branchpointer
+@@ -74,18 +92,6 @@ function branch_add(sv pf,dataxu size,da
+ 	return (EXIT_FAILURE)
+ end
+ 
+-importx "printf" printf
+-importx "putchar" putchar
+-
+-import "print_indent" print_indent
+-import "print_unindent" print_unindent
+-import "print_inline_start" print_inline_start
+-import "prints_inline_start" prints_inline_start
+-import "print_inline_done" print_inline_done
+-import "print_einline" print_einline
+-import "prints_inline" prints_inline
+-import "printt" printt
+-
+ function branch_code(ss code,valueu end,ss _a,ss _b,ss form)
+ 	ss start;set start code
+ 	charx a#1;charx b#1
+@@ -129,11 +135,6 @@ function branch_code(ss code,valueu end,
+ 	set _a# a;set _b# b
+ end
+ 
+-import "oadata_logpad_get" oadata_logpad_get #importx without args
+-import "print_lhex" print_lhex
+-import "print_hex" print_hex
+-import "print_hhex" print_hhex
+-
+ function branch_log(sv br,valueu start)
+ 	call prints_inline_start("branch:")
+ 	valueu cuts#1;set cuts br#:branch.cuts
+@@ -201,8 +202,6 @@ function branch_log(sv br,valueu start)
+ 	call print_unindent()
+ end
+ 
+-import "tree_entrylive" tree_entrylive
+-
+ function branch_free(valueu br,valueu logstart,dataxu indents)
+ 	if logstart!=(NULL)
+ 		call branch_log(br,logstart)
+--- actionswf-1.orig/oad/compare.oc
++++ actionswf-1/oad/compare.oc
+@@ -1,32 +1,49 @@
+ 
+ format elfobj64
+ 
+-importx "strlen" strlen
+-importx "malloc" malloc
+-importx "memcpy" memcpy
+-importx "fopen" fopen
+-importx "free" free
+-importx "fclose" fclose
+-
+ override include_sec 1
+ include "common.h" "common.oh"
+ 
+ #multithread unsafe
+ dataxu presprites_size#1  #same as sprites_size
+ #
++
++importx "strlen" strlen
++importx "malloc" malloc
++importx "memcpy" memcpy
++^importx "fopen" fopen 2
++importx "free" free
++importx "fclose" fclose
++#
++^import "restore" restore 1
++import "restore_free" restore_free
++import "mark_all" mark_all
++import "mark_compare" mark_compare
++#
++import "frame_free" frame_free
++import "print" print
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++#
++importx "puts" puts
++import "preframe_free" preframe_free
++#
++import "re_calloc" re_calloc
++import "re_calloc_size" re_calloc_size
++^import "nframe_init" nframe_init 2
++import "frame_expand" frame_expand
++#
++import "jumpforwards_done" jumpforwards_done
++
+ function global_presprites_size()
+ 	return global.presprites_size
+ end
+ 
+ char inter_extension_data=".data";vstr p_inter_extension_data^inter_extension_data
+-function inter_extension(sv psize)
++function inter_extension(sv psize) #1
+ 	set psize# (\global.inter_extension_data)
+ 	return global.p_inter_extension_data
+ end
+-import "restore" restore
+-import "restore_free" restore_free
+-import "mark_all" mark_all
+-import "mark_compare" mark_compare
+ function compare(ss swf_fullpath,valueu presprites,valueu data)
+ 	sd size;set size strlen(swf_fullpath)
+ 	sd size1=\global.inter_extension_data
+@@ -57,12 +74,6 @@ function compare(ss swf_fullpath,valueu
+ 	return (EXIT_FAILURE)
+ end
+ 
+-import "frame_free" frame_free
+-
+-import "print" print
+-import "print_indent" print_indent
+-import "print_unindent" print_unindent
+-
+ function sprite_free(sv s,sv start) #log is start != null
+ 	sv sp;set sp s#
+ 	if sp!=(NULL)
+@@ -116,10 +127,6 @@ function preoadata_init(sv ppresprites,s
+ 	return (EXIT_FAILURE)
+ end
+ 
+-importx "puts" puts
+-
+-import "preframe_free" preframe_free
+-
+ function preoadata_free(sv presprites,sv sprites,charx log,valueu xstart)
+ 	if presprites!=(NULL)
+ 		if sprites!=(NULL)
+@@ -187,11 +194,6 @@ function preoadata_free(sv presprites,sv
+ 	end
+ end
+ 
+-import "re_calloc" re_calloc
+-import "re_calloc_size" re_calloc_size
+-import "nframe_init" nframe_init
+-import "frame_expand" frame_expand
+-
+ #                       wordxu preid                                         at action only from here
+ function presprite_init(svu newpointer,sv ppresprites,sv psprites,charx type,charx ainit,valueu linestotal)
+ 	mult newpointer :
+@@ -310,8 +312,6 @@ function presprite_init(svu newpointer,s
+ 	return (EXIT_FAILURE)
+ end
+ 
+-import "jumpforwards_done" jumpforwards_done
+-
+ function presprite_done(sv sprites,wordxu preid,wordxu id,sv data,sv presprites)
+ 	sv pointer=:
+ 	mult pointer preid
+--- actionswf-1.orig/oad/frame.oc
++++ actionswf-1/oad/frame.oc
+@@ -1,11 +1,40 @@
+ 
+ format elfobj64
+ 
+-importx "realloc" realloc
+-
+ override include_sec 1
+ include "common.h" "common.oh"
+ 
++importx "realloc" realloc
++#
++importx "malloc" malloc
++importx "free" free
++^import "branch_init" branch_init 1
++import "tree_frame_init" tree_frame_init
++import "global_blog" global_blog
++#
++import "string_log" string_log
++import "branch_free" branch_free
++import "tree_frame_free" tree_frame_free
++import "prints_inline_start" prints_inline_start
++import "print_inline_start" print_inline_start
++import "print_inline_done" print_inline_done
++import "print" print
++import "print_indent" print_indent
++import "print_unindent" print_unindent
++import "print_hex_start" print_hex_start
++import "print_hex" print_hex
++import "print_lhex" print_lhex
++import "prints" prints
++import "indent" indent
++importx "printf" printf
++importx "putchar" putchar
++#
++import "print_text" print_text
++#
++^import "text_after_nlines" text_after_nlines 3
++^import "memnlcr" memnlcr 3
++importx "memcpy" memcpy
++
+ function re_alloc(svu pmem,dataxu size) #only dataxu external sizes, and +1 increments
+ 	if size!=0
+ 		dataxu currentmaxsize#1;set currentmaxsize size
+@@ -61,14 +90,7 @@ function re_calloc_add(svu pmem,sdu psiz
+ 	return ok
+ end
+ 
+-importx "malloc" malloc
+-importx "free" free
+-
+-import "branch_init" branch_init
+-import "tree_frame_init" tree_frame_init
+-import "global_blog" global_blog
+-
+-function preframe_init()
++function preframe_init() #0
+ 	sv pf;set pf malloc((\preframe\))
+ 	if pf!=(NULL)
+ 		sv ustrings
+@@ -118,25 +140,6 @@ function preframe_init()
+ 	return (NULL)
+ end
+ 
+-import "string_log" string_log
+-import "branch_free" branch_free
+-import "tree_frame_free" tree_frame_free
+-
+-import "prints_inline_start" prints_inline_start
+-import "print_inline_start" print_inline_start
+-import "print_inline_done" print_inline_done
+-import "print" print
+-import "print_indent" print_indent
+-import "print_unindent" print_unindent
+-import "print_hex_start" print_hex_start
+-import "print_hex" print_hex
+-import "print_lhex" print_lhex
+-import "prints" prints
+-import "indent" indent
+-
+-importx "printf" printf
+-importx "putchar" putchar
+-
+ function frame_print_top(charx ainit,datax log_index)
+ 	if ainit=(xlog_ainit_false)
+ 		call print("frame %u",log_index)
+@@ -256,8 +259,6 @@ function frame_init(valueu total)
+ 	return (NULL)
+ end
+ 
+-import "print_text" print_text
+-
+ function frame_print_action(valueu a,valueu b,charx c,charx d)
+ 	if a!=b
+ 		if d=(FALSE)
+@@ -356,7 +357,7 @@ function frame_free(sv f,charx ainit,dat
+ 	call free(f)
+ end
+ 
+-function nframe_init(sv pf,valueu total)
++function nframe_init(sv pf,valueu total) #2
+ 	set pf# preframe_init()
+ 	if pf#!=(NULL)
+ 		valueu f#1;set f frame_init(total)
+@@ -365,7 +366,7 @@ function nframe_init(sv pf,valueu total)
+ 	return (NULL)
+ end
+ 
+-function get_nframe(sv presprites,sv sprites,wordxu preid,charx ainit,sv ppf)
++function get_nframe(sv presprites,sv sprites,wordxu preid,charx ainit,sv ppf) #5
+ 	sv ps=:
+ 	mult ps preid
+ 	sv s;set s ps
+@@ -396,10 +397,6 @@ end
+ #with () for c
+ const frame_text_allocpart_=(frame_text_allocpart-1)
+ const _frame_text_allocpart_=~frame_text_allocpart_
+-import "text_after_nlines" text_after_nlines
+-import "memnlcr" memnlcr
+-
+-importx "memcpy" memcpy
+ 
+ function frame_text_add(valueu fr,svu _text,valueu lines)
+ 	valueu starttext#1;set starttext _text#
+--- actionswf-1.orig/oad/ibranch.oc
++++ actionswf-1/oad/ibranch.oc
+@@ -5,7 +5,13 @@ override include_sec 1
+ include "common.h" "common.oh"
+ 
+ import "re_alloc" re_alloc
+-import "branch_init" branch_init
++^import "branch_init" branch_init 2
++#
++import "re_alloc_add" re_alloc_add
++#
++import "printe" printe
++#
++import "global_blog" global_blog
+ 
+ function ibranch_add(valueu pf)
+ 	valueu bra#1;set bra pf#:preframe.branchpointer
+@@ -27,8 +33,6 @@ function ibranch_done(valueu pf)
+ 	set pf#:preframe.branchpointer bra#:branch.topbranch
+ end
+ 
+-import "re_alloc_add" re_alloc_add
+-
+ function jumpforwardif_resolve(valueu pf,wordxu number)
+ 	dataxu offset#1;set offset pf#:preframe.size
+ 	sub offset number
+@@ -47,7 +51,6 @@ function jumpforwardif_resolve(valueu pf
+ 		set prev prev#:branch.suprabranch
+ 	end
+ end
+-import "printe" printe
+ function jumpforward_resolve(valueu pf,wordxu number)
+ 	dataxu offset#1;set offset pf#:preframe.size
+ 	sub offset number
+@@ -86,7 +89,6 @@ function jumpbackward_resolve(valueu pf,
+ 		set prev prev#:branch.suprabranch
+ 	end
+ end
+-import "global_blog" global_blog
+ function jumpforwards_frame_done(valueu prefr)
+ 	if prefr!=(NULL)  #else is from_show / no aframe
+ 		svu pointer;svu end
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -4,23 +4,53 @@ format elfobj64
+ override include_sec 1
+ include "common.h" "common.oh"
+ 
+-importx "fopen" fopen
+-importx "fseek" fseek
+-importx "ftell" ftell
+-importx "malloc" malloc
+-importx "fread" fread
+-importx "fclose" fclose
+-
+ #multithread unsafe
+ dataxu xoffset#1
+ charx blog#1
+ #
+ 
++^importx "fopen" fopen 2
++importx "fseek" fseek
++^importx "ftell" ftell 1                             #this is hard to catch must compile and look at asm to see is an int
++importx "malloc" malloc                              #to catch practical but to catch only by warnings, is a long if also this warning comes -Wbuiltin-declaration-mismatch
++importx "fread" fread
++importx "fclose" fclose
++#
++import "branch_add" branch_add
++#
++import "re_calloc_add" re_calloc_add
++import "frame_actions" frame_actions
++import "string_add" string_add
++import "string_id" string_id
++^import "branch_init" branch_init 3
++import "ibranch_add" ibranch_add
++import "ibranch_done" ibranch_done
++import "tree_entry_ex" tree_entry_ex
++import "tree_entry_start" tree_entry_start
++import "tree_entry_end" tree_entry_end
++import "jumpforward_resolve" jumpforward_resolve
++import "jumpforwardif_resolve" jumpforwardif_resolve
++import "jumpbackward_resolve" jumpbackward_resolve
++import "jumpbackward_resolved" jumpbackward_resolved
++import "printe" printe
++import "function_resolved" function_resolved
++#
++import "presprite_init" presprite_init
++import "presprite_done" presprite_done
++^import "get_nframe" get_nframe 5
++#
++importx "strlen" strlen                              #same as malloc realloc
++importx "memcpy" memcpy
++importx "free" free
++import "compare" compare
++#
++import "save" save
++
+ function global_blog()
+ 	return global.blog
+ end
+ 
+-function fcontent(sd path,sv psize)
++function fcontent(sd path,sv psize) #2
+ 	sd f;set f fopen(path,"rb")
+ 	if f!=(NULL)
+ 		call fseek(f,0,(SEEK_END))
+@@ -41,7 +71,8 @@ function fcontent(sd path,sv psize)
+ end
+ 
+ #at these memnl the last row is ending in nl from src
+-function memnlcr(ss log,sv pnext,sv _cr) #here is moving through text, an example with cr: ffdec action output is \r\n
++ #here is moving through text, an example with cr: ffdec action output is \r\n
++function memnlcr(ss log,sv pnext,sv _cr) #3
+ 	set pnext# 1
+ 	if log#!=(xlog_nl) #empty row / last row
+ 		whiletrue
+@@ -71,7 +102,8 @@ function memnlcr(ss log,sv pnext,sv _cr)
+ 	end
+ 	return log
+ end
+-function memnl(ss log,sv pnext) #here is moving only on nl from src
++#here is moving only on nl from src
++function memnl(ss log,sv pnext) #2
+ 	set pnext# 1
+ 	if log#!=(xlog_nl) #emptyrow
+ 		inc log
+@@ -84,7 +116,7 @@ function memnl(ss log,sv pnext) #here is
+ 	end
+ 	return log
+ end
+-function memdec(ss start,value end)
++function memdec(ss start,value end) #2
+ 	sub end start
+ 	add start end
+ 	sd nr=1
+@@ -103,7 +135,8 @@ function memdec(ss start,value end)
+ 	return val
+ end
+ #end
+-function memhex_parse_withinc(ss start,swu out) #arecordheader,function,if,jump are 15/16 bits at max
++#arecordheader,function,if,jump are 15/16 bits at max
++function memhex_parse_withinc(ss start,swu out)
+ 	inc start
+ 	ss a;set a start
+ 	whiletrue #the action row is ending in new line
+@@ -135,8 +168,6 @@ function memhex_parse_withinc(ss start,s
+ 	return a
+ end
+ 
+-import "branch_add" branch_add
+-
+ function newbranch(sv px,sv pxx,valueu prefr)
+ 	sd xx;set xx pxx#
+ 	dataxu branchoffset#1;set branchoffset xx#
+@@ -148,23 +179,6 @@ function newbranch(sv px,sv pxx,valueu p
+ 	return ok
+ end
+ 
+-import "re_calloc_add" re_calloc_add
+-import "frame_actions" frame_actions
+-import "string_add" string_add
+-import "string_id" string_id
+-import "branch_init" branch_init
+-import "ibranch_add" ibranch_add
+-import "ibranch_done" ibranch_done
+-import "tree_entry_ex" tree_entry_ex
+-import "tree_entry_start" tree_entry_start
+-import "tree_entry_end" tree_entry_end
+-import "jumpforward_resolve" jumpforward_resolve
+-import "jumpforwardif_resolve" jumpforwardif_resolve
+-import "jumpbackward_resolve" jumpbackward_resolve
+-import "jumpbackward_resolved" jumpbackward_resolved
+-import "printe" printe
+-import "function_resolved" function_resolved
+-
+ function actionrow(ss inlog,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data,svu _text,svu _pointer_to_action_loop,ss _expecting_function_start)
+ 	ss start;set start inlog
+ 	inc inlog    ##first is a digit
+@@ -411,7 +425,7 @@ function actionrow(ss inlog,sd end,sv px
+ 	return (EXIT_FAILURE)
+ end
+ 
+-function text_after_nlines(ss inlog,valueu linesnr,valueu crs)
++function text_after_nlines(ss inlog,valueu linesnr,valueu crs) #3
+ 	ss next
+ 	while linesnr>^0
+ 		call memnlcr(inlog,#next,crs)
+@@ -421,10 +435,6 @@ function text_after_nlines(ss inlog,valu
+ 	return inlog
+ end
+ 
+-import "presprite_init" presprite_init
+-import "presprite_done" presprite_done
+-import "get_nframe" get_nframe
+-
+ function loop(ss inlog,sv x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data,charx log)
+ 	add logsize inlog
+ 	if inlog!=logsize  ##else no action sprites/shows
+@@ -531,18 +541,11 @@ function loop(ss inlog,sv x,sd xx,sd log
+ 	return (EXIT_SUCCESS) #exit 1
+ end
+ 
+-importx "strlen" strlen
+-importx "memcpy" memcpy
+-importx "free" free
+-
+-import "compare" compare
+-
+ char inter_last_extension_data=".last.data";vstr p_inter_last_extension_data^inter_last_extension_data
+-function inter_last_extension(sv psize)
++function inter_last_extension(sv psize) #1
+ 	set psize# (\global.inter_last_extension_data)
+ 	return global.p_inter_last_extension_data
+ end
+-import "save" save
+ function inter(valueu presprites,ss swf_fullpath,valueu data)
+ 	sd size;set size strlen(swf_fullpath)
+ 	sd size1=\global.inter_last_extension_data
+--- actionswf-1.orig/oad/log.oc
++++ actionswf-1/oad/log.oc
+@@ -8,6 +8,15 @@ include "common.h" "common.oh"
+ charx error#1
+ #
+ 
++importx "realloc" realloc
++#
++importx "free" free
++import "print_text" print_text
++#
++importx "putchar" putchar
++import "indent" indent
++import "print_inline_done" print_inline_done
++
+ function tree_init()
+ 	set global.error (EXIT_SUCCESS)
+ end
+@@ -18,7 +27,6 @@ end
+ const tree_pad=pad_default
+ const tree_pad_=(tree_pad-1)
+ const _tree_pad_=~tree_pad_
+-importx "realloc" realloc
+ function tree_resize(valueu pf,valueu sz)
+ 	add sz pf#:preframe.log_size
+ 	if sz>^pf#:preframe.log_allsize
+@@ -50,8 +58,6 @@ function tree_frame_init(valueu pf)
+ 	set pf#:preframe.log_allsize 0
+ 	set pf#:preframe.log_indents 0
+ end
+-importx "free" free
+-import "print_text" print_text
+ function tree_frame_free(valueu pf)
+ 	if pf#:preframe.log_mem!=(NULL)
+ 		call tree_entry_ex(pf,(output_nl))  #for memnl, if for prints will be '\0'
+@@ -80,11 +86,6 @@ function tree_entry_end(valueu pf)
+ 	call tree_entry_ex(pf,(xlog_innerbranchend))
+ end
+ 
+-importx "putchar" putchar
+-
+-import "indent" indent
+-import "print_inline_done" print_inline_done
+-
+ function tree_entrylive(dataxu indents,charx type)
+ 	call indent()
+ 	while indents>^0
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -13,11 +13,26 @@ char logpad=xlog_pad_default
+ importx "puts" puts
+ importx "printf" printf
+ importx "free" free
+-
+ import "sprite_free" sprite_free
+-
+ import "print" print
+ import "print_inline_done" print_inline_done
++#
++importx "strlen" strlen
++importx "malloc" malloc
++importx "memcpy" memcpy
++^import "fcontent" fcontent 2
++import "loop" loop
++import "inter" inter
++import "oadata_init" oadata_init
++import "preoadata_init" preoadata_init
++import "preoadata_free" preoadata_free
++import "presprite_done" presprite_done
++import "tree_init" tree_init
++import "tree_exit" tree_exit
++#
++importx "rename" rename
++^import "inter_extension" inter_extension 1
++^import "inter_last_extension" inter_last_extension 1
+ 
+ functionx oadata_free(sv data,charx log)
+ 	if data!=(NULL)
+@@ -71,20 +86,6 @@ functionx oadata_free(sv data,charx log)
+ 	end
+ end
+ 
+-importx "strlen" strlen
+-importx "malloc" malloc
+-importx "memcpy" memcpy
+-
+-import "fcontent" fcontent
+-import "loop" loop
+-import "inter" inter
+-import "oadata_init" oadata_init
+-import "preoadata_init" preoadata_init
+-import "preoadata_free" preoadata_free
+-import "presprite_done" presprite_done
+-import "tree_init" tree_init
+-import "tree_exit" tree_exit
+-
+ functionx oadata_make(ss swf_fullpath,svu poadata,charx log)
+ 	set poadata# (NULL)
+ 	sd size;set size strlen(swf_fullpath)
+@@ -157,10 +158,6 @@ functionx oadata_make(ss swf_fullpath,sv
+ 	return (EXIT_FAILURE)
+ end
+ 
+-importx "rename" rename
+-import "inter_extension" inter_extension
+-import "inter_last_extension" inter_last_extension
+-
+ functionx oadata_ok(ss swf_fullpath)
+ # move ...last.data ...data
+ 	sd size;set size strlen(swf_fullpath)
+@@ -184,7 +181,7 @@ functionx oadata_ok(ss swf_fullpath)
+ 			add size to
+ 			call memcpy(size,sinterfinal,size2)
+ 
+-			sd r ;#same 0/-1
++			datax r#1 ;#same 0/-1, here is int
+ 			set r rename(from,to)
+ 
+ 			call free(from)
+--- actionswf-1.orig/oad/mark.oc
++++ actionswf-1/oad/mark.oc
+@@ -4,6 +4,12 @@ format elfobj64
+ override include_sec 1
+ include "common.h" "common.oh"
+ 
++importx "realloc" realloc
++#
++importx "memcmp" memcmp
++#
++importx "strcmp" strcmp
++
+ function mark_all(svu presprites,valueu end,valueu data)
+ 	charx ok#1
+ 	add end presprites
+@@ -73,7 +79,6 @@ function mark_action_if(valueu act,value
+ 	end
+ 	return (EXIT_SUCCESS)
+ end
+-importx "realloc" realloc
+ function mark_action(valueu act,valueu data)
+ 	valueu size#1;set size data#:oadata.size
+ 	valueu ix#1;set ix size
+@@ -246,7 +251,6 @@ function mark_compare_frame(valueu prevp
+ 	end
+ 	return ok
+ end
+-importx "memcmp" memcmp
+ function mark_compare_branch(valueu prevbr,valueu br,valueu data)
+ 	charx ok#1
+ 
+@@ -307,7 +311,6 @@ function mark_compare_branch(valueu prev
+ 	end
+ 	return (EXIT_SUCCESS)
+ end
+-importx "strcmp" strcmp
+ function mark_compare_string(valueu prevstr,valueu str)
+ 	valueu s1#1;set s1 prevstr#:ustring.base
+ 	add s1 prevstr#:ustring.off
+--- actionswf-1.orig/oad/mds
++++ actionswf-1/oad/mds
+@@ -1,3 +1,6 @@
+ 
+-#if [ -n "${1}" ]; then OCOMP="q ~/o/ocompiler-1/src/o"; if [ ${1} = 0 ]; then shift; OCOMP=${OCOMP} ./md $@; exit; fi; shift; fi
+-OCONV="qq ~/o/ocompiler-1/otoc/otoc" OCOMP="q ~/o/ocompiler-1/src/o" ./md $@
++if [ -z "${launcher}" ]; then launcher="q"; fi
++if [ -z "${OCOMP}" ]; then OCOMP="${launcher} ~/o/ocompiler-1/src/o"; fi
++if [ -z "${OCONV}" ]; then OCONV="${launcher}${launcher} ~/o/ocompiler-1/otoc/otoc"; fi
++if [ -z "${OLINK}" ]; then OLINK="${launcher} ~/o/ocompiler-1/ounused/ounused"; fi
++OCONV="${OCONV}" OCOMP="${OCOMP}" OLINK="${OLINK}" ./md $@
+--- actionswf-1.orig/oad/save.oc
++++ actionswf-1/oad/save.oc
+@@ -9,6 +9,21 @@ const WORD=2
+ const DWORD=4
+ 
+ importx "fwrite" fwrite
++#
++import "global_presprites_size" global_presprites_size
++#
++importx "strlen" strlen
++#
++importx "fread" fread
++importx "malloc" malloc
++importx "free" free
++#
++importx "printf" printf
++import "re_alloc_add" re_alloc_add
++import "print_inline_done" print_inline_done
++import "global_blog" global_blog
++#
++importx "realloc" realloc
+ 
+ function lowwrite(valueu buf,charx sz,valueu file)
+ 	charx out#1;set out fwrite(buf,sz,1,file)
+@@ -41,7 +56,6 @@ function falsewrite(valueu file)
+ 	return out
+ end
+ 
+-import "global_presprites_size" global_presprites_size
+ function save(svu presprites,valueu file)
+ 	valueu end#1;set end presprites
+ 	add end global_presprites_size()
+@@ -113,8 +127,6 @@ function save_frame(valueu aframe,valueu
+ 	return out
+ end
+ 
+-importx "strlen" strlen
+-
+ function save_strings(valuexu pointer,valueu end,valueu file)
+ 	valuexu strings#1;set strings pointer
+ 	wordxu size#1;set size 0  #string was in constantpool that is actionrecordheader with ui16 size
+@@ -199,21 +211,17 @@ end
+ 
+ #read
+ 
+-importx "fread" fread
+-importx "malloc" malloc
+-importx "free" free
+-
+ function lowread(valueu file,valueu buf,charx sz)
+ 	call fread(buf,sz,1,file)
+ end
+-function mediumread(valueu file,wordxu sz)
++function mediumread(valueu file,wordxu sz) #1
+ 	valueu mem#1;set mem malloc(sz)
+ 	if mem!=(NULL)
+ 		call fread(mem,sz,1,file)
+ 	end
+ 	return mem
+ end
+-function highread(valueu file,dataxu sz)
++function highread(valueu file,dataxu sz) #1
+ 	valueu mem#1;set mem malloc(sz)
+ 	if mem!=(NULL)
+ 		call fread(mem,sz,1,file)
+@@ -303,13 +311,7 @@ function restore_free(svu predata)
+ 	call free(predata)
+ end
+ 
+-importx "printf" printf
+-
+-import "re_alloc_add" re_alloc_add
+-import "print_inline_done" print_inline_done
+-import "global_blog" global_blog
+-
+-function restore(valueu file)
++function restore(valueu file) #1
+ 	valueu data#1;set data malloc((\preoadata\))
+ 	if data!=(NULL)
+ 		svu presprites;set presprites malloc((sprites_realloc_onepart))
+@@ -386,7 +388,7 @@ function restore(valueu file)
+ 	return (NULL)
+ end
+ 
+-function restore_frame(valueu file)
++function restore_frame(valueu file) #1
+ 	valueu f#1;set f malloc((\preframe\))
+ 	if f!=(NULL)
+ 		whiletrue
+@@ -465,9 +467,7 @@ function restore_strings(valueu file,svu
+ 	return cpsize
+ end
+ 
+-importx "realloc" realloc
+-
+-function restore_branch(valueu file)
++function restore_branch(valueu file) #1
+ 	valueu br#1;set br malloc(\branch\)
+ 	if br!=(NULL)
+ 		valueu mem#1
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -4,17 +4,27 @@ format elfobj64
+ override include_sec 1
+ include "common.h" "common.oh"
+ 
+-import "re_alloc" re_alloc
++#multithread unsafe
++char indents=0
++#
+ 
++import "re_alloc" re_alloc
+ importx "malloc" malloc
+ importx "printf" printf
+ importx "putchar" putchar
+ importx "free" free
+ importx "strlen" strlen
+-
+-#multithread unsafe
+-char indents=0
+ #
++importx "fputs" fputs
++^importx "stdout" stdout
++importx "fputc" fputc
++#
++^import "memnl" memnl 2
++importx "fwrite" fwrite
++#
++^importx "stderr" stderr
++#
++import "re_alloc_add" re_alloc_add
+ 
+ const ui8max_=256
+ 
+@@ -95,10 +105,6 @@ function indent()
+ 	end
+ end
+ 
+-importx "fputs" fputs
+-^importx "stdout" stdout
+-importx "fputc" fputc
+-
+ function printn(sv s)
+ 	call fputc((output_nl),s)
+ end
+@@ -145,9 +151,6 @@ function prints_inline(ss format)
+ 	call printt(format)
+ end
+ 
+-import "memnl" memnl
+-
+-importx "fwrite" fwrite
+ function print_text(ss a,valueu c)
+ 	sv so^stdout
+ 	ss b
+@@ -165,7 +168,6 @@ function print_text(ss a,valueu c)
+ 	end
+ end
+ 
+-^importx "stderr" stderr
+ function printe(ss er)
+ 	sv se^stderr
+ 	set se se#
+@@ -195,8 +197,6 @@ function string_log(valueu base,valueu o
+ 	call print_lhex(base,off)  #will recognize the branch (visual) when having the string -> branch link and the branch offset
+ end
+ 
+-import "re_alloc_add" re_alloc_add
+-
+ function string_id(valueu prefr,swu xxcontent,sd _recalculation,charx inlogtype)
+ 	wordxu id#1;set id xxcontent#
+ 	if _recalculation!=(NULL)

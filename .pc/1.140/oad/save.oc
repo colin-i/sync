@@ -1,0 +1,539 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.oh"
+
+const BYTE=1
+const WORD=2
+const DWORD=4
+
+importx "fwrite" fwrite
+
+function lowwrite(valueu buf,charx sz,valueu file)
+	charx out#1;set out fwrite(buf,sz,1,file)
+	return out
+end
+function mediumwrite(valueu buf,wordxu sz,valueu file)
+	charx out#1;set out fwrite(buf,sz,1,file)
+	return out
+end
+function highwrite(valueu buf,dataxu sz,valueu file)
+	charx out#1;set out fwrite(buf,sz,1,file)
+	return out
+end
+function swrite(wordxu n,valueu file)
+	charx out#1;set out lowwrite(#n,(WORD),file) #size_t but WORD write
+	return out
+end
+function iwrite(dataxu n,valueu file)
+	charx out#1;set out lowwrite(#n,(DWORD),file)
+	return out
+end
+function truewrite(valueu file)
+	char a=TRUE
+	charx out#1;set out lowwrite(#a,(BYTE),file)
+	return out
+end
+function falsewrite(valueu file)
+	char a=FALSE
+	charx out#1;set out lowwrite(#a,(BYTE),file)
+	return out
+end
+
+import "global_presprites_size" global_presprites_size
+function save(svu presprites,valueu file)
+	valueu end#1;set end presprites
+	add end global_presprites_size()
+	wordxu counted#1;set counted 0
+	sv pointer#1;set pointer presprites
+	while pointer!=end
+		if pointer#!=(NULL)
+			inc counted
+		end
+		incst pointer
+	end
+	charx out#1;set out swrite(counted,file)
+	if out!=0
+		while presprites!=end
+			valueu ps#1;set ps presprites#
+			if ps!=(NULL)
+				if ps#:presprite.apreframe!=(NULL)
+					set out truewrite(file)
+					if out=0
+						return (EXIT_FAILURE)
+					end
+					set out save_frame(ps#:presprite.apreframe,file)
+				else
+					set out falsewrite(file)
+				end
+				if out=0
+					return (EXIT_FAILURE)
+				end
+				dataxu size#1;set size ps#:presprite.size
+				sub size : #1 is always only ready for next
+				valueu fend#1;set fend size
+				div size :
+				set out swrite(size,file) #store from_show places, next they can be with action and later one frame is unmodified, plus all gotoAnd places
+				if out!=0
+					svu frames#1;set frames ps#:presprite.preframes
+					add fend frames
+					while frames!=fend
+						if frames#!=(NULL)
+							set out truewrite(file)
+							if out=0
+								return (EXIT_FAILURE)
+							end
+							set out save_frame(frames#,file)
+						else  # from_show
+							set out falsewrite(file)
+						end
+						if out=0
+							return (EXIT_FAILURE)
+						end
+						incst frames
+					end
+				end
+			end
+			incst presprites
+		end
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+function save_frame(valueu aframe,valueu file)
+	charx out#1;set out save_strings(aframe#:preframe.ustrings,aframe#:preframe.ussize,file)
+	if out!=0
+		set out save_strings(aframe#:preframe.strings,aframe#:preframe.ssize,file)
+		if out!=0
+			set out save_branch(aframe#:preframe.abranch,file)
+		end
+	end
+	return out
+end
+
+importx "strlen" strlen
+
+function save_strings(valuexu pointer,valueu end,valueu file)
+	valuexu strings#1;set strings pointer
+	wordxu size#1;set size 0  #string was in constantpool that is actionrecordheader with ui16 size
+	add end pointer
+	valueu str#1;valueu text#1
+	while pointer!=end
+		set str pointer#
+		set text str#:string.base
+		add text str#:string.off
+		add size strlen(text)
+		inc size ##null end \0
+		incst pointer
+	end
+	charx out#1;set out swrite(size,file)
+	if out!=0
+		while strings!=end
+			set str strings#
+			set text str#:string.base
+			add text str#:string.off
+			set size strlen(text)
+			inc size ##null
+			set out mediumwrite(text,size,file)
+			if out=0
+				return 0
+			end
+			incst strings
+		end
+	end
+	return out
+end
+
+function save_branch(valueu br,valueu file) #at least a mathend/function_marker/whileblock_end/if_marker here
+	# branch_log. here we are gipsying because on 32 we are not agreeing with qword size. we are writing cuts sized parts
+	#with this occasion: it is good that multiple action calls are not merged into a branch
+	#anyway on 32src there are ftell calls .x at xcode start, at expands, overall at reread, that will enforce a small file
+	valueu cuts#1;set cuts br#:branch.cuts
+	valueu end#1;set end cuts
+	add end br#:branch.size
+	charx out#1;dataxu sz#1
+	while cuts!=end
+		set sz cuts#:branchcut.size
+		set out iwrite(sz,file)
+		if out=0
+			return 0
+		end
+		valueu code#1;set code cuts#:branchcut.x
+		set out highwrite(code,sz,file)
+		if out=0
+			return 0
+		end
+		add cuts \branchcut\
+	end
+	set out iwrite(0,file)
+	if out!=0
+		set sz br#:branch.isize ##expanded size
+		set end sz
+		divu sz :
+		set out iwrite(sz,file)
+		if out!=0
+			svu pointer;set pointer br#:branch.innerbranches
+			add end pointer
+			while pointer!=end
+				set out save_branch(pointer#,file)
+				if out=0
+					return 0
+				end
+				incst pointer
+			end
+			set pointer br#:branch.subbranch
+			if pointer!=(NULL)
+				set out truewrite(file)
+				if out!=0
+					set out save_branch(pointer,file)
+				end
+			else
+				set out falsewrite(file)
+			end
+		end
+	end
+	return out
+end
+
+#read
+
+importx "fread" fread
+importx "malloc" malloc
+importx "free" free
+
+function lowread(valueu file,valueu buf,charx sz)
+	call fread(buf,sz,1,file)
+end
+function mediumread(valueu file,wordxu sz)
+	valueu mem#1;set mem malloc(sz)
+	if mem!=(NULL)
+		call fread(mem,sz,1,file)
+	end
+	return mem
+end
+function highread(valueu file,dataxu sz)
+	valueu mem#1;set mem malloc(sz)
+	if mem!=(NULL)
+		call fread(mem,sz,1,file)
+	end
+	return mem
+end
+function cread(valueu file,ss pn)
+	call lowread(file,pn,(BYTE))
+end
+function sread(valueu file,swu pn)
+	call lowread(file,pn,(WORD))
+end
+function iread(valueu file,sdu pn)
+	call lowread(file,pn,(DWORD))
+end
+
+function restore_strings_free(valueu constpool,svu strs,dataxu size)
+	if size!=0  #not always having strings
+		sv cursor;set cursor strs
+		valueu end#1;set end strs
+		add end size
+		while cursor!=end
+			call free(cursor#)
+			incst cursor
+		end
+		call free(strs)
+		call free(constpool)
+	end
+end
+function restore_branch_inners_free(valueu br)
+	sv cursor;set cursor br#:branch.innerbranches
+	valueu end#1;set end cursor
+	add end br#:branch.isize
+	while cursor!=end
+		call restore_branch_free(cursor#)
+		incst cursor
+	end
+end
+function restore_branch_cuts_free(valueu br)
+	valueu cursor#1;set cursor br#:branch.cuts
+	valueu end#1;set end cursor
+	add end br#:branch.size
+	while cursor!=end
+		call free(cursor#:branchcut.x)
+		add cursor \branchcut\
+	end
+	call free(br#:branch.cuts)
+end
+function restore_branch_free(valueu br)
+	call restore_branch_cuts_free(br)
+	call restore_branch_inners_free(br)
+	valueu sbr#1;set sbr br#:branch.subbranch
+	if sbr!=(NULL)
+		call restore_branch_free(sbr)
+	end
+	call free(br)
+end
+function restore_frame_free(valueu fr)
+	call restore_strings_free(fr#:preframe.restore_ustrings,fr#:preframe.ustrings,fr#:preframe.ussize)
+	call restore_strings_free(fr#:preframe.restore_dstrings,fr#:preframe.strings,fr#:preframe.ssize)
+	call restore_branch_free(fr#:preframe.abranch)
+end
+function restore_free(svu predata)
+	svu pss#1;set pss predata#:preoadata.presprites
+	valueu end#1;set end pss
+	add end predata#:preoadata.size
+	while pss!=end
+		valueu ps#1;set ps pss#
+		if ps#:presprite.apreframe!=(NULL)
+			call restore_frame_free(ps#:presprite.apreframe)
+		end
+		valueu fs#1;set fs ps#:presprite.preframes
+		sv f;set f fs
+		valueu fend#1;set fend f
+		add fend ps#:presprite.size
+		while f!=fend
+			if f#!=(NULL) #can be also showframe
+				call restore_frame_free(f#)
+			end
+			incst f
+		end
+		call free(fs)
+		call free(ps)
+		incst pss
+	end
+	call free(predata#:preoadata.presprites)
+	call free(predata)
+end
+
+importx "printf" printf
+
+import "re_alloc_add" re_alloc_add
+import "print_inline_done" print_inline_done
+import "global_blog" global_blog
+
+function restore(valueu file)
+	valueu data#1;set data malloc((\preoadata\))
+	if data!=(NULL)
+		svu presprites;set presprites malloc((sprites_realloc_onepart))
+		if presprites!=(NULL)
+			set data#:preoadata.presprites presprites
+			set data#:preoadata.size 0
+			wordxu size#1
+			call sread(file,#size)
+			charx log#1;set log global_blog()
+			if log=(TRUE)
+				call printf("%hu sprites to restore",size)
+				call print_inline_done()
+			end
+			while size!=0
+				valueu ps#1;set ps malloc((\presprite\))
+				if ps!=(NULL)
+					valueu fs#1;set fs malloc((sprites_realloc_onepart))
+					if fs!=(NULL)
+						charx ok#1;set ok re_alloc_add(#data#:preoadata.presprites,#data#:preoadata.size,ps)
+						if ok=(EXIT_SUCCESS)
+							set ps#:presprite.preframes fs
+							set ps#:presprite.size 0
+							charx bl#1
+							call cread(file,#bl)
+							if bl=(TRUE)
+								set ps#:presprite.apreframe restore_frame(file)
+								if ps#:presprite.apreframe=(NULL)
+									call restore_free(data)
+									return (NULL)
+								end
+							else
+								set ps#:presprite.apreframe (NULL)
+							end
+							wordxu frames#1;call sread(file,#frames)
+							while frames!=0
+								call cread(file,#bl)
+								if bl=(TRUE)
+									whiletrue
+										valueu mem#1
+										set mem restore_frame(file)
+										if mem!=(NULL)
+											set ok re_alloc_add(#ps#:presprite.preframes,#ps#:presprite.size,mem)
+											if ok=(EXIT_SUCCESS)
+												break
+											end
+											call free(mem)
+										end
+										call restore_free(data)
+										return (NULL)
+									end
+								else
+									set ok re_alloc_add(#ps#:presprite.preframes,#ps#:presprite.size,(NULL))
+									if ok=(EXIT_FAILURE)
+										call restore_free(data)
+										return (NULL)
+									end
+								end
+								dec frames
+							end
+							dec size
+							continue
+						end
+						call free(fs)
+					end
+					call free(ps)
+				end
+				call restore_free(data)
+				return (NULL)
+			end
+			return data
+		end
+		call free(data)
+	end
+	return (NULL)
+end
+
+function restore_frame(valueu file)
+	valueu f#1;set f malloc((\preframe\))
+	if f!=(NULL)
+		whiletrue
+			wordxu usize#1
+			set usize restore_strings(file,#f#:preframe.restore_ustrings,#f#:preframe.ustrings,#f#:preframe.ussize)
+			if usize!=0
+				if f#:preframe.ussize=0
+					break
+				end
+			end
+			whiletrue
+				wordxu dsize#1
+				set dsize restore_strings(file,#f#:preframe.restore_dstrings,#f#:preframe.strings,#f#:preframe.ssize)
+				if dsize!=0
+					if f#:preframe.ssize=0
+						break
+					end
+				end
+				valueu mem#1;set mem restore_branch(file)
+				if mem!=(NULL)
+					set f#:preframe.abranch mem
+					return f
+				end
+				if dsize!=0
+					call restore_strings_free(f#:preframe.restore_dstrings,f#:preframe.strings,f#:preframe.ssize) #inside comparation is extra in extra, but in flow is a saving
+				end
+				break
+			end
+			if usize!=0
+				call restore_strings_free(f#:preframe.restore_ustrings,f#:preframe.ustrings,f#:preframe.ussize)
+			end
+			break
+		end
+		call free(f)
+	end
+	return (NULL)
+end
+
+function restore_strings(valueu file,svu _constpool,svu _strs,sd _size)
+	set _size# 0
+	wordxu cpsize#1
+	call sread(file,#cpsize)
+	if cpsize!=0
+		set _constpool# mediumread(file,cpsize)
+		valueu mem#1;set mem _constpool#
+		if mem!=(NULL)
+			valueu start#1;set start mem
+			set _strs# malloc((sprites_realloc_onepart))
+			if _strs#!=(NULL)
+				valueu end#1;set end mem
+				add end cpsize
+				while mem!=end
+					valueu s#1;set s malloc(\ustring\)
+					if s!=(NULL)
+						charx ok#1;set ok re_alloc_add(_strs,_size,s)
+						if ok=(EXIT_SUCCESS)
+							set s#:ustring.base start
+							set s#:ustring.off mem
+							sub s#:ustring.off start
+							add mem strlen(mem)
+							inc mem ##null end
+							continue
+						end
+						call free(s)
+					end
+					call restore_strings_free(start,_strs#,_size#)
+					set _size# 0
+					call free(start)
+					break
+				end
+				return cpsize
+			end
+			call free(start)
+		end
+	end
+	return cpsize
+end
+
+importx "realloc" realloc
+
+function restore_branch(valueu file)
+	valueu br#1;set br malloc(\branch\)
+	if br!=(NULL)
+		valueu mem#1
+		dataxu size#1
+		set br#:branch.cuts malloc(1) #same as original. is still a mem take, will need it later
+		if br#:branch.cuts!=(NULL)
+			set br#:branch.size 0
+			value sz#1;set sz 0
+			whiletrue
+				call iread(file,#size)
+				if size=0
+					break
+				end
+				set mem highread(file,size)
+				if mem!=(NULL)
+					add sz \branchcut\
+					valueu remem#1;set remem realloc(br#:branch.cuts,sz)
+					if remem!=(NULL)
+						set br#:branch.cuts remem
+						add remem br#:branch.size
+						set remem#:branchcut.x mem
+						set remem#:branchcut.size size
+						set br#:branch.size sz
+						continue
+					end
+					call free(mem)
+				end
+				call restore_branch_cuts_free(br)
+				call free(br)
+				return (NULL)
+			end
+			set br#:branch.innerbranches malloc((sprites_realloc_onepart))
+			if br#:branch.innerbranches!=(NULL)
+				set br#:branch.isize 0
+				call iread(file,#size)
+				while size!=0 #inners
+					set mem restore_branch(file)
+					if mem!=(NULL)
+						charx ok#1;set ok re_alloc_add(#br#:branch.innerbranches,#br#:branch.isize,mem)
+						if ok=(EXIT_SUCCESS)
+							dec size
+							continue
+						end
+						call restore_branch_free(mem)
+					end
+					call restore_branch_cuts_free(br)
+					call restore_branch_inners_free(br)
+					call free(br)
+					return (NULL)
+				end
+				charx bl#1
+				call cread(file,#bl)
+				if bl=(TRUE) #subbranch
+					set br#:branch.subbranch restore_branch(file)
+					if br#:branch.subbranch!=(NULL)
+						return br
+					end
+					call restore_branch_free(br)
+					return (NULL)
+				end
+				set br#:branch.subbranch (NULL)
+				return br
+			end
+			call restore_branch_cuts_free(br)
+		end
+		call free(br)
+	end
+	return (NULL)
+end

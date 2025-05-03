@@ -1,0 +1,150 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.oh"
+
+import "re_alloc" re_alloc
+import "branch_init" branch_init
+
+function ibranch_add(valueu pf)
+	valueu bra#1;set bra pf#:preframe.branchpointer
+	charx ok#1
+	set ok re_alloc(#bra#:branch.innerbranches,bra#:branch.isize)
+	if ok=(EXIT_SUCCESS)
+		svu pointer#1;set pointer bra#:branch.innerbranches
+		add pointer bra#:branch.isize
+		set pointer# branch_init(pf,bra) #no suprabranch, same as root
+		if pointer#!=(NULL)
+			add bra#:branch.isize :
+			return (EXIT_SUCCESS)
+		end
+	end
+	return (EXIT_FAILURE)
+end
+function ibranch_done(valueu pf)
+	valueu bra#1;set bra pf#:preframe.branchpointer
+	set pf#:preframe.branchpointer bra#:branch.topbranch
+end
+
+import "re_alloc_add" re_alloc_add
+
+function jumpforwardif_resolve(valueu pf,wordxu number)
+	dataxu offset#1;set offset pf#:preframe.size
+	sub offset number
+	valueu prev#1;set prev pf#:preframe.branchpointer
+	whiletrue
+		charx ok#1
+		if prev#:branch.offset=offset  ##is /,,+offset/
+			set ok re_alloc_add(#pf:preframe.actions_if,#pf:preframe.actions_if_size,prev#:branch.action_if)
+			return ok
+		end
+		#for forin break ends
+		if prev#:branch.offset_break=offset
+			set ok re_alloc_add(#pf:preframe.actions_if,#pf:preframe.actions_if_size,prev#:branch.action_break)
+			return ok
+		end
+		set prev prev#:branch.suprabranch
+	end
+end
+import "printe" printe
+function jumpforward_resolve(valueu pf,wordxu number)
+	dataxu offset#1;set offset pf#:preframe.size
+	sub offset number
+	valueu prev#1;set prev pf#:preframe.branchpointer
+	whiletrue
+		charx ok#1
+		#for conditions end, this will resolve also break ends
+		if prev#:branch.offset=offset  ##is /,,&offset/
+			set ok re_alloc_add(#pf:preframe.actions_jump,#pf:preframe.actions_jump_size,prev#:branch.action_if)
+			return ok
+		end
+		#this is catching unreachable code after break end
+		if prev#:branch.offset_break=offset ##both on first? like If? whiletrue break var a} but this is not logical
+			call printe("unreachable code after break")
+			return (EXIT_FAILURE)
+		end
+		set prev prev#:branch.suprabranch
+	end
+end
+function jumpbackward_resolved(valueu dest,valueu src,charx log,valueu br)
+	set dest#:action.next src
+	if log=(TRUE)
+		inc br#:branch.log_backjumps
+	end
+end
+function jumpbackward_resolve(valueu pf,wordxu number,charx log)
+	dataxu offset#1;set offset pf#:preframe.size
+	sub offset number
+	valueu prev#1;set prev pf#:preframe.branchpointer
+	whiletrue
+		if prev#:branch.offset_loop=offset ##can be ,,|,,$
+			#link prev action to loop start action
+			call jumpbackward_resolved(pf#:preframe.action_last,prev#:branch.action_loop,log,prev)
+			break
+		end
+		set prev prev#:branch.suprabranch
+	end
+end
+import "global_blog" global_blog
+function jumpforwards_frame_done(valueu prefr)
+	if prefr!=(NULL)  #else is from_show / no aframe
+		svu pointer;svu end
+		valueu act#1
+		if prefr#:preframe.actions_if_size!=0
+			set pointer prefr#:preframe.actions_if
+			set end pointer
+			add end prefr#:preframe.actions_if_size
+			while pointer!=end
+				set act pointer#
+				or act#:action.flags (if_flag)
+				incst pointer
+			end
+		end
+		if prefr#:preframe.actions_jump_size!=0
+			set pointer prefr#:preframe.actions_jump
+			set end pointer
+			add end prefr#:preframe.actions_jump_size
+			charx log#1;set log global_blog()
+			if log=(TRUE)
+				valueu branch_item#1;set branch_item prefr#:preframe.branchpointer
+				while pointer!=end
+					set act pointer#
+					set act#:action.next (action_next_default)
+					inc branch_item#:branch.log_fwdjumps
+					incst pointer
+				end
+			else
+				while pointer!=end
+					set act pointer#
+					set act#:action.next (action_next_default)
+					incst pointer
+				end
+			end
+		end
+	end
+end
+function jumpforwards_done(sv presprites,sv prespr) #id will be word*4
+	mult prespr :
+	add prespr presprites
+	set prespr prespr#
+	call jumpforwards_frame_done(prespr#:presprite.apreframe)
+	svu pointer;set pointer prespr#:presprite.preframes
+	valueu end#1;set end pointer
+	add end prespr#:presprite.size
+	while pointer!=end
+		call jumpforwards_frame_done(pointer#)
+		add pointer :
+	end
+end
+
+function function_resolved(valueu data,valueu actions,valueu logpreframe)
+	svu pointer
+	set pointer data#:oadata.functions
+	add pointer data#:oadata.functions_size
+	decst pointer
+	set pointer# actions
+	if logpreframe!=(NULL)
+		inc logpreframe#:preframe.log_sizedfunctions
+	end
+end
