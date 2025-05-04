@@ -1,0 +1,71 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-142) bionic; urgency=medium
+ .
+   * build fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-04
+
+--- actionswf-1.orig/oad/safe.h
++++ actionswf-1/oad/safe.h
+@@ -3,13 +3,37 @@
+ 
+ //only to not truncate void* return to int, args are not truncated at default, if they are then must long them at default
+ 
+-//gcc/clang with __has_builtin    //not the same as #ifndef __builtin_malloc
+-#if (! defined(__has_builtin)) || (! __has_builtin (__builtin_malloc))
+-void*malloc(long unsigned int); //builtin will warn, for example, if arg is char*
++//gcc/clang with __has_builtin
++//not the same as #ifndef __builtin_malloc
++//old gcc cannot do in one line if __has_builtin is not: #if (! defined(__has_builtin)) || (! __has_builtin(__builtin_malloc))
++#undef ok_lets_define_the_function
++
++#if defined(__has_builtin)
++#	if ! __has_builtin(__builtin_malloc)
++#		define ok_lets_define_the_function
++#	endif
++#endif
++#ifdef ok_lets_define_the_function
++#	undef ok_lets_define_the_function
++	void*malloc(long unsigned int); //builtin will warn, for example, if arg is char*
++#endif
++
++#if defined(__has_builtin)
++#	if ! __has_builtin(__builtin_realloc))
++#		define ok_lets_define_the_function
++#	endif
+ #endif
+-#if (! defined(__has_builtin)) || (! __has_builtin (__builtin_realloc))
++#ifdef ok_lets_define_the_function
++#	undef ok_lets_define_the_function
+ void*realloc(void*,long unsigned int);
+ #endif
+-#if (! defined(__has_builtin)) || (! __has_builtin (__builtin_strlen))
++
++#if defined(__has_builtin)
++#	if ! __has_builtin(__builtin_strlen))
++#		define ok_lets_define_the_function
++#	endif
++#endif
++#ifdef ok_lets_define_the_function
++#	undef ok_lets_define_the_function
+ long unsigned int strlen(const char*);
+ #endif
