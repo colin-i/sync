@@ -1,0 +1,96 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x71) focal; urgency=medium
+ .
+   * normalize clue fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-04
+
+--- edor-1.orig/.github/workflows/deledor.yml
++++ edor-1/.github/workflows/deledor.yml
+@@ -8,12 +8,11 @@ jobs:
+  # This workflow contains a single job called "build"
+  del:
+   # The type of runner that the job will run on
+-  runs-on: ubuntu-18.04
++  runs-on: ubuntu-22.04
+   # Steps represent a sequence of tasks that will be executed as part of the job
+   steps:
+    - name: Remove asset
+      uses: mknejp/delete-release-assets@v1
+-     env:
+      with:
+       token: ${{ secrets.PAT }}
+       tag: refs/tags/${{ env.tag }}
+--- edor-1.orig/.github/workflows/uprpmedor.yml
++++ edor-1/.github/workflows/uprpmedor.yml
+@@ -4,7 +4,7 @@ on:
+ 
+ jobs:
+  urbuild:
+-  runs-on: ubuntu-18.04
++  runs-on: ubuntu-22.04
+   steps:
+    - name: Run a multi-line script
+      run: |
+--- edor-1.orig/arh/pub
++++ edor-1/arh/pub
+@@ -17,6 +17,7 @@ last=$(curl https://api.github.com/repos
+ ~/test/rerpm && \
+ ~/test/uprpm && \
+ ~/test/pub upapp pkg pkgarm && \
++~/test/pkg/aur && \
+ ~/test/pub2 && \
+ ~/test/publp2 && \
+ ~/test/lp && \
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2318,9 +2318,9 @@ static bool loopin(WINDOW*w){
+ 		}
+ 	}
+ }
+-#define normalize_yes_clue ok=normalize_yes;normalize_clue=*r;
++#define normalize_yes_clue ok=normalize_yes;*normalize_clue_pointer=*r;
+ //-1 to normalize, 0 errors, 1 ok
+-static normalize_char normalize(char**c,size_t*size,size_t*r){
++static normalize_char normalize(char**c,size_t*size,size_t*r,size_t*normalize_clue_pointer){
+ 	normalize_char ok=normalize_err;
+ 	char*text_w=c[0];
+ 	size_t sz=size[0];
+@@ -2358,7 +2358,7 @@ static normalize_char normalize(char**c,
+ //same as normalize
+ static normalize_char normalize_split(char**c,size_t*s,size_t*r,char*argfile){
+ 	if(argfile==nullptr||split_grab(c,s)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
+-		return normalize(c,s,r);
++		return normalize(c,s,r,&normalize_clue);
+ 	}
+ 	return normalize_err;
+ }
+@@ -2531,7 +2531,8 @@ static void getfilebuf(char*cutbuf_file)
+ 			if(v!=nullptr){
+ 				lseek(f,0,SEEK_SET);
+ 				cutbuf_sz=(size_t)read(f,v,sz);
+-				if(normalize(&v,&cutbuf_sz,&cutbuf_r)!=normalize_err){
++				size_t not_a_clue_at_cutbuf;
++				if(normalize(&v,&cutbuf_sz,&cutbuf_r,&not_a_clue_at_cutbuf)!=normalize_err){
+ 					cutbuf=v;cutbuf_spc=cutbuf_sz;
+ 				}else free(v);
+ 			}
