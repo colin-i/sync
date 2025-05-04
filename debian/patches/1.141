@@ -1,0 +1,143 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-141) bionic; urgency=medium
+ .
+   * fix data test
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-04
+
+--- actionswf-1.orig/oad/common.oh
++++ actionswf-1/oad/common.oh
+@@ -1,4 +1,6 @@
+ 
++include "safe.h" "safe.oh"
++
+ const EXIT_SUCCESS=0
+ const EXIT_FAILURE=-1
+ 
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -39,7 +39,7 @@ import "presprite_init" presprite_init
+ import "presprite_done" presprite_done
+ ^import "get_nframe" get_nframe 5
+ #
+-importx "strlen" strlen                              #same as malloc realloc
++importx "strlen" strlen                              #same as malloc realloc. fwrite and memcpy. fread is not builtin but not using the return so no register high part clean there
+ importx "memcpy" memcpy
+ importx "free" free
+ import "compare" compare
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -34,7 +34,7 @@ importx "rename" rename
+ ^import "inter_extension" inter_extension 1
+ ^import "inter_last_extension" inter_last_extension 1
+ 
+-functionx oadata_free(sv data,charx log)
++functionx oadata_free(sv data,charx log) #2
+ 	if data!=(NULL)
+ 		sv sprites;set sprites data#:oadata.sprites
+ 		if sprites!=(NULL)
+@@ -86,7 +86,7 @@ functionx oadata_free(sv data,charx log)
+ 	end
+ end
+ 
+-functionx oadata_make(ss swf_fullpath,svu poadata,charx log)
++functionx oadata_make(ss swf_fullpath,svu poadata,charx log) #3
+ 	set poadata# (NULL)
+ 	sd size;set size strlen(swf_fullpath)
+ 	char logext=".log";vstr slogext^logext
+--- actionswf-1.orig/oad/oadbgdata.oh
++++ actionswf-1/oad/oadbgdata.oh
+@@ -1,7 +1,8 @@
+ 
+ include "oadbgdatas.h" "oadbgdatas.oh"
+ 
+-importx "oadata_make" oadata_make
+-importx "oadata_free" oadata_free
+-importx "oadata_ok" oadata_ok
+-importx "oadata_logpad_set" oadata_logpad_set
++importx "oadata_make" oadata_make 3
++importx "oadata_free" oadata_free 2
++importx "oadata_ok" oadata_ok 1
++importx "oadata_logpad_get" oadata_logpad_get
++importx "oadata_logpad_set" oadata_logpad_set 1
+--- /dev/null
++++ actionswf-1/oad/safe.h
+@@ -0,0 +1,15 @@
++
++//typedef long long long;//on windows but later
++
++//only to not truncate void* return to int, args are not truncated at default, if they are then must long them at default
++
++//gcc/clang with __has_builtin    //not the same as #ifndef __builtin_malloc
++#if (! defined(__has_builtin)) || (! __has_builtin (__builtin_malloc))
++void*malloc(long unsigned int); //builtin will warn, for example, if arg is char*
++#endif
++#if (! defined(__has_builtin)) || (! __has_builtin (__builtin_realloc))
++void*realloc(void*,long unsigned int);
++#endif
++#if (! defined(__has_builtin)) || (! __has_builtin (__builtin_strlen))
++long unsigned int strlen(const char*);
++#endif
+--- /dev/null
++++ actionswf-1/oad/safe.oh
+@@ -0,0 +1 @@
++
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -5,7 +5,8 @@ CFLAGS=$(echo $(cat ../../oad/cflags) |
+ if [ -n "${1}" ]; then
+ 	g="gdb -ex start --args"
+ fi
+-
++if [ -z "${OCOMP}" ]; then OCOMP=o; fi
++if [ -z "${OCONV}" ]; then OCONV=otoc; fi
+ if [ -z "${CC}" ]; then
+ 	CC=cc
+ 	if [ "${conv_64}" = 1 ]; then
+@@ -16,8 +17,8 @@ fi
+ if [ -z "${f}" ]; then
+ 	f=../../example/example.swf
+ fi
+-o a.oc x_file 1 && \
+-otoc a.oc.x && \
++${OCOMP} a.oc x_file 2 logfile 0 && \
++${OCONV} a.oc.x && \
+ ${CC} ${model} ${CFLAGS} -g a.c -L../../oad -loadbgdata && \
+ LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} || { echo a.out error; exit 1; }
+ #if [ -z "${d}" ]; then rm ${f}.data; else cp ${f}.data .; fi
+--- actionswf-1.orig/tests/data/a.oc
++++ actionswf-1/tests/data/a.oc
+@@ -2,7 +2,7 @@
+ format elfobj64
+ 
+ override include_sec 1
+-include "../../oad/oadbgdata.h" "../../oad/oadbgdata.oh"
++einclude "../../oad/oadbgdata.h" "../../oad/oadbgdata.oh"
+ 
+ 
+ entry main(data srgc,sv argv)
+--- actionswf-1.orig/tests/data/c
++++ actionswf-1/tests/data/c
+@@ -1,2 +1,2 @@
+ #!/bin/sh
+-rm -f a.oc.log a.oc.x a.o a.c a.out
++rm -f a.oc.x a.c a.out

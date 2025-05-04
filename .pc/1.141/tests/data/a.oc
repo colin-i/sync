@@ -1,0 +1,17 @@
+
+format elfobj64
+
+override include_sec 1
+include "../../oad/oadbgdata.h" "../../oad/oadbgdata.oh"
+
+
+entry main(data srgc,sv argv)
+	call oadata_logpad_set(0x30)
+	incst argv
+	ss path;set path argv#
+	sd data
+	sd a;set a oadata_make(path,#data,(TRUE))
+	if a!=0;return a;end
+	call oadata_free(data,(TRUE))
+	set a oadata_ok(path)
+	return a
