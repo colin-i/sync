@@ -1,0 +1,168 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+229) xenial; urgency=medium
+ .
+   * allow write fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-04
+
+--- ocompiler-1.orig/localtest
++++ ocompiler-1/localtest
+@@ -1 +1 @@
+-1-5+228
++1-5+229
+--- ocompiler-1.orig/old.html
++++ ocompiler-1/old.html
+@@ -1,3 +1,4 @@
++<p>ocompiler-1-5+228.x86_64.rpm,10vp1lC8PCTOGHLMBVQhKWB-XuS33NM3P,2025-05-04T10:27:50.159Z,88442,https://drive.google.com/uc?id=10vp1lC8PCTOGHLMBVQhKWB-XuS33NM3P&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+227.x86_64.rpm,11u8SDXx3AOIJb8WXCHjEUGE-ZeZgrqrp,2025-05-03T12:32:37.223Z,88230,https://drive.google.com/uc?id=11u8SDXx3AOIJb8WXCHjEUGE-ZeZgrqrp&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+226.x86_64.rpm,1ix6a1jvC3_wa3vXy32PXtEzRYNQK2JRf,2025-05-02T15:07:46.905Z,87727,https://drive.google.com/uc?id=1ix6a1jvC3_wa3vXy32PXtEzRYNQK2JRf&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+ <p>ocompiler-1-5+225.x86_64.rpm,1E0oMasr8FIpF4mNrA64UhMNjp6sh-7bv,2025-04-20T14:10:51.369Z,87696,https://drive.google.com/uc?id=1E0oMasr8FIpF4mNrA64UhMNjp6sh-7bv&export=download,['1xYmQadZsbMghRuKaBTv5ysIsKRqUfpu2'],anyoneWithLink</p>
+--- ocompiler-1.orig/otoc/action.oc
++++ ocompiler-1/otoc/action.oc
+@@ -24,12 +24,10 @@ end
+ 
+ function return(sd outfile)
+ 	if loop.function_start!=(err)
+-		if loop.allowwrite=(allowwrite_yes) #can be no_include
+-			call fseek(outfile,loop.function_start,(SEEK_SET))
+-			call fwrite(#write_long_pointer.a,(write_long_cast),1,outfile)
+-			call fseek(outfile,0,(SEEK_END))
+-			set loop.function_start (err) #if is not at endfunction, is here. multipe returns,write once
+-		end
++		call fseek(outfile,loop.function_start,(SEEK_SET))
++		call fwrite(#write_long_pointer.a,(write_long_cast),1,outfile)
++		call fseek(outfile,0,(SEEK_END))
++		set loop.function_start (err) #if is not at endfunction, is here. multipe returns,write once
+ 	end
+ 	char a="return "^  #also used at ret
+ 	callg write(outfile,#a,\.a)
+--- ocompiler-1.orig/otoc/decl.oc
++++ ocompiler-1/otoc/decl.oc
+@@ -26,14 +26,16 @@ function functiondef_d(sv pbuffer,sd out
+ 	return args ##for varargs
+ end
+ function functiondef_r(sv pbuffer,sd outfile,sd pointer,sd sz)
+-	set loop.function_start ftell(outfile)
+-	if loop.function_start!=(err)
+-		call write_void(outfile,pointer,sz)
+-		call writel(outfile)
+-		sd args;set args functiondef_d(pbuffer,outfile)
+-		return args ##for varargs
++	sd b;set b write_allow();if b=(TRUE) #returns ca be also in include files at o, don't want to test that on c?
++		set loop.function_start ftell(outfile)
++		if loop.function_start=(err)
++			call aftercallenable()
++		end
+ 	end
+-	call aftercallenable()
++	call write_void(outfile,pointer,sz)
++	call writel(outfile)
++	sd args;set args functiondef_d(pbuffer,outfile)
++	return args ##for varargs
+ end
+ function functiondef_ext(sv pbuffer,sd outfile,sd pointer,sd sz,sd vargs)
+ 	sd args;set args functiondef_r(pbuffer,outfile,pointer,sz)
+--- ocompiler-1.orig/otoc/loop.oc
++++ ocompiler-1/otoc/loop.oc
+@@ -400,7 +400,9 @@ function declare(sd outfile,sv pbuffer)
+ 			charx multi#1;call get_multistring(pbuffer,#multi,#sz,#pointer)
+ 			charx trim#1;call get_char(pbuffer,#trim)
+ 			if trim=(Xfile_declmode_string_pop_yes)
+-				call write_popstring(pointer,sz,outfile)
++				sd b;set b write_allow();if b=(TRUE)
++					call write_popstring(pointer,sz,outfile)
++				end
+ 				if type!=(Xfile_decltype_byte) #why check here and not above? to let popstring to be normal and check for 0 size and write to file (is more easy at debug)
+ 					call unimplemented() # char*={'a','b','c',0} is not "abc" ,downgrade to char? the sizeof and pointers then
+ 				end
+@@ -626,18 +628,24 @@ function else_core(sd outfile)
+ 	callg write(outfile,#a,\.a)
+ end
+ 
+-function write(sd outfile,ss buf,sd sz)
++function write_allow()
+ 	if loop.ignored=(ignored_no)
+ 		if loop.allowwrite=(allowwrite_yes)
+-			sd items
+-			if loop.directwrite=(TRUE)
+-				set items fwrite(buf,sz,1,outfile)
+-			else
+-				set items mwrite(buf,sz,outfile)
+-			end
+-			if items!=1
+-				call aftercallenable()
+-			end
++			return (TRUE)
++		end
++	end
++	return (FALSE)
++end
++function write(sd outfile,ss buf,sd sz)
++	sd b;set b write_allow();if b=(TRUE)
++		sd items
++		if loop.directwrite=(TRUE)
++			set items fwrite(buf,sz,1,outfile)
++		else
++			set items mwrite(buf,sz,outfile)
++		end
++		if items!=1
++			call aftercallenable()
+ 		end
+ 	end
+ end
+@@ -756,8 +764,8 @@ function writetn(sd outfile) #terminator
+ 	callg writenl(outfile)
+ end
+ 
+-function fprintu(sd outfile,sd c)
+-	sd items;set items fprintf(outfile,"%u",c) #this does't encounter allowwrite or directwrite at this moment
++function fprintu(sd outfile,sd c)  #has an upper write_allow check
++	sd items;set items fprintf(outfile,"%u",c) #safe from directwrite at this moment
+ 	if items<0
+ 		call aftercallenable()
+ 	end
+--- ocompiler-1.orig/otoc/var.oc
++++ ocompiler-1/otoc/var.oc
+@@ -207,7 +207,7 @@ function write_string_ex(sv pbuffer,sd o
+ 	call get_multistring(pbuffer,#multiline,#sz,#pointer)
+ 	callg write_string(outfile,multiline,sz,pointer)
+ end
+-function write_popstring(ss pointer,sd sz,sd outfile)
++function write_popstring(ss pointer,sd sz,sd outfile) #has an upper write_allow check
+ 	call writecl(outfile) #write {}, can work for char*?see at declare
+ 	add sz pointer
+ 	if pointer!=sz
+--- ocompiler-1.orig/tests/db
++++ ocompiler-1/tests/db
+@@ -1,4 +1,6 @@
+ 
+ if [ -z "${OCONV}" ]; then OCONV=../otoc/otoc; fi
+-./xb ${1} && \
+-${OCONV} ${1}.oc.x
++a=${1}
++shift
++./xb ${a} && \
++${OCONV} ${a}.oc.x $@
+--- /dev/null
++++ ocompiler-1/tests/dbr
+@@ -0,0 +1 @@
++OCONV="qq ../otoc/otoc" ./db $@
