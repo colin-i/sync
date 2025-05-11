@@ -1,0 +1,100 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-144) bionic; urgency=medium
+ .
+   * -dev with main package same version req
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-11
+
+--- actionswf-1.orig/mrd
++++ actionswf-1/mrd
+@@ -1 +1 @@
+-cd src && ./mrd && cd ../oad && ./md
++cd src && ./mrd && cd ../oad && ./md && cd ../dev && make
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -96,7 +96,7 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
++	install -D ${libname} $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 	if [ -e ../include_dev ]; then \
+ 		install -D oadbgdata.h $(DESTDIR)$(prefix)/include/actionswf/oadbgdata.h && \
+ 		install -D oadbgdatas.h $(DESTDIR)$(prefix)/include/actionswf/oadbgdatas.h && \
+@@ -107,7 +107,7 @@ install-lib:
+ install: all install-lib
+ 
+ uninstall:
+-	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 	-if [ -e ../include_dev ]; then \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/oadbgdata.h; \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/oadbgdatas.h; \
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -17,10 +17,13 @@ On Arch Linux, <i>.zst</i> file from [re
+ yay -Sy actionswf
+ ```
+ \
+-On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/actionswf/releases).
++On Fedora:
+ ```sh
+-dnf install actionswf-*.*.rpm
++sudo dnf copr enable colin/project
++sudo dnf install actionswf
+ ```
++There is also <i>actionswf-devel</i>.\
++\
+ \
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases) has the dll.
+ 
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -91,8 +91,9 @@ ${libname}: ${name}
+ 
+ else
+ #same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+-ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L. -l:${exte} --exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L. -l:${exte} --build-id --exclude-libs ${exte}
+ #and pkg-config for -lc? is not in libc6-dev. where is?
++#--build-id for rpm
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+@@ -155,7 +156,7 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
++	install -D ${libname} $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 	if [ -e ../include_dev ]; then \
+ 		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flags.oh && \
+ 		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flagss.oh && \
+@@ -167,7 +168,7 @@ install-lib:
+ install: all install-lib
+ 
+ uninstall:
+-	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 	-if [ -e ../include_dev ]; then \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/flagss.oh; \
