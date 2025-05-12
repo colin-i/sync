@@ -1,0 +1,83 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (1-5+229) xenial; urgency=medium
+ .
+   * allow write fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-12
+
+--- ocompiler-1.orig/otoc/Makefile
++++ ocompiler-1/otoc/Makefile
+@@ -74,8 +74,8 @@ install:
+ 	$(MAKE) install-proj
+ install-proj:
+ 	install -D ${prog} $(DESTDIR)$(prefix)/bin/${prog}
+-	#if [ "${NOOCONV}" != "1" ]; then install -D ${prog} $(DESTDIR)$(prefix)/bin/${prog} && echo ${prog} is installed; else echo ${prog} is not installed; fi
+-	#is at debian/ocompiler.install , will install here but not in the final deb
++#if [ "${NOOCONV}" != "1" ]; then install -D ${prog} $(DESTDIR)$(prefix)/bin/${prog} && echo ${prog} is installed; else echo ${prog} is not installed; fi
++#is at debian/ocompiler.install , will install here but not in the final deb
+ 
+ clean:
+ 	-rm -f ${FULLOBJO}
+--- ocompiler-1.orig/ounused/Makefile
++++ ocompiler-1/ounused/Makefile
+@@ -30,7 +30,8 @@ ${vers}:
+ ${FULLOBJO}: ${FULLOBJS} ${vers}
+ 	${launcher} ${OCOMP} $< exit_end 1 ${OFLAGSEXTRA}
+ 
+-ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 -o $@ ${L} -l:libc.so.6 -entry main
++ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 --build-id -o $@ ${L} -l:libc.so.6 -entry main
++#build-id for rpm
+ 
+ ${OB}: ${OBJ}
+ 	${ATLDCOM} ${FULLOBJO}
+--- ocompiler-1.orig/readme.md
++++ ocompiler-1/readme.md
+@@ -18,10 +18,13 @@ On Arch Linux, <i>.zst</i> file from [re
+ yay -Sy ocompiler
+ ```
+ \
+-On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/o/releases).
++On Fedora:
+ ```sh
+-dnf install ocompiler-*.*.rpm
++sudo dnf copr enable colin/project
++sudo dnf install ocompiler
+ ```
++There is also <i>ocompiler-devel</i>.\
++\
+ \
+ On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).\
+ \
+--- ocompiler-1.orig/src/Makefile
++++ ocompiler-1/src/Makefile
+@@ -63,9 +63,10 @@ ${OBJ}: ${FULLOBJS} ${etcinclude} ${vers
+ 	fi; \
+ 	mv ${FULLOBJO} . \
+ 
+-_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=${linker} ${L} -l:libc.so.6 -entry main -o
++_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=${linker} --build-id ${L} -l:libc.so.6 -entry main -o
+ ATLDCOM = ${_ATLDCOM} $@
+ ATLDCOM_T_O = $(LD) -melf_i386 --dynamic-linker=${linker} ${L} -lc -entry main -o z ${FULLOBJO}
++#--build-id for rpm
+ 
+ ${etcinclude}:
+ 	echo sd etchelper=${etchelper}\;ss etc_helper=\"${etc_helper}\" > ${etcinclude}
