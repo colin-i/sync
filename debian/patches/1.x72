@@ -1,0 +1,461 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x72) focal; urgency=medium
+ .
+   * alt+q and keys_help
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-18
+
+--- edor-1.orig/configure.ac
++++ edor-1/configure.ac
+@@ -65,6 +65,19 @@ AC_COMPILE_IFELSE(
+ )
+ CFLAGS="$start_cflgs"
+ 
++#99% for tests only
++AC_MSG_CHECKING([bool is a keyword])
++AC_COMPILE_IFELSE(
++	[AC_LANG_SOURCE([[
++		typedef char bool;
++	]])],
++	[
++		AC_MSG_RESULT([no])
++		AC_DEFINE(BOOL_REQUIRED, 1)
++	],
++	[AC_MSG_RESULT([yes])]
++)
++
+ AS_IF([test x"${cpp}" = x"true"],[
+ AC_LANG([C++])
+ AC_MSG_CHECKING([for std::filesystem::preferred_separator])
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -17,15 +17,31 @@ On Arch Linux, <i>.zst</i> or <i>.xz</i>
+ yay -Sy edor
+ ```
+ \
+-On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/edor/releases).
++On Fedora:
+ ```sh
+-dnf install edor-*.*.rpm
++sudo dnf copr enable colin/project
++sudo dnf install edor
++```
++\
++On openSUSE, run the following as __root__:\
++From openSUSE Factory:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Factory/home:costin.repo
++```
++From openSUSE Factory ARM:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Factory_ARM/home:costin.repo
++```
++And:
++```sh
++zypper refresh
++zypper install edor
+ ```
+ \
+ On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
+ 
+ ## From source
+-Use autoconf automake libncurses-dev ; on armv7l(alias armhf) cpu, libunwind-dev. There is a "headless" build file as well.
++Debian example: Install autoconf automake make libncurses-dev bc g++(or gcc and --disable-cpp at configure); on armv7l(alias armhf) cpu, libunwind-dev. There is a "headless" build file as well.
+ ```sh
+ autoreconf -i
+ ./configure
+--- edor-1.orig/s/Makefile.am
++++ edor-1/s/Makefile.am
+@@ -3,7 +3,7 @@ AUTOMAKE_OPTIONS = subdir-objects
+ bin_PROGRAMS = edor
+ edor_SOURCES = main.c bar.c sep.c tw.c tit.c split.c
+ edor_LDFLAGS = -rdynamic
+-edor_LDADD = -lcurses
++edor_LDADD = -lncurses
+ edor_CFLAGS = @CSS@
+ if CPP
+ edor_CPPFLAGS = -x c++ -Wno-old-style-cast @UNW@
+@@ -17,7 +17,8 @@ CLEANFILES += main.h
+ test: $(BUILT_SOURCES)
+ 	flag=`echo "${DEFS}" | grep -o "\-DARM7L=1"`; \
+ 	flag2=`echo "${DEFS}" | grep -o "\-DPLATFORM64=1"`; \
+-	text="$(CC) $${flag} $${flag2} -I. ${edor_SOURCES} ${edor_LDADD} ${LIBS} -o ${bin_PROGRAMS}t"; \
++	flag3=`echo "${DEFS}" | grep -o "\-DBOOL_REQUIRED=1"`; \
++	text="$(CC) $${flag} $${flag2} $${flag3} -I. ${edor_SOURCES} ${edor_LDADD} ${LIBS} -o ${bin_PROGRAMS}t"; \
+ 	echo $${text}; \
+ 	$${text}
+ #clean: #here, unlike .PHONY, will overwrite the clean rule
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -179,7 +179,7 @@ static command_char wrt_simple(int f){
+ 	for(size_t i=0;i<n;i++){
+ 		row*r=&rows[i];
+ 		if(wwrite(f,r->data,r->sz,awrite)==swrite_bad)return command_false;
+-		if(write(f,ln_term,ln_term_sz)!=ln_term_sz)return command_false;
++		if(write(f,ln_term,ln_term_sz)!=(ssize_t)ln_term_sz)return command_false;
+ 	}
+ 	if(wwrite(f,rows[n].data,rows[n].sz,awrite)==swrite_ok)return command_ok;
+ 	return command_false;
+@@ -565,7 +565,7 @@ void centering3(WINDOW*w,size_t*prw,row_
+ }
+ int centeringy(WINDOW*w){
+ 	int hg=getmaxy(w)/2;
+-	if(ytext<hg){hg=ytext;ytext=0;}
++	if(ytext<hg){hg=ytext;ytext=0;}//to silence rpmbuild warning, unsigned
+ 	else ytext=ytext-hg;
+ 	refreshpage(w);
+ 	return hg;
+@@ -648,12 +648,14 @@ command_char go_to(bar_byte cursor){
+ 	}
+ 	return command_false;
+ }
+-static void set_key(key_struct*from,char to){
++static unsigned char set_key(key_struct*from,unsigned char to,unsigned char orig){
+ 	memcpy(&keys[to],from,sizeof(key_struct));
+ 	if(keys[to].key_location!=nullptr){
+-		char ix=keys[to].index;keys_row[ix]=to;
++		unsigned char ix=keys[to].index;keys_row[ix]=to;
+ 		changekey(to);
++		return orig+'a';
+ 	}
++	return orig+'A';
+ }
+ #define is_a_z(p) input0[p]>='a'&&input0[p]<='z'
+ //same as go_to
+@@ -661,12 +663,12 @@ command_char change_key(bar_byte cursor)
+ 	if(is_a_z(0)){
+ 		if(is_a_z(1)){
+ 			if(input0[2]=='\0'){
+-				char from=*input0-'a';
+-				char to=input0[1]-'a';
++				unsigned char from=*input0-'a';
++				unsigned char to=input0[1]-'a';
+ 				key_struct aux;
+ 				memcpy(&aux,&keys[to],sizeof(key_struct));
+-				set_key(&keys[from],to);
+-				set_key(&aux,from);
++				keys_help[from]=set_key(&keys[from],to,from);
++				keys_help[to]=set_key(&aux,from,to);
+ 				rewriteprefs;
+ 				return command_ok;
+ 			}
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -2,8 +2,9 @@
+ 
+ //can add //comment if a macro in a set is only for a file but don't spread them and make a mess
+ 
++#include "def.h"
++
+ //main,bar
+-#define bar_byte unsigned char
+ #define bar_byte_plus short
+ #define com_nr_find 0
+ #define com_nr_findagain 1
+@@ -72,7 +73,7 @@ typedef struct{
+ //main
+ //bar
+ int c_to_xc(int,int);
+-void changekey(char);
++void changekey(unsigned char);
+ void cpymembuf(size_t,row_dword,size_t,row_dword,char*);
+ void deleting(size_t,size_t,size_t,size_t);
+ bool deleting_init(size_t,row_dword,size_t,row_dword);
+@@ -102,6 +103,7 @@ extern bool insensitive;
+ extern key_struct*keys;
+ extern char key_save;
+ extern char*keys_row;
++extern char*keys_help;
+ extern bool mod_flag;
+ extern char*ocode_extension;
+ extern char*textfile;
+@@ -190,7 +192,7 @@ bool titles(WINDOW*);
+ 
+ //split
+ //main
+-char split_conditions(char*,bool);
++split_char split_conditions(char*,bool);
+ bool split_grab(char**,size_t*);
+ bool split_writeprefs(int);
+ bool split_readprefs(int);
+@@ -210,6 +212,3 @@ extern char*split_extension;
+ extern char*split_extension_new;
+ //bar
+ swrite_char swrite(int,void*,unsigned int);
+-
+-
+-#include "def.h"
+--- edor-1.orig/s/def.h
++++ edor-1/s/def.h
+@@ -6,6 +6,7 @@
+ extern row*rows;
+ extern size_t rows_tot;
+ //bar,split
++#define bar_byte unsigned char
+ extern char ln_term[3];
+ extern size_t ln_term_sz;
+ //split
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -218,6 +218,7 @@ char*filewhites_extension=(char*)"yml";
+ static char*filewhites_extension_new=nullptr;
+ #define tab_protocol char
+ tab_protocol tab_sz=6;
++static int user_return=EXIT_SUCCESS;
+ 
+ #define splits_activated 'S'
+ #define splits_activated_mixless 'h'
+@@ -471,7 +472,7 @@ static int helpshow(int n){
+ 		}
+ 	}while(helpend==false);
+ 	int x=getcurx(stdscr);
+-	if(x!=0)for(int i=max-x;i!=max;i++)addch(' ');
++	if(x!=0)for(;x!=max;x++)addch(' ');//seems that prelast row need this, a color switch will be at next last row
+ 	return y;
+ }
+ 
+@@ -484,7 +485,7 @@ void visual(char a){
+ 
+ char orig_key(char now_key,char mod){
+ 	key_struct*now=&keys[now_key-'A'];
+-	char ix=now->index;
++	unsigned char ix=now->index;
+ 	char orig=keys_row_orig[ix]+'A';
+ 	return orig+mod;
+ }
+@@ -1119,7 +1120,7 @@ static void pasted(size_t r,size_t x,WIN
+ 	size_t z1=ytext;row_dword z2=xtext;size_t z3=r;
+ 	size_t rws=cutbuf_r-1;
+ 	r+=rws;int maxy=getmaxy(w);
+-	if(maxy<=r){
++	if(maxy<=r){ //to silence rpmbuild warning, unsigned
+ 		ytext+=r-maxy+1;
+ 		r=maxy-1;
+ 	}
+@@ -2133,7 +2134,7 @@ static bool pref_change(WINDOW*w,char**p
+ 	return true;
+ }
+ 
+-void changekey(char i){
++void changekey(unsigned char i){
+ 	key_struct*k=&keys[i];
+ 	char newkey=i+_0_to_A;
+ 	*(k->key_location)=newkey;
+@@ -2207,6 +2208,7 @@ static bool loopin(WINDOW*w){
+ 			else if(z==(key_actswf+A_to_a)){if(pref_change(w,&sdelimiter,&sdelimiter_new,true,key_actswf,A_to_a)/*true*/)return true;}//don't allow no size delimiters
+ 			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_out,&split_out_new,false,key_actswf2,A_to_a)/*true*/)return true;}
+ 			else if(z==key_whites+A_to_a){if(pref_change(w,&filewhites_extension,&filewhites_extension_new,false,key_whites,A_to_a)/*true*/)return true;}
++			else if(z==key_quit+A_to_a){user_return=EXIT_FAILURE;return false;}
+ 			else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
+ 			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
+ 			else if(z==key_actswf2){if(pref_change(w,&split_extension,&split_extension_new,false,key_actswf2,0)/*true*/)return true;}
+@@ -2251,13 +2253,13 @@ static bool loopin(WINDOW*w){
+ 					if(restorefile!=nullptr)unlink(restorefile);//here restorefile is deleted
+ 					return false;
+ 				}else if(chr==key_insens){
+-					bool b;char c;
++					char c;
+ 					if(insensitive/*true*/){insensitive=false;c=orig_lowkey(key_insens);}
+ 					else{insensitive=true;c=orig_upkey(key_insens);}
+ 					setprefs(mask_insensitive,insensitive);//here the bit is set on full insensitive search
+ 					vis(c,w);//is not showing on stdscr without wnoutrefresh(thisWindow)
+ 				}else if(chr==key_mouse){
+-					bool b;char c;
++					char c;
+ 					if(stored_mouse_mask_q){stored_mouse_mask=mousemask(0,nullptr);c=orig_lowkey(key_mouse);setprefs(mask_mouse,false);}
+ 					else{stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);c=orig_upkey(key_mouse);setprefs(mask_mouse,true);}
+ 					vis(c,w);
+@@ -2391,8 +2393,8 @@ static bool grab_file(char*f,size_t*text
+ 			puts("\" is a directory");
+ 		}
+ 		else{
+-			size_t size=(size_t)lseek(fd,0,SEEK_END);
+-			if(size!=-1){
++			size_t size=lseek(fd,0,SEEK_END);
++			if(size!=(size_t)-1){
+ 				text_init_b=(char*)malloc(size);
+ 				if(text_init_b!=nullptr){
+ 					lseek(fd,0,SEEK_SET);
+@@ -2429,7 +2431,7 @@ static bool grab_input(size_t*text_sz){
+ }
+ 
+ static void getkeys(char kp){
+-	for(char i=0;i<number_of_keys;i++){
++	for(unsigned char i=0;i<number_of_keys;i++){
+ 		unsigned char ix;//this is unsigned because is unknown read
+ 		if(i<kp){
+ 			ix=keys_row_frompref[i];
+@@ -2439,12 +2441,12 @@ static void getkeys(char kp){
+ 			//keys_row_frompref[i]=ix; is already at define time
+ 		}
+ 		if(keys_frompref[ix].key_location!=nullptr)return;
+-		char ix_orig=keys_row_orig[i];
++		unsigned char ix_orig=keys_row_orig[i];
+ 		memcpy(&keys_frompref[ix],&keys_orig[ix_orig],sizeof(key_struct));
+ 	}
+ 	keys=keys_frompref;
+ 	keys_row=keys_row_frompref;
+-	for(char i=0;i<number_of_keys;i++){
++	for(unsigned char i=0;i<number_of_keys;i++){
+ 		char ix=keys_row[i];
+ 		if(keys_row_orig[i]!=ix){
+ 			changekey(ix);
+@@ -2511,6 +2513,7 @@ static bool help_init(char*f,size_t szf)
+ 		a+=sz1;memcpy(a,f,szf);
+ 		keys_helptext=a+szf;
+ 		memcpy(keys_helptext,hel2,sz2);
++		keys_help=keys_helptext+(sz2-help_last_part_size);
+ 		return true;
+ 	}
+ 	return false;
+@@ -2525,8 +2528,8 @@ static void getfilebuf(char*cutbuf_file)
+ 		cutbuf_file[off]=store;
+ 	}*/
+ 	if(f!=-1){
+-		size_t sz=(size_t)lseek(f,0,SEEK_END);
+-		if(sz!=0&&sz!=-1){
++		size_t sz=lseek(f,0,SEEK_END);
++		if(sz!=(size_t)-1&&sz!=0){
+ 			char*v=(char*)malloc(sz);
+ 			if(v!=nullptr){
+ 				lseek(f,0,SEEK_SET);
+@@ -2815,6 +2818,10 @@ static void freeprefs(){//these if are n
+ }
+ static void action_go(int argc,char**argv,char*cutbuf_file,char*argfile){
+ 	if(prefs_file[0]!='\0')getprefs();//split is first that depends on prefs
++	for(unsigned char i=0;i<number_of_keys;i++){//this or set only at modifications
++		unsigned char k=keys_row[i];
++		keys_help[k]=k+'A';
++	}
+ 
+ 	size_t text_sz;
+ 	bool not_forced=true;
+@@ -2967,5 +2974,5 @@ int main(int argc,char**argv){
+ 	if(argc>3){puts("Too many arguments.");return EXIT_FAILURE;}
+ 
+ 	action(argc,argv);
+-	return EXIT_SUCCESS;
++	return user_return;
+ }
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -68,7 +68,8 @@ text="\ncommand mode: left,right,home,en
+ \nCtrl+y = enable/disable spaces->tabs indents at read, tabs->spaces at write; Alt+y = change rule extension name (blank is all)\
+ \nCtrl+b = change tab size\
+ \nCtrl+z = switch keys, applies to Ctrl and lower/upper Alt (example: az , +a becomes +z and +z becomes +a)\
+-\nCtrl+q = quit\""
++\nCtrl+q = quit; Alt+q = quit and return EXIT_FAILURE\
++\nabcdefghijklmnopqrstuvwxyz\""
+ wr_n "${text}"
+ 
+ if [ ${level} -eq ${level_help} ]; then
+@@ -144,7 +145,7 @@ while [ $i -lt 123 ]; do
+ 		110) find_pos indents            $i 1;;     #n
+ 		111) find_pos paste              $i 1 1;;   #o
+ 		112) find_pos actswf2            $i 0 1 1;; #p
+-		113) is_extern=x find_pos quit   $i 3;;     #q
++		113) is_extern=x find_pos quit   $i 3 1;;   #q
+ 		114) find_pos redo               $i 1;;     #r
+ 		115) is_extern=x find_pos save   $i 1 1;;   #s
+ 		116) find_pos insens             $i 1;;     #t
+@@ -159,10 +160,11 @@ while [ $i -lt 123 ]; do
+ done
+ wr_n ""
+ 
++#can define here static a[]; and defines to compile right but is a risk and better to undo them
+ wr_n "#define A_to_a 0x20"
+ if [ ${level} -ge ${level_pref_wr} ]; then
+ 	wr_n "static char keys_row_orig[]={${buf2}};"
+-	wr_n "char* keys_row=keys_row_orig;"
++	wr_n "char*keys_row=keys_row_orig;"
+ 	if [ ${level} -ge ${level_pref_rd} ]; then
+ 		wr_n "static char keys_row_frompref[]={${buf2}};"
+ 		if [ ${level} -ge ${level_map} ]; then
+@@ -173,6 +175,8 @@ if [ ${level} -ge ${level_pref_wr} ]; th
+ 			wr_n "#define key_last_index $((122-97))"
+ 			wr_n "#define _0_to_A 0x41"
+ 			wr_n "#define number_of_keys ${number_of_keys}"
++			wr_n "char*keys_help;"
++			wr_n "#define help_last_part_size $((26+1))"
+ 		fi
+ 	fi
+ fi
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -195,8 +195,8 @@ bool split_grab(char**p_text,size_t*p_si
+ 		if(split_reminder_c!=split_no){// yes_mixless or yes_mix
+ 			char*text;size_t size;int cmp;char*next;
+ 			char a=*sdelimiter;
+-			unsigned char sdelimsize=strlen(sdelimiter);//at file read only one byte for size
+-			unsigned char esdelimsize=strlen(esdelimiter);//same from preferences
++			bar_byte sdelimsize=strlen(sdelimiter);//also at file read only one byte for size
++			bar_byte esdelimsize=strlen(esdelimiter);//same from preferences
+ 
+ 			//calculate number of explodes
+ 			size_t explodes=0;
+@@ -205,7 +205,7 @@ bool split_grab(char**p_text,size_t*p_si
+ 				next=(char*)memchr(text,a,size);
+ 				if(next==nullptr)break;
+ 				next++;size-=next-text;
+-				if(size<=(sdelimsize-1))break;
++				if(size<=(sdelimsize-1))break;  //both are unsigned, don't know why rpmbuild is saying sdelimsize-1 is int
+ 				cmp=memcmp(next,sdelimiter+1,sdelimsize-1);
+ 				text=next+(sdelimsize-1);size-=text-next;
+ 				if(cmp!=0)continue;
+--- edor-1.orig/s/top.h
++++ edor-1/s/top.h
+@@ -1,20 +1,20 @@
+ 
+ #ifndef __cplusplus
+-
+-#ifdef HAVE_STDBOOL_H
+-#include<stdbool.h>
+-#else
+-//
+-#ifdef _Bool
+-typedef typeof(_Bool) bool;
+-#else
+-typedef char bool;
+-#endif
+-//
+-enum{false=0!=0,true=1==1};
+-#endif
+-
+-#include "null.h"
++#	ifdef HAVE_STDBOOL_H
++#		include<stdbool.h>
++#	else
++#		ifdef _Bool
++			typedef typeof(_Bool) bool;
++			enum{false=0!=0,true=1==1};
++#		else
++#			ifdef BOOL_REQUIRED
++				//bool,true,false are keywords with -std=c23 onwards
++				typedef char bool;
++				enum{false=0!=0,true=1==1};
++#			endif
++#		endif
++#	endif
++#	include "null.h"
+ #endif
+ 
+ 
