@@ -1,0 +1,905 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x74) focal; urgency=medium
+ .
+   * KEY_BACKSPACE optimized
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-05-25
+
+--- edor-1.orig/Makefile.old
++++ edor-1/Makefile.old
+@@ -3,13 +3,20 @@
+ 
+ prefix = /usr
+ 
+-DEFS =  -DUSE_FS=1 -DPLATFORM64=1\
+-	 -DHAVE_CURSES_H=1 -DHAVE_DIRENT_H=1 -DHAVE_ERRNO_H=1 -DHAVE_FCNTL_H=1 -DHAVE_POLL_H=1 -DHAVE_STDIO_H=1 -DHAVE_STDLIB_H=1 -DHAVE_STRING_H=1 -DHAVE_UNISTD_H=1 -DHAVE_TIME_H=1 -DHAVE_SYS_STAT_H=1\
+-	 -DHAVE_STDBOOL_H=1 -DHAVE_STDDEF_H=1
++DEFS =  -DUSE_FS=1\
++	 -DHAVE_FCNTL_H=1 -DHAVE_STDLIB_H=1 -DHAVE_TIME_H=1 -DHAVE_UNISTD_H=1\
++	 -DHAVE_CURSES_H=1\
++	 -DHAVE_ERRNO_H=1 -DHAVE_ERRNO_LOCATION=1\
++	 -DHAVE_STDIO_H=1\
++	 -DHAVE_STRING_H=1 -DHAVE_MEMMEM=1\
++	 -DHAVE_SYS_STAT_H=1\
++	 -DHAVE_STDBOOL_H=1 -DHAVE_STDDEF_H=1\
++	 -DSIZEOF_INT_P=8 -DSIZEOF_LONG=8\
+ # -DHAVE_DLFCN_H=1
+ # -DHAVE_SIGNAL_H=1
+ #
+-# -DUSE__FS=1
++# -DOTHER_CURSES=1 -DHAVE__GETREENT=1 -D_KEY_BACKSPACE=0x7f
++# -DUSE__FS -DMKDIR_1ARG=1
+ 
+ all: s/edor
+ 
+--- edor-1.orig/configure.ac
++++ edor-1/configure.ac
+@@ -8,12 +8,12 @@ AC_INIT([edor], [0.1])
+ AC_CONFIG_SRCDIR([s/main.c])
+ 
+ AC_CONFIG_AUX_DIR([build-aux])
++
+ # compile with -x c++
+ AC_ARG_ENABLE(cpp,
+   AS_HELP_STRING([--enable-cpp],[enable cpp, default: yes]),
+   [case "${enableval}" in yes) cpp=true ;; no) cpp=false ;; *) AC_MSG_ERROR([bad value ${enableval} for --enable-cpp]) ;; esac],
+   [cpp=true])
+-
+ AM_CONDITIONAL(CPP, test x"${cpp}" = x"true")
+ 
+ # Check for CFLAGS
+@@ -24,16 +24,103 @@ else
+ enable_cflags_setting=yes
+ fi
+ AC_MSG_RESULT($enable_cflags_setting)
++
++#AC_SUBST(__KEY_BACKSPACE, "")
++AC_ARG_VAR([_KEY_BACKSPACE],[set KEY_BACKSPACE value])
++AC_MSG_CHECKING([if redefining KEY_BACKSPACE])
++if test "x${_KEY_BACKSPACE+set}" = xset; then
++AC_MSG_RESULT([yes])
++AC_SUBST(__KEY_BACKSPACE, "-D_KEY_BACKSPACE=")
++else
++AC_MSG_RESULT([no])
++fi
++
+ # Checks for programs.
+ AC_PROG_CC
+ 
+ # Checks for header files. Checks for libraries.
+ 
++AC_CHECK_HEADERS(fcntl.h stdlib.h unistd.h time.h)
++AC_CHECK_HEADERS(curses.h, [
++		AC_SUBST(CSS, "")
++		AC_SEARCH_LIBS([nc_getmouse],[pdcurses],[AC_DEFINE(OTHER_CURSES,1,[is pdcurses])],[
++			AC_SEARCH_LIBS([getmouse],[ncurses])
++		])
++	], [
++		AC_SUBST(CSS, "-Wno-padded")
++	])
+ AC_CHECK_HEADERS(stddef.h)
+-AC_CHECK_HEADERS(dirent.h errno.h fcntl.h poll.h stdio.h stdlib.h string.h unistd.h time.h sys/stat.h)
+-AC_CHECK_HEADERS(curses.h, [AC_SUBST(CSS, "")], [AC_SUBST(CSS, "-Wno-padded")])
+-AC_SUBST(UNW, "")
+ 
++start_cflgs="$CFLAGS"
++CFLAGS="-Werror=implicit-function-declaration"
++AC_CHECK_HEADERS(errno.h, [
++	AC_MSG_CHECKING([function __errno_location])
++	AC_COMPILE_IFELSE(
++		[AC_LANG_SOURCE([[
++			#include <errno.h>
++			void main(){__errno_location();}
++		]])],
++		[
++			AC_MSG_RESULT([yes])
++			AC_DEFINE(HAVE_ERRNO_LOCATION, 1)
++		],
++		[
++			AC_MSG_RESULT([no])
++		]
++	)
++])
++AC_CHECK_HEADERS(stdio.h, [
++	AC_MSG_CHECKING([function __getreent])
++	AC_COMPILE_IFELSE(
++		[AC_LANG_SOURCE([[
++			#include <stdio.h>
++			void main(){__getreent();}
++		]])],
++		[
++			AC_MSG_RESULT([yes])
++			AC_DEFINE(HAVE__GETREENT, 1)
++		],
++		[
++			AC_MSG_RESULT([no])
++		]
++	)
++])
++AC_CHECK_HEADERS(string.h, [
++	AC_MSG_CHECKING([function memmem])
++	AC_COMPILE_IFELSE(
++		[AC_LANG_SOURCE([[
++			#include <string.h>
++			void main(){memmem("",1,"",1);}
++		]])],
++		[
++			AC_MSG_RESULT([yes])
++			AC_DEFINE(HAVE_MEMMEM, 1)
++		],
++		[
++			AC_MSG_RESULT([no])
++		]
++	)
++])
++AC_CHECK_HEADERS(sys/stat.h, [
++	AC_MSG_CHECKING([mkdir without mode_t])
++	AC_COMPILE_IFELSE(
++		[AC_LANG_SOURCE([[
++			#include <sys/stat.h>
++			void main(){mkdir("a");}
++		]])],
++		[
++			AC_MSG_RESULT([yes])
++			AC_DEFINE(MKDIR_1ARG, 1)
++			#to not write extra, also assume rest of windows definitions
++		],
++		[
++			AC_MSG_RESULT([no])
++		]
++	)
++])
++CFLAGS="$start_cflgs"
++
++#AC_SUBST(UNW, "")
+ #arm32 unwind
+ AC_CANONICAL_BUILD
+ AC_MSG_CHECKING([build_cpu])
+@@ -108,11 +195,13 @@ char a=std::filesystem::path::preferred_
+ AC_CHECK_HEADERS(stdbool.h)
+ ])
+ 
+-AC_RUN_IFELSE([AC_LANG_SOURCE([
+-int main(){
+-return sizeof(long)==sizeof(int);//0 is true for ac_run
+-}
+-])], [AC_DEFINE(PLATFORM64, 1, "64")], [])
++AC_CHECK_SIZEOF([int *])
++AC_CHECK_SIZEOF([long])
++#AC_RUN_IFELSE([AC_LANG_SOURCE([ #this is not cross-compile ok
++#int main(){
++#return sizeof(long)==sizeof(int);//0 is true for ac_run
++#}
++#])], [AC_DEFINE(PLATFORM64, 1, "64")], [])
+ 
+ #back at CFLAGS
+ test "x${enable_cflags_setting}" = xyes && CFLAGS="-O3 -s"
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -24,13 +24,13 @@ sudo dnf install edor
+ ```
+ \
+ On openSUSE, run the following as __root__:\
+-From openSUSE Factory:
++For openSUSE Tumbleweed:
+ ```sh
+-zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Factory/home:costin.repo
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
+ ```
+-From openSUSE Factory ARM:
++For openSUSE Leap:
+ ```sh
+-zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Factory_ARM/home:costin.repo
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_15.6/home:costin.repo
+ ```
+ And:
+ ```sh
+@@ -38,7 +38,10 @@ zypper refresh
+ zypper install edor
+ ```
+ \
+-On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
++On Windows, there is this **edor-\*-msys-\*.zst** pkg at [releases](https://github.com/colin-i/edor/releases) which is using [msys2](https://msys2.github.io).
++\
++\
++On other linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
+ 
+ ## From source
+ Debian example: Install autoconf automake make libncurses-dev bc g++(or gcc and --disable-cpp at configure); on armv7l(alias armhf) cpu, libunwind-dev. There is a "headless" build file as well.
+--- edor-1.orig/s/Makefile.am
++++ edor-1/s/Makefile.am
+@@ -2,11 +2,14 @@ AUTOMAKE_OPTIONS = subdir-objects
+ 
+ bin_PROGRAMS = edor
+ edor_SOURCES = main.c bar.c sep.c tw.c tit.c split.c
+-edor_LDFLAGS = -rdynamic
+-edor_LDADD = -lncurses
+-edor_CFLAGS = @CSS@
++
++edor_LDFLAGS = -Wl,--export-dynamic
++#same as -rdynamic, maybe was about some undefined symbols between edor_SOURCES
++
++edor_CFLAGS = @CSS@ @__KEY_BACKSPACE@@_KEY_BACKSPACE@
+ if CPP
+-edor_CPPFLAGS = -x c++ -Wno-old-style-cast @UNW@
++edor_CPPFLAGS = -x c++ -Wno-old-style-cast
++# @UNW@
+ # -Wno-c++98-compat
+ endif
+ 
+@@ -16,9 +19,14 @@ CLEANFILES += main.h
+ 
+ test: $(BUILT_SOURCES)
+ 	flag=`echo "${DEFS}" | grep -o "\-DARM7L=1"`; \
+-	flag2=`echo "${DEFS}" | grep -o "\-DPLATFORM64=1"`; \
+-	flag3=`echo "${DEFS}" | grep -o "\-DBOOL_REQUIRED=1"`; \
+-	text="$(CC) $${flag} $${flag2} $${flag3} -I. ${edor_SOURCES} ${edor_LDADD} ${LIBS} -o ${bin_PROGRAMS}t"; \
++	flag2=`echo "${DEFS}" | grep -o "\-DSIZEOF_INT_P=."`; \
++	flag3=`echo "${DEFS}" | grep -o "\-DSIZEOF_LONG=."`; \
++	flag4=`echo "${DEFS}" | grep -o "\-DBOOL_REQUIRED=1"`; \
++	flag5=`echo "${DEFS}" | grep -o "\-DOTHER_CURSES=1"`; \
++	flag6=`echo "${DEFS}" | grep -o "\-DMKDIR_1ARG=1"`; \
++	flag7=`echo "${DEFS}" | grep -o "\-DHAVE_ERRNO_LOCATION=1"`; \
++	flag8=`echo "${DEFS}" | grep -o "\-DHAVE__GETREENT=1"`; \
++	text="$(CC) $${flag} $${flag2} $${flag3} $${flag4} $${flag5} $${flag6} $${flag7} $${flag8} -I. ${edor_SOURCES} ${LIBS} -o ${bin_PROGRAMS}t"; \
+ 	echo $${text}; \
+ 	$${text}
+ #clean: #here, unlike .PHONY, will overwrite the clean rule
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -13,11 +13,6 @@
+ #else
+ #include"inc/bar/curses.h"
+ #endif
+-#ifdef HAVE_DIRENT_H
+-#include<dirent.h>
+-#else
+-#include"inc/bar/dirent.h"
+-#endif
+ #ifdef HAVE_ERRNO_H
+ #include<errno.h>
+ #else
+@@ -49,6 +44,10 @@
+ #include"inc/unistd.h"
+ #endif
+ 
++#ifdef MKDIR_1ARG
++#include"sys/stat.h"
++#endif
++
+ #include"base.h"
+ 
+ static char*err_s;
+@@ -150,7 +149,7 @@ static command_char wrt_simple_split(int
+ }
+ 
+ static swrite_char awrite(int f,void*buf,row_dword size){
+-	if(write(f,buf,size)==size)return swrite_ok;
++	if((ssize_t)write(f,buf,size)==size)return swrite_ok; //(ssize_t) only for windows to not be int and warning, on linux is ssize_t
+ 	return swrite_bad;
+ }
+ swrite_char wwrite(int f,char*buf,row_dword size,swrite_char(*fn)(int,void*,row_dword)){
+@@ -288,7 +287,11 @@ bool bar_char(char c,WINDOW*w,bool singl
+ }
+ 
+ int open_new(char*path){
++#ifndef MKDIR_1ARG
+ 	return open(path,O_CREAT|O_WRONLY|O_TRUNC,S_IRUSR|S_IWUSR);
++#else
++	return open(path,O_CREAT|O_WRONLY|O_TRUNC,_S_IREAD|_S_IWRITE);
++#endif
+ }
+ int open_or_new(char*dest){
+ 	int f;
+@@ -602,7 +605,7 @@ static bool replace_text(WINDOW*w,int yb
+ 			visual(' ');
+ 			return false;
+ 		}
+-		else if(is_KEY_BACKSPACE(c)){
++		else if(c==KEY_BACKSPACE){
+ 			if(cursorr!=0){
+ 				int x=getcurx(w);int y=getcury(w);
+ 				if(x==0){
+@@ -1428,7 +1431,7 @@ command_char command(comnrp_define comnr
+ 				addchnstr(t,2);
+ 			}else move(y,com_left+cursor-pos);
+ 		}
+-		else if(is_KEY_BACKSPACE(a)){
++		else if(a==KEY_BACKSPACE){
+ 			cursor=bcdl(y,&pos,input,cursor);
+ 		}
+ 		else if(a==KEY_DC){
+@@ -1490,11 +1493,6 @@ bool new_visual(char*f){
+ 	}
+ 	return false;
+ }
+-bool is_dir(int fd){
+-	DIR*d=fdopendir(fd);
+-	if(d!=nullptr){closedir(d);return true;}
+-	return false;
+-}
+ 
+ #define acall      "aftercall"
+ #define acall_size (1+2+2+2+2)
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -5,6 +5,10 @@
+ #include "def.h"
+ 
+ //main,bar
++#ifdef _KEY_BACKSPACE
++#	undef KEY_BACKSPACE
++#	define KEY_BACKSPACE _KEY_BACKSPACE   //0x7f at termux and 0x8 at pdcurses
++#endif
+ #define bar_byte_plus short
+ #define com_nr_find 0
+ #define com_nr_findagain 1
+@@ -29,16 +33,27 @@ typedef struct{
+ 	char**buf;
+ 	bool sizedonly;
+ }extdata;
+-#define is_KEY_BACKSPACE(a) a==KEY_BACKSPACE||a==0x7f //can be 127(ascii Delete) or 263, note: Ctrl+h generates 263
+ #define is_word_char(a) ('0'<=a&&(a<='9'||('A'<=a&&(a<='Z'||(a=='_'||('a'<=a&&a<='z'))))))
+ #define max_path 0xff
+ #define max_path_0 max_path+1
++
+ #define protocol_simple "%u"
+-#ifdef PLATFORM64
+-#define protocol "%lu"
+-#else
+-#define protocol protocol_simple
++#undef protocol
++#ifdef SIZEOF_INT_P
++#	if SIZEOF_INT_P >= 8
++#		ifdef SIZEOF_LONG
++#			if SIZEOF_LONG == 4
++#				define protocol "%llu" //long long for windows
++#			else
++#				define protocol "%lu"
++#			endif
++#		endif
++#	endif
+ #endif
++#ifndef protocol
++#	define protocol protocol_simple
++#endif
++
+ #define row_pad 0xF
+ #define tab_conditions_low '2'
+ #define tab_conditions_high '9'
+@@ -159,7 +174,6 @@ bool undo_bcsp(size_t,row_dword,size_t,r
+ bool undo_delk(size_t,row_dword,size_t,row_dword);
+ void undo_loop(WINDOW*);
+ bool new_visual(char*);
+-bool is_dir(int);
+ void err_set(WINDOW*);
+ int open_new(char*);
+ void texter_macro(const char*);
+--- edor-1.orig/s/headless
++++ edor-1/s/headless
+@@ -6,8 +6,9 @@ cp Makefile mk
+ #headers, first are default, second are our input
+ #\-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_INTTYPES_H=1 \-DHAVE_STDINT_H=1 \-DHAVE_STRINGS_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_SYS_TYPES_H=1 \-DHAVE_UNISTD_H=1
+ #without \-DSTDC_HEADERS=1
+-#\-DHAVE_STDDEF_H=1 \-DHAVE_DIRENT_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_FCNTL_H=1 \-DHAVE_POLL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1
++#\-DHAVE_STDDEF_H=1 \-DHAVE_ERRNO_H=1 \-DHAVE_ERRNO_LOCATION=1 \-DHAVE_FCNTL_H=1 \-DHAVE_STDIO_H=1 \-DHAVE__GETREENT=1 \-DHAVE_STDLIB_H=1 \-DHAVE_STRING_H=1 \-DHAVE_MEMMEM=1 \-DHAVE_UNISTD_H=1 \-DHAVE_TIME_H=1 \-DHAVE_SYS_STAT_H=1 \-DHAVE_CURSES_H=1
+ #c only headers \-DHAVE_STDBOOL_H=1
++# OTHER_CURSES MKDIR_1ARG _KEY_BACKSPACE
+ #
+ a=`grep "^DEFS =" mk`
+ echo ${a} | grep --color "HAVE"
+@@ -25,8 +26,10 @@ if [ -n "${n}" ]; then #on c flags will
+ 	b=`echo ${b} | sed "s/-DUSE_FS=1//g"`
+ fi
+ if [ "${1}" = "1" ]; then #rare test, if wanting 32
+-	echo ${b} | grep --color "\-DPLATFORM64=1"
+-	b=`echo ${b} | sed "s/\-DPLATFORM64=1//g"`
++	echo ${b} | grep --color "\-DSIZEOF_INT_P=8"
++	b=`echo ${b} | sed "s/\-DSIZEOF_INT_P=8/\-DSIZEOF_INT_P=4/g"`
++	echo ${b} | grep --color "\-DSIZEOF_LONG=8"
++	b=`echo ${b} | sed "s/\-DSIZEOF_LONG=8/\-DSIZEOF_LONG=4/g"`
+ fi
+ a=$(echo ${a} | sed 's/\\/\\\\/g')
+ b=$(echo ${b} | sed 's/\\/\\\\/g')
+--- edor-1.orig/s/inc/bar/dirent.h
++++ /dev/null
+@@ -1,13 +0,0 @@
+-
+-typedef struct DIR DIR;
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-DIR* fdopendir(int);
+-int closedir(DIR*);
+-
+-#ifdef __cplusplus
+-}
+-#endif
+--- edor-1.orig/s/inc/errno.h
++++ edor-1/s/inc/errno.h
+@@ -3,10 +3,14 @@
+ extern "C"{
+ #endif
+ 
+-//int* __errno(void) __attribute__((__const__));
+-//#define errno (*__errno())
+-extern int *__errno_location (void) __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
+-#define errno (*__errno_location ())
++//this is fiction, HAVE_ERRNO_LOCATION can be defined if no HAVE_ERRNO_H, is good only for fast compilers (make test)
++#ifdef HAVE_ERRNO_LOCATION
++	extern int *__errno_location (void) __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
++#	define errno (*__errno_location ())
++#else
++	int* __errno(void) __attribute__((__const__));
++#	define errno (*__errno())
++#endif
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/inc/main/fcntl.h
++++ edor-1/s/inc/main/fcntl.h
+@@ -1,5 +1,6 @@
+ 
+ #define O_RDWR 02
++#define S_IFDIR 0040000
+ 
+ #include"inc/asm-generic/fcntl.h"
+ 
+--- edor-1.orig/s/inc/main/poll.h
++++ /dev/null
+@@ -1,19 +0,0 @@
+-
+-#define POLLIN 0x0001
+-
+-typedef unsigned int nfds_t;
+-struct pollfd{
+-	int    fd;//       The following descriptor being polled.
+-	short  events;//   The input event flags (see below).
+-	short  revents;//  The output event flags (see below).
+-};
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-
+-int poll(struct pollfd fds[], nfds_t nfds, int timeout);
+-
+-#ifdef __cplusplus
+-}
+-#endif
+--- edor-1.orig/s/inc/main/stdio.h
++++ edor-1/s/inc/main/stdio.h
+@@ -2,8 +2,6 @@
+ #include "inc/stdio.h"
+ 
+ typedef struct __sFILE FILE;
+-//extern FILE*stdin __attribute__((annotate("introduced_in=" "23")));//warning on headless
+-extern FILE *stdin;//this is amd def
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -16,6 +14,17 @@ int putchar(int);
+ int rename(const char*,const char*);
+ //int snprintf(char* __buf, size_t __size, const char* __fmt, ...);
+ 
++#ifdef HAVE__GETREENT   //only on windows msys
++	FILE**__getreent();
++#endif
++
+ #ifdef __cplusplus
+ }
+ #endif
++
++#ifndef HAVE__GETREENT
++	//extern FILE*stdin __attribute__((annotate("introduced_in=" "23")));//warning on headless
++	extern FILE *stdin;//this is amd def
++#else
++	#define stdin __getreent()[1]
++#endif
+--- edor-1.orig/s/inc/main/sys_stat.h
++++ edor-1/s/inc/main/sys_stat.h
+@@ -1,11 +1,47 @@
+ 
+-typedef unsigned short mode_t;
++typedef unsigned long int __ino_t;
++typedef unsigned long int __dev_t;
++typedef unsigned int __mode_t;
++typedef unsigned int __nlink_t;
++typedef unsigned int __uid_t;
++typedef unsigned int __gid_t;
++typedef long int __off_t;
++typedef int __blksize_t;
++typedef long int __blkcnt_t;
++typedef long int __time_t;
++typedef long int __syscall_slong_t;
++struct timespec
++{
++    __time_t tv_sec;
++    __syscall_slong_t tv_nsec;
++};
++struct stat
++{
++	__dev_t st_dev;
++	__ino_t st_ino;
++	__mode_t st_mode;
++	__nlink_t st_nlink;
++	__uid_t st_uid;
++	__gid_t st_gid;
++	__dev_t st_rdev;
++	__dev_t __pad1;
++	__off_t st_size;
++	__blksize_t st_blksize;
++	int __pad2;
++	__blkcnt_t st_blocks;
++
++	struct timespec st_atim;
++	struct timespec st_mtim;
++	struct timespec st_ctim;
++	int __glibc_reserved[2];
++};
+ 
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
+-int mkdir(const char*, mode_t);
++int mkdir(const char*, __mode_t);
++int stat(const char *restrict pathname, struct stat *restrict statbuf);
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/inc/main/unistd.h
++++ edor-1/s/inc/main/unistd.h
+@@ -1,4 +1,6 @@
+ 
++#define STDIN_FILENO 0
++
+ #define SEEK_CUR 1
+ 
+ #include "inc/unistd.h"
+@@ -8,6 +10,7 @@ extern "C" {
+ #endif
+ 
+ int ftruncate(int,off_t);
++int isatty(int);
+ int rmdir(const char *);
+ int unlink(const char*);
+ 
+--- edor-1.orig/s/inc/stddef.h
++++ edor-1/s/inc/stddef.h
+@@ -1,6 +1,19 @@
+ 
+-#ifdef PLATFORM64
+-	typedef long unsigned int size_t;
+-#else
++#undef platform_is_known
++#ifdef SIZEOF_INT_P
++#	if SIZEOF_INT_P >= 8
++#		ifdef SIZEOF_LONG
++#			define platform_is_known 1
++#			if SIZEOF_LONG == 4
++				typedef long long unsigned int size_t; //long long for windows
++#			else
++				typedef long unsigned int size_t;
++#			endif
++#		endif
++#	endif
++#endif
++#ifndef platform_is_known
+ 	typedef unsigned int size_t;
++#else
++#	undef platform_is_known
+ #endif
+--- edor-1.orig/s/inc/string.h
++++ edor-1/s/inc/string.h
+@@ -34,7 +34,7 @@ void*memcpy(void*,const void*,size_t);
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-int memcmp(void*,void*,size_t);
++int memcmp(const void*,const void*,size_t);
+ #ifdef __cplusplus
+ }
+ #endif
+--- edor-1.orig/s/inc/unistd.h
++++ edor-1/s/inc/unistd.h
+@@ -1,10 +1,26 @@
+ 
+ //#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
+-#ifdef PLATFORM64
+-	typedef long int ssize_t;
++
++//this is at sys/types.h
++#undef platform_is_known
++#ifdef SIZEOF_INT_P
++#	if SIZEOF_INT_P >= 8
++#		ifdef SIZEOF_LONG
++#			define platform_is_known 1
++#			if SIZEOF_LONG == 4
++				typedef long long int ssize_t; //long long for windows
++#			else
++				typedef long int ssize_t;
++#			endif
++#		endif
++#	endif
++#endif
++#ifndef platform_is_known
++	typedef int size_t;
+ #else
+-	typedef int ssize_t;
++#	undef platform_is_known
+ #endif
++
+ //#include "inc/stddef.h"
+ 
+ #ifdef __cplusplus
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -18,11 +18,6 @@
+ #else
+ #include"inc/main/fcntl.h"
+ #endif
+-#ifdef HAVE_POLL_H
+-#include<poll.h>
+-#else
+-#include"inc/main/poll.h"
+-#endif
+ #ifdef HAVE_STDIO_H
+ #include<stdio.h>
+ #else
+@@ -206,7 +201,6 @@ static int topspace=1;
+ #define contentmarginsize 1
+ static int leftspace=contentmarginsize+contentmarginsize;
+ #define view_margin 8
+-#define known_stdin 0
+ static WINDOW*leftcontent=nullptr;
+ static WINDOW*rightcontent=nullptr;
+ static char at_right_mark='>';
+@@ -540,7 +534,11 @@ static bool helpin(WINDOW*w){
+ 		c=getch();
+ 		if(c==KEY_MOUSE){
+ 			MEVENT e;//switch case? a label can only be part of a statement and a declaration is not a statement
++#ifndef OTHER_CURSES
+ 			getmouse(&e);
++#else
++			nc_getmouse(&e);
++#endif
+ 			if((e.bstate&BUTTON4_PRESSED)!=0)hmove(-1);
+ 			else
+ 		#ifdef BUTTON5_PRESSED
+@@ -769,7 +767,11 @@ static void right_move(WINDOW*w,bool(*f)
+ movement_char movment(int c,WINDOW*w){
+ 	if(c==KEY_MOUSE){
+ 		MEVENT e;
++#ifndef OTHER_CURSES
+ 		getmouse(&e);//==OK is when mousemask is 0, but then nothing at getch
++#else
++		nc_getmouse(&e);
++#endif
+ 		if((e.bstate&BUTTON4_PRESSED)!=0)vu1move(w,getcury(w));
+ 		else
+ 	#ifdef BUTTON5_PRESSED
+@@ -1773,7 +1775,7 @@ static void type(int cr,WINDOW*w){
+ 		if(enter(y,x,&rw,&cl,w)/*true*/)return;
+ 		position(rw,cl);
+ 	}
+-	else if(is_KEY_BACKSPACE(cr)){
++	else if(cr==KEY_BACKSPACE){
+ 		if(bcsp(y,x,&rw,&cl,w)/*true*/)return;
+ 		position(rw,cl);
+ 	}
+@@ -2260,7 +2262,8 @@ static bool loopin(WINDOW*w){
+ 					if(titles(w)/*true*/)return true;
+ 				}else if(chr==key_quit){
+ 					bool q;bool not_q=quit_from_key(w,&q);
+-					if(not_q/*true*/)continue;return q;
++					if(not_q/*true*/)continue;
++					return q;
+ 				}else if(chr==key_insens){
+ 					char c;
+ 					if(insensitive/*true*/){insensitive=false;c=orig_lowkey(key_insens);}
+@@ -2388,11 +2391,21 @@ static void rows_init(size_t size){
+ 	z->sz=b-a;z->spc=0;
+ 	rows_spc=rows_tot;
+ }
++//DIR*d=fdopendir(fd);//having problems with this and msys2
++//	DIR*d=opendir(dirname);
++//	if(d!=nullptr){closedir(d);return true;}
++static bool is_dir(char*dirname){
++	struct stat s;
++	if(stat(dirname,&s)==0){//this is possible to test, since switching from fdopendir
++		return (s.st_mode & S_IFDIR)!=0;
++	}
++	return false;
++}
+ static bool grab_file(char*f,size_t*text_sz){
+ 	bool fake=true;
+ 	int fd=open(f,O_RDONLY);
+ 	if(fd!=-1){
+-		if(is_dir(fd)/*true*/){
++		if(is_dir(f)/*true*/){
+ 			putchar('\"');
+ 			size_t n=strlen(f);
+ 			for(size_t i=0;i<n;i++){
+@@ -2427,7 +2440,7 @@ static bool grab_input(size_t*text_sz){
+ 		if(v==nullptr)return true;
+ 		text_init_b=(char*)v;
+ 		char*c=text_init_b+*text_sz;
+-		d=(size_t)read(known_stdin,c,s);//zero indicates end of file
++		d=(size_t)read(STDIN_FILENO,c,s);//zero indicates end of file
+ 		//char*b=fgets(c,s,stdin);
+ 		//if(b==nullptr)break;
+ 		//d=strlen(c);
+@@ -2628,7 +2641,11 @@ static bool help_cutbuffile_preffile(cha
+ 				if(info_sz+csz<=max_path_0){
+ 					int dirsz=sprintf(prefs_file,"%s%c%s",h,path_separator,conf);
+ 					if(access(prefs_file,F_OK)==-1){
++#ifndef MKDIR_1ARG
+ 						mkdir(prefs_file,0777);
++#else
++						mkdir(prefs_file);
++#endif
+ 						//the mode of the created directory is (mode & ~umask & 0777)
+ 						//0 on success
+ 					}
+@@ -2869,12 +2886,18 @@ static void action_go(int argc,char**arg
+ 		split_reminder_c=split_conditions(argfile,true);//if or if not the file exists
+ 	}
+ 
+-	struct pollfd fds[1];
+-	//typedef struct __sFILE FILE;
+-	//FILE* stdin __attribute__((annotate("introduced_in=" "23")));
+-	fds[0].fd = known_stdin;
+-	fds[0].events = POLLIN;
+-	bool no_input=poll(fds, 1, 0)<1;
++	//#define POLLIN 0x0001
++	//typedef unsigned int nfds_t;
++	//struct pollfd{int    fd;short  events;short  revents;};
++	//int poll(struct pollfd fds[], nfds_t nfds, int timeout);
++	//struct pollfd fds[1];
++	////typedef struct __sFILE FILE;
++	////FILE* stdin __attribute__((annotate("introduced_in=" "23")));
++	//fds[0].fd = STDIN_FILENO;
++	//fds[0].events = POLLIN;
++	//bool no_input=poll(fds, 1, 0)<1;
++	bool no_input=isatty(STDIN_FILENO);
++
+ 	normalize_char ok=0;
+ 	if(no_file/*true*/&&no_input/*true*/){
+ 		text_init_b=(char*)malloc(1);
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -80,8 +80,8 @@ fi
+ #AS FG J L dk h
+ # Z CVBN   x  m
+ # ^M is 13 that comes also at Enter, ^I is 9 that comes also at Tab
++# ^H at termux is 263 backspace
+ # ^P at docker, something is not ok with the redraw
+-# ^H at termux is backspace
+ # ^A in termux is from Ctrl+Alt+a
+ 
+ textsed="$(echo "${text}" | sed "s/\\\n/n/g; s/\\\\\"/\"/g")"  # replace \n to n and \\\" to \"(this will go " at grep). \ at endings are 0
+--- edor-1.orig/s/mdhd
++++ edor-1/s/mdhd
+@@ -1 +1 @@
+-extraflags="CFLAGS=-g" ./headless
++extraflags="CFLAGS=-g" ./headless $@
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -91,6 +91,31 @@ static void split_add(char**text,char*ne
+ 	*text+=dif;*newtext+=dif;*remaining_size-=dif;
+ }
+ 
++#ifdef MKDIR_1ARG
++#include <fileapi.h>
++char *realpath(const char* path, char * resolved_path){
++	DWORD sz=GetFullPathName(path,0,(NULL),(NULL));
++	if(sz!=0){
++		char*p=(char*)malloc(sz);
++		if(p!=nullptr){
++			GetFullPathName(path,sz,p,(NULL));
++			return p;
++		}
++	}
++	return nullptr;
++}
++#endif
++#ifndef HAVE_MEMMEM
++void *memmem(const void*haystack,size_t haystack_len,const void*needle,size_t needle_len){//same as in headless
++	for (char *h =(char*) haystack;
++	     haystack_len >= needle_len;
++	     h++, haystack_len--) {
++		if (memcmp(h,needle,needle_len)==0) return h;
++	}
++	return nullptr;
++}
++#endif
++
+ static char* real_path(char*pathname){
+ 	char*a=realpath(pathname,nullptr);
+ 	if(a==nullptr&&errno==ENOENT){//is a New Path
+@@ -213,7 +238,7 @@ bool split_grab(char**p_text,size_t*p_si
+ 				next=(char*)memchr(text,a,size);
+ 				if(next==nullptr){split_error();return false;}
+ 				next++;size-=next-text;
+-				if(size<(sdelimsize-1)){split_error();return false;} //can be equal and is last char of the file
++				if(size<(sdelimsize-1)){split_error();return false;} //can be equal and is last char of the file //rpmbuild warning
+ 				cmp=memcmp(next,sdelimiter+1,sdelimsize-1);
+ 				if(cmp!=0){split_error();return false;}//it looks like the delimiter chars can't be in filename chars
+ 				text=next+(sdelimsize-1);size-=text-next;
+@@ -236,7 +261,7 @@ bool split_grab(char**p_text,size_t*p_si
+ 						next=(char*)memchr(text,a,size);
+ 						if(next==nullptr)break;
+ 						next++;dif=next-text;size-=dif;calculated_new_size+=dif;
+-						if(size<=(sdelimsize-1))break;
++						if(size<=(sdelimsize-1))break; //rpmbuild warning
+ 						cmp=memcmp(next,sdelimiter+1,sdelimsize-1);
+ 						text=next+(sdelimsize-1);dif=text-next;size-=dif;calculated_new_size+=dif;
+ 						if(cmp!=0)continue;
+@@ -446,9 +471,9 @@ void split_write_free(){
+ }
+ 
+ swrite_char swrite(int f,void*buf,row_dword size){
+-	if(write(f,buf,size)==size){
++	if((ssize_t)write(f,buf,size)==size){  //ssize_t windows warning
+ 		if(split_reminder_c==split_yes_mix){
+-			if(write(split_out_file,buf,size)==size){
++			if((ssize_t)write(split_out_file,buf,size)==size){  //ssize_t windows warning
+ 				return swrite_ok;
+ 			}
+ 			return swrite_bad;
+@@ -480,7 +505,7 @@ static bool split_write_split(char*file,
+ }
+ static bool split_write_orig(int orig_file,char*cursor,unsigned int size,bool*majorerror){
+ 	if(write(orig_file,sdelimiter,sdelimiter_size)==sdelimiter_size)
+-		if(write(orig_file,cursor,size)==size)
++		if((ssize_t)write(orig_file,cursor,size)==size)   //ssize_t windows warning
+ 			if(write(orig_file,sdelimiter,sdelimiter_size)==sdelimiter_size)
+ 				return true;
+ 	*majorerror=true;return false;
+--- edor-1.orig/s/tw.c
++++ edor-1/s/tw.c
+@@ -135,7 +135,7 @@ bool text_wrap(WINDOW*w){
+ 		store_rows=rows;rows=rowswrap;
+ 		store_rows_tot=rows_tot;rows_tot=j;
+ 		if(ocompiler_flag/*true*/){
+-			store_aftercall=aftercall;aftercall=aftercall_aux;
++			store_aftercall=aftercall;aftercall=aftercall_aux; // if warning, is ok, ocompiler_flag dependent
+ 		}
+ 
+ 		//window
+--- edor-1.orig/termux
++++ edor-1/termux
+@@ -1,6 +1,8 @@
+ git pull origin master && \
+-autoreconf -i && \
+-if [ ! -e configure ]; then
+-	pfx="--prefix=$PREFIX" ./cf
++if [ ! -e ./configure ]; then
++	autoreconf -i
++fi && \
++if [ ! -e ./Makefile ]; then
++	./configure --prefix=$PREFIX _KEY_BACKSPACE=0x7f
+ fi && \
+ make install
