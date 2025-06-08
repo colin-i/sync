@@ -1,0 +1,2991 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-192x) xenial; urgency=medium
+ .
+   * jpeg fix and mp3 mono/32H
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-08
+
+--- ovideo-1.orig/arh/pub
++++ ovideo-1/arh/pub
+@@ -1,7 +1,7 @@
+ 
+-echo "test/xver? (n)o? then git show master:verion.txt" && \
++echo "test/xver? y? else git show master:verion.txt" && \
+ read -n1 -t $((60*60*24)) ans && \
+-if [ "${ans}" != "n" ]; then
++if [ "${ans}" = "y" ]; then
+ 	echo xver && \
+ 	~/test/xver ./version.txt
+ else
+--- ovideo-1.orig/soundrecorder/src/Makefile
++++ ovideo-1/soundrecorder/src/Makefile
+@@ -40,5 +40,5 @@ distclean: clean
+ test:
+ 	echo "Nothing"
+ 
+-.PHONY: all clean distclean test
+-
++.PHONY: all compile ounused link clean distclean test
++.NOTPARALLEL:
+--- ovideo-1.orig/src/Makefile
++++ ovideo-1/src/Makefile
+@@ -20,7 +20,7 @@ cap = _capture/capture
+ err = err/err
+ eve = event/event
+ e=_exec/
+-exe = ${e}capture/save ${e}help ${e}init ${e}mainhandles ${e}mediainfo ${e}mix ${e}ostream ${e}start ${e}uri ${e}uristream
++exe = ${e}capture/save ${e}debug ${e}help ${e}init ${e}mainhandles ${e}mediainfo ${e}mix ${e}ostream ${e}start ${e}uri ${e}uristream
+ f=file-folder/
+ ffl = ${f}file-base ${f}folder-base
+ gnu = gnu/gst
+@@ -148,8 +148,6 @@ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/${projname}
+ 	-rm -r ${sharefolder}
+ 
+-.PHONY: all install clean distclean uninstall test
++.PHONY: all install install-proc clean distclean uninstall test
+ 
+ .NOTPARALLEL:
+-
+-#make compile prefix=/usr && make link linkerflags= LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage items_prefix=/home/bc/v/ovideo-1/src/
+--- ovideo-1.orig/src/_capture/capture.oc
++++ ovideo-1/src/_capture/capture.oc
+@@ -413,24 +413,25 @@ endfunction
+ import "file_write" file_write
+ 
+ function capture_left_string()
+-    char c#dword_null
+-    return #c
++	char c={0,0,0,0,0,0,0,0,0,0, 0} #dword_null
++#             1,2,3,4,5,6,7,8,9,10,11
++	return #c
+ endfunction
+ function capture_top_string()
+-    char c#dword_null
+-    return #c
++	char c={0,0,0,0,0,0,0,0,0,0, 0}
++	return #c
+ endfunction
+ function capture_width_string()
+-    char c#dword_null
+-    return #c
++	char c={0,0,0,0,0,0,0,0,0,0, 0}
++	return #c
+ endfunction
+ function capture_height_string()
+-    char c#dword_null
+-    return #c
++	char c={0,0,0,0,0,0,0,0,0,0, 0}
++	return #c
+ endfunction
+ function capture_size_string()
+-    char c#dword_null
+-    return #c
++	char c={0,0,0,0,0,0,0,0,0,0, 0}
++	return #c
+ endfunction
+ import "file_write_string" file_write_string
+ function capture_settings_set_write(sd capture_fl)
+@@ -569,9 +570,9 @@ function capture_rect_screenshot(sd acti
+     data y#1
+     data wdt#1
+     data hgt#1
+-    data cursor_option#1
+-    data *temp_option#1
+-    data *raw_option#1
++    data cursor_option=1
++    data *temp_option=1
++    data *raw_option=1
+ 
+     data values_rect^x
+ 	if action=(value_init)
+--- ovideo-1.orig/src/_exec/capture/save.oc
++++ ovideo-1/src/_exec/capture/save.oc
+@@ -40,11 +40,27 @@ function rec_stream_error(data *bus,data
+ endfunction
+ 
+ function save_inform_saved(ss location)
+-    str sv="File saved as: "
+-    data ss=stringstring
+-    import "strvaluedisp" strvaluedisp
+-    call strvaluedisp(sv,location,ss)
++	vstr sv="File saved as: "
++	data ss=stringstring
++	import "strvaluedisp" strvaluedisp
++	call strvaluedisp(sv,location,ss)
+ endfunction
++function save_inform_saved_th_fn(ss location)
++	call strvaluedisp(save_inform_saved.sv,location,save_inform_saved.ss)
++	return (FALSE)
++end
++function save_inform_saved_thf_fn(ss location)
++	call strvaluedisp(save_inform_saved.sv,location,save_inform_saved.ss)
++	call free(location)
++	return (FALSE)
++end
++importx "_g_idle_add" g_idle_add
++function save_inform_saved_th(ss location)
++	call g_idle_add(save_inform_saved_th_fn,location)
++end
++function save_inform_saved_thf(ss location)
++	call g_idle_add(save_inform_saved_thf_fn,location)
++end
+ 
+ function rec_endofstream(data *bus,data *message,str passdata)
+     call save_inform_saved(passdata)
+--- /dev/null
++++ ovideo-1/src/_exec/debug.oc
+@@ -0,0 +1,59 @@
++
++format elfobj
++
++include "../_include/include.oh"
++
++importx "_getenv" getenv
++importx "_fopen" fopen
++importx "_fclose" fclose
++importx "_fwrite" fwrite
++importx "_strchr" strchr
++
++import "texter" texter
++
++function debug_init()
++	sd v;set v getenv("OVIDEO_DEBUG_FILES")
++	if v!=(NULL)
++		value f=NULL
++		value fi#1
++		import "getwritemode" getwritemode
++		ss pos;set pos strchr(v,(MULTIPATH_SEPARATOR))
++		if pos!=(NULL)
++			set pos# (Nullchar)
++			sd w;set w getwritemode()
++			inc pos
++			set fi fopen(pos,w)
++			if fi!=(NULL)
++				set f fopen(v,w)
++				if f!=(NULL)
++					call texter("debug file opened")
++				else
++					call fclose(fi)
++				end
++			end
++		end
++	end
++end
++function debug_free()
++	if debug_init.f!=(NULL)
++		call fclose(debug_init.f)
++		#set debug_init.f (NULL)
++		call fclose(debug_init.fi)
++	end
++end
++function debug(ss data,sd size)
++	if debug_init.f!=(NULL)
++		sd a;set a fwrite(#size,4,1,debug_init.fi)
++		if a=1
++			set a fwrite(data,size,1,debug_init.f)
++			if a=1
++				importx "_fflush" fflush
++				call fflush(debug_init.fi)
++				call fflush(debug_init.f)
++				#also a kernel sync(2) to phisical write to the disk
++				ret
++			end
++		end
++		call texter("weird error")
++	end
++end
+--- ovideo-1.orig/src/_exec/init.oc
++++ ovideo-1/src/_exec/init.oc
+@@ -68,7 +68,7 @@ function init_user_sys(sv forward)
+ 	const d22=\-d2
+ 	char *="mpeg"
+ 	const d3=\
+-	char *={0x03,0x00,0x00,0x00,0x03,0x00,0x00,0x00}
++	char *={0x03,0x00,0x00,0x00,0x03,0x00,0x00,0x00,0x00,0x00,0x00,0x00}
+ 	const d33=\-d3
+ 	char *="search"
+ 	const d4=\
+@@ -80,7 +80,7 @@ function init_user_sys(sv forward)
+ 	const d55=\-d5
+ 	char *="stage"
+ 	const d6=\
+-	char *={0x0a,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x00,0x00,0x00}
++	char *={0x0a,0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x01,0x00,0x00,0x00}
+ 	const d66=\-d6
+ 	char *="update"
+ 	const d7=\
+--- ovideo-1.orig/src/_exec/ostream.oc
++++ ovideo-1/src/_exec/ostream.oc
+@@ -9,6 +9,10 @@ importx "_gtk_main" gtk_main
+ #importx "_exit" exit
+ 
+ import "initfn" initfn
++function main_thread()
++	value t#1
++	return t
++end
+ 
+ include "../_dif/difl.oc" "../_dif/difw.oc"
+ 
+@@ -21,6 +25,8 @@ call setlocale((LC_NUMERIC),"C") #"Engli
+ 
+ importx "_g_thread_init" g_thread_init
+ call g_thread_init(0)
++importx "_g_thread_self" g_thread_self
++set main_thread.t g_thread_self()
+ 
+ import "gstset" gstset
+ call gstset()
+@@ -43,6 +49,8 @@ import "prog_free" prog_free
+ call gstunset()
+ call search_clear_memory()
+ call prog_free()
++import "debug_free" debug_free
++call debug_free()
+ 
+ #normal return no, gtk_main problems (in this context)
+ include "../_dif/lin.oc" "../_dif/win.oc"
+--- ovideo-1.orig/src/_exec/start.oc
++++ ovideo-1/src/_exec/start.oc
+@@ -247,6 +247,9 @@ function initfn()
+     call gtk_widget_show_all(window)
+     #importx "_gtk_widget_hide_all" gtk_widget_hide_all
+     #call gtk_widget_hide_all(edits)
++
++	import "debug_init" debug_init
++	call debug_init()
+ endfunction
+ #void
+ 
+--- ovideo-1.orig/src/_include/files/ascii.h
++++ ovideo-1/src/_include/files/ascii.h
+@@ -1,5 +1,5 @@
+ 
+-#Const Nullchar=0x00
++Const Nullchar=0x00
+ #Const StartofHeading=0x01
+ #Const StartofText=0x02
+ #Const EndofText=0x03
+--- ovideo-1.orig/src/_include/files/mpeg.h
++++ ovideo-1/src/_include/files/mpeg.h
+@@ -65,13 +65,18 @@ const avc_P_SKIP=6
+ 
+ 
+ #mp3
+-const mp3_channels=2
+-const mp3_samplerate=48000
++const mp3_channels_stereo=2
++const mp3_channels_mono=1
++const mp3_samplerate_max=48000
++const mp3_samplerate_min=32000
+ const mp3_bitspersample=16
+ const mp3_bytespersample=mp3_bitspersample/8
+-const mp3_blockalign=mp3_channels*mp3_bytespersample
++const l3_bytespersample=WORD # must respect short_get_to_int for the moment #mp3_bytespersample
++#const mp3_blockalign=mp3_chans*mp3_bytespersample
+ const samp_per_frame=1152
+ const samp_per_frame2=576
++const mp3_max_supported_bitrate=128
++const mp3_BUFFER_SIZE=mp3_max_supported_bitrate*1000*144/mp3_samplerate_max  ;# + padding
+ 
+ const gr_info_part2_3_length=0
+ const gr_info_big_values=gr_info_part2_3_length+DWORD
+@@ -94,11 +99,11 @@ const SBLIMIT=32
+ const l3_sb_sample_band_size=SBLIMIT*DWORD
+ const l3_sb_sample_granule_size=18*l3_sb_sample_band_size
+ const l3_sb_sample_channel_size=3*l3_sb_sample_granule_size
+-const l3_sb_sample_size=mp3_channels*l3_sb_sample_channel_size
+-const l3_sb_sample_units=l3_sb_sample_size/DWORD
++const l3_sb_sample_stereo_size=mp3_channels_stereo*l3_sb_sample_channel_size
++const l3_sb_sample_units=l3_sb_sample_stereo_size/DWORD
+ 
+ const mdct_freq_channel_size=samp_per_frame2*DWORD
+-const mdct_freq_granule_size=mdct_freq_channel_size*mp3_channels
++const mdct_freq_granule_stereo_size=mdct_freq_channel_size*mp3_channels_stereo
+ 
+ const huffman_xlen=0
+ const huffman_ylen=huffman_xlen+DWORD
+@@ -106,5 +111,5 @@ const huffman_linbits=huffman_ylen+DWORD
+ const huffman_linmax=huffman_linbits+DWORD
+ const huffman_entry=huffman_linmax+DWORD
+ 
+-const buffer_channel_size=samp_per_frame*WORD
+-const buffer_size=mp3_channels*buffer_channel_size
++const buffer_channel_size=samp_per_frame*l3_bytespersample  #WORD
++const stereo_buffer_size=mp3_channels_stereo*buffer_channel_size
+--- ovideo-1.orig/src/_include/files/olang.h
++++ ovideo-1/src/_include/files/olang.h
+@@ -149,4 +149,8 @@ const avi_expand=1
+ 
+ #const sound_preview_buffers=32
+ 
++const riff_noflag=0
++const riff_move=1
++const riff_optional=2
++
+ const modal_texter_mark=dword_max+dword_max
+--- ovideo-1.orig/src/_include/lin.h
++++ ovideo-1/src/_include/lin.h
+@@ -15,3 +15,6 @@ const S_IWOTH=0x2
+ const flag_fmode=S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
+ 
+ const LC_NUMERIC=1
++
++Const Colon=0x3A
++const MULTIPATH_SEPARATOR=Colon
+--- ovideo-1.orig/src/_include/win.h
++++ ovideo-1/src/_include/win.h
+@@ -9,3 +9,6 @@ const flag_O_CREAT=0x0100;const flag_O_B
+ const flag_fmode=flag_dmode
+ 
+ const LC_NUMERIC=4
++
++Const Semicolon=0x3B
++const MULTIPATH_SEPARATOR=Semicolon
+--- ovideo-1.orig/src/_prepare/output/all.oc
++++ ovideo-1/src/_prepare/output/all.oc
+@@ -375,14 +375,29 @@ function stage_file_command(ss command)
+     call default_unref(pipe)
+ endfunction
+ 
++#void
+ function stage_save_all()
+     #verify for one frame and not mass remove
+-    import "frame_jobs" frame_jobs
+-    sd bool
+-    setcall bool frame_jobs()
+-    if bool!=1
+-        return 0
+-    endif
++	import "stage_get_sel" stage_get_sel
++	sd s;set s stage_get_sel()
++	if s=(NULL)
++		#must save mp3, ask if sound is null?
++		import "new_pixbuf_color" new_pixbuf_color
++		sd pixbuf
++		setcall pixbuf new_pixbuf_color(16,16,0)
++		if pixbuf=(NULL)
++			ret #urn 0
++		end
++		import "stage_new_pixbuf" stage_new_pixbuf
++		call stage_new_pixbuf(pixbuf)
++	else
++		import "mass_remove_job" mass_remove_job
++		sd bool
++		setcall bool mass_remove_job()
++		if bool!=(TRUE)
++			ret #urn 0
++		end
++	end
+ 
+     #file format
+     sd format
+@@ -396,7 +411,7 @@ function stage_save_all()
+     if cmp=(equalCompare)
+         import "mkvfile" mkvfile
+         call mkvfile((capture_flag_off))
+-        return 1
++        ret #urn 1
+     endif
+ 
+     import "is_local_avi" is_local_avi
+@@ -404,7 +419,7 @@ function stage_save_all()
+     if bool=1
+         import "aviwrite" aviwrite
+         call aviwrite(0)
+-        return 1
++        ret #urn 1
+     endif
+ 
+     import "slen" slen
+@@ -413,7 +428,7 @@ function stage_save_all()
+     if cmp=(equalCompare)
+         import "mp4_write" mp4_write
+         call mp4_write()
+-        return 1
++        ret #urn 1
+     endif
+ 
+     data file_frames%stage_file_frames
+@@ -444,7 +459,7 @@ function stage_save_all()
+     data noerr=noerror
+     setcall err allocsum_null(strings,ptr_mem)
+     if err!=noerr
+-        return err
++        ret #urn err
+     endif
+ 
+     call sprintf(mem,pipeformat,srcname,outformat,location)
+--- ovideo-1.orig/src/_prepare/output/mkv.oc
++++ ovideo-1/src/_prepare/output/mkv.oc
+@@ -1094,8 +1094,8 @@ function mkv_simpleblock(sd file,sd size
+             data p%ptr_nomoreframes
+             set p# 1
+             data fl%ptr_location
+-            import "save_inform_saved" save_inform_saved
+-            call save_inform_saved(fl#)
++            import "save_inform_saved_th" save_inform_saved_th
++            call save_inform_saved_th(fl#)
+             return 0
+         endif
+         data time_max%ptr_timecodemax
+--- ovideo-1.orig/src/_prepare/output/sound.oc
++++ ovideo-1/src/_prepare/output/sound.oc
+@@ -249,7 +249,7 @@ endfunction
+ function stage_sound_closedialog()
+ 	#not in main is here
+ 	importx "_g_idle_add" g_idle_add
+-	call g_idle_add(stage_sound_realclosedialog,(void))
++	call g_idle_add(stage_sound_realclosedialog) #,(void))
+ endfunction
+ #bool
+ function stage_sound_realclosedialog()
+@@ -633,33 +633,34 @@ function stage_sound_subsize(sd action,s
+ endfunction
+ function stage_sound_alloc(sd action,sd newblock,sd newblock_size)
+     import "memoryrealloc" memoryrealloc
+-    data alloc#1
+-    data p_alloc^alloc
+-    data size#1
++	value alloc=NULL
++	value p_alloc^alloc
++	data size#1
+ 
+ 	if action=(stage_sound_alloc_init)
+     #init the memory
+-        set alloc 0
++        set alloc (NULL)
+         set size 0
+         call stage_sound_subsize((value_set),0)
+-        call memoryrealloc(p_alloc,size)
+-        return 0
++        call memoryrealloc(p_alloc,1) #here is the rule to never 0 alloc
++        ret
+ 	endif
+ 	if action=(stage_sound_alloc_getremainingsize)
+-    #get the remaining size
++	#get the remaining size
+         sd sz
+         setcall sz stage_sound_subsize((value_get))
+         subcall sz stage_sound_sizedone((value_get))
+         return sz
+ 	endif
+ 	if action=(stage_sound_alloc_getbytes)
+-        return alloc
++		return alloc
++	endif
++	if alloc=(NULL)
++		ret
+ 	endif
+-    if alloc=0
+-        return 0
+-    endif
+     if action=(stage_sound_alloc_free)
+-        call free(alloc)
++		call free(alloc)
++		#set alloc (NULL)#seems that init is called first
+     elseif action=(stage_sound_alloc_expand)
+         sd newsubsize
+         setcall newsubsize stage_sound_subsize((value_get))
+@@ -672,7 +673,7 @@ function stage_sound_alloc(sd action,sd
+             sd err
+             setcall err memoryrealloc(p_alloc,newsize)
+             if err!=(noerror)
+-                return err
++                ret
+             endif
+             set size newsize
+         endif
+@@ -692,7 +693,7 @@ function stage_sound_alloc(sd action,sd
+         if stop_flag#=1
+             #safe close the main thread if stop pressed
+             call sound_global_flag_set(0)
+-            return (void)
++            ret
+         endif
+ 
+         sd bytespersec
+@@ -900,33 +901,39 @@ function sound_get_values(sd mem,sd *siz
+ endfunction
+ 
+ function stage_sound_copy_action(sd mem,sd *size)
+-    str r="RIFF"
+-    str r_ex="WAVE"
+-    str f="fmt "
+-    str d="data"
+-    sd bool
+-    import "riff_head" riff_head
+-    sd mem_sz^mem
+-    sd chunk_size
+-    sd p_chunk_size^chunk_size
+-
+-    setcall bool riff_head(mem_sz,r,p_chunk_size,r_ex)
+-    if bool!=1
+-        return 0
+-    endif
+-    setcall bool riff_head(mem_sz,f,p_chunk_size,0)
+-    if bool!=1
+-        return 0
+-    endif
+-    import "move_cursors" move_cursors
+-    call move_cursors(mem_sz,chunk_size)
+-    setcall bool riff_head(mem_sz,d,p_chunk_size,0)
+-    if bool!=1
+-        return 0
+-    endif
+-
+-    call stage_sound_alloc_expand(mem,chunk_size)
+-    call stage_sound_alloc((stage_sound_alloc_printdialog_time))
++	vstr r="RIFF"^
++	vstr r_ex="WAVE"^
++	vstr f="fmt "^
++	vstr l="LIST"^
++	vstr d="data"^
++	sd bool
++	import "riff_head" riff_head
++	sd mem_sz^mem
++	sd chunk_size
++	sd p_chunk_size^chunk_size
++	setcall bool riff_head(mem_sz,r,p_chunk_size,r_ex)
++	if bool=1
++		import "riff_head_ex" riff_head_ex
++		setcall bool riff_head_ex(mem_sz,f,p_chunk_size,0,(riff_move))
++		if bool=1
++			call riff_head_ex(mem_sz,l,p_chunk_size,0,(riff_move|riff_optional))
++			setcall bool riff_head(mem_sz,d,p_chunk_size,0)
++			if bool=1
++				#still need to bytealign to not do wrong access
++				sd part;set part stage_sound_bps((value_get))
++				divu part 8
++				mult part stage_sound_channels((value_get))
++				sd was;set was chunk_size
++				divu chunk_size part
++				mult chunk_size part
++				if was!=chunk_size
++					call texter("The wave copy was not block aligned")
++				end
++				call stage_sound_alloc_expand(mem,chunk_size)
++				call stage_sound_alloc((stage_sound_alloc_printdialog_time))
++			end
++		end
++	end
+ endfunction
+ 
+ 
+--- ovideo-1.orig/src/_prepare/output/stagefileoptions.oc
++++ ovideo-1/src/_prepare/output/stagefileoptions.oc
+@@ -7,12 +7,12 @@ include "../../_include/include.h"
+ 
+ function stage_file_options_got_file(sd mem,sd *size)
+     #values and initial default set
+-    data fps#1
++    data fps=10
+     data ptr_fps^fps
+     const ptr_fps^fps
+     set fps 2
+ 
+-    data output#1
++    data output=9
+     data ptr_output^output
+     const ptr_output^output
+     set output 0
+@@ -51,11 +51,11 @@ function stage_file_options_fname()
+ endfunction
+ 
+ function stage_file_options_init()
++    import "file_get_content_forward" file_get_content_forward
++
+     #stage data
+     ss stagedata
+     setcall stagedata stage_file_options_fname()
+-
+-    import "file_get_content_forward" file_get_content_forward
+     data f^stage_file_options_got_file
+     call file_get_content_forward(stagedata,f)
+ 
+@@ -124,7 +124,7 @@ function stage_file_options_output()
+     return ptr_output#
+ endfunction
+ function stage_file_options_info_message(sd action,sd value)
+-    data flag#1
++    data flag=1
+     if action=(value_set)
+         set flag value
+     else
+--- ovideo-1.orig/src/file-folder/file-base.oc
++++ ovideo-1/src/file-folder/file-base.oc
+@@ -32,13 +32,13 @@ Function openfile(data pfile,str path,st
+ EndFunction
+ 
+ function getreadmode()
+-    str read="rb"
+-    return read
++	vstr read="rb"
++	return read
+ endfunction
+ 
+ function getwritemode()
+-    str write="wb"
+-    return write
++	vstr write="wb"
++	return write
+ endfunction
+ 
+ #e
+@@ -365,21 +365,15 @@ endfunction
+ 
+ #e
+ function file_write(sd buffer,sd size,sd file)
+-    data z=0
+-    data noe=noerror
+-    if size=z
+-        return noe
+-    endif
+-    data byte=1
+-    sd sizewrote
+-    importx "_fwrite" fwrite
+-    setcall sizewrote fwrite(buffer,byte,size,file)
+-    if sizewrote!=z
+-        return noe
+-    endif
+-    str er="File write error number: "
+-    call strerrno(er)
+-    return er
++	sd sizewrote
++	importx "_fwrite" fwrite
++	setcall sizewrote fwrite(buffer,1,size,file)
++	if sizewrote=size
++		return (noerror)
++	endif
++	vstr er="File write error number: "
++	call strerrno(er)
++	return er
+ endfunction
+ #bool
+ function file_write_string(sd string,sd file)
+--- ovideo-1.orig/src/md
++++ ovideo-1/src/md
+@@ -5,3 +5,4 @@ a=${1}
+ fi
+ 
+ LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu make ${a} prefix=/usr OFLAGSEXTRA="function_name 1 nul_res_pref 1" linkerflags= LD=/home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd items_prefix=`pwd`/
++#make compile prefix=/usr && make link linkerflags= LD=... items_prefix=...
+--- ovideo-1.orig/src/media/audiovideo.oc
++++ ovideo-1/src/media/audiovideo.oc
+@@ -164,7 +164,6 @@ endfunction
+ 
+ 
+ 
+-
+ #dialog for read/write waiting
+ 
+ import "dialog_modal_texter_draw" dialog_modal_texter_draw
+@@ -175,14 +174,10 @@ endfunction
+ 
+ #bool
+ function av_dialog_run(sd forward,sd data)
+-    data dialog#1
++	value dialog=NULL   #valuex will not be good for another thread, were will see always 0
++#	set dialog (NULL)
+ 
+     #init for linux terminal capture
+-    import "dialog_modal_texter_drawwidget" dialog_modal_texter_drawwidget
+-    call dialog_modal_texter_drawwidget((value_set),0)
+-    call av_dialog_multiline_info((value_set),0)
+-    set dialog 0
+-
+     import "capture_terminal" capture_terminal
+     sd term
+     setcall term capture_terminal((value_get))
+@@ -207,70 +202,91 @@ function av_dialog_run(sd forward,sd dat
+     importx "_g_thread_create" g_thread_create
+     sd thread
+     setcall thread g_thread_create(forward,data,1,ptrgerr)
+-    if thread=0
+-        import "gerrtoerr" gerrtoerr
+-        call gerrtoerr(ptrgerr)
+-    else
+-        if term=0
+-            #dialog run
+-            importx "_gtk_dialog_run" gtk_dialog_run
+-            sd response=GTK_RESPONSE_OK+1
+-            sd stop_click=0
+-            while response!=(GTK_RESPONSE_OK)
+-                setcall response gtk_dialog_run(dialog)
+-                if response!=(GTK_RESPONSE_OK)
+-                    call av_dialog_stop((value_set),1)
+-                    set stop_click 1
+-                endif
+-            endwhile
+-            if stop_click=0
+-                #keep the dialog for viewing informations
+-                sd toggle
+-                setcall toggle av_results((value_get))
+-                if toggle!=0
+-                    call gtk_dialog_run(dialog)
+-                    import "stage_file_options_info_message" stage_file_options_info_message
+-                    sd toggle_button
+-                    setcall toggle_button av_results_toggle_button((value_get))
+-                    importx "_gtk_toggle_button_get_active" gtk_toggle_button_get_active
+-                    setcall toggle gtk_toggle_button_get_active(toggle_button)
+-                    if toggle=1
+-                        call stage_file_options_info_message((value_set),0)
+-                    endif
+-                endif
+-            endif
+-        else
+-            import "capture_alt_ev_wait" capture_alt_ev_wait
+-            call capture_alt_ev_wait()
+-        endelse
+-        #close the other thread and get return(optional)
+-        importx "_g_thread_join" g_thread_join
+-        setcall bool g_thread_join(thread)
+-    endelse
+-
+-    if dialog!=0
+-        #for text draw callbacks
+-        call dialog_modal_texter_drawwidget((value_set),0)
+-        #free dialog
+-        importx "_gtk_widget_destroy" gtk_widget_destroy
+-        call gtk_widget_destroy(dialog) #here is not saying critical at windows, but also on linux the dialog needs to be destroyed
+-    endif
++	if thread=0
++		import "gerrtoerr" gerrtoerr
++		call gerrtoerr(ptrgerr)
++	else
++		sd returned=0
++		if term=0
++			#dialog run
++			importx "_gtk_dialog_run" gtk_dialog_run
++			sd response=GTK_RESPONSE_OK+1
++			sd stop_click=0
++			while response!=(GTK_RESPONSE_OK)
++				setcall response gtk_dialog_run(dialog)
++				if response!=(GTK_RESPONSE_OK)
++					call av_dialog_stop((value_set),1)
++					set stop_click 1
++				endif
++			endwhile
++			if stop_click=0
++				#keep the dialog for viewing informations
++				sd toggle
++				setcall toggle av_results((value_get))
++				if toggle!=0
++					#wait return from the other thread(optional)
++					importx "_g_thread_join" g_thread_join
++					setcall bool g_thread_join(thread) #this is here because needing no more reallocs on log
++					set returned 1
++					call av_dialog_multiline_info((value_get))
++
++					call gtk_dialog_run(dialog)
++					import "stage_file_options_info_message" stage_file_options_info_message
++					sd toggle_button
++					setcall toggle_button av_results_toggle_button((value_get))
++					importx "_gtk_toggle_button_get_active" gtk_toggle_button_get_active
++					setcall toggle gtk_toggle_button_get_active(toggle_button)
++					if toggle=1
++						call stage_file_options_info_message((value_set),0)
++					endif
++				endif
++			endif
++		else
++			import "capture_alt_ev_wait" capture_alt_ev_wait
++			call capture_alt_ev_wait()
++		endelse
++		if returned=0
++			#wait return from the other thread(optional)
++			setcall bool g_thread_join(thread)
++		end
++	endelse
++
++	if dialog!=0
++		#free dialog
++		importx "_gtk_widget_destroy" gtk_widget_destroy
++		call gtk_widget_destroy(dialog) #here is not saying critical at windows, but also on linux the dialog needs to be destroyed
++		call av_dialog_multiline_info((value_unset))
++
++		set dialog (NULL) # main thread here for idleclose, and when coming again
++		import "dialog_modal_texter_drawwidget" dialog_modal_texter_drawwidget
++		call dialog_modal_texter_drawwidget((value_set),0) #if an idle_add is still coming
++		call av_dialog_multiline_info((value_set),0) #if an idle_add is still coming
++	endif
+ 
+-    return bool
++	return bool
+ 
+-    const av_dialog^dialog
++	const av_dialog^dialog
+ endfunction
+ function av_dialog_handle()
+     sd p%av_dialog
+     return p#
+ endfunction
+-function av_dialog_close()
++function av_dialog_idleclose() #main thread here
++	sd dialog
++	setcall dialog av_dialog_handle()
++	if dialog!=0
++		importx "_gtk_dialog_response" gtk_dialog_response
++		call gtk_dialog_response(dialog,(GTK_RESPONSE_OK))
++	end
++	return (FALSE)
++end
++function av_dialog_close() #this from another thread but av_dialog_handle was init and main thread will wait another thread to end before resetting av_dialog_handle
+     sd dialog
+     setcall dialog av_dialog_handle()
+     if dialog!=0
+-    #close the dialog
+-        importx "_gtk_dialog_response" gtk_dialog_response
+-        call gtk_dialog_response(dialog,(GTK_RESPONSE_OK))
++		#close the dialog
++		importx "_g_idle_add" g_idle_add #av_dialog_close from another thread
++		call g_idle_add(av_dialog_idleclose) #,dialog)
+     else
+     #signal the terminal
+         import "capture_alt_ev_set" capture_alt_ev_set
+@@ -289,25 +305,46 @@ endfunction
+ import "slen" slen
+ 
+ #text iter at get
+-function av_dialog_multiline_info(sd action,sd arg)
+-    data view#1
+-    sd buffer
+-    if action=(value_set)
+-        set view arg
+-    else
+-    #if action==(value_insert)
+-        if view=0
+-            return 0
+-        endif
+-        importx "_gtk_text_view_get_buffer" gtk_text_view_get_buffer
+-        sd text
+-        set text arg
+-        setcall buffer gtk_text_view_get_buffer(view)
+-        sd len
+-        setcall len slen(text)
+-        importx "_gtk_text_buffer_insert_at_cursor" gtk_text_buffer_insert_at_cursor
+-        call gtk_text_buffer_insert_at_cursor(buffer,text,len)
+-    endelse
++function av_dialog_multiline_info(sd action,sd arg) #another thread
++	value view#1 #NULL #will be set
++	valueu mem#1 #is multithread so no valuexu
++	data size#1
++	if action=(value_insert) #another thread
++		sd len
++		importx "_strlen" strlen
++		setcall len strlen(arg)
++		sd sz;set sz size
++		add sz len
++		if sz>0  #overflow?
++			import "memrealloc" memrealloc
++			sd m;set m memrealloc(mem,sz)
++			if m!=(NULL)
++				set mem m
++				add m size
++				set size sz
++				importx "_memcpy" memcpy
++				call memcpy(m,arg,len)
++			end
++		end
++	elseif action=(value_set) #in main safe
++		set view arg
++		importx "_malloc" malloc
++		set mem malloc(1) #no zero
++		set size 0
++	else #in main safe
++		if mem!=(NULL)
++			if action=(value_get)
++				importx "_gtk_text_view_get_buffer" gtk_text_view_get_buffer
++				sd buffer
++				setcall buffer gtk_text_view_get_buffer(view)
++				#importx "_gtk_text_buffer_insert_at_cursor" gtk_text_buffer_insert_at_cursor
++				importx "_gtk_text_buffer_set_text" gtk_text_buffer_set_text
++				call gtk_text_buffer_set_text(buffer,mem,size)
++			else #if action=(value_unset)
++				call free(mem)
++			end
++		end
++	endelse
+ endfunction
+ 
+ function av_dialog_init(sd vbox,sd *dialog)
+@@ -404,23 +441,19 @@ function av_display_info_progress(sd fil
+ endfunction
+ 
+ function av_display_info(sd action,sd file,sd nr,sd frame_size)
+-    data start#1
+-    data end#1
+-    data p_start^start
+-    data p_end^end
+-    data read_counter#1
+-    if action=(value_set)
++	data start#1
++	data end#1
++	data p_start^start
++	data p_end^end
++	data read_counter#1
++	if action=(value_set)
+         #set read counter
+         set read_counter 0
+-    elseif action=(value_get)
++	elseif action=(value_get)
+         call file_tell(file,p_start)
+         #get start pointer
+-    else
++	else
+         #if action==(value_write)
+-        #get/display
+-        char bf#100
+-        str text^bf
+-        str format="Frame: %u, Size: %u bytes"
+         sd size
+ 
+         if nr!=-1
+@@ -440,17 +473,25 @@ function av_display_info(sd action,sd fi
+             call av_display_progress(imgs,(av_info_simple))
+         endelse
+ 
+-        call sprintf(text,format,nr,size)
+-        sd len
+-        setcall len slen(text)
+-        ss cursor
+-        set cursor text
+-        add cursor len
+-        set cursor# (LineFeed)
+-        inc cursor
+-        set cursor# 0
+-        call av_dialog_multiline_info((value_insert),text)
+-    endelse
++		sd toggle
++		setcall toggle stage_file_options_info_message((value_get))
++		if toggle!=0
++			#get/display
++			char bf     #1+2+2+2+ 1+2+2+2+  2+2+2+1+dword_max+dword_max+1
++			vstr format="Frame: %u, Size: %u bytes"
++			vstr text^bf
++			call sprintf(text,format,nr,size)
++			sd len
++			setcall len slen(text)
++			ss cursor
++			set cursor text
++			add cursor len
++			set cursor# (LineFeed)
++			inc cursor
++			set cursor# 0
++			call av_dialog_multiline_info((value_insert),text)
++		end
++	endelse
+ endfunction
+ 
+ #bool
+@@ -481,6 +522,10 @@ endfunction
+ 
+ #bool
+ function riff_head(sd mem_sz,ss chunk,sd p_chunk_size,ss riff_ex)
++	sd bool;set bool riff_head_ex(mem_sz,chunk,p_chunk_size,riff_ex,(riff_noflag))
++	return bool
++end
++function riff_head_ex(sd mem_sz,ss chunk,sd p_chunk_size,ss riff_ex,sd flags)
+     sd mem
+     sd size
+     sd block^mem
+@@ -494,9 +539,12 @@ function riff_head(sd mem_sz,ss chunk,sd
+     sd cmp
+     setcall cmp cmpmem(chunk,mem,4)
+     if cmp!=(equalCompare)
++	sd test=riff_optional;and test flags
++	if test=(riff_noflag)
+         str cmp_er="Unrecognized chunk"
+         call texter(cmp_er)
+-        return 0
++	end
++	return 0
+     endif
+     import "move_cursors" move_cursors
+     call move_cursors(block,4)
+@@ -521,8 +569,12 @@ function riff_head(sd mem_sz,ss chunk,sd
+         call move_cursors(block,4)
+         sub p_chunk_size# 4
+     endif
+-    call cpymem(mem_sz,block,8)
+-    return 1
++	and flags (riff_move)
++	if flags!=(riff_noflag)
++		call move_cursors(block,p_chunk_size#)
++	end
++	call cpymem(mem_sz,block,8)
++	return 1
+ endfunction
+ 
+ 
+--- ovideo-1.orig/src/media/jpeg.oc
++++ ovideo-1/src/media/jpeg.oc
+@@ -4,6 +4,8 @@ format elfobj
+ 
+ include "../_include/include.h"
+ 
++#maybe from here: https://www.codeproject.com/Articles/83225/A-Simple-JPEG-Encoder-in-C-
++
+ const JPEG_LIB_VERSION=80
+ #const JCS_RGB=2
+ 
+--- ovideo-1.orig/src/media/jpeg_enc.oc
++++ ovideo-1/src/media/jpeg_enc.oc
+@@ -185,14 +185,16 @@ function write_jpeg_blocks(sd pixbuf)
+         add j 8
+     endwhile
+ 
+-    #Write End of Image Marker
+-    char EOI_data={0xFF,0xD9}
+-    str EOI^EOI_data
+-    setcall bool jpeg_file_mem_add(EOI,2)
+-    if bool!=1
+-        return 0
+-    endif
+-    return 1
++	#write if last byte is not full
++	set bool jpeg_write_last() # corrected with albmac/JPEGVisualRepairTool, there is another byte diff, example ballhit/env1(dbl2png,kolourpaint to bmp), but identify -verbose is ok
++	if bool=1
++		#Write End of Image Marker
++		char EOI_data={0xFF,0xD9}
++		vstr EOI^EOI_data
++		setcall bool jpeg_file_mem_add(EOI,2)
++		return bool
++	end
++	return 0
+ endfunction
+ 
+ 
+@@ -1713,61 +1715,78 @@ function jpeg_bytepos(sd action,sd value
+ endfunction
+ 
+ function jpeg_write_data(sd pos,sd data)
+-    #words style from char
+-    char m_data={1,   0,         2,   0,         4,    0,          8,    0}
+-    char      *={16,  0,         32,  0,         64,   0,          128,  0}
+-    char      *={256, 256/0x100, 512, 512/0x100, 1024, 1024/0x100, 2048, 2048/0x100}
+-    char      *={4096,4096/0x100,8192,8192/0x100,16384,16384/0x100,32768,32768/0x100}
+-    str mask^m_data
+-
+-    dec pos
+-
+-    sd bytenew
+-    sd bytepos
+-    sd pbyte^bytenew
+-    setcall bytenew jpeg_bytenew((value_get))
+-    setcall bytepos jpeg_bytepos((value_get))
+-
+-    while pos>=0
+-        sd mask_value
+-        setcall mask_value array_get_word(mask,pos)
+-        and mask_value data
+-        if mask_value!=0
+-            orcall bytenew array_get_word(mask,bytepos)
+-        endif
+-        dec pos
+-        dec bytepos
+-        #write file data
+-        if bytepos<0
+-            sd bool
+-            setcall bool jpeg_file_mem_add(pbyte,1)
+-            if bool!=1
+-                return 0
+-            endif
+-            if bytenew=0xff
+-                str null=""
+-                setcall bool jpeg_file_mem_add(null,1)
+-                if bool!=1
+-                    return 0
+-                endif
+-            endif
+-
+-            set bytenew (bytenew_start)
+-            set bytepos (bytepos_start)
+-        endif
+-    endwhile
+-    #store the bytenew and bytepos for next round
+-    call jpeg_bytenew((value_set),bytenew)
+-    call jpeg_bytepos((value_set),bytepos)
+-
+-    return 1
+-endfunction
+-
+-
+-
+-
+-
+-
++	#words style from char
++	char m_data={1,   0,         2,   0,         4,    0,          8,    0}
++	char      *={16,  0,         32,  0,         64,   0,          128,  0}
++	char      *={256, 256/0x100, 512, 512/0x100, 1024, 1024/0x100, 2048, 2048/0x100}
++	char      *={4096,4096/0x100,8192,8192/0x100,16384,16384/0x100,32768,32768/0x100}
++	str mask^m_data
++
++	dec pos
++
++	sd bytenew
++	sd bytepos
++	setcall bytenew jpeg_bytenew((value_get))
++	setcall bytepos jpeg_bytepos((value_get))
++
++	while pos>=0
++		sd mask_value
++		setcall mask_value array_get_word(mask,pos)
++		and mask_value data
++		if mask_value!=0
++			orcall bytenew array_get_word(mask,bytepos)
++		endif
++		dec pos
++		dec bytepos
++		#write file data
++		if bytepos<0
++		sd bool
++		set bool jpeg_write_byte(#bytenew)
++		if bool!=1
++			return 0
++		endif
++		set bytenew (bytenew_start)
++		set bytepos (bytepos_start)
++	endif
++	endwhile
++	#store the bytenew and bytepos for next round
++	call jpeg_bytenew((value_set),bytenew)
++	call jpeg_bytepos((value_set),bytepos)
++
++	return 1
++endfunction
++function jpeg_write_byte(ss p)
++	sd bool
++	setcall bool jpeg_file_mem_add(p,1)
++	if bool=1
++		if p#=0xff
++			vstr null=""
++			setcall bool jpeg_file_mem_add(null,1)
++			return bool
++		endif
++		return 1
++	endif
++	return 0
++end
++function jpeg_write_last()
++	sd bytepos
++	setcall bytepos jpeg_bytepos((value_get))
++	if bytepos!=(bytepos_start)
++		char fast={2,4,8,16,32,64,128}
++		ss _fast^fast
++		charx f#1
++		add _fast bytepos
++		set f _fast#
++		sd bytenew
++		setcall bytenew jpeg_bytenew((value_get))
++		mult bytenew f
++		sub f 1
++		or bytenew f
++		sd bool;set bool jpeg_write_byte(#bytenew)
++		return bool
++	end
++	return 1
++end
+ 
+ 
+ 
+@@ -1849,7 +1868,7 @@ endfunction
+ 
+ #quality
+ function jpeg_quality(sd action,sd value)
+-    data quality#1
++    data quality=800
+     if action=(value_set)
+         set quality value
+     else
+--- ovideo-1.orig/src/media/mp4.oc
++++ ovideo-1/src/media/mp4.oc
+@@ -48,38 +48,102 @@ import "av_dialog_stop" av_dialog_stop
+ 
+ 
+ 
+-#importx "_fread" fread
+-#importx "_fwrite" fwrite
+-#function extragere(ss location)
+-#	data extragere_off1#1
+-#	const extr_1^extragere_off1
+-#	data extragere_off2#1
+-#	const extr_2^extragere_off2
+-#	sd file
+-#	call openfile(#file,location,"rb")
+-#	sd mp3_file
+-#	call openfile(#mp3_file,"captures/file.mp3","wb")
+-#	sd mp3_sz;set mp3_sz extragere_off2;sub mp3_sz extragere_off1
+-#	call file_seek_set(file,extragere_off1)
+-#	sd mp3Mem;setcall mp3Mem memalloc(mp3_sz)
+-#	Call fread(mp3Mem,1,mp3_sz,file)
+-#	Call fwrite(mp3Mem,1,mp3_sz,mp3_file)
+-#	call fclose(mp3_file)
+-#	call fclose(file)
+-#endfunction
+-
+-
+-
++importx "_fread" fread
++importx "_fwrite" fwrite
++importx "_strlen" strlen
++import "getwritemode" getwritemode
++import "getreadmode" getreadmode
++import "save_inform_saved_thf" save_inform_saved_thf
++function mp3_file(sd bool,sv extra_off1,sv mp3_off)
++#location is saved with const
++#reopen, the mode is getwritemode for mp4 file. call before mp4 is closed to not release resources to not recheck too many calls
++	charx nothing#1
++	vstrx src#1
++	const extr_0^src
++	ss dest;set dest src
++	sd src_sz;set src_sz strlen(src)
++	add dest src_sz
++	dec dest
++	if bool=(FALSE)
++		if extra_off1=mp3_off
++			set nothing 1
++			ret
++		end
++		set nothing 0
++
++		sd err
++		sd file
++		ss r;set r getreadmode()
++		set err openfile(#file,src,r) #after this the resources are claimed at least to what the opened file reached
++		#linux, for example, can rename the resources to .nfs000000000068516d00000006 if the file information header is deleted
++		if err=(noerror)
++			charx aux#1;set aux dest#
++			set dest# 0x33   #mp4->mp3 , hacky way
++
++			sub mp3_off extra_off1
++			sd mp3Mem;setcall mp3Mem memalloc(mp3_off)
++			if mp3Mem!=(NULL)
++				sd mp3__file
++				ss w;set w getwritemode()
++				set err openfile(#mp3__file,src,w)
++				if err=(noerror)
++					call file_seek_set(file,extra_off1) #this was ok
++					sdu rd;set rd fread(mp3Mem,mp3_off,1,file)
++					if rd=1 #if the resources are ok at main open it doesn't mean async is not changeable for second open
++						Call fwrite(mp3Mem,mp3_off,1,mp3__file)
++						call fclose(mp3__file)
++					end
++				end
++				call free(mp3Mem)
++			end
++			call fclose(file)
++
++			set dest# aux
++		end
++	else
++		if nothing=0
++			sd allocsz;set allocsz src_sz
++			mult allocsz 2 #this is captures/epoch.ext here
++			add allocsz 5+1
++			sd mem;set mem memalloc(allocsz)
++			if mem!=(NULL)
++				importx "_memcpy" memcpy
++				call memcpy(mem,src,src_sz)
++				ss cursor;set cursor mem
++				add cursor src_sz
++				char and=" and "^
++				call memcpy(cursor,#and,5)
++				add cursor 5
++				set dest# 0x33   #mp4->mp3 , hacky way
++				call memcpy(cursor,src,src_sz)
++				add cursor src_sz
++				set cursor# (Nullchar)
++				call save_inform_saved_thf(mem)
++			end
++		else
++			call save_inform_saved_th(src)
++		end
++	end
++end
++function mp3_file_bool()
++	char b=FALSE
++	return b
++end
++function mp3_file_bool_set(sd value)
++	set mp3_file_bool.b value
++end
+ 
+ function mp4_write()
+-    call mp4_write_expand_set((mp4_write))
+-    ss location
+-    import "stage_get_output_container" stage_get_output_container
+-    setcall location stage_get_output_container()
+-    call av_dialog_run(mp4_dialog,location)
+-
+-#call extragere(location)
+-
++	call mp4_write_expand_set((mp4_write))
++	ss location
++	import "stage_get_output_container" stage_get_output_container
++	setcall location stage_get_output_container()
++	sd b;set b mp3_file_bool()
++	if b=(TRUE)
++		value off0%%extr_0
++		set off0# location
++	end
++	call av_dialog_run(mp4_dialog,location)
+ endfunction
+ #
+ function mp4_filewrite(sd file)
+@@ -100,12 +164,12 @@ function mp4_container(sd file,sd pixbuf
+     if bool!=1
+         return 0
+     endif
+-    setcall bool mp3_init()
+-    if bool=1
+-        call mp4_file(file,pixbuf)
+-        call mp3_free()
+-    endif
+-    call avc_free()
++	setcall bool mp3_init()
++	if bool=1
++		call mp4_file(file,pixbuf)
++		call mp3_free()
++	endif
++	call avc_free()
+ endfunction
+ 
+ import "mp4_longest_duration" mp4_longest_duration
+@@ -150,14 +214,14 @@ function mp4_file(sd file,sd pixbuf)
+         addcall sz mp4_audio_samples_get()
+         setcall bool mp4_sound_init(sz)
+         if bool!=1
+-            return (void)
++            ret #urn (void)
+         endif
+     endif
+     #
+     setcall bool mp4_start(file)
+-    if bool=(TRUE)
+-        call mp4_info_set(1)
+-    endif
++	if bool=(TRUE)
++		call mp4_info_set(1)
++	endif
+ endfunction
+ #bool
+ function mp4_start(sd file)
+@@ -1262,9 +1326,15 @@ import "file_seekSet_setDwRev_goEnd" fil
+ 
+ #bool
+ function mp4_mdat(sd file)
+-
+-#data off1%extr_1
+-#call file_tell(file,off1)
++	sd err
++	sd b;set b mp3_file_bool()
++	if b=(TRUE)
++		sv off1
++		set err file_tell(file,#off1)
++		if err!=(noerror)
++			return 0
++		end
++	end
+ 
+     sd bool
+     setcall bool mp4_mdat_sound(file)
+@@ -1277,7 +1347,6 @@ function mp4_mdat(sd file)
+     setcall ch_off mp4_chunksOffset((value_get))
+     sd file_pos
+     sd ptr_file_pos^file_pos
+-    sd err
+     setcall err file_tell(file,ptr_file_pos)
+     if err!=(noerror)
+         return 0
+@@ -1286,9 +1355,10 @@ function mp4_mdat(sd file)
+     if bool!=(TRUE)
+         return (FALSE)
+     endif
+-
+-#data off2%extr_2
+-#set off2# file_pos
++	sd bl;set bl mp3_file_bool()
++	if bl=(TRUE)
++		call mp3_file((FALSE),off1,file_pos)
++	end
+ 
+     #
+     sd all_size_of_sample
+@@ -1537,7 +1607,6 @@ function mp4_mdat_sound(sd file)
+     sd ptr_file_pos^file_pos
+ 
+     #sound
+-    import "mp3_encode" mp3_encode
+     sd is_sound_or_is_not
+     setcall is_sound_or_is_not mp4_sound_presence_get()
+     if is_sound_or_is_not!=0
+@@ -1603,7 +1672,7 @@ function mp4_mdat_sound(sd file)
+         sd max_rate
+         setcall max_rate mp4_audio_maxBitrate_get()
+         #
+-        sd timescale=mp3_samplerate
++        sd timescale;set timescale stage_sound_rate((value_get))
+         sd samples=0
+         sd loop=1
+         while loop=1
+@@ -1616,10 +1685,13 @@ function mp4_mdat_sound(sd file)
+             if err!=(noerror)
+                 return 0
+             endif
++
++	    import "mp3_encode" mp3_encode
+             setcall bool mp3_encode(file)
+             if bool!=1
+                 return 0
+             endif
++
+             setcall err file_tell(file,p_sound_size)
+             if err!=(noerror)
+                 return 0
+@@ -1831,7 +1903,7 @@ const soundmdhd_size=\-soundmdhd_start
+     if procedure=(mp4_write)
+         sd times^creationTime
+         call mp4_times((value_get),times)
+-        set timeScale (mp3_samplerate)
++        set timeScale stage_sound_rate((value_get))
+         setcall timeScale dword_reverse(timeScale)
+         setcall duration mp4_all_samples()
+         setcall duration dword_reverse(duration#)
+@@ -1843,12 +1915,13 @@ const soundmdhd_size=\-soundmdhd_start
+             return 0
+         endif
+     else
+-        setcall err file_seek_cursor_get_dword_reverse(file,(soundmdhd_duration),#duration)
+-        if err!=(noerror)
+-            return 0
+-        endif
+-        mult duration (mp3_blockalign)
+-        call mp4_audio_samples_set(duration)
++		setcall err file_seek_cursor_get_dword_reverse(file,(soundmdhd_duration),#duration)
++		if err!=(noerror)
++			return 0
++		endif
++		mult duration (mp3_bytespersample)
++		mult duration stage_sound_channels((value_get))
++		call mp4_audio_samples_set(duration)
+     endelse
+     return 1
+ endfunction
+@@ -1995,7 +2068,8 @@ const mp4a_start=\
+     char *version={0,0}
+     char *revision={0,0}
+     data *vendor=0
+-    char *channel_count={0,mp3_channels}
++	char *channel_count=0;char channel_count#1
++	set channel_count stage_sound_channels((value_get))
+     char *bitspersample={0,mp3_bitspersample}
+     char *compression_id={0,0}
+     char *packet_size={0,0}
+@@ -2008,12 +2082,13 @@ const mp4a_size=\-mp4a_start
+     sd procedure
+     setcall procedure mp4_write_expand_get()
+     if procedure=(mp4_write)
+-        import "int_into_short" int_into_short
+-        sd sr
+-        setcall sr dword_reverse((mp3_samplerate))
+-        div sr (0x100*0x100)
+-        sd p^samplerate_hi
+-        call int_into_short(sr,p)
++		import "int_into_short" int_into_short
++		sd sr
++		sd mp3_samplerate;set mp3_samplerate stage_sound_rate((value_get))
++		setcall sr dword_reverse(mp3_samplerate)
++		divu sr (0x100*0x100)
++		sd p^samplerate_hi
++		call int_into_short(sr,p)
+     endif
+ 
+     sd bool
+@@ -2280,17 +2355,47 @@ const soundstco_size=\-soundstco_start
+     return 1
+ endfunction
+ 
+-#
++import "stage_sound_channels" stage_sound_channels
++import "stage_sound_rate" stage_sound_rate
+ #bool
+ function mp4_sound_init(sd all_size)
++	import "stage_sound_bps" stage_sound_bps
++	sd ch
++	setcall ch stage_sound_channels((value_get))
++	#verify for the used format
++	if ch!=(mp3_channels_stereo)
++		if ch!=(mp3_channels_mono)
++			vstr ch_err="Sound with 1/2 channels required"
++			call texter(ch_err)
++			return 0
++		endif
++	endif
++	sd bps
++	setcall bps stage_sound_bps((value_get))
++	if bps!=(mp3_bitspersample)
++		vstr bps_err="Sound with 16 bits-per-sample required"
++		call texter(bps_err)
++		return 0
++	endif
++	sd rate
++	setcall rate stage_sound_rate((value_get))
++	if rate!=(mp3_samplerate_max)
++		if rate!=(mp3_samplerate_min)
++			vstr sr_err="Sound with 32000/48000 sample rate required"
++			call texter(sr_err)
++			return 0
++		end
++	endif
+     #all samples
+     sd all_samples
+     setcall all_samples mp4_all_samples()
+-    sd samples
+-    set samples all_size
+-    div samples (buffer_size)
+-    mult samples (buffer_size)
+-    div samples (mp3_channels*mp3_bytespersample)
++	sd samples
++	set samples all_size
++	sd buffer_size=buffer_channel_size;mult buffer_size ch
++	divu samples buffer_size
++	mult samples buffer_size
++	divu samples (mp3_bytespersample)
++	divu samples ch
+     set all_samples# samples
+     #duration at the default timescale
+     import "fmul_quad" fmul_quad
+@@ -2303,7 +2408,8 @@ function mp4_sound_init(sd all_size)
+     call fild_value(tscale)
+     call fstp_quad(double)
+     call fmul_quad(double)
+-    call fild_value((mp3_samplerate))
++	sd mp3_samplerate;set mp3_samplerate stage_sound_rate((value_get))
++	call fild_value(mp3_samplerate)
+     call fstp_quad(double)
+     call fdiv_quad(double)
+     setcall duration mp4_sound_duration()
+@@ -2328,36 +2434,12 @@ function mp4_sound_init(sd all_size)
+     call mp4_next_track_set((emptyId))
+     #Not part of MPEG-4 audio profiles
+     call mp4_audio_profile_set(0xfe)
+-    #verify for the used format
+-    import "stage_sound_channels" stage_sound_channels
+-    import "stage_sound_bps" stage_sound_bps
+-    import "stage_sound_rate" stage_sound_rate
+-    sd ch
+-    setcall ch stage_sound_channels((value_get))
+-    if ch!=(mp3_channels)
+-        str ch_err="Sound with 2 channels required"
+-        call texter(ch_err)
+-        return 0
+-    endif
+-    sd bps
+-    setcall bps stage_sound_bps((value_get))
+-    if bps!=(mp3_bitspersample)
+-        str bps_err="Sound with 16 bits-per-sample required"
+-        call texter(bps_err)
+-        return 0
+-    endif
+-    sd rate
+-    setcall rate stage_sound_rate((value_get))
+-    if rate!=(mp3_samplerate)
+-        str sr_err="Sound with 48000 sample rate required"
+-        call texter(sr_err)
+-        return 0
+-    endif
+     return 1
+ endfunction
+ 
+ 
+ ##extend + write
++import "save_inform_saved_th" save_inform_saved_th
+ import "file_write_forward" file_write_forward
+ function mp4_dialog(ss filename)
+     #init expand values
+@@ -2393,15 +2475,22 @@ function mp4_dialog(ss filename)
+             call free(mem)
+         endif
+     endelse
+-
+-    sd info
+-    setcall info mp4_info_get()
+-    if info=(TRUE)
+-        import "save_inform_saved" save_inform_saved
+-        call save_inform_saved(filename)
+-    endif
+-
+-    call av_dialog_close()
++	sd info
++	setcall info mp4_info_get()
++	if info=(TRUE)
++		sd b
++		if procedure=(mp4_write)
++			set b mp3_file_bool()
++			if b=(TRUE)
++				call mp3_file((TRUE))
++			else
++				call save_inform_saved_th(filename)
++			end
++		else
++			call save_inform_saved_th(filename)
++		end
++	endif
++	call av_dialog_close()
+ endfunction
+ 
+ #bool
+--- ovideo-1.orig/src/media/mpeg-avc_encode.oc
++++ ovideo-1/src/media/mpeg-avc_encode.oc
+@@ -4,6 +4,9 @@ format elfobj
+ 
+ include "../_include/include.h"
+ 
++#MPEG-4 Advanced Video Coding
++#this was, comparing by constants like X264_TYPE_AUTO or NAL_SLICE_IDR, x264 http://www.videolan.org/x264.html
++
+ const NAL_SLICE=1
+ const NAL_SLICE_IDR=5
+ const NAL_SEI=6
+@@ -116,7 +119,7 @@ function avc_ini_headers()
+     #importx "_sprintf" sprintf
+     #char version_data#256
+     #str version^version_data
+-    #str format="x264 - core %d%s - H.264/MPEG-4 AVC codec - Copyleft 2005 - http://www.videolan.org/x264.html"
++    #str format="x264 - core %d%s - H.264/MPEG-4 AVC codec - Copyleft 2005"
+     #sd X264_BUILD=34
+     #str X264_VERSION=""
+     #call sprintf(version,format,X264_BUILD,X264_VERSION)
+--- ovideo-1.orig/src/media/mpeg-avc_wrap.oc
++++ ovideo-1/src/media/mpeg-avc_wrap.oc
+@@ -135,27 +135,27 @@ function avc_rounding(sd value)
+ endfunction
+ 
+ function avc_free()
+-    sd mem
+-    setcall mem avc_pre_input((value_get))
+-    call free(mem)
+-    setcall mem avc_input((value_get))
+-    if mem!=0
+-        call free(mem)
+-    endif
+-    setcall mem avc_output((value_get))
+-    if mem!=0
+-        call free(mem)
+-    endif
+-    setcall mem avc_nal_output((value_get))
+-    if mem!=0
+-        call free(mem)
+-    endif
+-    setcall mem avc_mb_data((value_get))
+-    if mem!=0
+-        call free(mem)
+-    endif
+-    setcall mem avc_input_dequant((value_get))
+-    if mem!=0
+-        call free(mem)
+-    endif
++	sd mem
++	setcall mem avc_pre_input((value_get))
++	call free(mem)
++	setcall mem avc_input((value_get))
++	if mem!=0
++		call free(mem)
++		setcall mem avc_output((value_get))
++		if mem!=0
++			call free(mem)
++			setcall mem avc_nal_output((value_get))
++			if mem!=0
++				call free(mem)
++				setcall mem avc_mb_data((value_get))
++				if mem!=0
++					call free(mem)
++					setcall mem avc_input_dequant((value_get))
++					if mem!=0
++						call free(mem)
++					endif
++				end
++			end
++		end
++	end
+ endfunction
+--- ovideo-1.orig/src/media/mpeg-mp3_bs.oc
++++ ovideo-1/src/media/mpeg-mp3_bs.oc
+@@ -6,48 +6,53 @@ format elfobj
+ include "../_include/include.h"
+ 
+ import "mp3_output" mp3_output
+-import "mp3_allsize" mp3_allsize
++#import "mp3_allsize" mp3_allsize
+ import "mp3_output_size" mp3_output_size
+ import "mp3_output_pos" mp3_output_pos
+ 
+ import "shl" shl
+ 
+ function mp3_bs_write(sd value,sd len)
+-    sd size
+-    setcall size mp3_output_size((value_get))
+-    sd allsize
+-    setcall allsize mp3_allsize((value_get))
+-    sd pos
+-    setcall pos mp3_output_pos((value_get))
+-    while len!=0
+-        if size>=allsize
+-            call mp3_output_size((value_set),size)
+-            call mp3_output_pos((value_set),pos)
+-            return 0
+-        endif
+-
+-        ss mem
+-        setcall mem mp3_output((value_get))
+-        add mem size
+-
+-        dec len
+-        dec pos
+-        sd test=1
+-        setcall test shl(test,len)
+-        and test value
+-        sd unit=1
+-        setcall unit shl(unit,pos)
+-        if test!=0
+-            or mem# unit
+-        else
+-            xor unit -1
+-            and mem# unit
+-        endelse
+-        if pos=0
+-            inc size
+-            set pos 8
+-        endif
+-    endwhile
+-    call mp3_output_size((value_set),size)
+-    call mp3_output_pos((value_set),pos)
++	if len!=0 #there are cases, and to ignore them must while len>0 and dec len, if wanting to keep [0,32] else can work another way at [0,31] like [1,32]
++		sd size
++		setcall size mp3_output_size((value_get))
++#    sd allsize
++#    setcall allsize mp3_allsize((value_get))
++		sd pos
++		setcall pos mp3_output_pos((value_get))
++		ss mem
++		setcall mem mp3_output((value_get))
++		add mem size
++		dec len
++		sd test=1
++		setcall test shl(test,len)
++		sd p;set p mem
++		while test!=0
++#       if size>=allsize #will be less or equal allsize
++#          call mp3_output_size((value_set),size)
++#            call mp3_output_pos((value_set),pos)
++#            return 0
++#        endif
++			sd t;set t test
++			and t value
++			if t!=0
++				or mem# pos
++			else
++				xor pos -1
++				and mem# pos
++				xor pos -1
++			endelse
++			if pos=1
++				inc mem
++				set pos 0x80
++			else
++				shr1 pos
++			end
++			shr1 test
++		endwhile
++		sub mem p
++		add size mem
++		call mp3_output_size((value_set),size)
++		call mp3_output_pos((value_set),pos)
++	end
+ endfunction
+--- ovideo-1.orig/src/media/mpeg-mp3_data.oc
++++ ovideo-1/src/media/mpeg-mp3_data.oc
+@@ -12,14 +12,14 @@ function mp3_output(sd way,sd value)
+         return output
+     endelse
+ endfunction
+-function mp3_allsize(sd way,sd value)
+-    data allsize#1
+-    if way=(value_set)
+-        set allsize value
+-    else
+-        return allsize
+-    endelse
+-endfunction
++#function mp3_allsize(sd way,sd value)
++#    data allsize#1
++#    if way=(value_set)
++#        set allsize value
++#    else
++#        return allsize
++#    endelse
++#endfunction
+ function mp3_output_size(sd way,sd value)
+     data output_size#1
+     if way=(value_set)
+@@ -81,16 +81,18 @@ endfunction
+ #l3_enc
+ 
+ const l3_enc_channelSize=samp_per_frame2*DWORD
+-const l3_enc_granuleSize=mp3_channels*l3_enc_channelSize
++#const l3_enc_granuleSize=mp3_chans*l3_enc_channelSize
++import "stage_sound_channels" stage_sound_channels
+ #pointer
+ function l3_enc(sd granule,sd channel)
+-    data l3_enc_data#2*mp3_channels*samp_per_frame2
+-    sd l3^l3_enc_data
+-    mult granule (l3_enc_granuleSize)
+-    add l3 granule
+-    mult channel (l3_enc_channelSize)
+-    add l3 channel
+-    return l3
++	data l3_enc_data#2*mp3_channels_stereo*samp_per_frame2
++	sd l3^l3_enc_data
++	mult granule (l3_enc_channelSize)
++	mult granule stage_sound_channels((value_get))
++	add l3 granule
++	mult channel (l3_enc_channelSize)
++	add l3 channel
++	return l3
+ endfunction
+ #value
+ function l3_enc_sample_get(sd set,sd samp_nr)
+@@ -102,17 +104,18 @@ endfunction
+ #gr info
+ 
+ const gr_info_items=gr_info_channelSize/DWORD
+-const gr_info_granuleSize=mp3_channels*gr_info_channelSize
++#const gr_info_granuleSize=mp3_chans*gr_info_channelSize
+ #pointer
+ function mp3_gr_info(sd granule,sd channel)
+-    #side informations
+-    data gr_info_data#2*mp3_channels*gr_info_items
+-    sd gr_info^gr_info_data
+-    mult granule (gr_info_granuleSize)
+-    add gr_info granule
+-    mult channel (gr_info_channelSize)
+-    add gr_info channel
+-    return gr_info
++	#side informations
++	data gr_info_data#2*mp3_channels_stereo*gr_info_items
++	sd gr_info^gr_info_data
++	mult granule (gr_info_channelSize)
++	mult granule stage_sound_channels((value_get))
++	add gr_info granule
++	mult channel (gr_info_channelSize)
++	add gr_info channel
++	return gr_info
+ endfunction
+ #value
+ function mp3_gr_info_itemGet(sd pack,sd item)
+--- ovideo-1.orig/src/media/mpeg-mp3_encode.oc
++++ ovideo-1/src/media/mpeg-mp3_encode.oc
+@@ -5,37 +5,44 @@ format elfobj
+ 
+ include "../_include/include.h"
+ 
++#comparing constants like MPG_MD_DUAL_CHANNEL or BUFFER_SIZE(was 4096), the discontinued BladeEnc, maybe a fork of The LAME Project
++
+ import "mp3_output_size" mp3_output_size
+ import "mp3_output_pos" mp3_output_pos
+ 
+-#define         MPG_MD_STEREO           0
+-const MPG_MD_DUAL_CHANNEL=2
+-#define         MPG_MD_MONO             3
++const MPG_MD_STEREO=0
++#define         MPG_MD_JOINT_STEREO     1
++#define         MPG_MD_DUAL_CHANNEL     2
++const MPG_MD_MONO=3
+ 
+ const MPG_MD_LR_LR=0
+ #define         MPG_MD_LR_I              1
+ #define         MPG_MD_MS_LR             2
+ #define         MPG_MD_MS_I              3
+ 
++import "debug" debug
++
+ #bool
+ function mp3_encode(sd file)
+-    call mp3_output_size((value_set),0)
+-    call mp3_output_pos((value_set),8)
+-
+-    call mp3_encode_frame()
+-
+-    import "file_write" file_write
+-    import "mp3_output" mp3_output
+-    ss mem
+-    sd size
+-    setcall mem mp3_output((value_get))
+-    setcall size mp3_output_size((value_get))
+-    sd er
+-    setcall er file_write(mem,size,file)
+-    if er!=(noerror)
+-        return 0
+-    endif
+-    return 1
++	call mp3_output_size((value_set),0)
++	call mp3_output_pos((value_set),0x80)
++#	call mp3_output_pos((value_set),8)
++
++	call mp3_encode_frame()
++
++	import "file_write" file_write
++	import "mp3_output" mp3_output
++	ss mem
++	sd size
++	setcall mem mp3_output((value_get))
++	setcall size mp3_output_size((value_get))
++	call debug(mem,size)
++	sd er
++	setcall er file_write(mem,size,file)
++	if er!=(noerror)
++		return 0
++	endif
++	return 1
+ endfunction
+ 
+ import "fild_value" fild_value
+@@ -47,7 +54,8 @@ import "sar32" sar
+ 
+ import "mp3_mean_bits" mp3_mean_bits
+ import "mp3_l3_sb_sample" mp3_l3_sb_sample
+-
++import "stage_sound_channels" stage_sound_channels
++import "stage_sound_rate" stage_sound_rate
+ function mp3_encode_init()
+     #sd avg_slots_per_frame
+     #(
+@@ -60,7 +68,7 @@ function mp3_encode_init()
+     #    (double)config->mpeg.bits_per_slot
+     #);
+     sd samp_per_frame=samp_per_frame
+-    sd samplerate=mp3_samplerate
++	sd samplerate;set samplerate stage_sound_rate((value_get))
+     sd bits_per_slot=8
+     sd bitrate
+     setcall bitrate mp3_bitrate()
+@@ -91,12 +99,13 @@ function mp3_encode_init()
+     set bits_per_frame whole_slots_per_frame
+     mult bits_per_frame 8
+ 
+-    sd sideinfo_len
+-    if (mp3_channels)=1
+-        set sideinfo_len 168
+-    else
+-        set sideinfo_len 288
+-    endelse
++	sd sideinfo_len
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	if mp3_channels=1
++		set sideinfo_len 168
++	else
++		set sideinfo_len 288
++	endelse
+ 
+     sd mean_bits
+     set mean_bits bits_per_frame
+@@ -107,24 +116,24 @@ function mp3_encode_init()
+     setcall p_mean_bits mp3_mean_bits()
+     set p_mean_bits# mean_bits
+ 
+-    import "setmemzero" setmemzero
+-    sd l3_sb_sample
+-    setcall l3_sb_sample mp3_l3_sb_sample()
+-    call setmemzero(l3_sb_sample,(l3_sb_sample_size))
++	import "setmemzero" setmemzero
++	sd l3_sb_sample
++	setcall l3_sb_sample mp3_l3_sb_sample()
++	call setmemzero(l3_sb_sample,(l3_sb_sample_stereo_size))  #this has 2 granules
+ endfunction
+ 
+ function mp3_encode_frame()
+     sd mean_bits
+     setcall mean_bits mp3_mean_bits()
+     set mean_bits mean_bits#
+-    #
+-    char buffer_data#buffer_size
++
++    char buffer_data#stereo_buffer_size
+     data buffer^buffer_data
+     #
+     sd l3_sb_sample
+     setcall l3_sb_sample mp3_l3_sb_sample()
+     #
+-    const mdct_freq_size=2*mdct_freq_granule_size
++    const mdct_freq_size=2*mdct_freq_granule_stereo_size
+     data mdct_freq_data#mdct_freq_size
+     data mdct_freq^mdct_freq_data
+     #call setmemzero(mdct_freq,(mdct_freq_size))
+@@ -132,6 +141,7 @@ function mp3_encode_frame()
+     #get from input
+     import "mp3_get_pcm" mp3_get_pcm
+     call mp3_get_pcm(buffer)
++
+     #polyphase filtering
+     sd buf
+     sd l3_sb
+@@ -143,48 +153,69 @@ function mp3_encode_frame()
+     set buf buffer
+     set l3_sb l3_sb_sample
+     add l3_sb (l3_sb_sample_granule_size)
+-    while granule!=2
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	sd buffer_size=buffer_channel_size;mult buffer_size mp3_channels
++	sd l3_sb_sample_size=l3_sb_sample_channel_size;mult l3_sb_sample_size mp3_channels
++	while granule!=2
+         set sizeadd granule
+         mult sizeadd (buffer_granule_size)
+-        add sizeadd (buffer_size)
++        add sizeadd buffer_size
+         add buf sizeadd
+         #
+         set sizeadd granule
+         mult sizeadd (l3_sb_sample_granule_size)
+-        add sizeadd (l3_sb_sample_size)
++        add sizeadd l3_sb_sample_size
+         add l3_sb sizeadd
+         #
+-        sd channel=mp3_channels
+-        while channel!=0
+-            dec channel
+-            sub buf (buffer_channel_size)
+-            sub l3_sb (l3_sb_sample_channel_size)
+-            #
+-            sd i=0
+-            while i<18
+-                call l3_window_filter_subband(buf,l3_sb,channel)
+-                add buf (buffer_band_size)
+-                add l3_sb (l3_sb_sample_band_size)
+-                inc i
+-            endwhile
+-            sub buf (buffer_granule_size)
+-            sub l3_sb (l3_sb_sample_granule_size)
+-        endwhile
+-        inc granule
+-    endwhile
+-    #apply mdct to the polyphase output
+-    import "mp3_mdct" mp3_mdct
+-    call mp3_mdct(l3_sb_sample,mdct_freq)
+-    #bit and noise allocation
+-    import "mp3_iteration" mp3_iteration
+-    call mp3_iteration(mdct_freq,mean_bits)
+-    #write the frame to the bitstream
+-    call mp3_format_bitstream(mdct_freq)
++		sd mp3_channel;set mp3_channel mp3_channels
++		while mp3_channel!=0
++			dec mp3_channel
++			sub buf (buffer_channel_size)
++			sub l3_sb (l3_sb_sample_channel_size)
++			#
++			sd i=0
++			while i<18
++				call l3_window_filter_subband(buf,l3_sb,mp3_channel)
++				add buf (buffer_band_size)
++				add l3_sb (l3_sb_sample_band_size)
++				inc i
++			endwhile
++			sub buf (buffer_granule_size)
++			sub l3_sb (l3_sb_sample_granule_size)
++		endwhile
++		inc granule
++	endwhile
++	call debug(l3_sb_sample,(l3_sb_sample_stereo_size))
++
++	#apply mdct to the polyphase output
++	import "mp3_mdct" mp3_mdct
++	call mp3_mdct(l3_sb_sample,mdct_freq)
++	call debug(mdct_freq,(mdct_freq_size))
++
++	#bit and noise allocation
++	import "mp3_iteration" mp3_iteration
++	call mp3_iteration(mdct_freq,mean_bits)
++	call debug(mdct_freq,(mdct_freq_size))
++
++	#write the frame to the bitstream
++	call mp3_format_bitstream(mdct_freq)
+ endfunction
+ 
+ function mp3_bitrate()
+-    data bitrate=128
+-    return bitrate
++	sd channels;set channels stage_sound_channels((value_get))
++	sd rate;set rate stage_sound_rate((value_get))
++	if channels=2
++		if rate=(mp3_samplerate_max)
++			return 128
++		end
++		#mp3_samplerate_min
++		return 96
++	end
++	if rate=(mp3_samplerate_max)
++		return 64
++	end
++	#mp3_samplerate_min
++	return 32
+ endfunction
+ 
+ import "l3_enc" l3_enc
+@@ -194,24 +225,24 @@ function mp3_format_bitstream(sd mdct_fr
+     sd l3enc_tt
+     setcall l3enc_tt l3_enc(0,0)
+     sd granule=0
+-    while granule<2
+-        sd channel=0
+-        while channel<(mp3_channels)
+-            sd i=0
+-            while i<(samp_per_frame2)
+-                if mdct_freq#<0
+-                    #if l3enc_tt#>0
+-                    mult l3enc_tt# -1
+-                    #endif
+-                endif
+-                add mdct_freq (DWORD)
+-                add l3enc_tt (DWORD)
+-                inc i
+-            endwhile
+-            inc channel
+-        endwhile
+-        inc granule
+-    endwhile
++	while granule<2
++		sd mp3_channel;set mp3_channel stage_sound_channels((value_get))
++		while mp3_channel>0
++			sd i=0
++			while i<(samp_per_frame2)
++				if mdct_freq#<0
++					#if l3enc_tt#>0
++					mult l3enc_tt# -1
++					#endif
++				endif
++				add mdct_freq (DWORD)
++				add l3enc_tt (DWORD)
++				inc i
++			endwhile
++			dec mp3_channel
++		endwhile
++		inc granule
++	endwhile
+     #
+     call mp3_side_info()
+     call mp3_main_data()
+@@ -238,22 +269,28 @@ function mp3_header()
+     sd biterate_index
+     sd btrt
+     setcall btrt mp3_bitrate()
+-    data bitratex_data={0,32,40,48,56,64,80,96,112,128,160,192,224,256,320}
++    data bitratex_data={0,32,40,48,56,64,80,96,112,mp3_max_supported_bitrate} #,160,192,224,256,320}
+     data bitratex^bitratex_data
+-    setcall biterate_index int_in_set(btrt,bitratex,15)
++    setcall biterate_index int_in_set(btrt,bitratex) #,15)
+     call mp3_bs_write(biterate_index,4)
+     #samplerate index
+     sd samplerate_index
+-    data samplerateex_data={44100, 48000, 32000}
++    data samplerateex_data={44100, mp3_samplerate_max, mp3_samplerate_min}
+     data samplerateex^samplerateex_data
+-    setcall samplerate_index int_in_set(48000,samplerateex,3)
++	sd samplerate;set samplerate stage_sound_rate((value_get))
++	setcall samplerate_index int_in_set(samplerate,samplerateex) #,3)
+     call mp3_bs_write(samplerate_index,2)
+     #padding
+-    call mp3_bs_write(0,1)
++    call mp3_bs_write(0,1) #Padding is necessary when the sampling frequency is 44.1 kHz and the frame length should always be an integer.
+     #extension
+     call mp3_bs_write(0,1)
+     #mode
+-    call mp3_bs_write((MPG_MD_DUAL_CHANNEL),2)
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	if mp3_channels=2
++		call mp3_bs_write((MPG_MD_STEREO),2)
++	else
++		call mp3_bs_write((MPG_MD_MONO),2)
++	end
+     #mode_ext
+     call mp3_bs_write((MPG_MD_LR_LR),2)
+     #copyright
+@@ -271,78 +308,83 @@ function mp3_frameSI()
+     #main_data_begin
+     call mp3_bs_write(0,9)
+     #private_bits
+-    #if config->wave.channels == 2
+-    call mp3_bs_write(0,3)
+-    #scalefactor select information
+-    sd i=0
+-    while i<(mp3_channels)
+-        sd scfsi_band=0
+-        while scfsi_band<4
+-            call mp3_bs_write(0,1)
+-            inc scfsi_band
+-        endwhile
+-        inc i
+-    endwhile
+-    sd value
+-    sd granule=0
+-    while granule<2
+-        sd channel=0
+-        while channel<(mp3_channels)
+-            sd gr_info
+-            setcall gr_info mp3_gr_info(granule,channel)
+-            #
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_part2_3_length))
+-            call mp3_bs_write(value,12)
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_big_values))
+-            call mp3_bs_write(value,9)
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_global_gain))
+-            call mp3_bs_write(value,8)
+-            #scalefac_compress
+-            call mp3_bs_write(0,4)
+-            call mp3_bs_write(0,1)
+-            #
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_table_select_0))
+-            call mp3_bs_write(value,5)
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_table_select_1))
+-            call mp3_bs_write(value,5)
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_table_select_2))
+-            call mp3_bs_write(value,5)
+-            #
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_region0_count))
+-            call mp3_bs_write(value,4)
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_region1_count))
+-            call mp3_bs_write(value,3)
+-            #
+-            #preflag
+-            call mp3_bs_write(0,1)
+-            #scalefac_scale
+-            call mp3_bs_write(0,1)
+-            setcall value mp3_gr_info_itemGet(gr_info,(gr_info_count1table_select))
+-            call mp3_bs_write(value,1)
+-            #
+-            inc channel
+-        endwhile
+-        inc granule
+-    endwhile
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	if mp3_channels=2
++		call mp3_bs_write(0,3)
++	else
++		call mp3_bs_write(0,5)
++	end
++	#scalefactor select information
++	sd mp3_channel;set mp3_channel mp3_channels
++	while mp3_channel>0
++		sd scfsi_band=0
++		while scfsi_band<4
++			call mp3_bs_write(0,1)
++			inc scfsi_band
++		endwhile
++		dec mp3_channel
++	endwhile
++	sd value
++	sd granule=0
++	while granule<2
++		set mp3_channel 0
++		while mp3_channel<mp3_channels
++			sd gr_info
++			setcall gr_info mp3_gr_info(granule,mp3_channel)
++			#
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_part2_3_length))
++			call mp3_bs_write(value,12)
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_big_values))
++			call mp3_bs_write(value,9)
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_global_gain))
++			call mp3_bs_write(value,8)
++			#scalefac_compress
++			call mp3_bs_write(0,4)
++			call mp3_bs_write(0,1)
++			#
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_table_select_0))
++			call mp3_bs_write(value,5)
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_table_select_1))
++			call mp3_bs_write(value,5)
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_table_select_2))
++			call mp3_bs_write(value,5)
++			#
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_region0_count))
++			call mp3_bs_write(value,4)
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_region1_count))
++			call mp3_bs_write(value,3)
++			#
++			#preflag
++			call mp3_bs_write(0,1)
++			#scalefac_scale
++			call mp3_bs_write(0,1)
++			setcall value mp3_gr_info_itemGet(gr_info,(gr_info_count1table_select))
++			call mp3_bs_write(value,1)
++			#
++			inc mp3_channel
++		endwhile
++		inc granule
++	endwhile
+ endfunction
+ 
+ #main data
+ 
+ function mp3_main_data()
+-    sd granule=0
+-    while granule<2
+-        sd channel=0
+-        while channel<(mp3_channels)
+-            sd gr_info
+-            setcall gr_info mp3_gr_info(granule,channel)
+-            sd l3enc_tt
+-            setcall l3enc_tt l3_enc(granule,channel)
+-            #
+-            call mp3_Huffmancodebits(gr_info,l3enc_tt)
+-            inc channel
+-        endwhile
+-        inc granule
+-    endwhile
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	sd granule=0
++	while granule<2
++		sd mp3_channel;set mp3_channel 0
++		while mp3_channel<mp3_channels
++			sd gr_info
++			setcall gr_info mp3_gr_info(granule,mp3_channel)
++			sd l3enc_tt
++			setcall l3enc_tt l3_enc(granule,mp3_channel)
++			#
++			call mp3_Huffmancodebits(gr_info,l3enc_tt)
++			inc mp3_channel
++		endwhile
++		inc granule
++	endwhile
+ endfunction
+ 
+ import "l3_enc_sample_get" l3_enc_sample_get
+--- ovideo-1.orig/src/media/mpeg-mp3_input.oc
++++ ovideo-1/src/media/mpeg-mp3_input.oc
+@@ -7,6 +7,7 @@ include "../_include/include.h"
+ import "stage_sound_alloc_getremainingsize" stage_sound_alloc_getremainingsize
+ import "stage_sound_sizedone" stage_sound_sizedone
+ import "stage_sound_alloc_getbytes" stage_sound_alloc_getbytes
++import "stage_sound_channels" stage_sound_channels
+ 
+ const HAN_SIZE=512
+ const han_bytes_size=HAN_SIZE*DWORD
+@@ -22,7 +23,8 @@ function mp3_get_pcm(sd buffer)
+     #get size is all the raw size to read
+     sd get_size
+     set get_size frame_ch_size
+-    mult get_size (mp3_channels)
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	mult get_size mp3_channels
+     #can be less remaining size than a frame
+     if get_size>remainingsize
+         set get_size remainingsize
+@@ -33,12 +35,14 @@ function mp3_get_pcm(sd buffer)
+     setcall bytes stage_sound_alloc_getbytes()
+     setcall sizedone stage_sound_sizedone((value_get))
+     add bytes sizedone
++	import "debug" debug
++	call debug(bytes,get_size)
+     add sizedone get_size
+     call stage_sound_sizedone((value_set),sizedone)
+     #
+     sd get_ch_size
+     set get_ch_size get_size
+-    div get_ch_size (mp3_channels)
++    divu get_ch_size mp3_channels
+     #raw data to buffer
+     import "cpymem" cpymem
+     sd cursor
+@@ -47,7 +51,9 @@ function mp3_get_pcm(sd buffer)
+     sd cursor_size
+     sd buffer_cursor
+     sd sizeadd
+-    while i!=(mp3_channels)
++	sd add=mp3_bytespersample
++	mult add mp3_channels
++    while i!=mp3_channels
+         set cursor bytes
+         set next_channel i
+         mult next_channel (mp3_bytespersample)
+@@ -60,34 +66,13 @@ function mp3_get_pcm(sd buffer)
+         #
+         set cursor_size 0
+         while cursor_size!=get_ch_size
+-            call cpymem(buffer_cursor,cursor,(mp3_bytespersample))
+-            add cursor (mp3_bytespersample*mp3_channels)
+-            add buffer_cursor (WORD)
+-            add cursor_size (mp3_bytespersample)
++			call cpymem(buffer_cursor,cursor,(mp3_bytespersample))
++			add cursor add
++			add buffer_cursor (l3_bytespersample) #WORD
++			add cursor_size (mp3_bytespersample)
+         endwhile
+         inc i
+     endwhile
+-    #actions if less than a frame readed
+-    #if get_ch_size!=frame_ch_size
+-    #    set i 0
+-    #    while i!=(mp3_channels)
+-    #        set buffer_cursor buffer
+-    #        set sizeadd (buffer_channel_size)
+-    #        mult sizeadd i
+-    #        add buffer_cursor sizeadd
+-    #        add buffer_cursor get_ch_size
+-            #
+-    #        set cursor_size get_ch_size
+-    #        while cursor_size!=frame_ch_size
+-    #            data silent_data=0
+-    #            data p_silent_data^silent_data
+-    #            call cpymem(buffer_cursor,p_silent_data,(mp3_bytespersample))
+-    #            add buffer_cursor (WORD)
+-    #            add cursor_size (mp3_bytespersample)
+-    #        endwhile
+-    #        inc i
+-    #    endwhile
+-    #endif
+ endfunction
+ 
+ #bool
+@@ -339,7 +324,7 @@ function l3_window_filter_subband(sd buf
+     sd i=31
+     while i>=0
+         setcall value short_get_to_int(buf)
+-        add buf (WORD)
++        add buf (l3_bytespersample) #WORD
+         setcall value shl(value,16)
+         set index i
+         add index off
+--- ovideo-1.orig/src/media/mpeg-mp3_iteration.oc
++++ ovideo-1/src/media/mpeg-mp3_iteration.oc
+@@ -11,14 +11,16 @@ import "mp3_gr_info_itemGet" mp3_gr_info
+ import "l3_enc" l3_enc
+ import "mp3_xrabs" mp3_xrabs
+ import "mult64_highint_rounded" mult64_highint_rounded
+-
++import "stage_sound_channels" stage_sound_channels
+ function mp3_iteration(sd mdct_freq,sd mean_bits)
+-    sd ResvSize=0
+-    sd ResvMax=0
+-    sd xr
+-    sd channel=mp3_channels
+-    while channel>0
+-        dec channel
++	sd ResvSize=0
++	sd ResvMax=0
++	sd xr
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	sd mdct_freq_granule_size=mdct_freq_channel_size;mult mdct_freq_granule_size mp3_channels
++	sd channel;set channel mp3_channels
++	while channel>0
++		dec channel
+         set xr (mdct_freq_channel_size)
+         mult xr channel
+         add xr mdct_freq
+@@ -72,7 +74,7 @@ function mp3_iteration(sd mdct_freq,sd m
+             #
+             sd value
+             set value mean_bits
+-            div value (mp3_channels)
++            divu value mp3_channels
+             subcall value mp3_gr_info_itemGet(gr_info,(gr_info_part2_3_length))
+             add ResvSize value
+             #
+@@ -81,7 +83,7 @@ function mp3_iteration(sd mdct_freq,sd m
+             add quantizerStepSize 210
+             call mp3_gr_info_itemSet(gr_info,(gr_info_global_gain),quantizerStepSize)
+             #
+-            add xr (mdct_freq_granule_size)
++            add xr mdct_freq_granule_size
+             inc granule
+         endwhile
+     endwhile
+@@ -92,7 +94,8 @@ endfunction
+ #max_bits
+ function mp3_ResvMaxBits(sd mean_bits)
+     sd max_bits
+-    div mean_bits (mp3_channels)
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	divu mean_bits mp3_channels
+     set max_bits mean_bits
+     if max_bits>4095
+         set max_bits 4095
+@@ -112,13 +115,14 @@ endfunction
+ function mp3_ResvFrameEnd(sd ResvSize,sd ResvMax,sd mean_bits)
+     #just in case mean_bits is odd, this is necessary...
+     sd value
+-    if (mp3_channels)=2
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	if mp3_channels=2
+         set value mean_bits
+         and value 1
+         if value!=0
+             inc ResvSize
+         endif
+-    endif
++	endif
+     sd over_bits
+     set over_bits ResvSize
+     sub over_bits ResvMax
+--- ovideo-1.orig/src/media/mpeg-mp3_mdct.oc
++++ ovideo-1/src/media/mpeg-mp3_mdct.oc
+@@ -10,7 +10,7 @@ const ca_cs_units=8
+ const ca_cs_size=ca_cs_units*DWORD
+ 
+ import "mult64" mult64
+-
++import "stage_sound_channels" stage_sound_channels
+ function mp3_mdct(sd l3_sb_sample,sd mdct_freq)
+     sd l3_sb_gr
+     sd l3_sb_gr_1
+@@ -22,12 +22,15 @@ function mp3_mdct(sd l3_sb_sample,sd mdc
+     sd p_value^value
+     sd l3_sb_cursor_1
+     sd granule=0
++	sd mp3_channels;set mp3_channels stage_sound_channels((value_get))
++	sd l3_sb_sample_size=l3_sb_sample_channel_size;mult l3_sb_sample_size mp3_channels
++	sd mdct_freq_granule_size=mdct_freq_channel_size;mult mdct_freq_granule_size mp3_channels
+     while granule<2
+         set mdct_enc mdct_freq
+-        set sizeadd (mdct_freq_granule_size)
++        set sizeadd mdct_freq_granule_size
+         mult sizeadd granule
+         add mdct_enc sizeadd
+-        add mdct_enc (mdct_freq_granule_size)
++        add mdct_enc mdct_freq_granule_size
+         #
+         set l3_sb_gr l3_sb_sample
+         set sizeadd granule
+@@ -36,10 +39,10 @@ function mp3_mdct(sd l3_sb_sample,sd mdc
+         set l3_sb_gr_1 l3_sb_gr
+         add l3_sb_gr_1 (l3_sb_sample_granule_size)
+         #
+-        add l3_sb_gr (l3_sb_sample_size)
+-        add l3_sb_gr_1 (l3_sb_sample_size)
++        add l3_sb_gr l3_sb_sample_size
++        add l3_sb_gr_1 l3_sb_sample_size
+         #
+-        sd channel=mp3_channels
++        sd channel;set channel mp3_channels
+         while channel>0
+             dec channel
+             sub l3_sb_gr (l3_sb_sample_channel_size)
+@@ -193,7 +196,7 @@ function mp3_mdct(sd l3_sb_sample,sd mdc
+     sd from
+     sd to
+     set channel 0
+-    while channel!=(mp3_channels)
++    while channel!=mp3_channels
+         set from channel
+         mult from (l3_sb_sample_channel_size)
+         set to from
+--- ovideo-1.orig/src/media/mpeg-mp3_tables.oc
++++ ovideo-1/src/media/mpeg-mp3_tables.oc
+@@ -572,12 +572,19 @@ function mp3_tables_enwindow()
+     return p
+ endfunction
+ 
+-
++import "stage_sound_rate" stage_sound_rate
+ function scalefac_band_long()
+-    #Table B.8.c: 48 kHz
+-    data band={0,4,8,12,16,20,24,30,36,42,50,60,72,88,106,128,156,190,230,276,330,384,576}
+-    data p^band
+-    return p
++	sd samplerate;set samplerate stage_sound_rate((value_get))
++	if samplerate=32000
++		# Table B.8.a: 32 kHz
++		data band32={0,4,8,12,16,20,24,30,36,44,54,66,82,102,126,156,194,240,296,364,448,550,576}
++		vdata p32^band32
++		return p32
++	end
++	# Table B.8.c: 48 kHz
++	data band        ={0,4,8,12,16,20,24,30,36,42,50,60,72,88,106,128,156,190,230,276,330,384,576}
++	vdata p^band
++	return p
+ endfunction
+ function scalefac_band_long_get(sd index)
+     sd tab
+--- ovideo-1.orig/src/media/mpeg-mp3_wrap.oc
++++ ovideo-1/src/media/mpeg-mp3_wrap.oc
+@@ -7,17 +7,16 @@ include "../_include/include.h"
+ #bool
+ function mp3_init()
+     import "mp3_output" mp3_output
+-    import "mp3_allsize" mp3_allsize
++#    import "mp3_allsize" mp3_allsize
+     sd output
+-    const BUFFER_SIZE=4096
+-    sd size=BUFFER_SIZE
++    sd size=mp3_BUFFER_SIZE
+     import "memalloc" memalloc
+     setcall output memalloc(size)
+     if output=0
+         return 0
+     endif
+     call mp3_output((value_set),output)
+-    call mp3_allsize((value_set),size)
++#    call mp3_allsize((value_set),size)
+ 
+     import "l3_subband_init" l3_subband_init
+     call l3_subband_init()
+--- ovideo-1.orig/src/media/mpeg.oc
++++ ovideo-1/src/media/mpeg.oc
+@@ -2,7 +2,8 @@
+ format elfobj
+ 
+ 
+-#MPEG-4 encoder
++#MPEG-4 Advanced Simple Profile encoder
++#this was, comparing by constants like XVID_VOL_INTERLACING or XVID_VOP_HQACPRED, xvidcore, https://labs.xvid.com/project/
+ 
+ include "../_include/include.h"
+ 
+@@ -1451,27 +1452,30 @@ endfunction
+ 
+ ##########options
+ function mpeg_options(sd mem,sd *size)
+-    sd value
+-    sd p_value^value
+-    sd mem_sz^mem
+-    import "get_mem_int_advance" get_mem_int_advance
+-    sd err
+-
+-    setcall err get_mem_int_advance(p_value,mem_sz)
+-    if err!=(noerror)
+-        return 0
+-    endif
+-    call mpeg_single_tolerance((value_set),value)
+-
+-    setcall err get_mem_int_advance(p_value,mem_sz)
+-    if err!=(noerror)
+-        return 0
+-    endif
+-    call mpeg_group_tolerance((value_set),value)
++	sd value
++	sd p_value^value
++	sd mem_sz^mem
++	import "get_mem_int_advance" get_mem_int_advance
++	sd err
++	setcall err get_mem_int_advance(p_value,mem_sz)
++	if err=(noerror)
++		call mpeg_single_tolerance((value_set),value)
++		setcall err get_mem_int_advance(p_value,mem_sz)
++		if err=(noerror)
++			call mpeg_group_tolerance((value_set),value)
++			setcall err get_mem_int_advance(p_value,mem_sz)
++			if err=(noerror)
++				import "mp3_file_bool_set" mp3_file_bool_set
++				call mp3_file_bool_set(value)
++				return 1
++			end
++		end
++	end
++	return 0
+ endfunction
+ 
+ function mpeg_single_tolerance(sd action,sd value)
+-    data single_tolerance#1
++    data single_tolerance=3
+     if action=(value_set)
+         set single_tolerance value
+     else
+@@ -1479,7 +1483,7 @@ function mpeg_single_tolerance(sd action
+     endelse
+ endfunction
+ function mpeg_group_tolerance(sd action,sd value)
+-    data group_tolerance#1
++    data group_tolerance=3
+     if action=(value_set)
+         set group_tolerance value
+     else
+@@ -1508,6 +1512,17 @@ function mpeg_settings_init(sd vbox,sd *
+     setcall value mpeg_group_tolerance((value_get))
+     setcall scale hscalefield(hbox,0,256,1,value)
+     call mpeg_group_scale((value_set),scale)
++
++	importx "_gtk_check_button_new_with_label" gtk_check_button_new_with_label
++	valuexu mp3_toggle#1;setcall mp3_toggle gtk_check_button_new_with_label("MP3 File")
++	import "mp3_file_bool" mp3_file_bool
++	sd b;set b mp3_file_bool()
++	if b=(TRUE)
++		importx "_gtk_toggle_button_set_active" gtk_toggle_button_set_active
++		call gtk_toggle_button_set_active(mp3_toggle,(TRUE))
++	end
++	import "packstart_default" packstart_default
++	call packstart_default(vbox,mp3_toggle)
+ endfunction
+ function mpeg_settings_set()
+     import "file_write_forward_sys_folder_enter_leave" file_write_forward_sys_folder_enter_leave
+@@ -1519,22 +1534,28 @@ function mpeg_settings_set()
+ endfunction
+ 
+ function mpeg_settings_set_write(sd mpeg_fl)
+-    import "hscale_get" hscale_get
+-    sd value
+-    sd scale
+-    sd p_value^value
+-
+-    setcall scale mpeg_single_scale((value_get))
+-    setcall value hscale_get(scale)
+-    call mpeg_single_tolerance((value_set),value)
+-
+-    call file_write(p_value,4,mpeg_fl)
+-
+-    setcall scale mpeg_group_scale((value_get))
+-    setcall value hscale_get(scale)
+-    call mpeg_group_tolerance((value_set),value)
+-
+-    call file_write(p_value,4,mpeg_fl)
++	import "hscale_get" hscale_get
++	sd value
++	sd scale
++	sd p_value^value
++	sd err
++
++	setcall scale mpeg_single_scale((value_get))
++	setcall value hscale_get(scale)
++	call mpeg_single_tolerance((value_set),value)
++	set err file_write(p_value,4,mpeg_fl)
++	if err=(noerror)
++		setcall scale mpeg_group_scale((value_get))
++		setcall value hscale_get(scale)
++		call mpeg_group_tolerance((value_set),value)
++		set err file_write(p_value,4,mpeg_fl)
++		if err=(noerror)
++			importx "_gtk_toggle_button_get_active" gtk_toggle_button_get_active
++			sd f;set f gtk_toggle_button_get_active(mpeg_settings_init.mp3_toggle)
++			call mp3_file_bool_set(f)
++			call file_write(#f,4,mpeg_fl)
++		end
++	end
+ endfunction
+ 
+ function mpeg_single_scale(sd action,sd value)
+--- ovideo-1.orig/src/obj/containers.oc
++++ ovideo-1/src/obj/containers.oc
+@@ -127,28 +127,25 @@ function dialogfield(ss title,sd modal_f
+ endfunction
+ #true to not propagate
+ function dialogfield_modal_texter_expose(sd widget)
+-	call dialogfield_modal_texter_drawtext((value_get),widget)
+-	return (TRUE)
++	sd b;set b dialogfield_modal_texter_drawtext((value_get),widget)
++	return b
+ endfunction
+ import "cpymem" cpymem
+ import "slen" slen
+ #const modal_texter_draw_data_size=100
+-function dialogfield_modal_texter_drawtext(sd procedure,sd text)
+-	char text_data#22+modal_texter_mark+1
+-	vstr strtext^text_data
++function dialogfield_modal_texter_drawtext(sd procedure,sd data)
++	vstr main_thread_text=NULL
++#	char text_data#22+modal_texter_mark+1
++#	vstr strtext^text_data
+ 	if procedure=(value_set)
+-	#this is not main thread
+-		sd len
+-		setcall len slen(text)
+-		inc len
+-		call cpymem(strtext,text,len)
+-	elseif procedure=(value_get)
+-	#this is main thread
+-		import "draw_expose_text" draw_expose_text
+-		call draw_expose_text(text,strtext)
++		set main_thread_text data
+ 	else
+-	#value_unset
+-		set strtext# 0
++		if main_thread_text!=(NULL) #was not our call
++			import "draw_expose_text" draw_expose_text
++			call draw_expose_text(data,main_thread_text)
++			return (TRUE)  #was handled, no more propagation required
++		end
++		return (FALSE)
+ 	endelse
+ endfunction
+ #
+@@ -162,13 +159,13 @@ function dialogfield_modal_texter_init(s
+     import "connect_signal" connect_signal
+     sd draw
+     setcall draw drawfield(vbox)
+-    call dialogfield_modal_texter_drawtext((value_unset))
++#    call dialogfield_modal_texter_drawtext((value_unset))
+     #old remark: it's not ok to access at the same time txt[modal_texter_draw_data_size] by threads but it's no problem
+     #import "setmemzero" setmemzero
+     #call setmemzero(txt,(modal_texter_draw_data_size))
+     call dialog_modal_texter_drawwidget((value_set),draw)
+     #
+-    str expose="expose-event"
++    vstr expose="expose-event"
+     data exp^dialogfield_modal_texter_expose
+     call connect_signal(draw,expose,exp)
+     #
+@@ -195,31 +192,50 @@ function dialog_modal_texter_drawwidget(
+         return drawwidget
+     endelse
+ endfunction
++function dup_str(ss text)
++	import "memalloc" memalloc
++	importx "_strlen" strlen
++	importx "_memcpy" memcpy
++	sd len;set len strlen(text);inc len
++	sd mem;set mem memalloc(len) #cannot double thread the text
++	if mem!=(NULL)
++		call memcpy(mem,text,len)
++		return mem
++	end
++	return (NULL)
++end
+ function dialog_modal_texter_draw(ss text)
+-#	sd widget
+-#	setcall widget dialog_modal_texter_drawwidget((value_get))
+-#	if widget!=0
+-	call dialogfield_modal_texter_drawtext((value_set),text)
+-	importx "_g_idle_add" g_idle_add
+-	#the drawing commands must be called from the main thread or sometimes will crash
+-	call g_idle_add(dialog_modal_texter_draw_main_thread,(void))
+-#	endif
++	char counter=0
++	if counter<1
++		sd mem;set mem dup_str(text)
++		if mem!=(NULL)
++			importx "_g_idle_add" g_idle_add
++			#the drawing commands must be called from the main thread or sometimes will crash
++			call g_idle_add(dialog_modal_texter_draw_main_thread,mem)
++			inc counter
++		endif
++	end
+ endfunction
+ #FALSE=stop timeout
+-function dialog_modal_texter_draw_main_thread(sd *data)
++function dialog_modal_texter_draw_main_thread(sd data)
+ 	sd widget
+ 	setcall widget dialog_modal_texter_drawwidget((value_get))
+ 	if widget!=0 #this,at audiovideo,can come later in main after g_thread_join/gtk_widget_destroy
++		call dialogfield_modal_texter_drawtext((value_set),data)
+ 		import "widget_redraw" widget_redraw
+ 		importx "_gtk_widget_get_window" gtk_widget_get_window
+ 		call widget_redraw(widget)
+ 		sd window
+-		setcall window gtk_widget_get_window(widget)
++		setcall window gtk_widget_get_window(widget) #Returns the widget's window if it is realized, NULL otherwise.
+ 		if window!=0
+ 			importx "_gdk_window_process_updates" gdk_window_process_updates
+ 			call gdk_window_process_updates(window,(FALSE))
+ 		endif
++		call dialogfield_modal_texter_drawtext((value_set),(NULL)) #that is an expose gdk event
+ 	endif
++	importx "_free" free
++	call free(data)
++	dec dialog_modal_texter_draw.counter
+ 	return (FALSE)
+ endfunction
+ 
+--- ovideo-1.orig/src/obj/items.oc
++++ ovideo-1/src/obj/items.oc
+@@ -196,18 +196,23 @@ endfunction
+ 
+ importx "_gtk_entry_get_text" gtk_entry_get_text
+ 
+-#void
+ importx "_gtk_entry_set_text" gtk_entry_set_text
+-#edit texter
++importx "_g_thread_self" g_thread_self
+ import "get_current_texter_pointer" get_current_texter_pointer
+-function texter(ss text)
+-	sd info#1
+-	setcall info get_current_texter_pointer()
+-	call gtk_entry_set_text(info#,text)
++import "main_thread" main_thread
++#void
++function texter(ss text) #edit texter
++	sd t;set t g_thread_self()
++	sd t1;set t1 main_thread()
++	if t=t1
++		sd info#1
++		setcall info get_current_texter_pointer()
++		call gtk_entry_set_text(info#,text) #can't gtk from another thread, here at errors
++	end
+ 	call printer(text)
+ endfunction
++importx "_printf" printf
+ function printer(ss text)
+-    importx "_printf" printf
+     call printf(text)
+     char nl={0xa,0}
+     str newline^nl
+--- ovideo-1.orig/src/util/numbers.oc
++++ ovideo-1/src/util/numbers.oc
+@@ -547,22 +547,22 @@ endfunction
+ 
+ #mathings
+ 
+-#pos/-1
+-function int_in_set(sd int,sd set,sd set_count)
+-    if set_count=0
+-        return -1
+-    endif
++#pos
++function int_in_set(sd int,sd set) #,sd set_count)
++#    if set_count=0
++#        return -1
++#    endif
+     sd start
+     set start set
+     while set#!=int
+         add set (DWORD)
+-        dec set_count
+-        if set_count=0
+-            return -1
+-        endif
++#        dec set_count
++#        if set_count=0
++#            return -1
++#        endif
+     endwhile
+     sub set start
+-    div set (DWORD)
++    divu set (DWORD)
+     return set
+ endfunction
+ 
+--- ovideo-1.orig/src/util/update.oc
++++ ovideo-1/src/util/update.oc
+@@ -87,7 +87,7 @@ function update_path()
+     return update_fname
+ endfunction
+ function update_mem()
+-    data mem#1
++    data mem=1
+     return #mem
+ endfunction
+ import "openfile" openfile
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.191
+\ No newline at end of file
++1.192
+\ No newline at end of file
