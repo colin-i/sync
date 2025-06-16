@@ -1,0 +1,49 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ sirc (1-v17.1) jammy; urgency=medium
+ .
+   * deprecated after jammy
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-16
+
+--- sirc-1.orig/s/inc/gtk.h
++++ sirc-1/s/inc/gtk.h
+@@ -74,7 +74,8 @@ typedef void (*GDestroyNotify)(gpointer
+ typedef void *GdkPixbufDestroyNotify;
+ typedef gboolean(*GSourceFunc)(gpointer user_data);
+ 
+-typedef enum{G_APPLICATION_DEFAULT_FLAGS = 0}
++//typedef enum{G_APPLICATION_DEFAULT_FLAGS = 0} //at ubuntu jammy at the moment this is not defined
++typedef enum{G_APPLICATION_FLAGS_NONE}
+  GApplicationFlags;
+ typedef enum{G_CONNECT_SWAPPED = 1 << 1}
+  GConnectFlags;//_BEFORE G_CONNECT_AFTER = 1 << 0,
+--- sirc-1.orig/s/main.c
++++ sirc-1/s/main.c
+@@ -4197,7 +4197,7 @@ int main (int    argc,
+ 	if(OPENSSL_init_ssl(OPENSSL_INIT_NO_LOAD_SSL_STRINGS,nullptr)==1){
+ 		struct stk_s ps;
+ 		GtkApplication *app;
+-		app = gtk_application_new (nullptr, G_APPLICATION_DEFAULT_FLAGS);//G_APPLICATION_FLAGS_NONE
++		app = gtk_application_new (nullptr, G_APPLICATION_FLAGS_NONE);
+ 
+ 		//if(app!=nullptr){
+ 		ps.args[autoconnect_id]="autoconnect";ps.args_short[autoconnect_id]='a';
