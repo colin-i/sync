@@ -1,0 +1,90 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-v19) jammy; urgency=medium
+ .
+   * add arg1 f helper
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-21
+
+--- torra-1.orig/README.md
++++ torra-1/README.md
+@@ -39,6 +39,13 @@ dnf install python3-torra
+ And having gtk4.\
+ \
+ \
++On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/irc-ssl/releases). Or:
++```sh
++yay -Sy python-torra
++```
++Will also install gtk4 if is not already installed.\
++\
++\
+ From [PyPI](https://pypi.org/project/torra):
+ ```sh
+ pip3 install torra
+--- torra-1.orig/info.md
++++ torra-1/info.md
+@@ -1,4 +1,4 @@
+ Torrent client.\
+-To specify another torrent list at start, launch with an argument (example: ```torra ~/torrents.txt```)\
++To specify another torrent list at start, launch with an argument, e.g. ```torra ~/torrents.txt```, or ```torra f ~/torrents.txt```\
+ To remove configuration launch ```torra --remove-config```.\
+ [Git Page](https://github.com/colin-i/tora)
+--- torra-1.orig/setup.py
++++ torra-1/setup.py
+@@ -1,6 +1,6 @@
+-ver="1.0.38"
++ver="1.0.39"
+ README="""Torrent client.\\
+-To specify another torrent list at start, launch with an argument (example: ```torra ~/torrents.txt```)\\
++To specify another torrent list at start, launch with an argument, e.g. ```torra ~/torrents.txt```, or ```torra f ~/torrents.txt```\\
+ To remove configuration launch ```torra --remove-config```.\\
+ [Git Page](https://github.com/colin-i/tora)
+ """
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -41,11 +41,18 @@ def activate(app):
+ 	layout.layout(window)
+ 
+ def main():
++	if os.getenv("ENTRY_DEBUG"):
++		sys.stdout.write("ENTRY_DEBUG marker\n")
+ 	if len(sys.argv)>1:
+ 		if sys.argv[1]=="--remove-config":
+ 			cleanup()
+ 			return
+-		listtor.config_filename=sys.argv[1].replace('\\','') #the same? pdb -m torra.main \\-\\-remove-config
++		fname=sys.argv[1]
++		if len(fname)==1:
++			if len(sys.argv)>2:
++				if fname[0]=='f':
++					fname=sys.argv[2]
++		listtor.config_filename=fname
+ 	os.makedirs(confs.get_root_dir(),exist_ok=True)
+ 	a=k.gtk_application_new(None,0)
+ 	actv=b"activate"
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.38
+\ No newline at end of file
++1.0.39
+\ No newline at end of file
