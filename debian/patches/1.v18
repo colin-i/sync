@@ -1,0 +1,76 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-v18) jammy; urgency=medium
+ .
+   * premade setup.py
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-21
+
+--- /dev/null
++++ torra-1/setup.py
+@@ -0,0 +1,47 @@
++ver="1.0.38"
++README="""Torrent client.\\
++To specify another torrent list at start, launch with an argument (example: ```torra ~/torrents.txt```)\\
++To remove configuration launch ```torra --remove-config```.\\
++[Git Page](https://github.com/colin-i/tora)
++"""
++
++#this file will make setup.py after using github colin-i test/pyp/pypre
++#setuptools.setup is looking at one argv parameter; to "build" and "install":
++#python3 setup.py install
++
++#libtorrent from pypi has bindings and library now, before was:
++#	python-libtorrent-bin is at extra require now, but, if was at install requires:
++#		ok, package python-libtorrent-bin is old. install with pip install --no-deps but add somehow appdirs
++#			and python-libtorrent on ubuntu
++#			if it's not old python-libtorrent at pip:
++#				that+(libtorrent-rasterbar2.0 on ubuntu) can be a solution
++
++pkname='torra'
++
++from setuptools import setup
++setup(name=pkname,
++	version=ver,
++	packages=[pkname],
++	#opt
++	python_requires='>=3',
++	install_requires=["appdirs>=1.4.3"
++		,"libtorrent"
++		#python-libtorrent-bin it's not updated at pypi (old 3.9)
++		#,'python-libtorrent-bin>=1.2.9' #;platform_system=="Linux" and platform_machine=="x86_64"'
++		#,"python-apt"#is from 2012 0.7.8, missing DistUtilsExtra, sudo apt install python-apt is 2.2., verify with pip3 install python-apt
++	],
++	#extras_require={
++	#	'bin': ['python-libtorrent-bin>=1.2.9']
++	#	#,'apt': ['python-apt']
++	#},
++	description='Torrent client',
++	long_description=README,
++	long_description_content_type="text/markdown",
++	url='https://github.com/colin-i/tora',
++	author='cb',
++	author_email='costin.botescu@gmail.com',
++	license='MIT',
++	entry_points = {
++		'console_scripts': [pkname+'='+pkname+'.main:main']
++	}
++)
