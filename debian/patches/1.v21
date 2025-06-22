@@ -1,0 +1,60 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-v21) jammy; urgency=medium
+ .
+   * flush earlier
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-22
+
+--- torra-1.orig/setup.py
++++ torra-1/setup.py
+@@ -1,4 +1,4 @@
+-ver="1.0.40"
++ver="1.0.39"
+ README="""Torrent client.\\
+ To remove configuration launch ```torra --remove-config```. There is also ```torra --debug```.\\
+ To specify another torrent list at start, launch with an argument, e.g. ```torra ~/torrents.txt```, or ```torra f ~/torrents.txt```\\
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -41,15 +41,13 @@ def activate(app):
+ 	layout.layout(window)
+ 
+ def main():
+-	#appimage is not passing this on github test, local appimage test is ok
+-	#if os.getenv("ENTRY_DEBUG"):
+-	#	sys.stdout.write("ENTRY_DEBUG marker\n")
+ 	if len(sys.argv)>1:
+ 		if sys.argv[1]=="--remove-config":
+ 			cleanup()
+ 			return
+ 		if sys.argv[1]=="--debug":
+ 			sys.stdout.write("ENTRY_DEBUG marker\n")
++			sys.stdout.flush()
+ 		else:
+ 			fname=sys.argv[1]
+ 			if len(fname)==1:
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.40
+\ No newline at end of file
++1.0.39
+\ No newline at end of file
