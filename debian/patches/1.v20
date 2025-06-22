@@ -1,0 +1,97 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-v20) jammy; urgency=medium
+ .
+   * appimage fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-22
+
+--- torra-1.orig/README.md
++++ torra-1/README.md
+@@ -53,7 +53,7 @@ pip3 install torra
+ And having gtk4.\
+ \
+ \
+-On other linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/tora/releases).
++On other linux distributions with gtk4, <i>.AppImage</i> file from [releases](https://github.com/colin-i/tora/releases).
+ 
+ ## From source
+ Using libtorrent (arvidn) with python bindings.\
+--- torra-1.orig/info.md
++++ torra-1/info.md
+@@ -1,4 +1,4 @@
+ Torrent client.\
++To remove configuration launch ```torra --remove-config```. There is also ```torra --debug```.\
+ To specify another torrent list at start, launch with an argument, e.g. ```torra ~/torrents.txt```, or ```torra f ~/torrents.txt```\
+-To remove configuration launch ```torra --remove-config```.\
+ [Git Page](https://github.com/colin-i/tora)
+--- torra-1.orig/setup.py
++++ torra-1/setup.py
+@@ -1,7 +1,7 @@
+-ver="1.0.39"
++ver="1.0.40"
+ README="""Torrent client.\\
++To remove configuration launch ```torra --remove-config```. There is also ```torra --debug```.\\
+ To specify another torrent list at start, launch with an argument, e.g. ```torra ~/torrents.txt```, or ```torra f ~/torrents.txt```\\
+-To remove configuration launch ```torra --remove-config```.\\
+ [Git Page](https://github.com/colin-i/tora)
+ """
+ 
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -41,18 +41,22 @@ def activate(app):
+ 	layout.layout(window)
+ 
+ def main():
+-	if os.getenv("ENTRY_DEBUG"):
+-		sys.stdout.write("ENTRY_DEBUG marker\n")
++	#appimage is not passing this on github test, local appimage test is ok
++	#if os.getenv("ENTRY_DEBUG"):
++	#	sys.stdout.write("ENTRY_DEBUG marker\n")
+ 	if len(sys.argv)>1:
+ 		if sys.argv[1]=="--remove-config":
+ 			cleanup()
+ 			return
+-		fname=sys.argv[1]
+-		if len(fname)==1:
+-			if len(sys.argv)>2:
+-				if fname[0]=='f':
+-					fname=sys.argv[2]
+-		listtor.config_filename=fname
++		if sys.argv[1]=="--debug":
++			sys.stdout.write("ENTRY_DEBUG marker\n")
++		else:
++			fname=sys.argv[1]
++			if len(fname)==1:
++				if len(sys.argv)>2:
++					if fname[0]=='f':
++						fname=sys.argv[2]
++			listtor.config_filename=fname
+ 	os.makedirs(confs.get_root_dir(),exist_ok=True)
+ 	a=k.gtk_application_new(None,0)
+ 	actv=b"activate"
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.39
+\ No newline at end of file
++1.0.40
+\ No newline at end of file
