@@ -1,0 +1,593 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ dicopp (1-v17) jammy; urgency=medium
+ .
+   * sync last changes
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-27
+
+--- dicopp-1.orig/README.md
++++ dicopp-1/README.md
+@@ -10,23 +10,54 @@ Install:
+ ```sh
+ sudo apt-get install dicopp
+ ```
++Will also install eiskaltdcpp-daemon/libgtk-4-1 if are not already installed.\
+ \
+-On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/dico/releases).
+ \
+-On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/dico/releases).
++On openSUSE, run the following as __root__:\
++For openSUSE Tumbleweed:
+ ```sh
+-yum install dicopp-*.*.rpm
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
+ ```
++For openSUSE Leap:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
++```
++And:
++```sh
++zypper refresh
++zypper install python313-dicopp
++```
++Replace *python313* with *python312* or *python311* if needed.\
++Will also install eiskaltdcpp-daemon/libgtk-4-1 if are not already installed.\
+ \
+-From pypi:
++\
++On Fedora, run the following as __root__:
++```sh
++dnf copr enable colin/project
++dnf install python3-dicopp
++```
++And having eiskaltdcpp/gtk4.\
++\
++\
++On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/dico/releases). Or:
++```sh
++yay -Sy python-dicopp
++```
++Will also install gtk4 if is not already installed.\
++\
++\
++From [PyPI](https://pypi.org/project/dicopp):
+ ```sh
+ pip3 install dicopp
+ ```
+-And having the dependencies.
++And having eiskaltdcpp/gtk4. Also working on Windows MinGW64 MSys2 with eiskaltdcpp from official installer and the daemon to be in PATH.\
++\
++\
++On othern linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/dico/releases).
+ 
+ ## From source
+-Using eiskaltdcpp-daemon through json rpc and gtk4 bound with PyGObject.\
+-With setup.py or the other python setup script.
++Using gtk4 bound with PyGObject and eiskaltdcpp through json rpc.\
++More info at setup.pre.py.
+ 
+ ## [Info](https://github.com/colin-i/dico/blob/master/info.md)
+ 
+--- dicopp-1.orig/dicopp/base.py
++++ dicopp-1/dicopp/base.py
+@@ -40,7 +40,7 @@ def write(win):
+ 		json.dump(d, write_file)
+ 
+ def read(win):
+-	get_client_dir().mkdir(exist_ok=True)
++	os.makedirs(get_client_dir(),exist_ok=True)
+ 	try:
+ 		with open(get_client()) as f:
+ 			d=json.load(f)
+@@ -58,6 +58,7 @@ def read(win):
+ 			com.restore(d)
+ 			return d
+ 	except Exception:
++		print("error at json read "+get_client())
+ 		return None
+ def read2(d):
+ 	if d:
+--- dicopp-1.orig/dicopp/con.py
++++ /dev/null
+@@ -1,20 +0,0 @@
+-
+-from gi.repository import Gtk
+-
+-from . import nick
+-
+-passive=Gtk.EntryBuffer()
+-def store(d):
+-	d['passive']='1' if passive.get_text() else ''
+-def restore(d):
+-	passive.set_text(d['passive'],-1)
+-
+-def ini(se):
+-	z='IncomingConnections'
+-	if passive.get_text():
+-		return nick.see(se,z,'int',"3")
+-	s = se.find(z)
+-	if s==None:
+-		return False
+-	se.remove(s)
+-	return True
+--- /dev/null
++++ dicopp-1/dicopp/connect.py
+@@ -0,0 +1,20 @@
++
++from gi.repository import Gtk
++
++from . import nick
++
++passive=Gtk.EntryBuffer()
++def store(d):
++	d['passive']='1' if passive.get_text() else ''
++def restore(d):
++	passive.set_text(d['passive'],-1)
++
++def ini(se):
++	z='IncomingConnections'
++	if passive.get_text():
++		return nick.see(se,z,'int',"3")
++	s = se.find(z)
++	if s==None:
++		return False
++	se.remove(s)
++	return True
+--- dicopp-1.orig/dicopp/daem.py
++++ dicopp-1/dicopp/daem.py
+@@ -3,16 +3,29 @@ from gi.repository import Gtk
+ import subprocess
+ import shlex
+ import psutil
++import sys
++import appdirs
+ 
+ data=Gtk.EntryBuffer()#text=''
+ 
+ from . import sets
+ from . import hubscon
+ from . import reqs
++from . import stor2
+ 
+ name='eiskaltdcpp-daemon'
+ instobj=None
+ 
++def ini():
++	if sys.platform=='win32':
++		global name
++		name='eiskaltdcpp-daemon.exe'
++		#stor2.name=appdirs.user_config_dir('EiskaltDC++',None,roaming=True)
++		a=appdirs.user_config_dir('EiskaltDC++',roaming=True)
++		import os
++		stor2.name=os.path.dirname(a)
++	else:
++		stor2.name=appdirs.user_config_dir('eiskaltdc++')
+ def confs():
+ 	global keep
+ 	keep=data.get_text()
+@@ -45,13 +58,15 @@ def dopen():
+ 		open()
+ def dclose():
+ 	close(True)
++def dclose_owned():
++	close(False)
+ def open():
+ 	seq=shlex.split(data.get_text())
+ 	args=[name]
+ 	for s in seq:
+ 		args.append(s)
+ 	global instobj
+-	instobj=subprocess.Popen(args)#otherwise, cannot make it works
++	instobj=subprocess.Popen(args)
+ def close(inter):
+ 	try:
+ 		t=10
+--- dicopp-1.orig/dicopp/first.py
++++ dicopp-1/dicopp/first.py
+@@ -1,9 +1,11 @@
+ 
+ from . import stor2
+-from . import nick
+ 
+ import os.path
+ 
++#was see some DCPlusPlus.xml creations but at older versions, now can't bring that back
++#where? Nick(without this cannot connect nowhere),IncomingConnections(activ/pasiv this is also vital),Share(to share something, can be vital) TotalUpload(this is in confs)
++
+ a='''<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+ <DCPlusPlus>
+ 	<Settings>
+@@ -20,12 +22,31 @@ b='''</Nick>
+ def ini():
+ 	f=stor2.get_file()
+ 	if os.path.isfile(f)==False:
+-		d=os.path.dirname(f)
+-		import pathlib
+-		pathlib.Path(d).mkdir(exist_ok=True)#parents=True
+-		#
+-		import xml.etree.ElementTree as ET
+-		s=a+nick.name.get_text()+b
+-		e=ET.fromstring(s)
+-		t = ET.ElementTree(element=e)
+-		t.write(f)
++		from . import daem
++		try:
++			daem.dopen()
++		except Exception:
++			print("daemon open error at start")
++			return 0
++		import time
++		print("no daemon confs. sleep 5")
++		time.sleep(5)
++		if os.path.isfile(f):
++			return -1
++		if daem.absent: #else will be same error
++			daem.dclose_owned()
++
++			import xml.etree.ElementTree as ET
++			from . import nick
++			s=a+nick.name.get_text()+b
++			e=ET.fromstring(s)
++			t = ET.ElementTree(element=e)
++			try:
++				t.write(f)
++				return 1
++			except Exception:
++				pass
++		from . import base
++		print("cannot write to "+f+" , if is the portable daemon then set \"ext_file\" in "+base.get_client()+" to point to the right location")
++		return 0
++	return 1
+--- dicopp-1.orig/dicopp/hubs.py
++++ dicopp-1/dicopp/hubs.py
+@@ -149,6 +149,11 @@ def ini_async():
+ 			socket.setdefaulttimeout(None) #this will wait like default, ~2 minutes?
+ 	if addr.get_text()==predefined_list:
+ 		urlresult=ini_predefined()
++		if urlresult==None:
++			try:
++				urlresult=urllib.request.urlopen(addr2.get_text())
++			except Exception:
++				print("after predefined, urlopen 2 exception")
+ 	else:
+ 		urlresult=ini_urls(addr.get_text(),addr2.get_text())
+ 	#GLib.idle_add(ini_main,(urlresult,threading.current_thread())) why was needed to compare async_th and th?
+--- dicopp-1.orig/dicopp/main.py
++++ dicopp-1/dicopp/main.py
+@@ -21,7 +21,7 @@ from . import first
+ 
+ def quit(widget, mainloop):
+ 	base.write(widget)
+-	daem.close(False)#in base.write is log, can require daemon open
++	daem.dclose_owned() #in base.write is log, can require daemon open
+ 	limit.close()
+ 	hubscon.close()
+ 	search.close()
+@@ -31,60 +31,88 @@ def quit(widget, mainloop):
+ 	return True
+ 
+ def main():
+-	if len(sys.argv)>1:
+-		cleanup()
+-		return
+-	first.ini()
+-	mainloop = GLib.MainLoop()
++	daem.ini()
+ 	win = Gtk.Window()
+-	win.set_title('Direct Connect')
+-	d=base.read(win)
+-	layout.show(win)
+-	limit.open(win)
+-	log.ini()
+-	stor2.ini()
+-	nick.ini(False)
+-	hubs.ini()
+-	win.connect('close-request', quit, mainloop)
+-	try:
+-		daem.dopen()
+-	except Exception:
+-		print("daemon open error")
+-		return
+-	base.read2(d)#after daemon start
+-	win.show()
+-	mainloop.run()
+-
++	d=base.read(win)  #needed at cleanup(stor2)/first(stor2/nick)/...
++	if len(sys.argv)>1:
++		if sys.argv[1]=="--remove-config":
++			cleanup()
++			return
++		sys.stdout.write("ENTRY_DEBUG marker\n")
++		sys.stdout.flush()
++	n=first.ini()
++	if n:
++		mainloop = GLib.MainLoop()
++		win.set_title('Direct Connect')
++		layout.show(win)
++		limit.open(win)
++		log.ini()
++		stor2.ini()
++		nick.ini(False if n==1 else True)
++		hubs.ini()
++		win.connect('close-request', quit, mainloop)
++		try:
++			daem.dopen()
++		except Exception:
++			print("daemon open error")
++			return
++		base.read2(d)#after daemon start
++		win.show()
++		mainloop.run()
++def get_yes():
++	print("yes ?");
++	str = ""
++	while True:
++		x = sys.stdin.read(1) # reads one byte at a time, similar to getchar()
++		if x == '\n':
++			break
++		str += x
++	return str
+ def cleanup():
+ 	#remove config and exit
++	r=" removed"
+ 	c=base.get_client_dir()
+ 	if os.path.isdir(c):
+-		print("Would remove:");
++		print("Would remove(dirs only if empty):");
+ 		f=base.get_client()
+ 		if os.path.isfile(f):
+ 			print(f)
+ 		else:
+ 			f=None
+ 		print(c)
+-		print("yes ?");
+-		str = ""
+-		while True:
+-			x = sys.stdin.read(1) # reads one byte at a time, similar to getchar()
+-			if x == '\n':
+-				break
+-			str += x
++		basepath=os.path.dirname(c)
++		basepathname=os.path.basename(basepath)
++		if basepathname[0]=='.' or basepathname==base.pkname: #same like torra
++			print(basepath)
++		else:
++			basepath=None
++		str=get_yes()
+ 		if str=="yes":
+-			r=" removed"
+ 			if f:
+ 				os.remove(f)
+ 				print(f+r)
+ 			if len(os.listdir(path=c))==0:
+ 				os.rmdir(c) #OSError if not empty
+ 				print(c.__str__()+r)
++				if basepath:
++					if len(os.listdir(path=basepath))==0:
++						os.rmdir(basepath)
++						print(basepath.__str__()+r)
++					else:
++						print(basepath.__str__()+" is not empty.")
+ 			else:
+ 				print(c.__str__()+" is not empty.")
+ 		else:
+ 			print("expecting \"yes\"")
++	f2=stor2.get_file() #default or get_text
++	if os.path.isfile(f2):
++		print("Was this extern file, "+f2+" ,made by dicopp? Remove?")
++		str=get_yes()
++		if str=="yes":
++			os.remove(f2)
++			print(f2+r)
++		else:
++			print("expecting \"yes\"")
+ 
+ if __name__ == "__main__":
+     main()
+--- dicopp-1.orig/dicopp/nick.py
++++ dicopp-1/dicopp/nick.py
+@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
+ from . import stor2
+ from . import daem
+ from . import share
+-from . import con
++from . import connect
+ 
+ def rand4(a):
+ 	s=str(a)
+@@ -26,7 +26,7 @@ def ini(restart):
+ 	se = root.find(stor2.set)
+ 	b=see(se,'Nick','string',name.get_text())
+ 	b=share.ini(root) or b
+-	b=con.ini(se) or b
++	b=connect.ini(se) or b
+ 	#Slots not working r|=see(se,'Slots','int',slots)
+ 	if b:
+ 		if restart:
+--- dicopp-1.orig/dicopp/stor2.py
++++ dicopp-1/dicopp/stor2.py
+@@ -1,21 +1,22 @@
+ 
+ from gi.repository import Gtk
+ 
++#name='eiskaltdc++' set at daem.ini
++
+ import xml.etree.ElementTree as ET
+-import appdirs
+ import os.path
+ 
+ from . import limit
+ from . import nick
+ from . import sets
+-from . import con
++from . import connect
+ from . import share
+ 
+ file=Gtk.EntryBuffer()
+ set='Settings'
+ 
+ def get_file_default():
+-	return os.path.join(appdirs.user_config_dir('eiskaltdc++'),'DCPlusPlus.xml')
++	return os.path.join(name,'DCPlusPlus.xml')
+ def get_file():
+ 	a=file.get_text()
+ 	if a:
+@@ -36,7 +37,7 @@ def confs():
+ 	g.attach(Gtk.Label(halign=Gtk.Align.START,label="Nick name"),0,1,1,1)
+ 	g.attach(sets.entries(nick.name),1,1,1,1)
+ 	g.attach(Gtk.Label(halign=Gtk.Align.START,label="Passive (blank=False)"),0,2,1,1)
+-	g.attach(sets.entries(con.passive),1,2,1,1)
++	g.attach(sets.entries(connect.passive),1,2,1,1)
+ 	g.attach(Gtk.Label(halign=Gtk.Align.START,label="Share folder"),0,3,1,1)
+ 	g.attach(sets.entries(share.folder),1,3,1,1)
+ 	f.set_child(g)
+@@ -44,12 +45,12 @@ def confs():
+ def store(d):
+ 	d['ext_file']=file.get_text()
+ 	nick.store(d)
+-	con.store(d)
++	connect.store(d)
+ 	share.store(d)
+ def restore(d):
+ 	file.set_text(d['ext_file'],-1)
+ 	nick.restore(d)
+-	con.restore(d)
++	connect.restore(d)
+ 	share.restore(d)
+ 
+ def confs_loc():
+--- dicopp-1.orig/info.md
++++ dicopp-1/info.md
+@@ -1,4 +1,4 @@
+ DC++ client.\
+ Using [eiskaltdcpp-daemon](https://github.com/eiskaltdcpp/eiskaltdcpp).\
+-To remove configuration launch the program with one argument.\
++To remove configuration launch ```dicopp --remove-config```.\
+ [Git Page](https://github.com/colin-i/dico)
+--- /dev/null
++++ dicopp-1/setup-test.py
+@@ -0,0 +1,14 @@
++
++import subprocess
++import sys
++test=subprocess.run([sys.executable,'-m','pip','install','PyGObject>=3.40'])
++if test.returncode:
++	exit(test.returncode)
++import gi
++gi.require_version("Gtk", "4.0")
++from gi.repository import Gtk,GLib,GObject,Gdk
++test=subprocess.Popen(['eiskaltdcpp-daemon'])
++test.terminate()
++test.wait()
++
++subprocess.run([sys.executable,'-m','pip','install','--user','.'])
+--- dicopp-1.orig/setup-with-requirements.py
++++ /dev/null
+@@ -1,14 +0,0 @@
+-
+-import subprocess
+-import sys
+-test=subprocess.run([sys.executable,'-m','pip','install','PyGObject>=3.40'])
+-if test.returncode:
+-	exit(test.returncode)
+-import gi
+-gi.require_version("Gtk", "4.0")
+-from gi.repository import Gtk,GLib,GObject,Gdk
+-test=subprocess.Popen(['eiskaltdcpp-daemon'])
+-test.terminate()
+-test.wait()
+-
+-subprocess.run([sys.executable,'-m','pip','install','--user','.'])
+--- /dev/null
++++ dicopp-1/setup.pre.py
+@@ -0,0 +1,29 @@
++
++#the .pre.py file is making the .py file after using github colin-i test/pyp/pypre
++#setuptools.setup is looking at one argv parameter; to "build" and "install":
++#python3 setup.py install
++#                 develop --user
++
++pkname='dicopp'
++
++from setuptools import setup
++setup(name=pkname,
++	packages=[pkname],
++	#data_files = [('', [pkname+'/hublist.xml.gz'])], #still is not placing it in the same folder
++	version=ver,
++	#opt
++	include_package_data=True,
++	python_requires='>=3.9', #for importlib.resources.files
++	install_requires=["PyGObject>=3.40","requests>=2.21","appdirs>=1.4.3",\
++		"psutil>=5.5.1"],
++	description='Direct Connect ++ client',
++	long_description=README,
++	long_description_content_type="text/markdown",
++	url='https://github.com/colin-i/dico',
++	author='cb',
++	author_email='costin.botescu@gmail.com',
++	license='MIT',
++	entry_points = {
++		'console_scripts': [pkname+'='+pkname+'.main:main']
++	}
++)
+--- dicopp-1.orig/setup.py
++++ dicopp-1/setup.py
+@@ -1,15 +1,17 @@
++ver="1.0.45"
++README="""DC++ client.\\
++Using [eiskaltdcpp-daemon](https://github.com/eiskaltdcpp/eiskaltdcpp).\\
++To remove configuration launch ```dicopp --remove-config```.\\
++[Git Page](https://github.com/colin-i/dico)
++"""
+ 
++#the .pre.py file is making the .py file after using github colin-i test/pyp/pypre
+ #setuptools.setup is looking at one argv parameter; to "build" and "install":
+ #python3 setup.py install
+ #                 develop --user
+ 
+ pkname='dicopp'
+ 
+-import pathlib
+-HERE = pathlib.Path(__file__).parent
+-README = (HERE / "info.md").read_text()
+-ver=(HERE / "v2").read_text()
+-
+ from setuptools import setup
+ setup(name=pkname,
+ 	packages=[pkname],
+@@ -24,7 +26,7 @@ setup(name=pkname,
+ 	long_description=README,
+ 	long_description_content_type="text/markdown",
+ 	url='https://github.com/colin-i/dico',
+-	author='bot',
++	author='cb',
+ 	author_email='costin.botescu@gmail.com',
+ 	license='MIT',
+ 	entry_points = {
+--- dicopp-1.orig/v2
++++ dicopp-1/v2
+@@ -1 +1 @@
+-1.0.41
+\ No newline at end of file
++1.0.45
+\ No newline at end of file
