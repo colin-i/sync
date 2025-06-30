@@ -1,0 +1,1025 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+233) xenial; urgency=medium
+ .
+   * new way to find conf file
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-06-30
+
+--- ocompiler-2.orig/Makefile
++++ ocompiler-2/Makefile
+@@ -5,12 +5,18 @@ TOPTARGETS := install-proj clean distcle
+ 
+ #this at pkgbuild, must set because is not found dpkg-architecture, and that is making ifeq i386 not same as ifneq amd64
+ ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), i386)
+-SUBDIRS := src ounused otoc
+ conv_64=1
+ else
+-SUBDIRS := src ounused ostrip otoc
++ifndef conv_64
+ conv_64=0
+ endif
++endif
++
++ifeq ($(conv_64),1)
++SUBDIRS := src ounused otoc
++else
++SUBDIRS := src ounused ostrip otoc
++endif
+ 
+ #all must be first rule (rule: ...) to be executed in case of make with no args
+ all: $(SUBDIRS)
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+232
++2-5+233
+--- /dev/null
++++ ocompiler-2/makewin
+@@ -0,0 +1,33 @@
++
++#this is the new make for windows
++
++OCOMP=o
++
++if [ -n "$1" ]; then
++OCOMP=$1
++fi
++
++#must also use mingw-w64-i686-dev
++
++${OCOMP} ./src/windows/obj32.oc inplace_reloc 0 ${OFLAGS} && \
++#argc argv? more info at obj.oc. _WinMain@16
++i686-w64-mingw32-ld -O3 -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
++ounused ./src/windows/obj32.oc.log && \
++\
++rm ./src/windows/obj32.o && \
++rm ./src/windows/obj32.oc.log && \
++\
++mkdir ocompiler && \
++mv o.exe ocompiler && \
++cp ocompiler.conf ocompiler && \
++\
++cd ounused && platform=win launcher=wine6 OCOMP=../ocompiler/o.exe make && \
++mv ounused.exe ../ocompiler && make clean && cd .. && \
++\
++cd otoc && platform=win launcher=wine6 OCOMP="wine6 ../ocompiler/o.exe" OLINK="wine6 ../ocompiler/ounused.exe" OFLAGSEXTRA="inplace_reloc 0" make && \
++mv otoc.exe ../ocompiler && make clean && cd ../tests && OCOMP="wine6 ../ocompiler/o.exe" OCONV="wine6 ../ocompiler/otoc.exe" ./db a.out && ./c1 a.out && ./c && \
++\
++zip -r ocompiler.zip ocompiler && \
++rm -r ./ocompiler && \
++\
++unzip -l ocompiler.zip
+--- ocompiler-2.orig/makewin32
++++ /dev/null
+@@ -1,27 +0,0 @@
+-
+-#this is the new make for windows
+-
+-OCOMP=o
+-
+-if [ -n "$1" ]; then
+-OCOMP=$1
+-fi
+-
+-#must also use mingw-w64-i686-dev
+-
+-${OCOMP} ./src/windows/obj32.oc inplace_reloc 0 ${OFLAGS} && \
+-#argc argv? more info at obj.oc. _WinMain@16
+-i686-w64-mingw32-ld -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
+-ounused ./src/windows/obj32.oc.log && \
+-\
+-rm ./src/windows/obj32.o && \
+-rm ./src/windows/obj32.oc.log && \
+-\
+-mkdir ocompiler && \
+-mv o.exe ocompiler && \
+-cp ocompiler.conf ocompiler && \
+-\
+-zip -r ocompiler.zip ocompiler && \
+-rm -r ./ocompiler && \
+-\
+-unzip -l ocompiler.zip
+\ No newline at end of file
+--- ocompiler-2.orig/ostrip/Makefile
++++ ocompiler-2/ostrip/Makefile
+@@ -44,7 +44,7 @@ OLINK=../ounused/ounused
+ ${OBJ}: ${FULLOBJS}
+ 	${launcher} ${OCOMP} $< ${OFLAGS}
+ 
+-ATCCCOM = $(CC) ${linkerflags} -o
++ATCCCOM = $(CC) ${linkerflags} ${linkerflagsextra} -o
+ ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -l:libc.so.6 -entry main -o
+ #strange that aarch64 cross ld can't -lc but -l:libc.so.6
+ 
+--- ocompiler-2.orig/otoc/Makefile
++++ ocompiler-2/otoc/Makefile
+@@ -1,8 +1,6 @@
+ 
+ prog=otoc
+ 
+-all: ${prog}
+-
+ ifndef linkerflags
+ linkerflags=-O3 -s
+ endif
+@@ -15,9 +13,6 @@ endif
+ ifndef conv_64
+ conv_64=0
+ endif
+-ifndef ldprefer
+-OFLAGSPRE= include_sec 1
+-endif
+ ifndef prefix
+ prefix=/usr
+ endif
+@@ -28,24 +23,37 @@ FULLOBJS = ${FULLOBJ}.oc
+ FULLOBJO = ${FULLOBJ}.o
+ FULLOBJLOG = ${FULLOBJS}.log
+ 
+-#problems at box64 and CC
++number=number.oh
++tags=tags.oh
++
++
++ifneq (${platform},win)
++
++#same like ostrip for libc.so.6, and same suse and AFTERLDCOM
++AFTERLDCOM= ${L} -l:libc.so.6
+ ifeq (${conv_64},0)
+-	ATCCCOM = $(CC) ${linkerflags} -o
+-	ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} ${L} -l:libc.so.6 -entry main -o
+-	#same like ostrip for libc.so.6
++	ATCCCOM = $(CC) ${linkerflags} ${linkerflagsextra} -o
++	ATLDCOM = $(LD) --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${linkerflags} -entry main -o
+ else
+ 	ATCCCOM = $(CC) -m32 ${linkerflags} -o
+-	ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${L} -lc -entry main -o
+-	OFLAGSPRE+= conv_64 1
++	ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} -entry main -o
+ endif
++fullprog=${prog}
++all: ${fullprog}
++
++else
++
++#OFLAGSPRE+= conv_64 2 #this is only when using linux ocomp
++ATCCCOM = x86_64-w64-mingw32-gcc -o
++fullprog=${prog}.exe
++all: ${fullprog}
+ 
+-ifndef OFLAGS
+-	OFLAGS= ${OFLAGSPRE}
+ endif
+-OFLAGS+= ${OFLAGSEXTRA}
+ 
+-number=number.oh
+-tags=tags.oh
++OFLAGS=${OFLAGSPRE} ${OFLAGSEXTRA}
++ifeq (${conv_64},1)
++	OFLAGS+= conv_64 1 include_sec 1
++endif
+ 
+ %.pre.o: %.pre.oc
+ 	${OCOMP} $< ${OFLAGS}
+@@ -54,19 +62,19 @@ tags=tags.oh
+ 	if [ -z "${ldprefer}" ]; then \
+ 		${ATCCCOM} $@ $^; \
+ 	else \
+-		${ATLDCOM} $@ $^; \
++		${ATLDCOM} $@ $^ ${AFTERLDCOM}; \
+ 	fi
+ %.oh: %.pre
+ 	${launcher} ./$<
+ 
+ ${OBJ}: ${FULLOBJS} ${tags} ${number}
+ 	${OCOMP} $< ${OFLAGS}
+-${prog}: ${OBJ}
++${fullprog}: ${OBJ}
+ 	${OLINK} ${FULLOBJLOG}
+ 	if [ -z "${ldprefer}" ]; then \
+ 		${ATCCCOM} ${prog} ${FULLOBJO}; \
+ 	else \
+-		${ATLDCOM} ${prog} ${FULLOBJO}; \
++		${ATLDCOM} ${prog} ${FULLOBJO} ${AFTERLDCOM}; \
+ 	fi
+ 
+ install:
+@@ -80,7 +88,7 @@ install-proj:
+ clean:
+ 	-rm -f ${FULLOBJO}
+ 	-rm -f ${FULLOBJLOG}
+-	-rm -f ${prog}
++	-rm -f ${fullprog}
+ 	-rm -f ${number} number.pre number.pre.o number.pre.oc.log
+ 	-rm -f ${tags} tags.pre tags.pre.o tags.pre.oc.log
+ distclean: clean
+--- ocompiler-2.orig/otoc/entry.oc
++++ ocompiler-2/otoc/entry.oc
+@@ -1,4 +1 @@
+-entry main(sd argc,sv argv)
+-incst argv
+-#sd s;set s _s2#
+-#incst _s2
++entry main(sd argc,sv argv);incst argv
+--- ocompiler-2.orig/otoc/entryraw.oc
++++ ocompiler-2/otoc/entryraw.oc
+@@ -1,2 +1 @@
+-entryraw main(sd argc,sv *s0,ss s1) #,ss s2)
+-sv argv;set argv #s1
++entryraw main(sd argc,sv *s0,ss s1) #,ss s2);sv argv;set argv #s1
+--- ocompiler-2.orig/otoc/mcd
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-make clean && ./md
+--- ocompiler-2.orig/otoc/md
++++ ocompiler-2/otoc/md
+@@ -1,4 +1,5 @@
+ 
++if [ -e otoc.o ]; then rm otoc.o; fi
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ 
+ OFLAGSEXTRA+=" function_name 1 nul_res_pref 1"
+--- ocompiler-2.orig/otoc/mrd
++++ ocompiler-2/otoc/mrd
+@@ -1,8 +1,14 @@
+ 
+-if [ -e otoc.o ]; then rm otoc.o; fi
+-if [ -z "${1}" ]; then OCOMP="q ../src/o"; fi
+-
+-launcher=qq OCOMP=${OCOMP} LD=/usr/x86_64-linux-gnu/bin/ld OFLAGSEXTRA="inplace_reloc 0" ldprefer=1 ./md
++if [ -z "${OCOMP}" ]; then export OCOMP="q ../src/o"; fi
++if [ "${ldprefer}" = "0" ]; then # windows and if wanting to see gcc warnings
++	ldprefer=
++else # default linux
++	export ldprefer=1
++	export OFLAGSPRE="include_sec 1"
++	export LD=/usr/x86_64-linux-gnu/bin/ld
++fi
++if [ -z "${launcher}" ]; then export launcher=qq; fi
++OFLAGSEXTRA="inplace_reloc 0" ./md $@
+ 
+ #old:
+ #saying this?: cannot find /usr/x86_64-linux-gnu/lib/libc.so.6
+--- ocompiler-2.orig/otoc/mrdi
++++ ocompiler-2/otoc/mrdi
+@@ -1 +1 @@
+-./mrd x
++OCOMP=o ./mrd $@
+--- /dev/null
++++ ocompiler-2/otoc/mrdiw
+@@ -0,0 +1 @@
++platform=win ldprefer=0 launcher=wine6 OFLAGSPRE="conv_64 2" ./mrdi $@
+\ No newline at end of file
+--- ocompiler-2.orig/otoc/otoc.oc
++++ ocompiler-2/otoc/otoc.oc
+@@ -7,15 +7,18 @@ importx "puts" puts
+ importx "fopen" fopen
+ importx "fclose" fclose
+ importx "strrchr" strrchr
+-importx "memrchr" memrchr
+ importx "exit" exit  #only for problems at box64
+ 
+ function out_file(sd in)
+ 	ss p;set p strrchr(in,(asciidot))
+ 	if p!=(NULL)
+-		sub p in
+-		set p memrchr(in,(asciidot),p)
+-		if p!=(NULL)
++		while in!=p
++			dec p
++			if p#=(asciidot)
++				break
++			end
++		end
++		if in!=p
+ 			#here we know there at at least two dots and of course the term null char
+ 			inc p
+ 			charx ext#1;set ext (asciic)
+@@ -130,7 +133,7 @@ function parse_options(sd _argc,sv _argv
+ 	return (EXIT_SUCCESS)
+ end
+ 
+-include "entryraw.oc" "entry.oc"
++include "entry.oc" "entryraw.oc"
+ 	if argc>=2
+ 		sd ok;set ok parse_options(#argc,#argv)
+ 		if ok=(EXIT_SUCCESS)
+--- ocompiler-2.orig/otoc/xfile.oh
++++ ocompiler-2/otoc/xfile.oh
+@@ -1,4 +1,4 @@
+ 
+ #einclude? will use all constants in the header. yes, but some are used without touching them, like in loop()
+-einclude "/usr/include/ocompiler/xfile.oh" "../src/files/headers/xfile.oh"
+-#        entryraw                          entry
++einclude "../src/files/headers/xfile.oh"
++#entry raw "/usr/include/ocompiler/xfile.oh"
+--- ocompiler-2.orig/ounused/Makefile
++++ ocompiler-2/ounused/Makefile
+@@ -1,8 +1,6 @@
+ 
+ OB = ounused
+ 
+-all: ${OB}
+-
+ OBJ = ${OB}.o
+ FULLOBJ = ./${OB}
+ FULLOBJS = ${FULLOBJ}.oc
+@@ -12,30 +10,48 @@ FULLOBJLOG = ${FULLOBJS}.log
+ ifndef OCOMP
+ OCOMP=../src/o
+ endif
+-
+ ifndef linkerflags
+ linkerflags=-O3 -s
+ #             1
+ endif
+-
+ ifndef prefix
+ prefix=/usr
+ endif
++ifndef exelauncher
++exelauncher=${launcher}
++endif
+ 
+ ver=version.oh
+ vers=../${ver}
++
++ifneq (${platform},win)
++
++OFLAGS=exit_end 1 underscore_pref 1
++platform_ob=${OB}
++all: ${platform_ob}
++${platform_ob}: ${OBJ}
++	$(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 --build-id -o $@ -entry main ${FULLOBJO} ${L} -l:libc.so.6
++	$(MAKE) -f ./Makefile link
++
++else
++
++OFLAGS=inplace_reloc 0 include_sec 1
++platform_ob=${OB}.exe
++all: ${platform_ob}
++${platform_ob}: ${OBJ}
++	i686-w64-mingw32-gcc ${linkerflags} ${FULLOBJO} -o $@
++	$(MAKE) -f ./Makefile link
++
++endif
++
++link:
++	${exelauncher} ./${platform_ob} ${FULLOBJLOG}
++
+ ${vers}:
+ 	cd .. && $(MAKE) -f ./Makefile ${ver}
+ 
+ ${FULLOBJO}: ${FULLOBJS} ${vers}
+-	${launcher} ${OCOMP} $< exit_end 1 ${OFLAGSEXTRA}
+-
+-ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 --build-id -o $@ ${L} -l:libc.so.6 -entry main
+-#build-id for rpm
+-
+-${OB}: ${OBJ}
+-	${ATLDCOM} ${FULLOBJO}
+-	${launcher} ./${OB} ${FULLOBJLOG}
++	${launcher} ${OCOMP} $< ${OFLAGS} ${OFLAGSEXTRA}
+ 
+ install:
+ 	$(MAKE) all
+@@ -50,7 +66,7 @@ clean-compile:
+ 	-rm -f ${vers}
+ 
+ clean-link:
+-	-rm -f ${OB}
++	-rm -f ${platform_ob}
+ 
+ clean: clean-compile clean-link
+ distclean: clean
+@@ -61,4 +77,4 @@ uninstall:
+ test:
+ 	echo "Nothing"
+ 
+-.PHONY: all install install-proj clean clean-compile clean-link distclean uninstall test
++.PHONY: all install install-proj clean clean-compile clean-link distclean uninstall test link
+--- /dev/null
++++ ocompiler-2/ounused/entry.oc
+@@ -0,0 +1,3 @@
++
++entry _main(sd argc,sv argv)
++incst argv
+--- /dev/null
++++ ocompiler-2/ounused/entryraw.oc
+@@ -0,0 +1,3 @@
++
++entryraw main(sd argc,ss *argv0,ss argv1)
++sv argv;set argv #argv1
+--- ocompiler-2.orig/ounused/files.oc
++++ ocompiler-2/ounused/files.oc
+@@ -60,7 +60,7 @@ endfunction
+ function fileentry(sd s,sd sz)
+ 	call nullend(s,sz)
+ 	sd temp
+-	setcall temp realpath(s,(NULL))
++	setcall temp _realpath(s,(NULL))
+ 	if temp!=(NULL)
+ 		call fileentry_exists(temp)
+ 		call free(temp)
+--- ocompiler-2.orig/ounused/header.oh
++++ ocompiler-2/ounused/header.oh
+@@ -1,35 +1,32 @@
+ 
++const NULL=0
+ const EXIT_SUCCESS=0
+ const EXIT_FAILURE=1
++const dword=4
+ 
+-Importx "stderr" stderr
+-Importx "fprintf" fprintf
++Importx "_fprintf" fprintf
+ 
+ #resolve
+-importx "fwrite" fwrite
+-importx "fflush" fflush
++importx "_fwrite" fwrite
++importx "_fflush" fflush
+ 
+ #inits
+-importx "get_current_dir_name" get_current_dir_name
+-importx "strlen" strlen
+-
+-#files
+-importx "realpath" realpath
++importx "_strlen" strlen
+ 
+ #mem
+-importx "malloc" malloc
+-importx "realloc" realloc
+-importx "memcpy" memcpy
+-importx "memcmp" memcmp
++importx "_malloc" malloc   #win
++importx "_realloc" realloc #win
++importx "_memcpy" memcpy
++importx "_memcmp" memcmp
+ 
+ #loop
+-importx "fopen" fopen
+-importx "fclose" fclose
+-importx "getline" getline
+-importx "feof" feof
+-importx "free" free
+-importx "chdir" chdir
+-importx "stdout" stdout
++importx "_fopen" fopen
++importx "_fclose" fclose
++importx "_feof" feof
++importx "_free" free
++importx "_chdir" chdir
+ 
+ #uconstres
+-importx "memchr" memchr
++importx "_memchr" memchr
++
++include "lin.oc" "win.oc"
+--- ocompiler-2.orig/ounused/inits.oc
++++ ocompiler-2/ounused/inits.oc
+@@ -8,7 +8,7 @@ function allocs()
+ 	call alloc1(fp)
+ 
+ 	sv cwd%cwd_p
+-	setcall cwd# get_current_dir_name()
++	setcall cwd# _get_current_dir_name()
+ 	if cwd#=(NULL)
+ 		call erExit("get_current_dir_name error")
+ 	endif
+--- /dev/null
++++ ocompiler-2/ounused/lin.oc
+@@ -0,0 +1,32 @@
++
++Importx "stderr" stderr
++function std_err()
++	svu s^stderr
++	return s#
++end
++
++#inits
++importx "get_current_dir_name" get_current_dir_name
++function _get_current_dir_name()
++	ss a;set a get_current_dir_name()
++	return a
++end
++
++#files
++importx "realpath" realpath
++function _realpath(ss a,ss b)
++	ss c;set c realpath(a,b)
++	return c
++end
++
++#loop
++importx "getline" getline
++function _getline(sv a,sv b,sd c)
++	sd d;set d getline(a,b,c)
++	return d
++end
++importx "stdout" stdout
++function std_out()
++	svu s^stdout
++	return s#
++end
+--- ocompiler-2.orig/ounused/loop.oc
++++ ocompiler-2/ounused/loop.oc
+@@ -1,5 +1,4 @@
+ 
+-const NULL=0
+ #const void=0
+ const asciiperiod=0x2E
+ const asciio=0x6F
+@@ -13,7 +12,7 @@ include "uconst.oc"
+ 
+ function log_file(ss file)
+ 	sd f
+-	setcall f fopen(file,"r")
++	setcall f fopen(file,"rb") #b is important to make windows version to not translate fgetc \r\n into \n, "r" at linux is not translating from windows \r\n
+ 	if f!=(NULL)
+ 		sv fp%logf_p
+ 		set fp# f
+@@ -22,7 +21,7 @@ function log_file(ss file)
+ 		sd sz=0
+ 		sd link=TRUE
+ 		while sz!=-1
+-			setcall sz getline(p,bsz,f)
++			setcall sz _getline(p,bsz,f)
+ 			if sz!=-1
+ 				#knowing line\r\n from ocompiler
+ 				sub sz 2
+@@ -175,11 +174,11 @@ function printlink(sd file)
+ 						set back# (asciio)
+ 						inc back
+ 						set back# (NULL)
+-						sv st^stdout
++						sv st;set st std_out()
+ 						sd len
+-						setCall len fprintf(st#," ")
++						setCall len fprintf(st," ")
+ 						if len=1
+-							setCall len fprintf(st#,file)
++							setCall len fprintf(st,file)
+ 							sub back file
+ 							if len=back
+ 								ret
+--- ocompiler-2.orig/ounused/md
++++ ocompiler-2/ounused/md
+@@ -1,2 +1,7 @@
+ 
++if [ -e ounused.o ]; then
++	if [ -z "${no_reset}" ]; then
++		rm ounused.o
++	fi
++fi
+ OFLAGSEXTRA="function_name 1 nul_res_pref 1" make linkerflags= $@
+--- ocompiler-2.orig/ounused/mdc
++++ /dev/null
+@@ -1,3 +0,0 @@
+-
+-make clean && \
+-OFLAGSEXTRA="function_name 1 nul_res_pref 1" make linkerflags= $@
+--- ocompiler-2.orig/ounused/mem.oc
++++ ocompiler-2/ounused/mem.oc
+@@ -1,6 +1,4 @@
+ 
+-const dword=4
+-
+ function alloc1(sd p)
+ 	sd er
+ 	setcall er alloc1_throwless(p)
+--- /dev/null
++++ ocompiler-2/ounused/mrdi
+@@ -0,0 +1 @@
++OCOMP=/home/bc/x86_64_orig/o ./mrd
+\ No newline at end of file
+--- /dev/null
++++ ocompiler-2/ounused/mrdiw
+@@ -0,0 +1 @@
++platform=win OCOMP=o exelauncher=wine6 ./md $@
+\ No newline at end of file
+--- ocompiler-2.orig/ounused/ounused.oc
++++ ocompiler-2/ounused/ounused.oc
+@@ -9,13 +9,13 @@ include "header.oh"
+ include "./throwless.oc"
+ 
+ function messagedelim()
+-	sv st^stderr
++	sv st;set st std_err()
+ 	Char visiblemessage={0x0a,0}
+-	Call fprintf(st#,#visiblemessage)
++	Call fprintf(st,#visiblemessage)
+ endfunction
+ Function Message(ss text)
+-	sv st^stderr
+-	Call fprintf(st#,text)
++	sv st;set st std_err()
++	Call fprintf(st,text)
+ 	call messagedelim()
+ EndFunction
+ function erMessage(ss text)
+@@ -32,7 +32,7 @@ endfunction
+ include "./loop.oc"
+ include "./resolve.oc"
+ 
+-entryraw main(sd argc,ss *argv0,ss argv1)
++include "entryraw.oc" "entry.oc"
+ 
+ if argc>1
+ 	call inits()
+@@ -42,7 +42,6 @@ if argc>1
+ 	sd i
+ 	set i argc
+ 	mult argc :
+-	sv argv;set argv #argv1
+ 	add argc argv
+ 	while argv!=argc
+ 		call log_file(argv#)
+--- ocompiler-2.orig/ounused/resolve.oc
++++ ocompiler-2/ounused/resolve.oc
+@@ -29,10 +29,10 @@ function resolve(sd j)
+ 	sd k
+ 	setcall k uconst_resolved(2)
+ 	#
+-	sv so^stdout
+-	call fflush(so#) #there is no line end at stdout, then flush is required
++	sv so;set so std_out()
++	call fflush(so) #there is no line end at stdout, then flush is required
+ 	#
+-	sv st^stderr
++	sv st;set st std_err()
+ 	sd fls
+ 	setcall fls filessize()
+ 	div fls :
+@@ -40,14 +40,13 @@ function resolve(sd j)
+ 	setcall imps_sz importssize()
+ 	sd const_sz
+ 	setcall const_sz constssize()
+-	Call fprintf(st#,"\n%u logs, %u files, %u unique imports, %u %s/%s, %u %s resolved, %u %s/%s resolved.",j,fls,imps_sz,const_sz,c,v,i,f,k,c,v) #starting with a new line to not be on the same line with stdout
++	Call fprintf(st,"\n%u logs, %u files, %u unique imports, %u %s/%s, %u %s resolved, %u %s/%s resolved.",j,fls,imps_sz,const_sz,c,v,i,f,k,c,v) #starting with a new line to not be on the same line with stdout
+ 	#\n, end ending with another one for no echo after this program
+ 	call messagedelim()
+ endfunction
+ 
+ function wrongExit(ss x,ss n,sd len)
+-	sv st^stderr
+-	set st st#
++	sv st;set st std_err()
+ 	Call fprintf(st,"Unused %s: ",x)
+ 	call fwrite(n,len,1,st)
+ 	call erExit("")
+--- /dev/null
++++ ocompiler-2/ounused/win.oc
+@@ -0,0 +1,96 @@
++
++const asciinewline=0xa
++const EOF=-1
++#const STDIN_FILENO=0
++const STDOUT_FILENO=1
++const STDERR_FILENO=2
++
++importx "___iob_func" _iob_func
++function iob_func(sd type)
++	#typedef struct FILE{ #char *_ptr; #int _cnt; #char *_base; #int _flag; #int _file; #int _charbuf;#int _bufsiz; #char *_tmpfname; #}
++	sd std
++	setcall std _iob_func()
++	const size_of_FILE_noPad=:+dword+:+dword+dword+dword+dword+:
++	const pad_align_calc1=:-1;const pad_align_calc2=~pad_align_calc1;const pad_align_calc3=size_of_FILE_noPad+pad_align_calc1
++	const size_of_FILE=pad_align_calc3&pad_align_calc2
++	mult type (size_of_FILE)
++	add std type
++	return std
++endfunction
++
++function std_err()
++	sd a;set a iob_func((STDERR_FILENO))
++	return a
++end
++
++importx "_getcwd" getcwd
++#inits
++function _get_current_dir_name()
++	ss a;set a getcwd((NULL),0) #NULL is at loop.oc
++	return a
++end
++
++#files
++importx "_GetFullPathNameA@16" GetFullPathName
++function _realpath(ss a,ss *b)
++#b is null here
++	datax sz#1;set sz GetFullPathName(a,0,(NULL),(NULL))
++	if sz!=0  #easy to test with a ushort+ path,a long time ago was MAX_PATH=255, maybe nowadays is same
++		sd b;set b malloc(sz)
++		if b!=(NULL)
++			call GetFullPathName(a,sz,b,(NULL)) #now size return will not include null termination
++			return b
++		end
++	end
++	return (NULL)
++end
++
++#loop
++const getline_increments=0x80
++importx "_fgetc" fgetc
++function _getline(sv lineptr,sv n,sd stream)
++#lineptr is ok, n is ok and with a minimum size, stream is ok, ssize_t return
++#knowing line\r\n from ocompiler, but basing only on \n
++#to match linux behavior, return size+termsize+null
++#here no term+null termination write, and n+= is negligent
++	charxs c#1
++	set c fgetc(stream) #unsigned char cast to int
++	if c=(EOF)
++		return -1
++	end
++	ss bufptr;set bufptr lineptr#
++	ss pointer;set pointer bufptr
++	ss end;set end pointer
++	add end n#
++	whiletrue
++		set pointer# c
++		inc pointer
++		set c fgetc(stream)
++		if c=(EOF)
++			break
++		end
++		if c=(asciinewline)
++			inc pointer
++			break
++		end
++		if pointer=end
++			add n# (getline_increments)
++			ss newstart;set newstart realloc(bufptr,n#)
++			if newstart=(NULL)
++				return -1
++			end
++			sub bufptr newstart
++			sub pointer bufptr
++			sub end bufptr
++			add end (getline_increments)
++			set bufptr newstart
++			set lineptr# bufptr
++		end
++	end
++	sub pointer bufptr
++	return pointer
++end
++function std_out()
++	sd a;set a iob_func((STDOUT_FILENO))
++	return a
++end
+--- ocompiler-2.orig/readme.md
++++ ocompiler-2/readme.md
+@@ -26,9 +26,28 @@ sudo dnf install ocompiler
+ There is also <i>ocompiler-devel</i>.\
+ \
+ \
+-On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).\
++On openSUSE, run the following as __root__:\
++For openSUSE Tumbleweed:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
++```
++For openSUSE Leap:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
++```
++Replace *16.0* with *15.6* if needed.\
++And:
++```sh
++zypper refresh
++zypper install ocompiler
++```
++An optional step is to install **ocompiler-devel**.\
+ \
+-On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/o/releases).
++\
++On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/o/releases).\
++\
++\
++On other linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).
+ 
+ ## Info
+ Documentation is at [o.html](https://htmlpreview.github.io/?https://github.com/colin-i/o/blob/master/o.html).\
+--- ocompiler-2.orig/src/Makefile
++++ ocompiler-2/src/Makefile
+@@ -27,19 +27,22 @@ endif
+ 
+ #set preffile data
+ PREFFILE=ocompiler.conf
+-#there is not suposed to be a /usr/etc, /usr is read-only
++#there is not supposed to be a /usr/etc, /usr is read-only
++#move back is not working on fedora if sbin/o and on suse interactive bash(in scripts is ok) o is another alias and ocompiler is with move back
+ ifeq ($(prefix),/usr)
+ 	PREFFILEFULL=$(DESTDIR)/etc/${PREFFILE}
+-	#also move back the usr folder: usr/bin/o
+-	#$((3+1+3+1+${#projname}))
+-	etchelper=9
+-	etc_helper=usr/bin/o
++	##also move back the usr folder: usr/bin/o
++	##$((3+1+3+1+${#projname}))
++	#etchelper=9
++	#etc_helper=usr/bin/o
++	etc_helper=/etc/${PREFFILE}
+ else
+ 	PREFFILEFULL=$(DESTDIR)$(prefix)/etc/${PREFFILE}
+-	#move back only exec name and bin folder: /usr/local/etc is ok. bin/o
+-	#$((3+1+${#projname}))
+-	etchelper=5
+-	etc_helper=bin/o
++	##move back only exec name and bin folder: /usr/local/etc is ok. bin/o
++	##$((3+1+${#projname}))
++	#etchelper=5
++	#etc_helper=bin/o
++	etc_helper=$(prefix)/etc/${PREFFILE}
+ endif
+ etcinclude=etcinclude.oc
+ #debian/ocompiler.install is forcing to usr/ / etc/
+@@ -56,23 +59,26 @@ ${OBJ}: ${FULLOBJS} ${etcinclude} ${vers
+ 	if [ -s ${OBT} ];then \
+ 		echo text; \
+ 		base64 -d ${OBT} > $@; \
+-		${_ATLDCOM} o $@; \
++		${_ATLDCOM} o $@ ${AFTERLDCOM}; \
+ 		${launcher} ./o ${FULLOBJS} ${OFLAGS}; \
+ 	else \
+ 		${OCOMP} $< ${OFLAGS}; \
+ 	fi; \
+ 	mv ${FULLOBJO} . \
+ 
+-_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=${linker} --build-id ${L} -l:libc.so.6 -entry main -o
++#suse will not work if -l is not at end
++AFTERLDCOM = ${L} -l:libc.so.6
++_ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=${linker} --build-id -entry main -o
+ ATLDCOM = ${_ATLDCOM} $@
+-ATLDCOM_T_O = $(LD) -melf_i386 --dynamic-linker=${linker} ${L} -lc -entry main -o z ${FULLOBJO}
++ATLDCOM_T_O = $(LD) -melf_i386 --dynamic-linker=${linker} -entry main -o z ${FULLOBJO} ${AFTERLDCOM}
+ #--build-id for rpm
+ 
+ ${etcinclude}:
+-	echo sd etchelper=${etchelper}\;ss etc_helper=\"${etc_helper}\" > ${etcinclude}
++	echo ss etc_helper=\"${etc_helper}\" > ${etcinclude}
++#sd etchelper=${etchelper}\;
+ 
+ ${projname}: ${OBJ}
+-	${ATLDCOM} $^
++	${ATLDCOM} $^ ${AFTERLDCOM}
+ #$^ is all objects here, $< is first object
+ 
+ install:
+--- ocompiler-2.orig/src/files/functions/pref/preffuncs.oc
++++ ocompiler-2/src/files/functions/pref/preffuncs.oc
+@@ -255,7 +255,7 @@ function setpreferences(vstr scrpath)
+ 	Data preferencessize#1
+ 	Data ptrpreferencessize^preferencessize
+ 
+-	setcall err prefextra(preferences,ptrpreferencessize,ptrpreferencescontent,scrpath)
++	setcall err prefextra(preferences,ptrpreferencessize,ptrpreferencescontent) #,scrpath
+ 	If err!=noerr
+ 		data null=0
+ 		#data void#1
+--- ocompiler-2.orig/src/linux/files/prefextra.oc
++++ ocompiler-2/src/linux/files/prefextra.oc
+@@ -2,16 +2,16 @@
+ const variable_convention=lin_convention
+ 
+ #err
+-function prefextra(ss prefpath,sd ptrpreferencessize,sd ptrpreferencescontent,ss scrpath)
++function prefextra(ss prefpath,sd ptrpreferencessize,sd ptrpreferencescontent) #,ss scrpath
+ 	sd err
+-	setcall err prefextra_helper(prefpath,ptrpreferencessize,ptrpreferencescontent,scrpath)
++	setcall err prefextra_helper(prefpath,ptrpreferencessize,ptrpreferencescontent) #,scrpath
+ 	if err!=(noerror)
+ 		Call Message(err)
+ 	endif
+ 	return err
+ endfunction
+ #err
+-function prefextra_helper(ss prefpath,sd ptrpreferencessize,sd ptrpreferencescontent,ss scrpath)
++function prefextra_helper(ss prefpath,sd ptrpreferencessize,sd ptrpreferencescontent) #,ss scrpath
+ 	sd err
+ 	sd s2;setcall s2 strlen(prefpath)
+ 	sd mem
+@@ -47,46 +47,15 @@ function prefextra_helper(ss prefpath,sd
+ 	endelse
+ 
+ 	#second verify in etc, more at Makefile about etcinclude
+-
+-	sd size;setcall size strlen(scrpath)
+ 	include "../../etcinclude.oc"
+-	if size>etchelper
+-		sd test;set test scrpath
+-		add test size
+-		sub test etchelper
+-		sd cmp;setcall cmp memcmp(etc_helper,test,etchelper) #an example when testing from src folder, is not usr/bin/o / bin/o
+-		if cmp=0
+-			sub size etchelper
+-			sd sz=3+1+1
+-			sd allsize;set allsize size
+-			add allsize sz
+-			add allsize s2
+-			setcall err memoryalloc(allsize,#mem)
+-			if err=(noerror)
+-				call memtomem(mem,scrpath,size)
+-				set scrpath mem
+-				add scrpath size
+-				call memtomem(scrpath,"etc/",(3+1))
+-				add scrpath (3+1)
+-				call memtomem(scrpath,prefpath,s2)
+-				add scrpath s2
+-				set scrpath# (NULL)
+-				setcall int access(mem,(F_OK))
+-				if int=0
+-					SetCall err file_get_content_ofs(mem,ptrpreferencessize,ptrpreferencescontent,(NULL)) #openfile has alloc err msg
+-					if err=(noerror)
+-						call free(mem)
+-						return (noerror)
+-					endif
+-					Call safeMessage(err)  #openfile has alloc err msg
+-				endif
+-				call free(mem)
+-			else
+-				return err
+-			endelse
++	setcall int access(etc_helper,(F_OK))
++	if int=0
++		SetCall err file_get_content_ofs(etc_helper,ptrpreferencessize,ptrpreferencescontent,(NULL)) #openfile has alloc err msg
++		if err=(noerror)
++			return (noerror)
+ 		endif
++		Call safeMessage(err)  #openfile has alloc err msg
+ 	endif
+-
+ 	call Message("No preferences file found in etc.")
+ 
+ 	return "No preferences file found in HOME. The file is here: https://raw.githubusercontent.com/colin-i/o/master/ocompiler.conf"
+--- ocompiler-2.orig/src/windows/files/prefextra.oc
++++ ocompiler-2/src/windows/files/prefextra.oc
+@@ -3,6 +3,6 @@ const variable_convention=ms_convention
+ 
+ #Const error=-1 is at header
+ 
+-function prefextra(ss *file,sd *ptrpreferencessize,sd *ptrpreferencescontent,ss *scrpath)
++function prefextra(ss *file,sd *ptrpreferencessize,sd *ptrpreferencescontent) #,ss *scrpath
+ 	return (error)
+ endfunction
+--- ocompiler-2.orig/src/windows/obj.oc
++++ ocompiler-2/src/windows/obj.oc
+@@ -1,7 +1,8 @@
+ 
+ Include "./head.oh"
+ 
+-#gcc(i686/x86_64) will ask for WinMain, but it has argc,argv entry, there are some additional steps
++#see ounused and otoc for windows
++#old remark: gcc(i686/x86_64) will ask for WinMain, but it has argc,argv entry, there are some additional steps
+ #old remark: gcc want -8 at inplace instead of 0
+ 
+ #gcc:
+--- ocompiler-2.orig/test32
++++ ocompiler-2/test32
+@@ -1,2 +1,7 @@
+ 
+-test `cat debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"` = `cat localtest`
++if [ -e debian/changelog ]; then
++	test `cat debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"` = `cat localtest`
++else
++	#ocompiler.spec is also removed
++	exit 0
++fi
+--- /dev/null
++++ ocompiler-2/tests/dbw
+@@ -0,0 +1 @@
++OCONV="wine6 ../otoc/otoc.exe" ./db $@
+--- ocompiler-2.orig/versionscript
++++ ocompiler-2/versionscript
+@@ -1,2 +1,9 @@
+ #!/bin/sh
+-echo char version=\"`cat ./debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"`\" > ./version.oh
++echo char version=\"`
++if [ -e ./debian/changelog ]; then
++	cat ./debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))"
++else
++	#also removed from static rpm: cat ./ocompiler.spec | grep ^Version | grep -o "[^ ]*$"
++	cat ./localtest
++fi
++`\" > ./version.oh
