@@ -1,0 +1,438 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x77) focal; urgency=medium
+ .
+   * extra code
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-03
+
+--- edor-1.orig/cln
++++ edor-1/cln
+@@ -1,2 +1,2 @@
+ 
+-git clean -xdf -e .pc/ -e debian/patches/ && git diff && echo git diff
++git clean -xdf -e .pc/ -e debian/patches/ -e arh/edor.jpg && git diff && echo git diff
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -30,8 +30,9 @@ zypper addrepo https://download.opensuse
+ ```
+ For openSUSE Leap:
+ ```sh
+-zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_15.6/home:costin.repo
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
+ ```
++Replace *16.0* with *15.6* if needed.\
+ And:
+ ```sh
+ zypper refresh
+@@ -41,7 +42,7 @@ zypper install edor
+ On Windows, there is this **edor-\*-msys-\*.zst** pkg at [releases](https://github.com/colin-i/edor/releases) which is using [msys2](https://msys2.github.io).
+ \
+ \
+-On other linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
++On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
+ 
+ ## From source
+ Debian example: Install autoconf automake make libncurses-dev bc g++(or gcc and --disable-cpp at configure); on armv7l(alias armhf) cpu, libunwind-dev. There is a "headless" build file as well.
+--- edor-1.orig/s/inc/main/armv7/stdlib.h
++++ edor-1/s/inc/main/armv7/stdlib.h
+@@ -1,5 +1,4 @@
+ 
+-#define EXIT_FAILURE 1
+ #define STDOUT_FILENO 0
+ 
+ #ifdef __cplusplus
+--- edor-1.orig/s/inc/main/sys_stat.h
++++ edor-1/s/inc/main/sys_stat.h
+@@ -1,4 +1,31 @@
+ 
++#undef platform_is_known
++#ifdef SIZEOF_INT_P
++#	if SIZEOF_INT_P >= 8
++#		ifdef SIZEOF_LONG
++#			define platform_is_known 1
++#			if SIZEOF_LONG == 4
++
++typedef unsigned int _dev_t;
++typedef unsigned short _ino_t;
++typedef long _off_t;
++struct stat {
++    _dev_t st_dev;
++    _ino_t st_ino;
++    unsigned short st_mode;
++    short st_nlink;
++    short st_uid;
++    short st_gid;
++    _dev_t st_rdev;
++    _off_t st_size;
++    time_t st_atime;
++    time_t st_mtime;
++    time_t st_ctime;
++};
++typedef unsigned short __mode_t;
++
++#			else
++
+ typedef unsigned long int __ino_t;
+ typedef unsigned long int __dev_t;
+ typedef unsigned int __mode_t;
+@@ -8,7 +35,7 @@ typedef unsigned int __gid_t;
+ typedef long int __off_t;
+ typedef int __blksize_t;
+ typedef long int __blkcnt_t;
+-typedef long int __time_t;
++typedef time_t __time_t;
+ typedef long int __syscall_slong_t;
+ struct timespec
+ {
+@@ -29,13 +56,59 @@ struct stat
+ 	__blksize_t st_blksize;
+ 	int __pad2;
+ 	__blkcnt_t st_blocks;
+-
+ 	struct timespec st_atim;
+ 	struct timespec st_mtim;
+ 	struct timespec st_ctim;
+ 	int __glibc_reserved[2];
+ };
+ 
++#			endif
++#		endif
++#	endif
++#endif
++#ifndef platform_is_known
++
++typedef unsigned long long int __dev_t;
++typedef unsigned long int __ino_t;
++typedef unsigned int __mode_t;
++typedef unsigned int __nlink_t;
++typedef unsigned int __uid_t;
++typedef unsigned int __gid_t;
++typedef long int __off_t;
++typedef long int __blksize_t;
++typedef long int __blkcnt_t;
++typedef time_t __time_t;
++typedef long int __syscall_slong_t;
++struct timespec
++{
++    __time_t tv_sec;
++    __syscall_slong_t tv_nsec;
++};
++struct stat
++{
++      __dev_t st_dev;
++      unsigned short int __pad1;
++      __ino_t st_ino;
++      __mode_t st_mode;
++      __nlink_t st_nlink;
++      __uid_t st_uid;
++      __gid_t st_gid;
++      __dev_t st_rdev;
++      unsigned short int __pad2;
++      __off_t st_size;
++      __blksize_t st_blksize;
++      __blkcnt_t st_blocks;
++      struct timespec st_atim;
++      struct timespec st_mtim;
++      struct timespec st_ctim;
++      unsigned long int __glibc_reserved4;
++      unsigned long int __glibc_reserved5;
++};
++
++#else
++#	undef platform_is_known
++#endif
++
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+--- edor-1.orig/s/inc/main/time.h
++++ edor-1/s/inc/main/time.h
+@@ -1,5 +1,20 @@
+ 
+-typedef long int time_t;
++#undef platform_is_known
++#ifdef SIZEOF_INT_P
++#	if SIZEOF_INT_P >= 8
++#		ifdef SIZEOF_LONG
++#			if SIZEOF_LONG == 4
++#				define platform_is_known 1
++				typedef long long time_t; //win 64 gcc
++#			endif
++#		endif
++#	endif
++#endif
++#ifndef platform_is_known
++	typedef long int time_t;
++#else
++#	undef platform_is_known
++#endif
+ 
+ #ifdef __cplusplus
+ extern "C" {
+--- edor-1.orig/s/inc/split/string.h
++++ edor-1/s/inc/split/string.h
+@@ -6,7 +6,9 @@ extern "C" {
+ #endif
+ 
+ void*memchr(void*,int,size_t);
+-//void *memmem(const void*,size_t,const void*,size_t);//this is provided in our split.c
++#ifdef HAVE_MEMMEM  //hard to happen
++void *memmem(const void*,size_t,const void*,size_t);//this is provided in our split.c
++#endif
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2491,7 +2491,7 @@ static bool valid_ln_term(int argc,char*
+ 	return false;
+ }
+ //same as normalize
+-static normalize_char startfile(char*argfile,int argc,char**argv,size_t*text_sz,bool no_file,bool no_input,bool not_forced){
++static normalize_char startfile(char*argfile,size_t*text_sz,bool no_file,bool no_input,bool not_forced){//,int argc,char**argv
+ 	if(no_file==false)if(grab_file(argfile,text_sz)/*true*/)return normalize_err;
+ 	if(no_input==false){
+ 		if(no_file/*true*/){
+@@ -2768,54 +2768,50 @@ static void proced(char*cutbuf_file,WIND
+ 		}
+ 	}
+ }
++
+ static void remove_config_print(char*s){
+ 	printf("%s removed\n",s);
+ }
+-static bool remove_config(char*pattern,char*cutbuf_file){
+-	if(strcmp(pattern,"--remove-config")==0){
+-		int c=-1;int p=-1;int pf=-1;
+-		char prefs_folder[max_path_0];
+-		if(cutbuf_file[0]!='\0')c=access(cutbuf_file,F_OK);
+-		if(prefs_file[0]!='\0'){
+-			char*end=prefs_file+strlen(prefs_file);
+-			do{end--;}while(*end!=path_separator);
+-			*end='\0';sprintf(prefs_folder,"%s",prefs_file);*end=path_separator;
+-			p=access(prefs_folder,F_OK);//is also working for folders
+-			if(p==0)pf=access(prefs_file,F_OK);
+-		}
+-		if(c==0||p==0){
+-			puts("Would remove:");//puts writes and a trailing new line
+-			if(c==0)puts(cutbuf_file);
+-			if(p==0){
+-				if(pf==0)puts(prefs_file);
+-				printf("\"%s\" if is empty\n",prefs_folder);
+-			}
+-			puts("yes ?");
+-			int e=getchar();//can be fgets but at raw was not ok, and initscr is clearing screen and can't see printf on some systems, if can combine raw with initscr this is ok
+-			if(e=='y'){
++static void remove_config(char*cutbuf_file){
++	int c=-1;int p=-1;int pf=-1;
++	char prefs_folder[max_path_0];
++	if(cutbuf_file[0]!='\0')c=access(cutbuf_file,F_OK);
++	if(prefs_file[0]!='\0'){
++		char*end=prefs_file+strlen(prefs_file);
++		do{end--;}while(*end!=path_separator);
++		*end='\0';sprintf(prefs_folder,"%s",prefs_file);*end=path_separator;
++		p=access(prefs_folder,F_OK);//is also working for folders
++		if(p==0)pf=access(prefs_file,F_OK);
++	}
++	if(c==0||p==0){
++		puts("Would remove:");//puts writes and a trailing new line
++		if(c==0)puts(cutbuf_file);
++		if(p==0){
++			if(pf==0)puts(prefs_file);
++			printf("\"%s\" if is empty\n",prefs_folder);
++		}
++		puts("yes ?");
++		int e=getchar();//can be fgets but at raw was not ok, and initscr is clearing screen and can't see printf on some systems, if can combine raw with initscr this is ok
++		if(e=='y'){
++			e=getchar();
++			if(e=='e'){
+ 				e=getchar();
+-				if(e=='e'){
+-					e=getchar();
+-					if(e=='s'){
+-					//here can also verify for newline
+-						if(c==0)
+-							if(unlink(cutbuf_file)==0)
+-								remove_config_print(cutbuf_file);
+-						if(p==0){
+-							if(pf==0)if(unlink(prefs_file)==0)
+-								remove_config_print(prefs_file);
+-							if(rmdir(prefs_folder)==0)remove_config_print(prefs_folder);
+-							else printf("%s ignored (maybe is not empty)\n",prefs_folder);
+-						}
+-						return true;
++				if(e=='s'){
++				//here can also verify for newline
++					if(c==0)
++						if(unlink(cutbuf_file)==0)
++							remove_config_print(cutbuf_file);
++					if(p==0){
++						if(pf==0)if(unlink(prefs_file)==0)
++							remove_config_print(prefs_file);
++						if(rmdir(prefs_folder)==0)remove_config_print(prefs_folder);
++						else printf("%s ignored (maybe is not empty)\n",prefs_folder);
+ 					}
+ 				}
+ 			}
+-			puts("expecting \"yes\"");
+ 		}
+-		return true;
++		puts("expecting \"yes\"");
+ 	}
+-	return false;
+ }
+ static bool get_answer(char switcher){
+ 	int c=getchar();
+@@ -2823,6 +2819,28 @@ static bool get_answer(char switcher){
+ 	while(c!='\n')c=getchar();
+ 	return a;
+ }
++static bool command_line(int*argc,char***argv,char*cutbuf_file){
++	if(*argc>1){
++		char*pattern=(*argv)[1];
++		if(strcmp(pattern,"--file")==0){
++			*argc=(*argc)-1;*argv=(*argv)+1;
++			return false;
++		}else if(strcmp(pattern,"--help")==0){
++			//if(*argc!=2){
++			//	const char entry_text[]="ENTRY_DEBUG marker\n";//for headless dependencies start test
++			//	write(STDOUT_FILENO, entry_text, sizeof(entry_text)-1);// or fd=-1 for EBADF ( man errno )
++			//	step_one_command
++			//}else{
++			puts("Enter the program and press F1 for help");
++			return true;
++			//}
++		}else if(strcmp(pattern,"--remove-config")==0){
++			remove_config(cutbuf_file);
++			return true;
++		}
++	}
++	return false;
++}
+ 
+ static void filewhites_read(){
+ 	for(size_t i=0;i<rows_tot;i++){
+@@ -2842,30 +2860,21 @@ static void freeprefs(){//these if are n
+ 	split_freeprefs();
+ 	if(filewhites_extension_new!=nullptr)free(filewhites_extension_new);
+ }
+-static void action_go(int argc,char**argv,char*cutbuf_file,char*argfile){
++static void action_go(int argc,char**argv,char*cutbuf_file){
++	if(command_line(&argc,&argv,cutbuf_file)/*true*/)return;
++	if(argc>3){puts("Too many arguments.");user_return=EXIT_FAILURE;return;}
++
+ 	if(prefs_file[0]!='\0')getprefs();//split is first that depends on prefs
+ 	for(unsigned char i=0;i<number_of_keys;i++){//this or set only at modifications
+ 		unsigned char k=keys_row[i];
+ 		keys_help[k]=k+'A';
+ 	}
+ 
+-	size_t text_sz;
++	size_t text_sz;char*argfile;
+ 	bool not_forced=true;
+ 	bool no_file=argc==1;
+ 	if(no_file==false){
+-		char*src=argv[1];
+-		if(remove_config(src,cutbuf_file)/*true*/)return;
+-		size_t f_slen=strlen(src);
+-		argfile=(char*)malloc(f_slen+1);//textfile= is not ok, can be changed at =input. is also set at new visual, and below
+-		if(argfile==nullptr)return;
+-		char*dest=argfile;char*end=src+f_slen;
+-		while(src<end){
+-			if(*src=='\\'){src++;
+-				if(src==end)break;
+-			}
+-			*dest=*src;dest++;src++;
+-		}*dest='\0';
+-
++		argfile=argv[1];
+ 		no_file=new_visual(argfile)/*true*/;
+ 		if(restorefile_path(argfile)/*true*/){
+ 			if(access(restorefile_buf,F_OK)==0){
+@@ -2884,7 +2893,7 @@ static void action_go(int argc,char**arg
+ 		if(valid_ln_term(argc,argv,&not_forced)/*true*/)return;
+ 		//if(no_file/*true*/)
+ 		split_reminder_c=split_conditions(argfile,true);//if or if not the file exists
+-	}
++	}else argfile=nullptr;
+ 
+ 	//#define POLLIN 0x0001
+ 	//typedef unsigned int nfds_t;
+@@ -2913,7 +2922,7 @@ static void action_go(int argc,char**arg
+ 			}
+ 		}
+ 	}else{
+-		ok=startfile(argfile,argc,argv,&text_sz,no_file,no_input,not_forced);
++		ok=startfile(argfile,&text_sz,no_file,no_input,not_forced);//,argc,argv
+ 		if(ok!=normalize_err){
+ 			if(ok==normalize_yes){
+ 				//entering \r in printf at %s will return to the start
+@@ -2984,13 +2993,10 @@ static void action(int argc,char**argv){
+ 	char cutbuf_file[max_path_0];
+ 	cutbuf_file[0]='\0';
+ 	if(help_cutbuffile_preffile(argv[0],cutbuf_file)/*true*/){//this is here, is convenient for remove_config
+-		char*argfile=nullptr;//example when launching with no args
+-		action_go(argc,argv,cutbuf_file,argfile);
+-		if(argfile!=nullptr)free(argfile);
++		action_go(argc,argv,cutbuf_file);
+ 		if(editingfile!=nullptr)unlink(editingfile);//this can be before and after text_init_b, also, this can be if no argfile when rebase is on with a save as..
+-
+-		free(helptext);
+ 		if(cutbuf!=nullptr)free(cutbuf);//this is init at getfilebuf or if not there at writemembuf
++		free(helptext);
+ 	}
+ }
+ int main(int argc,char**argv){
+@@ -3003,8 +3009,6 @@ int main(int argc,char**argv){
+ 	//baz(argc);
+ 	#endif
+ 
+-	if(argc>3){puts("Too many arguments.");return EXIT_FAILURE;}
+-
+ 	action(argc,argv);
+ 	return user_return;
+ }
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -22,8 +22,9 @@ wr4 () { buf3="${buf3}$@"; }
+ 
+ printf '%s\n' "#define hel1 \"USAGE\n\"" > ${f}
+ wr "#define hel2 \""
+-d2=" [filepath [line_termination: rn/r/n]]\
++d2=" [--file] [filepath [line_termination: rn/r/n]]\
+ \n      --remove-config      Remove configuration files.\
++\n      --help               Will guide to enter here.\
+ \nINPUT\
+ \nthis help: q(uit),up/down,mouse/touch V.scroll\
+ \nMovement:\
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -1,5 +1,9 @@
+ 
+ #define is_split_c
++#ifdef HAVE_MEMMEM
++#define _GNU_SOURCE
++#endif
++
+ #ifdef HAVE_STDDEF_H
+ #include<stddef.h>
+ #else
