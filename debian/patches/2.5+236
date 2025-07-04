@@ -1,0 +1,158 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+236) xenial; urgency=medium
+ .
+   * ostrip print at nothing
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-04
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+235
++2-5+236
+--- ocompiler-2.orig/makewin
++++ ocompiler-2/makewin
+@@ -25,7 +25,7 @@ cd ounused && platform=win launcher=wine
+ mv ounused.exe ../ocompiler && make clean && cd .. && \
+ \
+ cd otoc && platform=win launcher=wine6 OCOMP="wine6 ../ocompiler/o.exe" OLINK="wine6 ../ocompiler/ounused.exe" OFLAGSEXTRA="inplace_reloc 0" make && \
+-mv otoc.exe ../ocompiler && make clean && cd ../tests && OCOMP="wine6 ../ocompiler/o.exe" OCONV="wine6 ../ocompiler/otoc.exe" ./db a.out && ./c1 a.out && ./c && \
++mv otoc.exe ../ocompiler && make clean && cd ../tests && OCOMP="wine6 ../ocompiler/o.exe" OCONV="wine6 ../ocompiler/otoc.exe" ./db a.out && ./c1 a.out && ./c && cd .. && \
+ \
+ zip -r ocompiler.zip ocompiler && \
+ rm -r ./ocompiler && \
+--- ocompiler-2.orig/ostrip/ostrip.oc
++++ ocompiler-2/ostrip/ostrip.oc
+@@ -1,8 +1,6 @@
+ 
+ #must do a stripped .data and resolved .text (and .symtab with offset (more at leaf.py))
+ 
+-#input: exec log1 o1 ... logN oN
+-
+ format elfobj64
+ #modify debian/control exec depends,appimage.yml,debian/control arh order
+ 
+@@ -28,10 +26,10 @@ format elfobj64
+ #only at shared:
+ #	aftercall value at .dynsym
+ 
+-#pin about .data align at objects that ld respects when concatenating
+-#aftercall is retrieved in .symtab in an entry with Type=NOTYPE and Ndx=dataind, then .strtab for name, then in another objects an import with that name
+-#at exec instead of .strtab can be value is inside data(there are outside data values as well), but that's extra code
+-#aftercall can be resolved not from the first iteration
++# pin about .data align at objects that ld respects when concatenating
++# aftercall is retrieved in .symtab in an entry with Type=NOTYPE and Ndx=dataind, then .strtab for name, then in another objects an import with that name
++# at exec instead of .strtab can be value is inside data(there are outside data values as well), but that's extra code
++# aftercall can be resolved not from the first iteration
+ 
+ include "header.oh"
+ 
+@@ -172,4 +170,5 @@ if argc>=(1+3)  #0 is all the time
+ 	call frees()
+ 	call exit((EXIT_SUCCESS))
+ endif
++call eMessage("Usage: ostrip exec log1 o1 [... logN oN]")
+ call exit((EXIT_FAILURE))
+--- ocompiler-2.orig/otoc/Makefile
++++ ocompiler-2/otoc/Makefile
+@@ -54,6 +54,9 @@ OFLAGS=${OFLAGSPRE} ${OFLAGSEXTRA}
+ ifeq (${conv_64},1)
+ 	OFLAGS+= conv_64 1
+ endif
++ifdef ldprefer
++	OFLAGS+= include_sec 1
++endif
+ 
+ %.pre.o: %.pre.oc
+ 	${OCOMP} $< ${OFLAGS}
+--- ocompiler-2.orig/otoc/mrd
++++ ocompiler-2/otoc/mrd
+@@ -4,7 +4,7 @@ if [ "${ldprefer}" = "0" ]; then # windo
+ 	ldprefer=
+ else # default linux
+ 	export ldprefer=1
+-	export OFLAGSPRE="include_sec 1"
++	#export OFLAGSPRE="include_sec 1"
+ 	export LD=/usr/x86_64-linux-gnu/bin/ld
+ fi
+ if [ -z "${launcher}" ]; then export launcher=qq; fi
+--- ocompiler-2.orig/readme.md
++++ ocompiler-2/readme.md
+@@ -47,7 +47,7 @@ An optional step is to install **ocompil
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/o/releases).\
+ \
+ \
+-On other linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).
++On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).
+ 
+ ## Info
+ Documentation is at [o.html](https://htmlpreview.github.io/?https://github.com/colin-i/o/blob/master/o.html).\
+--- ocompiler-2.orig/src/Makefile
++++ ocompiler-2/src/Makefile
+@@ -85,8 +85,10 @@ install:
+ 	$(MAKE) all
+ 	$(MAKE) install-proj
+ install-proj:
+-	install -D o \
+-		$(DESTDIR)$(prefix)/bin/o
++	install -D o $(DESTDIR)$(prefix)/bin/o
++	if [ -e ../ocompiler_is_o ]; then\
++		ln -s o $(DESTDIR)$(prefix)/bin/ocompiler;\
++	fi
+ 	install -D ../${PREFFILE} ${PREFFILEFULL}
+ 	if [ -e ../include_dev ]; then \
+ 		install -D files/headers/logs.oh $(DESTDIR)$(prefix)/include/ocompiler/logs.oh && \
+@@ -94,6 +96,11 @@ install-proj:
+ 		install -D files/headers/xfilecore.oh $(DESTDIR)$(prefix)/include/ocompiler/xfilecore.oh && \
+ 		install -D files/headers/xfile.oh $(DESTDIR)$(prefix)/include/ocompiler/xfile.oh; \
+ 	fi
++#at suse, at use interactive bash (not inside scripts) o is another alias
++#not install because is not installing a link
++#ln -s o %{_buildrootdir}/BUILDROOT%{_bindir}/ocompiler || ln -s o %{_buildrootdir}/%{name}-%{version}-%{release}.%{_arch}%{_bindir}/ocompiler #this because at use interactive bash (not inside scripts) o is another alias
++#ln here because since debian .install file, will go through that
++#		ln -s o ocompiler;\
+ 
+ clean-compile:
+ 	-rm -f ${OBJ}
+@@ -116,13 +123,17 @@ distclean: clean
+ 
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/o
++	if [ -e ../ocompiler_is_o ]; then\
++		-rm -f $(DESTDIR)$(prefix)/bin/ocompiler;\
++	fi
+ 	-rm -f ${PREFFILEFULL}
+-	-if [ -e ../include_dev ]; then \
+-		rm -f $(DESTDIR)$(prefix)/include/ocompiler/logs.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/ocompiler/log.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/ocompiler/xfilecore.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/ocompiler/xfile.oh; \
++	-if [ -e ../include_dev ]; then\
++		rm -f $(DESTDIR)$(prefix)/include/ocompiler/logs.oh;\
++		rm -f $(DESTDIR)$(prefix)/include/ocompiler/log.oh;\
++		rm -f $(DESTDIR)$(prefix)/include/ocompiler/xfilecore.oh;\
++		rm -f $(DESTDIR)$(prefix)/include/ocompiler/xfile.oh;\
+ 	fi
++#		-rm -f ocompiler;\
+ 
+ test-obj:
+ 	${launcher} ./o linux/obj.oc function_name 1 nul_res_pref 1

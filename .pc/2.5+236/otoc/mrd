@@ -1,0 +1,18 @@
+
+if [ -z "${OCOMP}" ]; then export OCOMP="q ../src/o"; fi
+if [ "${ldprefer}" = "0" ]; then # windows and if wanting to see gcc warnings
+	ldprefer=
+else # default linux
+	export ldprefer=1
+	export OFLAGSPRE="include_sec 1"
+	export LD=/usr/x86_64-linux-gnu/bin/ld
+fi
+if [ -z "${launcher}" ]; then export launcher=qq; fi
+OFLAGSEXTRA="inplace_reloc 0" ./md $@
+
+#old:
+#saying this?: cannot find /usr/x86_64-linux-gnu/lib/libc.so.6
+# sudo ln -s /home/bc/before/lib/libc.so.6 /usr/x86_64-linux-gnu/lib/libc.so.6
+#            and for libc_nonshared.a and ld-linux-x86-64.so.2
+#OCOMP=${OCOMP} LD_LIBRARY_PATH=/home/bc/before LD=/home/bc/before/x86_64-linux-gnu-ld.bfd L=-L/home/bc/before/lib OFLAGSEXTRA="inplace_reloc 0" ldprefer=1 ./md
+#if qemu too, must comment in qemu-x86_64.conf (from qemu-user-binfmt)
