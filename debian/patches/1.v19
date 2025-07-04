@@ -1,0 +1,57 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ sirc (1-v19) jammy; urgency=medium
+ .
+   * CFLAGS fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-04
+
+--- sirc-1.orig/configure.ac
++++ sirc-1/configure.ac
+@@ -77,6 +77,8 @@ AC_CHECK_HEADERS(sys/stat.h, [
+ 	)
+ ])
+ 
++start_cflgs="${CFLAGS}"
++
+ PKG_CHECK_MODULES([GLIB], [glib-2.0],[
+       CFLAGS="$GLIB_CFLAGS"
+       AC_MSG_CHECKING([g_memdup2])
+@@ -121,16 +123,16 @@ PKG_CHECK_MODULES([GTK], [gtk+-3.0],[
+ 	fi
+ ])
+ 
+-start_cflgs="$CFLAGS"
+ CFLAGS="-Werror=unknown-warning-option -Weverything"
+ AC_MSG_CHECKING([-Weverything])
+ AC_COMPILE_IFELSE(
+    [AC_LANG_SOURCE([])],
+    [AC_MSG_RESULT([yes])
+-	start_cflgs="$start_cflgs -Weverything -Werror"],
++	start_cflgs="${start_cflgs} -Weverything -Werror"],
+    [AC_MSG_RESULT([no])]
+ )
+-CFLAGS="$start_cflgs"
++
++CFLAGS="${start_cflgs}"
+ 
+ AS_IF([test x"$cpp" = x"false"],[
+   AC_CHECK_HEADERS(stdbool.h stddef.h)])
