@@ -1,0 +1,184 @@
+The automatically generated patch puts this free form text on top of it.
+
+If you are using gbp-buildpackage(1), you probably don't need this file.
+
+If you are using dgit-maint-merge(7), please consider text as follows.
+
+The Debian packaging of foo is maintained in git, using the merging workflow
+described in dgit-maint-merge(7).  There isn't a patch queue that can be
+represented as a quilt series.
+
+A detailed breakdown of the changes is available from their canonical
+representation - git commits in the packaging repository.  For example, to see
+the changes made by the Debian maintainer in the first upload of upstream
+version 1.2.3, you could use:
+
+    % git clone https://git.dgit.debian.org/foo
+    % cd foo
+    % git log --oneline 1.2.3..debian/1.2.3-1 -- . ':!debian'
+
+(If you have dgit, use `dgit clone foo`, rather than plain `git clone`.)
+
+A single combined diff, containing all the changes, follows.
+--- wstbld-1.orig/Makefile
++++ wstbld-1/Makefile
+@@ -1,9 +1,13 @@
+ 
+ p=wstbld
+ 
++ifndef prefix
++prefix=/usr
++endif
++
+ all: ${p}
+ ${p}:
+-	RUN__SHELL=$(SHELL) . ./shl && $${RUN__SHELL} ./mk
++	RUN__SHELL=$(SHELL) . ./shl && LD=$(LD) $${RUN__SHELL} ./mk
+ install:
+ 	install -D ${p} $(DESTDIR)$(prefix)/bin/${p}
+ clean:
+--- wstbld-1.orig/files.txt
++++ wstbld-1/files.txt
+@@ -10,10 +10,10 @@
+ #third and fourth rows are optional
+ 
+ #a slash-slash is: copy source to ..sync/src folder
+-///home/bc/old/wsb/sync/src/
++///home/bc/o/wstbld-1/sync/src/
+ 
+ #a slash-backslash is: copy destination to ..sync/dest folder
+-/\/home/bc/old/wsb/sync/dest/
++/\/home/bc/o/wstbld-1/sync/dest/
+ 
+ 
+ #A site model example, this file is parsed by the program
+--- wstbld-1.orig/mk
++++ wstbld-1/mk
+@@ -2,25 +2,38 @@
+ if [ -z "${linkerflags}" ]; then linkerflags="-O3 -s"; fi
+ p=wstbld
+ if [ -z "${1}" ]; then
+-	if [ -z "${LD}" ]; then LD=ld; fi
++	if [ -z "${LD}" ]; then
++		LD=ld
++	else
++		echo ld=${LD}
++	fi
+ 	if [ -z "${m32}" ]; then
++		echo 64bit
+ 		o wsb.oc underscore_pref 1 include_sec 1 ${OFLAGS} ${OFLAGSEXTRA} && \
+ 		ounused wsb.oc.log && \
+-		${LD} ${linkerflags} wsb.o -entry main --dynamic-linker=/lib64/ld-linux-x86-64.so.2 -o ${p} -lc
++		${LD} ${linkerflags} wsb.o -entry main --dynamic-linker=/lib64/ld-linux-x86-64.so.2 --build-id -o ${p} -l:libc.so.6  #--build-id for rpm
+ 	else
++		echo 32bit
+ 		o wsb.oc underscore_pref 1 include_sec 1 conv_64 1 ${OFLAGS} ${OFLAGSEXTRA} && \
+ 		ounused wsb.oc.log && \
+ 		#objcopy --redefine-sym _main=main wsb.o  #this will mess and can't use with inplace_reloc false either
+ 		${LD} ${linkerflags} -m elf_i386 wsb.o -entry main --dynamic-linker=/lib/ld-linux.so.2 -o ${p} -lc
+ 	fi
+ else
++	if [ -z "${CC}" ]; then
++		CC=gcc
++	else
++		echo cc=${CC}
++	fi
+ 	if [ -z "${m32}" ]; then
+-		o wsb.oc underscore_pref 1 inplace_reloc 0 conv_64 2 && \
+-		ounused wsb.oc.log && \
+-		x86_64-w64-mingw32-gcc-win32 ${linkerflags} wsb.o -o ${p}.exe
++		${mount}o${ext} wsb.oc underscore_pref 1 inplace_reloc 0 ${OFLAGS} && \
++		${mount}ounused${ext} wsb.oc.log && \
++		${CC} ${linkerflags} wsb.o -o ${p}.exe
++		# x86_64-w64-mingw32-gcc-win32
+ 	else
+-		o wsb.oc inplace_reloc 0 conv_64 1 && \
+-		ounused wsb.oc.log && \
+-		i686-w64-mingw32-gcc-win32 ${linkerflags} wsb.o -o ${p}.exe  #this is not working without uncommenting at win.oc
++		${mount}o${ext} wsb.oc inplace_reloc 0 conv_64 1 && \
++		${mount}ounused${ext} wsb.oc.log && \
++		${CC} ${linkerflags} wsb.o -o ${p}.exe  #this is not working without uncommenting at win.oc
++		# i686-w64-mingw32-gcc-win32
+ 	fi
+ fi
+--- /dev/null
++++ wstbld-1/mw
+@@ -0,0 +1,6 @@
++
++if [ -z "$1" ]; then
++	CC=x86_64-w64-mingw32-gcc-win32 OFLAGS="conv_64 2" ./mk 1
++else
++	CC=i686-w64-mingw32-gcc-win32 m32=x ./mk 1
++fi
+--- wstbld-1.orig/test
++++ wstbld-1/test
+@@ -1,6 +1,6 @@
+ 
+ mkdir -p dest && mkdir -p sync/dest && mkdir -p sync/src && \
+-${db} ./wsb files.txt && \
++${db} ./wstbld files.txt && \
+ diff -r /home/bc/arh/sites/files sync/src && \
+ diff -r dest sync/dest && \
+ if [ -n "${1}" ]; then
+--- wstbld-1.orig/wsb.oc
++++ wstbld-1/wsb.oc
+@@ -54,12 +54,12 @@ endfunction
+ importx "_free" free
+ 
+ function texter(ss msg)
+-    call puts(msg)
++	call puts(msg)
+ 	if main.starting_dir!=(NULL)
+ 		call free(main.starting_dir)
+ 	end
+-    importx "_exit" exit
+-    call exit(1)
++	importx "_exit" exit
++	call exit(1)
+ endfunction
+ 
+ importx "_sprintf" sprintf
+@@ -692,7 +692,7 @@ function sync_src_fn(ss filename,sd mem,
+ end
+ 
+ function usage()
+-	call texter("USAGE: wsb file
++	call texter("USAGE: wstbld file
+ or:        f file
+            --remove-log
+            --help")
+@@ -742,22 +742,21 @@ end
+ 
+ function to_home()
+ 	importx "_getenv" getenv
+-	sd e;vstr home_e="home error"
+-	set e getenv("HOMEDRIVE")
++	sd e
++	set e getenv("HOME")
+ 	if e!=(NULL)
+ 		call dirch_simple(e)
+-		set e getenv("HOMEPATH")
++	else #command prompt
++		set e getenv("HOMEDRIVE")
+ 		if e!=(NULL)
+-			call dirch_simple(e)
+-		else
+-			call texter(home_e)
+-		end
+-	else
+-		set e getenv("HOME")
+-		if e!=(NULL)
+-			call dirch_simple(e)
+-		else
+-			call texter(home_e)
++			call dirch_simple(e)  #msys build will not do this/only mingw, anyway they are working at HOME
++			set e getenv("HOMEPATH")
++			if e!=(NULL)
++				call dirch_simple(e)
++			else
++				vstr home_e="home error"
++				call texter(home_e)
++			end
+ 		end
+ 	end
+ 	return e
