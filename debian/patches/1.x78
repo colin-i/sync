@@ -1,0 +1,99 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x78) focal; urgency=medium
+ .
+   * aftercall fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-11
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -1532,6 +1532,6 @@ void aftercall_draw(WINDOW*w){
+ size_t init_aftercall(){
+ 	if(textfile!=nullptr){
+ 		if(is_extension_ok(ocode_extension,textfile)/*true*/)return aftercall_find();
+-	}
++	}else if(*ocode_extension=='\0')return aftercall_find();
+ 	return rows_tot;//still need a value
+ }
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2224,7 +2224,7 @@ static bool loopin(WINDOW*w){
+ 			else if(z==(key_findword+A_to_a)){if(find_mode(com_nr_findwordfrom,w)/*true*/)return true;}
+ 			else if(z==(key_undo+A_to_a)){vis('U',w);undo_loop(w);vis(' ',w);}
+ 			else if(z==(key_save+A_to_a)){b=savetofile(w,false);if(b/*true*/)return true;}
+-			else if(z==(key_ocomp+A_to_a)){aftercall=aftercall_find();aftercall_draw(w);}
++			else if(z==(key_ocomp+A_to_a)){aftercall=aftercall_find();aftercall_draw(w);}//here will scan without asking about file extension or disable/enable but only if enable will show
+ 			else if(z==(key_actswf+A_to_a)){if(pref_change(w,&sdelimiter,&sdelimiter_new,true,key_actswf,A_to_a)/*true*/)return true;}//don't allow no size delimiters
+ 			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_out,&split_out_new,false,key_actswf2,A_to_a)/*true*/)return true;}
+ 			else if(z==key_whites+A_to_a){if(pref_change(w,&filewhites_extension,&filewhites_extension_new,false,key_whites,A_to_a)/*true*/)return true;}
+@@ -2284,7 +2284,7 @@ static bool loopin(WINDOW*w){
+ 				}else if(chr==key_ocomp){
+ 					if(ocompiler_flag/*true*/){ocompiler_flag=false;c=orig_lowkey(key_ocomp);}
+ 					else{ocompiler_flag=true;c=orig_upkey(key_ocomp);
+-						aftercall=aftercall_find();}
++						aftercall=init_aftercall();}
+ 					setprefs(mask_ocompiler,ocompiler_flag);
+ 					visual(c);//addch for more info, first to window, then wnoutrefresh to virtual, then doupdate to phisical
+ 					aftercall_draw(w);
+--- edor-1.orig/s/tw.c
++++ edor-1/s/tw.c
+@@ -60,8 +60,8 @@ bool text_wrap(WINDOW*w){
+ 			row_dword sz=r->sz;
+ 
+ 			//add tabs
+-			char*s=r->data;
+-			int j;for (j=0; s[j]!='\0'; s[j]=='\t' ? j++ : *s++);
++			char*s=r->data;const char*end=s+sz;
++			int j=0;for(j=0;s!=end;s++)if(*s=='\t')j++;
+ 			sz+=(tab_sz-1)*j;
+ 
+ 			n+=sz/max;
+@@ -132,11 +132,14 @@ bool text_wrap(WINDOW*w){
+ 		visual(orig_upkey(key_wrap));//without stdscr refresh is not ok
+ 
+ 		//tw store some variables
+-		store_rows=rows;rows=rowswrap;
+-		store_rows_tot=rows_tot;rows_tot=j;
+ 		if(ocompiler_flag/*true*/){
+-			store_aftercall=aftercall;aftercall=aftercall_aux; // if warning, is ok, ocompiler_flag dependent
++			store_aftercall=aftercall;
++			if(aftercall<rows_tot){
++				aftercall=aftercall_aux; // if warning, is ok, ocompiler_flag dependent
++			}else aftercall=n;
+ 		}
++		store_rows=rows;rows=rowswrap;
++		store_rows_tot=rows_tot;rows_tot=j;
+ 
+ 		//window
+ 		ytext=y;xtext=0;
+--- /dev/null
++++ edor-1/win
+@@ -0,0 +1,9 @@
++set -e
++curl -s https://api.github.com/repos/colin-i/edor/releases/latest > 1
++n=`cat 1 | jq '.assets[] | .name' | grep -n msys | cut -d: -f1`
++n=$((n-1))
++x=`cat 1 | jq ".assets[${n}].browser_download_url"`
++x=${x:1:-1}
++wget $x
++pacman -U $x
++rm 1 $x
