@@ -1,0 +1,667 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-196) bionic; urgency=medium
+ .
+   * jpeg save location
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-14
+
+--- /dev/null
++++ ovideo-1/_fix/fix
+@@ -0,0 +1,9 @@
++
++cd l
++if [ -z "$1" ]; then
++	ln -s /home/bc/a/v/squashfs-root/usr/lib/i386-linux-gnu/libjpeg.so.8.2.2 libjpeg.so
++	ln -s /home/bc/a/v/squashfs-root/usr/lib/i386-linux-gnu/libsoup-2.4.so.1 libsoup-2.4.so
++	ln -s /home/bc/a/v/squashfs-root/usr/lib/i386-linux-gnu/libasound.so.2 libasound.so
++	ln -s /home/bc/a/v/squashfs-root/usr/lib/i386-linux-gnu/libgthread-2.0.so.0 libgthread-2.0.so
++	ln -s /home/bc/a/v/squashfs-root/lib/i386-linux-gnu/libpthread.so.0 libpthread.so
++else rm libjpeg.so libsoup-2.4.so libasound.so libgthread-2.0.so libpthread.so; fi
+--- /dev/null
++++ ovideo-1/_fix/pc/gstreamer-app-1.0.pc
+@@ -0,0 +1,4 @@
++Name: GTK+
++Description: GTK+ Graphical UI Library (${target} target)
++Version: 2.24.33
++Libs: -l:libgstreamer-1.0.so.0 -l:libgstapp-1.0.so.0 -l:libgstvideo-1.0.so.0
+--- /dev/null
++++ ovideo-1/_fix/pc/gstreamer-pbutils-1.0.pc
+@@ -0,0 +1,4 @@
++Name: GTK+
++Description: GTK+ Graphical UI Library (${target} target)
++Version: 2.24.33
++Libs: -l:libgstpbutils-1.0.so.0
+--- /dev/null
++++ ovideo-1/_fix/pc/gtk+-2.0.pc
+@@ -0,0 +1,4 @@
++Name: GTK+
++Description: GTK+ Graphical UI Library (${target} target)
++Version: 2.24.33
++Libs: --unresolved-symbols=ignore-in-shared-libs -L/home/bc/a/v/squashfs-root/usr/lib/i386-linux-gnu -l:libgtk-x11-2.0.so.0 -l:libgdk-x11-2.0.so.0 -l:libgdk_pixbuf-2.0.so.0 -l:libglib-2.0.so.0 -l:libgobject-2.0.so.0 -l:libcairo.so.2 -l:libpango-1.0.so.0 -l:libgio-2.0.so.0
+--- ovideo-1.orig/cln
++++ ovideo-1/cln
+@@ -1 +1 @@
+-make clean && git status
+\ No newline at end of file
++make clean && cd _fix && ./fix clean && cd .. && git status
+\ No newline at end of file
+--- ovideo-1.orig/make_linux.old
++++ ovideo-1/make_linux.old
+@@ -10,3 +10,7 @@ cd src
+ 
+ ../lin_make_objects
+ ../lin_link_objects
++
++#On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/ostream/releases).
++#Missing libjpeg.so.8? https://download.copr.fedorainfracloud.org/results/aflyhorse/libjpeg/fedora-36-i386/
++#Unacceptable TLS certificate? `bionic release glib-networking:i386 libgiognutls.so` can do it with environment GIO_EXTRA_MODULES variable for the `dirname` part.
+--- ovideo-1.orig/readme.md
++++ ovideo-1/readme.md
+@@ -12,21 +12,29 @@ Install:
+ sudo apt-get install ovideo
+ ```
+ \
+-On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/ostream/releases).\
+-\
+-On Fedora, <i>.rpm</i> file from [releases](https://github.com/colin-i/ostream/releases).\
+-Missing libjpeg.so.8? https://download.copr.fedorainfracloud.org/results/aflyhorse/libjpeg/fedora-36-i386/ \
+-Unacceptable TLS certificate? `bionic release glib-networking:i386 libgiognutls.so` can do it with environment GIO_EXTRA_MODULES variable for the `dirname` part.
++On openSUSE (i586), run the following as __root__:\
++For openSUSE Tumbleweed:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
++```
++For openSUSE Leap:
+ ```sh
+-dnf install ovideo-*.*.rpm
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_15.6/home:costin.repo
++```
++And:
++```sh
++zypper refresh
++zypper install ovideo
+ ```
+ \
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/ostream/releases).\
+ <i>Gstreamer sdk</i> x86 0.10 from [here](https://cgit.freedesktop.org/gstreamer/gstreamer/refs/heads).
++\
++\
++On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/ostream/releases).
+ 
+ ## From source
+-Compile with [O Compiler](https://github.com/colin-i/o) and link with
+-<i>binutils</i> and see the <i>Makefile</i> for requirements.
++Compile with [O Compiler](https://github.com/colin-i/o). At linux, for example: link with <i>lld</i> and having gstreamer1(with good/bad plugins), gtk2, libsoup2, libasound2, libjpeg8.
+ 
+ ## Info
+ [Video tutorials](https://www.youtube.com/channel/UCBJPvGdXY5U3p8Fbl6HOFkQ).\
+--- ovideo-1.orig/src/Makefile
++++ ovideo-1/src/Makefile
+@@ -61,28 +61,48 @@ $(foreach var,$(items),$(eval obs += ${i
+ $(eval logs = )
+ $(foreach var,$(items),$(eval logs += ${items_prefix}${var}.oc.log))
+ 
++extra=${o}containers.oh
++
+ ifeq (${platform},lin)
+ 
+ OFLAGS = underscore_pref 1 ${OFLAGSEXTRA}
+-lprojname=${items_prefix}${projname}
+ lshare=_dif/share.txt
+ sharefolderpackage=$(prefix)/share/ovideo
+ sharefolder=$(DESTDIR)${sharefolderpackage}
+ dynlink=/lib/ld-linux.so.2
+-all: ${lprojname}
+-${lprojname}: ${lshare} ${obs}
++all: ${projname}
++${projname}: ${lshare} ${extra} ${obs}
+ 	${OLINK} ${logs}
+-	export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig/:${PKG_CONFIG_PATH}; \
+-	$(LD) ${linkerflags} -melf_i386 --dynamic-linker=${dynlink} ${obs} -o ${lprojname} -lc -lm `pkg-config --libs gtk+-2.0 gstreamer-pbutils-1.0 gstreamer-app-1.0` -ljpeg -lsoup-2.4 -lasound -lgthread-2.0 -lpthread;
++	export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}; \
++	$(LD) -melf_i386 --dynamic-linker=${dynlink} ${linkerflags} ${obs} -o ${items_prefix}${projname} ${Lc} -l:libc.so.6 -l:libm.so.6 `pkg-config --libs gtk+-2.0 gstreamer-pbutils-1.0 gstreamer-app-1.0` -ljpeg -lsoup-2.4 -lasound -lgthread-2.0 -lpthread;
++#same CC problem like at actionswf # $(CC) -m32 ${linkerflagsextra}
++#need to use LLVM lld to work
+ ${lshare}:
+ 	echo char prestart=0x2e\;char simplestart=\"${sharefolderpackage}\"\;return \#simplestart > ${lshare}
++platform-clean:
++	-rm -f ${projname}
++	-rm -f ${lshare}
++install-proc:
++	cd ../build; \
++	find ./img -type f ! -name 1616.png -exec install -Dm 664 {} ${sharefolder}/{} \;
++	#is with ! name can try in debian/rules override_dh_auto_clean maybe
++	install -d ${sharefolder}/html
++	cd ../html; \
++	install -Dm 664 html/use.html ${sharefolder}/html/
++	cd ..; \
++	install -m 664 ./version.txt ${sharefolder}/
++	install -D ${projname} \
++		$(DESTDIR)$(prefix)/bin/${projname}
++uninstall:
++	-rm -f $(DESTDIR)$(prefix)/bin/${projname}
++	-rm -r ${sharefolder}
+ 
+ else
+ 
+ OFLAGS = inplace_reloc 0 include_sec 1 ${OFLAGSEXTRA}
+ wprojname=${projname}.exe
+ all: ${wprojname}
+-${wprojname}: ${obs}
++${wprojname}: ${extra} ${obs}
+ 	ounused ${logs}
+ 	#this is also working
+ 	#i686-w64-mingw32-gcc -Wl,--large-address-aware ${linkerflags} ${obs} -o ${wprojname} -Wl,--start-group \
+@@ -93,9 +113,22 @@ ${wprojname}: ${obs}
+ 	-lgtk-win32-2.0 -lgdk-win32-2.0 -lgdk_pixbuf-2.0 -lglib-2.0 -lgobject-2.0 -lgio-2.0 -lgthread-2.0 \
+ 	-lgstreamer-0.10 -lgstapp-0.10 -lgstinterfaces-0.10 -lgstpbutils-0.10 \
+ 	-lcairo -lpango-1.0 -lsoup-2.4 -ljpeg;
++platform-clean:
++	-rm -f ${wprojname}
++install-proc:
++	echo use wmake
++uninstall: install-proc
+ 
+ endif
+ 
++${extra}:
++	a='int main(){printf("charx GtkTypeInfo#%u;data s=%u;data a=%u;data b=%u;data bb=%u;data c=%u;data cc=%u;data d=%u;",sizeof(GtkTypeInfo),sizeof(GtkTypeInfo),offsetof(GtkTypeInfo,type_name),offsetof(GtkTypeInfo,object_size),sizeof(GtkEventBox),offsetof(GtkTypeInfo,class_size),sizeof(GtkEventBoxClass),offsetof(GtkTypeInfo,class_init_func));return 0;}'; \
++	export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}; \
++	printf '#include <gtk/gtk.h>\n%s' "$${a}" | gcc `pkg-config --cflags gtk+-2.0` -x c -m32 - `pkg-config --libs gtk+-2.0`
++	echo -n 'function ov_frame();' > $@
++	./a.out >> $@
++	echo -n 'call setmemzero(#GtkTypeInfo,s);end' >> $@
++	rm a.out
+ 
+ #at jammy libgtk2.0-dev:i386,libgstreamer-plugins-base1.0-dev:i386,libsoup2.4-dev:i386,libasound2-dev:i386
+ 
+@@ -117,47 +150,29 @@ endif
+ #snprintf with circular unresolved requirements
+ #cos is in -lmingwex that will work with -lmingw32 -lmsvcrt
+ #on win msvcr100 is old and at here is from old java-i586
+-linkapp:
+-	LD_LIBRARY_PATH=/home/bc/v/ovideo-1/AppDir/usr/lib/i386-linux-gnu:/home/bc/v/ovideo-1/AppDir/lib/i386-linux-gnu \
+-		$(LD) ${linkerflags} -melf_i386 --dynamic-linker=${dynlink} ${obs} -o ${lprojname} \
+-			-L/home/bc/v/ovideo-1/AppDir/usr/lib/i386-linux-gnu \
+-			-l:libc.so.6 -l:libm.so.6 -l:libgtk-x11-2.0.so.0 -l:libgdk-x11-2.0.so.0 -l:libpangocairo-1.0.so.0 -l:libatk-1.0.so.0 -l:libcairo.so.2 -l:libgdk_pixbuf-2.0.so.0 -l:libgio-2.0.so.0 -l:libpangoft2-1.0.so.0 -l:libpango-1.0.so.0 -l:libfontconfig.so.1 -l:libfreetype.so.6 -l:libgstpbutils-1.0.so.0 -l:libgstaudio-1.0.so.0 -l:libgstvideo-1.0.so.0 -l:libgstapp-1.0.so.0 -l:libgstbase-1.0.so.0 -l:libgstreamer-1.0.so.0 -l:libgobject-2.0.so.0 -l:libglib-2.0.so.0 -l:libjpeg.so.8 -l:libsoup-2.4.so.1 -l:libasound.so.2 -l:libpthread.so.0 -l:libgthread-2.0.so.0
++#linkapp:
++#	LD_LIBRARY_PATH=/home/bc/v/ovideo-1/AppDir/usr/lib/i386-linux-gnu:/home/bc/v/ovideo-1/AppDir/lib/i386-linux-gnu \
++#		$(LD) ${linkerflags} -melf_i386 --dynamic-linker=${dynlink} ${obs} -o ${lprojname} \
++#			-L/home/bc/v/ovideo-1/AppDir/usr/lib/i386-linux-gnu \
++#			-l:libc.so.6 -l:libm.so.6 -l:libgtk-x11-2.0.so.0 -l:libgdk-x11-2.0.so.0 -l:libpangocairo-1.0.so.0 -l:libatk-1.0.so.0 -l:libcairo.so.2 -l:libgdk_pixbuf-2.0.so.0 -l:libgio-2.0.so.0 -l:libpangoft2-1.0.so.0 -l:libpango-1.0.so.0 -l:libfontconfig.so.1 -l:libfreetype.so.6 -l:libgstpbutils-1.0.so.0 -l:libgstaudio-1.0.so.0 -l:libgstvideo-1.0.so.0 -l:libgstapp-1.0.so.0 -l:libgstbase-1.0.so.0 -l:libgstreamer-1.0.so.0 -l:libgobject-2.0.so.0 -l:libglib-2.0.so.0 -l:libjpeg.so.8 -l:libsoup-2.4.so.1 -l:libasound.so.2 -l:libpthread.so.0 -l:libgthread-2.0.so.0
+ 
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS}
+ #	$(eval logs += $@.oc.log)
+ #	$(eval obs += $@.o)
+ 
+-clean:
++clean: platform-clean
+ 	-rm -f ${obs}
+ 	-rm -f ${logs}
+-	-rm -f ${projname}
+-	-rm -f ${lshare}
+-	-rm -f ${wprojname}
++	-rm -f ${extra}
+ 
+ distclean: clean
+ 
+ test:
+ 	echo "Nothing"
+ 
+-install-proc:
+-	cd ../build; \
+-	find ./img -type f ! -name 1616.png -exec install -Dm 664 {} ${sharefolder}/{} \;
+-	#is with ! name can try in debian/rules override_dh_auto_clean maybe
+-	install -d ${sharefolder}/html
+-	cd ../html; \
+-	install -Dm 664 html/use.html ${sharefolder}/html/
+-	cd ..; \
+-	install -m 664 ./version.txt ${sharefolder}/
+-	install -D ${projname} \
+-		$(DESTDIR)$(prefix)/bin/${projname}
+-
+ install: all install-proc
+ 
+-uninstall:
+-	-rm -f $(DESTDIR)$(prefix)/bin/${projname}
+-	-rm -r ${sharefolder}
+-
+-.PHONY: all install install-proc linkapp clean distclean uninstall test
++.PHONY: all install install-proc clean platform-clean distclean uninstall test
+ 
+ .NOTPARALLEL:
+--- ovideo-1.orig/src/_dif/dif~lin.oc
++++ ovideo-1/src/_dif/dif~lin.oc
+@@ -68,12 +68,19 @@ endfunction
+ 
+ importx "gtk_file_chooser_get_filename" gtk_file_chooser_get_filename
+ function file_chooser_get_fname(sd dialog)
+-    sd file
+-    setcall file gtk_file_chooser_get_filename(dialog)
+-    return file
++	sd file
++	setcall file gtk_file_chooser_get_filename(dialog) #platform encoding
++	return file
+ endfunction
+-
+-
++function ov_frame_clone(ss file) #here is from filechooser
++	importx "g_filename_to_utf8" g_filename_to_utf8
++	ss f;set f g_filename_to_utf8(file,-1,(NULL),(NULL),(NULL)) #G_CONVERT_ERROR_EMBEDDED_NUL(output contains a nul character) is not because len is -1
++	#G_CONVERT_ERROR_ILLEGAL_SEQUENCE(A nul character found inside the string) , same -1 len
++	#if f!=(NULL) #"or NULL on an error"
++	#	call g_free(file) can't free orig here, is from filechooser forward
++	#end
++	return f
++end
+ 
+ 
+ 
+--- ovideo-1.orig/src/_dif/dif~win.oc
++++ ovideo-1/src/_dif/dif~win.oc
+@@ -136,7 +136,11 @@ function file_chooser_get_fname(sd dialo
+     setcall file gtk_file_chooser_get_filename_utf8(dialog)
+     return file
+ endfunction
+-
++importx "_g_strdup" g_strdup
++function ov_frame_clone(ss file) #already utf8
++	set file g_strdup(file) #nothing about null return
++	return file
++end
+ 
+ 
+ 
+--- ovideo-1.orig/src/_exec/ostream.oc
++++ ovideo-1/src/_exec/ostream.oc
+@@ -17,6 +17,8 @@ end
+ include "../_dif/difl.oc" "../_dif/difw.oc"
+ 
+ call gtk_init(0,0)
++import "ov_init" ov_init
++call ov_init()
+ 
+ importx "_setlocale" setlocale
+ call setlocale((LC_NUMERIC),"C") #"English" was ok
+--- ovideo-1.orig/src/_prepare/frame/add.oc
++++ ovideo-1/src/_prepare/frame/add.oc
+@@ -13,19 +13,24 @@ function stage_new_frame()
+     call filechooserfield_forward(f)
+ endfunction
+ function stage_new_frame_got_filename(ss filename)
+-    sd pixbuf
+-    setcall pixbuf pixbuf_from_file(filename)
+-    sd z=0
+-    if pixbuf!=z
+-        call stage_new_pixbuf(pixbuf)
+-    endif
++	sd pixbuf
++	setcall pixbuf pixbuf_from_file(filename)
++	sd z=0
++	if pixbuf!=z
++		sd ebox
++		set ebox stage_new_pixbuf(pixbuf)
++		import "ov_frame_connect_fname" ov_frame_connect_fname
++		call ov_frame_connect_fname(ebox,filename)
++	endif
+ endfunction
+ function stage_new_pixbuf(sd pixbuf)
+-    str text="Frame added. Total frames: "
+-    import "stage_new_pix" stage_new_pix
+-    call stage_new_pix(pixbuf,text)
+-    import "stage_display_last" stage_display_last
+-    call stage_display_last()
++	vstr text="Frame added. Total frames: "
++	import "stage_new_pix" stage_new_pix
++	sd ebox
++	set ebox stage_new_pix(pixbuf,text)
++	import "stage_display_last" stage_display_last
++	call stage_display_last()
++	return ebox
+ endfunction
+ 
+ 
+--- ovideo-1.orig/src/_prepare/frame/frame.oc
++++ ovideo-1/src/_prepare/frame/frame.oc
+@@ -39,7 +39,7 @@ function stage_frame_panel_open_fn(sd p_
+ 
+     import "stage_save_img" stage_save_img
+     char frame_lot="img.bmp"
+-    char *="Save the current selection to a file"
++    char *="Save the selected frame to a file"
+     data *^stage_save_img
+     #
+     import "stage_add_centered" stage_add_centered
+--- ovideo-1.orig/src/_prepare/pipe.oc
++++ ovideo-1/src/_prepare/pipe.oc
+@@ -205,25 +205,29 @@ function stage_pixbuf_to_container(sd pi
+ endfunction
+ 
+ #add a new frame to the stage
+-#err
++#eventbox
+ function stage_new_frame_with_timelength(sd pixbuf,sd length)
+-    #add the frame length at the end
+-    call stage_frame_time_numbers((stage_frame_time_append),length)
++	#add the frame length at the end
++	call stage_frame_time_numbers((stage_frame_time_append),length)
+ 
+-    #add eventbox for mouse detection
+-    sd eventbox
+-    setcall eventbox stage_new_click_area()
++	#add eventbox for mouse detection
++	sd eventbox
++	setcall eventbox stage_new_click_area()
+ 
+-    #pixbuf to eventbox
+-    call stage_pixbuf_to_container(pixbuf,eventbox)
++	#pixbuf to eventbox
++	call stage_pixbuf_to_container(pixbuf,eventbox)
++	return eventbox
+ endfunction
+-#add a frame,length=1
++#add a frame,length=1  ebox return
+ function stage_new_pix(sd pixbuf,ss text_ok)
+-    call stage_new_frame_with_timelength(pixbuf,1)
++	sd ebox
++	set ebox stage_new_frame_with_timelength(pixbuf,1)
+ 
+-    #show the message and the received number of frames
+-    data one=1
+-    call stage_display_index(text_ok,one)
++	#show the message and the received number of frames
++	data one=1
++	call stage_display_index(text_ok,one)
++
++	return ebox
+ endfunction
+ import "default_unref_ptr" default_unref_ptr
+ #incoming frame arrange
+--- ovideo-1.orig/src/_prepare/sel.oc
++++ ovideo-1/src/_prepare/sel.oc
+@@ -226,6 +226,7 @@ function stage_get_sel_parent(sd ptr_eve
+     return (noerror)
+ endfunction
+ 
++import "object_get_dword_name" object_get_dword_name
+ #e
+ function stage_get_sel_pixbuf(sd ptr)
+     sd eventbox
+@@ -236,7 +237,6 @@ function stage_get_sel_pixbuf(sd ptr)
+         return err
+     endif
+     sd pixbuf
+-    import "object_get_dword_name" object_get_dword_name
+     setcall pixbuf object_get_dword_name(eventbox)
+     set ptr# pixbuf
+     data noerr=noerror
+@@ -262,38 +262,42 @@ function stage_get_selection_pixbuf()
+     return px
+ endfunction
+ 
++function jpeg_format()
++	return "jpg"
++end
+ #save the selection to a file
+ function stage_save_img()
+-    sd pixbuf
+-    sd ptr_pixbuf^pixbuf
+-    sd err
+-    data noerr=noerror
+-    setcall err stage_get_sel_pixbuf(ptr_pixbuf)
+-    if err!=noerr
+-        return err
+-    endif
+-
+-    ss location
+-    str format="jpeg"
+-    import "save_destination" save_destination
+-    setcall location save_destination(format)
+-
+-    sd file
+-    sd p_file^file
+-    import "openfile" openfile
+-    importx "_fclose" fclose
+-    sd er
+-    ss mode="wb"
+-    setcall er openfile(p_file,location,mode)
+-    if er!=(noerror)
+-        return 0
+-    endif
+-    import "stage_jpeg_write" stage_jpeg_write
+-    call stage_jpeg_write(file,pixbuf)
+-    call fclose(file)
+-
+-    import "save_inform_saved" save_inform_saved
+-    call save_inform_saved(location)
++	sd eventbox
++	sd ptr_eventbox^eventbox
++	sd err
++	setcall err stage_get_sel_parent(ptr_eventbox)
++	if err=(noerror)
++		ss location
++		import "ov_frame_location" ov_frame_location
++		set location ov_frame_location(eventbox)
++		if location=(NULL)
++			ss format;set format jpeg_format()
++			import "save_destination" save_destination
++			setcall location save_destination(format)
++		end
++		sd file
++		sd p_file^file
++		import "openfile" openfile
++		importx "_fclose" fclose
++		ss mode="wb"
++		setcall err openfile(p_file,location,mode)
++		if err=(noerror)
++			sd pixbuf
++			setcall pixbuf object_get_dword_name(eventbox)
++
++			import "stage_jpeg_write" stage_jpeg_write
++			call stage_jpeg_write(file,pixbuf)
++			call fclose(file)
++
++			import "save_inform_saved" save_inform_saved
++			call save_inform_saved(location)
++		endif
++	endif
+ endfunction
+ 
+ 
+--- ovideo-1.orig/src/mk
++++ ovideo-1/src/mk
+@@ -13,3 +13,5 @@ LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/
+ #libgiognutls.so bionic release version package is failling to backport
+ #I made a base64 libgiognutls.so.txt copy at https://drive.google.com/uc?id=192pUkPvRf4-SIQaU8vdvJa-Hgo22Cgpw&export=download
+ #	mention: mimeType='text/plain' ~/test/google/a 0
++
++#suse to be usable in Xephyr in docker must also install:  zypper in -t pattern gnome_basic gnome gnome_x11
+--- /dev/null
++++ ovideo-1/src/mrd
+@@ -0,0 +1,19 @@
++set -e
++if [ -z "`ls ../_fix/l`" ]; then cd ../_fix; ./fix; cd ../src; fi
++if [ ! -e obj/containers.oh ]; then cp ../../containers.oh obj; fi
++PKG_CONFIG_PATH=/home/bc/a/v/ovideo-1/_fix/pc \
++LD_LIBRARY_PATH=${HOME}/Desktop/binutils-arm64-i686-focal/usr/lib/aarch64-linux-gnu LD=${HOME}/Desktop/binutils-arm64-i686-focal/usr/bin/i686-linux-gnu-ld.bfd \
++Lc=-L/home/bc/a/v/ovideo-1/_fix/l \
++OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= \
++	make prefix=/usr items_prefix=`pwd`/
++mv ovideo ../../squashfs-root/usr/bin/ostream
++
++#i686-linux-gnu/bin/ld
++
++#_fix/fix
++#add --unresolved-symbols=ignore-in-shared-libs few -l like in pc folder
++#  if the following, will have too many libs in dynamic and will be wrong fonts
++#        in /home/bc/a/v/squashfs-root/usr/lib/i386-linux-gnu
++#        find . -maxdepth 1 -type f | sed 's/^.\//-l:/' | xargs
++#  if the following, will still have unresolved symbols ps_ funcs
++#        same in /home/bc/a/v/squashfs-root/lib/i386-linux-gnu + libpulsecommon-15.99.so
+--- ovideo-1.orig/src/obj/containers.oc
++++ ovideo-1/src/obj/containers.oc
+@@ -5,6 +5,8 @@ format elfobj
+ 
+ include "../_include/include.oh"
+ 
++include "containers.oh"
++
+ importx "_gtk_box_pack_start" gtk_box_pack_start
+ 
+ #########box
+@@ -161,7 +163,6 @@ function dialogfield_modal_texter_init(s
+     setcall draw drawfield(vbox)
+ #    call dialogfield_modal_texter_drawtext((value_unset))
+     #old remark: it's not ok to access at the same time txt[modal_texter_draw_data_size] by threads but it's no problem
+-    #import "setmemzero" setmemzero
+     #call setmemzero(txt,(modal_texter_draw_data_size))
+     call dialog_modal_texter_drawwidget((value_set),draw)
+     #
+@@ -273,15 +274,101 @@ endfunction
+ 
+ ##########eventbox
+ 
++importx "_gtk_type_new" gtk_type_new
++function ov_gtk_event_box_new()
++	valuex type#1  #gsize
++	sd ebox;set ebox gtk_type_new(type)
++	return ebox
++end
++importx "_g_type_class_add_private" g_type_class_add_private
++function ov_gtk_event_box_class_init(sd class)
++	call g_type_class_add_private(class,:) #When an object is allocated, the private structures for the type and all of its parent types are allocated sequentially in the same memory block as the public structures, and are zero-filled.
++end
++importx "_gtk_event_box_get_type" gtk_event_box_get_type
++importx "_gtk_type_unique" gtk_type_unique
++import "setmemzero" setmemzero
++function ov_init()
++	#vstrx type_name#1             #_gchar
++	#datax object_size#1           #guint
++	#datax class_size#1            #guint
++	#valuex class_init_func#1      #GtkClassInitFunc
++	#valuex object_init_func#1     #GtkObjectInitFunc
++	#valuex reserved_1#1           #gpointer
++	#valuex reserved_2#1           #gpointer
++	#valuex base_class_init_func#1 #GtkClassInitFunc
++
++	call ov_frame()
++
++	sd a
++	set a #ov_frame.GtkTypeInfo
++	add a ov_frame.a
++	set a#v^ "OVEventBox"
++	set a #ov_frame.GtkTypeInfo
++	add a ov_frame.b
++	set a# ov_frame.bb
++	set a #ov_frame.GtkTypeInfo
++	add a ov_frame.c
++	set a# ov_frame.cc
++	set a #ov_frame.GtkTypeInfo
++	add a ov_frame.d
++	set a#v ov_gtk_event_box_class_init
++
++	sd t;set t gtk_event_box_get_type()
++	set ov_gtk_event_box_new.type gtk_type_unique(t,#ov_frame.GtkTypeInfo)
++end
++function ov_frame_destroy_func(sd *frame,ss fnameclone)
++	call g_free(fnameclone)
++end
++importx "_g_basename" g_basename
++importx "_g_utf8_strrchr" g_utf8_strrchr
++importx "_g_strconcat" g_strconcat
++importx "_g_type_instance_get_private" g_type_instance_get_private
++function ov_frame_connect_fname(sd frame,ss fname)
++	import "ov_frame_clone" ov_frame_clone
++	set fname ov_frame_clone(fname)
++	if fname!=(NULL) #"or NULL on an error"
++		#there is a complication with home_folder absolute on linux, set here fast at the moment
++		ss bname;set bname g_basename(fname) #It returns a pointer into the given file name string.
++		#these are starting from gtk_file_chooser_get_filename[_utf8] utf8 also from filename_to_utf8
++		char ext_delim={Period,Nullchar}
++		ss pos;set pos g_utf8_strrchr(bname,-1,ext_delim)
++		if pos!=(NULL)
++			set pos# (Nullchar)
++		end
++		import "capture_folder" capture_folder
++		sd p1;set p1 capture_folder()
++		import "jpeg_format" jpeg_format
++		sd form;set form jpeg_format()
++		sd location;set location g_strconcat(p1,"/",bname,#ext_delim,form,(NULL)) #/ is ok at the other jpg save. utf8 return
++		call g_free(fname)
++
++		#connect frame
++		sv data;set data g_type_instance_get_private(frame,ov_gtk_event_box_new.type)
++		set data# location
++
++		#and to free
++		call connect_signal_data(frame,"destroy",ov_frame_destroy_func,location)
++	end
++end
++function ov_frame_location(sd ebox)
++	sv source;set source g_type_instance_get_private(ebox,ov_gtk_event_box_new.type)
++	import "move_to_home_core" move_to_home_core
++	ss location;set location source#
++	if location!=(NULL)
++		call move_to_home_core(#location)
++	end
++	return location
++end
++
+ importx "_gtk_container_add" gtk_container_add
+ import "container_add" container_add
+ 
+ importx "_gtk_event_box_new" gtk_event_box_new
+ function eventboxfield(sd box)
+-    sd wid
+-    setcall wid gtk_event_box_new()
+-    call packstart_default(box,wid)
+-    return wid
++	sd wid
++	setcall wid ov_gtk_event_box_new() #gtk_event_box_new()
++	call packstart_default(box,wid)
++	return wid
+ endfunction
+ function eventboxfield_cnt(sd box)
+     sd wid
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.195
+\ No newline at end of file
++1.196
+\ No newline at end of file
+--- ovideo-1.orig/wmake
++++ ovideo-1/wmake
+@@ -15,6 +15,7 @@ if [ -z "$1" ] || [ -n "$2" ]
+ then
+ #make/clean
+ 	cd src
++	if [ ! -e obj/containers.oh ]; then cp ../../containers.oh obj; fi
+ 	./wmake $2
+ 	if [ "$?" != 0 ]; then
+ 		exit
+--- /dev/null
++++ ovideo-1/zipexcludes
+@@ -0,0 +1 @@
++_fix soundrecorder
+\ No newline at end of file
