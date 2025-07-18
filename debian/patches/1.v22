@@ -1,0 +1,607 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ torra (1-v22) jammy; urgency=medium
+ .
+   * relative paths
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-18
+
+--- torra-1.orig/README.md
++++ torra-1/README.md
+@@ -20,8 +20,9 @@ zypper addrepo https://download.opensuse
+ ```
+ For openSUSE Leap:
+ ```sh
+-zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_15.6/home:costin.repo
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
+ ```
++Replace *16.0* with *15.6* if needed.\
+ And:
+ ```sh
+ zypper refresh
+@@ -39,7 +40,7 @@ dnf install python3-torra
+ And having gtk4.\
+ \
+ \
+-On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/irc-ssl/releases). Or:
++On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/tora/releases). Or:
+ ```sh
+ yay -Sy python-torra
+ ```
+@@ -50,10 +51,10 @@ From [PyPI](https://pypi.org/project/tor
+ ```sh
+ pip3 install torra
+ ```
+-And having gtk4.\
++And having gtk4 and, if is not at PyPI, libtorrent with python bindings. Also working on Windows MinGW64 MSys2.\
+ \
+ \
+-On other linux distributions with gtk4, <i>.AppImage</i> file from [releases](https://github.com/colin-i/tora/releases).
++On linux distributions with gtk4, <i>.AppImage</i> file from [releases](https://github.com/colin-i/tora/releases).
+ 
+ ## From source
+ Using libtorrent (arvidn) with python bindings.\
+--- torra-1.orig/setup.py
++++ torra-1/setup.py
+@@ -1,4 +1,4 @@
+-ver="1.0.39"
++ver="1.0.41"
+ README="""Torrent client.\\
+ To remove configuration launch ```torra --remove-config```. There is also ```torra --debug```.\\
+ To specify another torrent list at start, launch with an argument, e.g. ```torra ~/torrents.txt```, or ```torra f ~/torrents.txt```\\
+--- torra-1.orig/torra/confs.py
++++ torra-1/torra/confs.py
+@@ -2,8 +2,11 @@
+ import os.path
+ import appdirs
+ import pathlib
++
++projname='torra'
++
+ def get_root_dir():
+-	return pathlib.Path(appdirs.user_config_dir('torra'))
++	return pathlib.Path(appdirs.user_config_dir(projname))
+ def get_root_file(f):
+ 	return os.path.join(get_root_dir(),f)
+ 
+--- torra-1.orig/torra/conmenu.py
++++ torra-1/torra/conmenu.py
+@@ -5,6 +5,8 @@ from . import treesel
+ from . import layout
+ from . import next
+ k=gtk.k
++k2=gtk.k2
++k3=gtk.k3
+ 
+ timer=0
+ 
+@@ -19,14 +21,14 @@ def fire():
+ def click(tree,path):
+ 	global timer
+ 	if timer>0:
+-		k.g_source_remove(timer)
++		k2.g_source_remove(timer)
+ 	k.gtk_widget_show(menu)
+ 	torrent.sel(tree,path)
+-	timer=k.g_timeout_add(10000,fire,None)
++	timer=k2.g_timeout_add(10000,fire,None)
+ 
+ def hide():
+ 	global timer
+-	k.g_source_remove(timer)
++	k2.g_source_remove(timer)
+ 	timer=0
+ 	k.gtk_widget_hide(menu)
+ 
+@@ -50,13 +52,13 @@ def ini(parent,tree):
+ 	menu=k.gtk_box_new(gtk.GtkOrientation.GTK_ORIENTATION_HORIZONTAL,0)
+ 	uni=chr(0x24D8).encode()
+ 	b=k.gtk_button_new_with_label(uni)
+-	k.g_signal_connect_data(b,b"clicked",infoclick,tree,None,0)
++	k3.g_signal_connect_data(b,b"clicked",infoclick,tree,None,0)
+ 	k.gtk_box_append(menu,b)
+ 	uni=chr(0x1F5D1).encode()
+ 	b=k.gtk_button_new_with_label(uni)
+-	k.g_signal_connect_data(b,b"clicked",remclick,tree,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data(b,b"clicked",remclick,tree,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	k.gtk_box_append(menu,b)
+ 	k.gtk_box_append(parent,menu)
+ 	k.gtk_widget_hide(menu)
+-	k.g_signal_connect_data(tree,b"row-activated",click,None,None,0)
++	k3.g_signal_connect_data(tree,b"row-activated",click,None,None,0)
+ 	k.gtk_tree_view_set_activate_on_single_click(tree,True)
+--- torra-1.orig/torra/gtk.py
++++ torra-1/torra/gtk.py
+@@ -42,10 +42,18 @@ CALLBACK4i = CFUNCTYPE(c_int,c_void_p,c_
+ class GtkTreeIter(Structure):
+ 	_fields_=[("stamp",c_int),("user_data",c_void_p),("user_data2",c_void_p),("user_data3",c_void_p)]
+ 
+-path_to_deps = "/usr/local/lib/arm-linux-gnueabihf"
+-os.environ['PATH'] = path_to_deps + os.pathsep + os.environ['PATH']
+-lib_gtk_name="libgtk-4.so.1"
+-k = cdll.LoadLibrary(lib_gtk_name)
++#path_to_deps = "/usr/local/lib/arm-linux-gnueabihf"
++#os.environ['PATH'] = path_to_deps + os.pathsep + os.environ['PATH']
++try:
++	k =cdll.LoadLibrary("libgtk-4.so.1")
++	k2=k
++	k3=k
++	k4=k
++except Exception:
++	k =cdll.LoadLibrary("libgtk-4-1.dll")
++	k2=cdll.LoadLibrary("libglib-2.0-0.dll")
++	k3=cdll.LoadLibrary("libgobject-2.0-0.dll")
++	k4=cdll.LoadLibrary("libgio-2.0-0.dll")
+ 
+ #By default functions are assumed to return the C int type. Other return types can be specified by setting the restype attribute of the function object.
+ #argtypes no default. c_void_p is python int. pointers must be announced on ARM.
+@@ -67,12 +75,12 @@ def gtk_list_store_set5(a,b,i1,v1,i2,p2,
+ 	k.gtk_list_store_set.argtypes = [c_void_p,c_void_p,c_int,c_void_p,c_int,c_void_p,c_int,c_void_p,c_int,c_void_p,c_int,c_void_p,c_int]
+ 	k.gtk_list_store_set(a,b,i1,v1,i2,p2,i3,p3,i4,p4,i5,p5,-1)
+ 
+-k.g_application_run.argtypes = [c_void_p,c_int,c_void_p]
+-k.g_free.argtypes = [c_void_p]
+-k.g_object_unref.argtypes = [c_void_p]
+-k.g_signal_connect_data.argtypes = [c_void_p,c_void_p,c_void_p,c_void_p,c_void_p,c_int]
+-k.g_source_remove.argtypes = [c_void_p]
+-k.g_timeout_add.argtypes = [c_int,c_void_p,c_void_p]
++k2.g_free.argtypes = [c_void_p]
++k2.g_source_remove.argtypes = [c_void_p]
++k2.g_timeout_add.argtypes = [c_int,c_void_p,c_void_p]
++k3.g_object_unref.argtypes = [c_void_p]
++k3.g_signal_connect_data.argtypes = [c_void_p,c_void_p,c_void_p,c_void_p,c_void_p,c_int]
++k4.g_application_run.argtypes = [c_void_p,c_int,c_void_p]
+ #
+ k.gdk_keyval_name.restype=c_char_p
+ k.gdk_toplevel_get_state.argtypes = [c_void_p]
+--- torra-1.orig/torra/layout.py
++++ torra-1/torra/layout.py
+@@ -9,6 +9,7 @@ from . import torrent
+ from . import overall
+ from . import next
+ k=gtk.k
++k3=gtk.k3
+ 
+ from enum import IntEnum
+ class COLUMNS(IntEnum):
+@@ -22,7 +23,7 @@ class COLUMNS(IntEnum):
+ colsdef=lambda:k.gtk_list_store_new(COLUMNS.n, gtk.G_TYPE_STRING, gtk.G_TYPE_STRING, gtk.G_TYPE_STRING, gtk.G_TYPE_STRING, gtk.G_TYPE_STRING)
+ list=colsdef()
+ sort=k.gtk_tree_model_sort_new_with_model(list)
+-k.g_object_unref(list)
++k3.g_object_unref(list)
+ 
+ @gtk.CALLBACK
+ def header_click(ix):
+@@ -37,7 +38,7 @@ def header_click(ix):
+ def columns_add(tree,n,i):
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(n, renderer, b"text", i, None)
+-	k.g_signal_connect_data(column,b"clicked",header_click,i,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data(column,b"clicked",header_click,i,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	k.gtk_tree_view_column_set_clickable(column,True)
+ 	k.gtk_tree_view_column_set_resizable(column,True)
+ 	k.gtk_tree_view_column_set_expand(column,True)
+@@ -72,20 +73,20 @@ def layout(window):
+ 	global entry_tor
+ 	entry_tor=k.gtk_entry_new()
+ 	k.gtk_widget_set_hexpand(entry_tor,True)
+-	k.g_signal_connect_data (entry_tor, b"activate", add, window, None, gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data (entry_tor, b"activate", add, window, None, gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	#
+ 	k.gtk_box_append(bx,entry_tor)
+ 	b=k.gtk_button_new_with_label(b"+")
+ 	k.gtk_box_append(bx,b)
+-	k.g_signal_connect_data (b, b"clicked", add, window, None, gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data (b, b"clicked", add, window, None, gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	#
+ 	b=k.gtk_button_new_with_label(chr(0x2699).encode())
+-	k.g_signal_connect_data (b, b"clicked", sets.sets, window, None, gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data (b, b"clicked", sets.sets, window, None, gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	k.gtk_box_append(bx,b)
+ 	#
+ 	global treeV
+ 	treeV=k.gtk_tree_view_new_with_model(sort)
+-	k.g_object_unref(sort)
++	k3.g_object_unref(sort)
+ 	columns(treeV) #,confs.width
+ 	listtor.read(list,window)
+ 	if k.gtk_tree_model_iter_n_children(list,None)>0:
+@@ -97,7 +98,7 @@ def layout(window):
+ 	#
+ 	lst=overall.ini(colsdef())
+ 	tree=k.gtk_tree_view_new_with_model(lst)
+-	k.g_object_unref(lst)
++	k3.g_object_unref(lst)
+ 	columns(tree) #,confs.width
+ 	#
+ 	box=k.gtk_box_new(gtk.GtkOrientation.GTK_ORIENTATION_VERTICAL,0)
+--- torra-1.orig/torra/listtor.py
++++ torra-1/torra/listtor.py
+@@ -1,11 +1,14 @@
+ import json
++import os
+ 
+ from . import confs
+ from . import gtk
+ from . import layout
+ from . import torrent
+ from . import torben
++from . import sets
+ k=gtk.k
++k2=gtk.k2
+ 
+ config_filename = confs.get_root_file('config')
+ #in folder is ... (lib/python3.7/site-packages/) tora/config and ...tora/config
+@@ -22,12 +25,16 @@ def write(lst):
+ 			layout.COLUMNS.PATH, gtk.byref(path),
+ 			layout.COLUMNS.UP,gtk.byref(val))
+ 		d={'path':path.value.decode(),'upload':int(val.value)}
+-		k.g_free(path)
++		k2.g_free(path)
+ 		arr.insert(0,d)
+ 		b=k.gtk_tree_model_iter_next(lst,it)
+ 	with open(config_filename, "w") as write_file:
+ 		json.dump(arr, write_file)
+ 
++def tor_path(p):
++	if os.path.isabs(p)==False:
++		return os.path.join(k.gtk_entry_buffer_get_text(sets.fold_bf).decode(),p)
++	return p
+ def read(lst,window):
+ 	i=gtk.GtkTreeIter()
+ 	ip=gtk.byref(i)
+@@ -38,10 +45,11 @@ def read(lst,window):
+ 		return
+ 	for x in dat:
+ 		p=x['path']
+-		if torrent.open_tor(p,x['upload'],window):
++		p2=tor_path(p)
++		if torrent.open_tor(p2,x['upload'],window):
+ 			k.gtk_list_store_prepend(lst,ip)
+ 			gtk.gtk_list_store_set5(lst, ip,
+-				layout.COLUMNS.NAME, torben.name(p),
++				layout.COLUMNS.NAME, torben.name(p2),
+ 				layout.COLUMNS.PATH, p.encode(),
+ 				layout.COLUMNS.UP,b"0",layout.COLUMNS.DOWN,b"0",
+ 				layout.COLUMNS.RATIO,b"0")
+--- torra-1.orig/torra/main.py
++++ torra-1/torra/main.py
+@@ -14,6 +14,8 @@ from . import overall
+ from . import listtor
+ from . import ratio
+ k=gtk.k
++k3=gtk.k3
++k4=gtk.k4
+ 
+ @gtk.CALLBACKi
+ def closing(window):
+@@ -28,7 +30,7 @@ def closing(window):
+ def activate(app):
+ 	window = k.gtk_application_window_new (app)
+ 	k.gtk_window_set_title (window, b"Torrent")
+-	k.g_signal_connect_data (window, b"close-request", closing, None, None, 0)
++	k3.g_signal_connect_data (window, b"close-request", closing, None, None, 0)
+ 	k.gtk_widget_show (window)
+ 	confs.read_opt(window)
+ 
+@@ -58,10 +60,10 @@ def main():
+ 	os.makedirs(confs.get_root_dir(),exist_ok=True)
+ 	a=k.gtk_application_new(None,0)
+ 	actv=b"activate"
+-	k.g_signal_connect_data (a, actv, activate, None, None, 0)
+-	r=k.g_application_run (a,0,None)
+-	k.g_object_unref(sets.fold_bf)
+-	k.g_object_unref(a)
++	k3.g_signal_connect_data (a, actv, activate, None, None, 0)
++	r=k4.g_application_run (a,0,None)
++	k3.g_object_unref(sets.fold_bf)
++	k3.g_object_unref(a)
+ 	exit(r)
+ 
+ def cleanup_f(f):
+@@ -77,7 +79,10 @@ def cleanup():
+ 		f2=cleanup_f(listtor.config_filename)
+ 		print(c)
+ 		base=os.path.dirname(c)
+-		if (os.path.basename(base))[0]=='.': #.config, on another system can be a premade
++		bname=os.path.basename(base)
++		if bname[0]=='.': #.config, on another system can be a premade
++			print(base)
++		elif bname==confs.projname: #if is torra/torra is ok
+ 			print(base)
+ 		else:
+ 			base=None
+--- torra-1.orig/torra/meninfo.py
++++ torra-1/torra/meninfo.py
+@@ -1,9 +1,12 @@
+ from . import gtk
+ from . import treesel
+ from . import bencod
++from . import listtor
+ k=gtk.k
++k3=gtk.k3
+ 
+ def go(path,window):
++	path=listtor.tor_path(path.decode())
+ 	with open(path,'rb') as f:
+ 		d=f.read()
+ 		bencod.is_info=True
+@@ -16,7 +19,7 @@ def go(path,window):
+ 		#same like settings
+ 		k.gtk_window_set_default_size(dialog,k.gtk_widget_get_width(window),k.gtk_widget_get_height(window))
+ 
+-		k.g_signal_connect_data (dialog,b"response",k.gtk_window_destroy,None,None,0)
++		k3.g_signal_connect_data (dialog,b"response",k.gtk_window_destroy,None,None,0)
+ 		box=k.gtk_dialog_get_content_area(dialog)
+ 		#
+ 		text = k.gtk_text_view_new ()
+--- torra-1.orig/torra/next.py
++++ torra-1/torra/next.py
+@@ -2,6 +2,7 @@ from . import gtk
+ from . import torrent
+ from . import layout
+ k=gtk.k
++k3=gtk.k3
+ 
+ mask=gtk.GdkModifierType.GDK_CONTROL_MASK
+ key=gtk.GDK_KEY_n
+@@ -27,7 +28,7 @@ def eve(tree, keyval, keycode, state):
+ def ini(tree):
+ 	global controller
+ 	controller=k.gtk_event_controller_key_new()
+-	k.g_signal_connect_data (controller,b"key-pressed",eve,tree,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data (controller,b"key-pressed",eve,tree,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	k.gtk_widget_add_controller (tree, controller)
+ 
+ def unini(tree):
+@@ -69,7 +70,7 @@ def is_unfinished(mod,it,it2,sl):
+ def sets(e):
+ 	show(e)
+ 	control=k.gtk_event_controller_key_new()
+-	k.g_signal_connect_data (control,b"key-pressed",reset,e,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
++	k3.g_signal_connect_data (control,b"key-pressed",reset,e,None,gtk.GConnectFlags.G_CONNECT_SWAPPED)
+ 	k.gtk_widget_add_controller (e, control)
+ 
+ def show(e):
+--- torra-1.orig/torra/overall.py
++++ torra-1/torra/overall.py
+@@ -6,6 +6,7 @@ from . import torrent
+ from . import bencod
+ from . import sets
+ k=gtk.k
++k2=gtk.k2
+ 
+ i=gtk.GtkTreeIter()
+ it=gtk.byref(i)
+@@ -15,7 +16,7 @@ def ini(lst):
+ 	list=lst
+ 	k.gtk_list_store_append(list,it)
+ 	global timer
+-	timer=k.g_timeout_add(5000,fresh,None)
++	timer=k2.g_timeout_add(5000,fresh,None)
+ 	return list
+ 
+ def st(a):
+@@ -30,7 +31,7 @@ def download_sz(mod,ir):
+ 	item_text=gtk.c_char_p()
+ 	gtk.gtk_tree_model_get (mod, ir, layout.COLUMNS.PATH, gtk.byref(item_text))
+ 	val=item_text.value.decode()
+-	k.g_free(item_text)
++	k2.g_free(item_text)
+ 	size=0
+ 	try:
+ 		with open(val,'rb') as f:
+@@ -83,4 +84,4 @@ def fresh():
+ 	return True
+ 
+ def close():
+-	k.g_source_remove(timer)
+\ No newline at end of file
++	k2.g_source_remove(timer)
+\ No newline at end of file
+--- torra-1.orig/torra/ratio.py
++++ torra-1/torra/ratio.py
+@@ -3,6 +3,7 @@ from . import overall
+ from . import layout
+ from . import log
+ k=gtk.k
++k2=gtk.k2
+ 
+ ratint_bf=k.gtk_entry_buffer_new(b"0",-1)
+ ratlim_bf=k.gtk_entry_buffer_new(b"2",-1)
+@@ -31,7 +32,7 @@ def ini():
+ def freeint():
+ 	global timer
+ 	if timer>0:
+-		k.g_source_remove(timer)
++		k2.g_source_remove(timer)
+ 		timer=0
+ def setint(window):
+ 	freeint()
+@@ -53,14 +54,14 @@ def gain(w):#when add tor and resets(inc
+ 	if timer==0:
+ 		n=int(k.gtk_entry_buffer_get_text(ratint_bf))
+ 		if n>0:
+-			timer=k.g_timeout_add(n*60000,fresh,w)
++			timer=k2.g_timeout_add(n*60000,fresh,w)
+ 	log.likenew()
+ 
+ def getratio():
+ 	z=gtk.c_char_p()
+ 	gtk.gtk_tree_model_get(overall.list,overall.it,layout.COLUMNS.RATIO,gtk.byref(z))
+ 	r=float(z.value)
+-	k.g_free(z)
++	k2.g_free(z)
+ 	return r
+ 
+ def store(d):
+--- torra-1.orig/torra/sets.py
++++ torra-1/torra/sets.py
+@@ -5,6 +5,7 @@ from . import next
+ from . import log
+ from . import cons
+ k=gtk.k
++k3=gtk.k3
+ 
+ fold_bf=k.gtk_entry_buffer_new(None,-1)
+ 
+@@ -37,7 +38,7 @@ def sets(window):
+ 	#	k.gtk_window_maximize(dialog) #this was working, now, a dialog has the button but is doing nothing, here
+ 	k.gtk_window_set_default_size(dialog,k.gtk_widget_get_width(window),k.gtk_widget_get_height(window))
+ 
+-	k.g_signal_connect_data (dialog,b"response",response,window,None,0)
++	k3.g_signal_connect_data (dialog,b"response",response,window,None,0)
+ 	#
+ 	box=k.gtk_box_new(gtk.GtkOrientation.GTK_ORIENTATION_VERTICAL,0)
+ 	e=k.gtk_entry_new_with_buffer(fold_bf)
+--- torra-1.orig/torra/stats.py
++++ torra-1/torra/stats.py
+@@ -3,6 +3,7 @@ import libtorrent as lt
+ from . import gtk
+ from . import torrent
+ k=gtk.k
++k3=gtk.k3
+ 
+ from enum import IntEnum
+ class COLUMNS(IntEnum):
+@@ -40,7 +41,7 @@ k.gtk_list_store_append(list2,ip2)
+ 
+ def ini(box):
+ 	tree=k.gtk_tree_view_new_with_model(list)
+-	k.g_object_unref(list)
++	k3.g_object_unref(list)
+ 	renderer = k.gtk_cell_renderer_progress_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Percentage", renderer, b"value", COLUMNS.progress, None)
+ 	k.gtk_tree_view_column_set_resizable(column,True)
+@@ -69,7 +70,7 @@ def ini(box):
+ 	k.gtk_box_append(box,tree)
+ 	#
+ 	tree2=k.gtk_tree_view_new_with_model(list2)
+-	k.g_object_unref(list2)
++	k3.g_object_unref(list2)
+ 	renderer = k.gtk_cell_renderer_text_new()
+ 	column = k.gtk_tree_view_column_new_with_attributes(b"Peers list", renderer, b"text", COLUMNS2.list_peers, None)
+ 	k.gtk_tree_view_column_set_resizable(column,True)
+--- torra-1.orig/torra/torrent.py
++++ torra-1/torra/torrent.py
+@@ -6,7 +6,9 @@ from . import sets
+ from . import layout
+ from . import log
+ from . import ratio
++from . import listtor
+ k=gtk.k
++k2=gtk.k2
+ 
+ ses = lt.session()
+ ses.listen_on(6881, 6891)
+@@ -45,8 +47,8 @@ def fresh():
+ def pos(i):
+ 	global timer
+ 	if timer>0:
+-		k.g_source_remove(timer)
+-	timer=k.g_timeout_add(5000, fresh, None)
++		k2.g_source_remove(timer)
++	timer=k2.g_timeout_add(5000, fresh, None)
+ 	global h
+ 	h=torrents[i].h
+ 
+@@ -59,13 +61,17 @@ def sel(tree,path):
+ 
+ def open_tor(path,u,w):
+ 	try:
+-		with open(path+".fastresume") as f:
++		fresm=path+".fastresume"
++		log.addT("try to fastresume: "+fresm)
++		with open(fresm) as f:
+ 			b=f.read()
+ 			c=eval(b)
+ 			d=lt.bencode(c)
++			log.addT("try to resume data")
+ 			td=lt.read_resume_data(d)
+ 	except Exception:
+ 		try:
++			log.addT("try to add: "+path)
+ 			info = lt.torrent_info(path)
+ 			pv=k.gtk_entry_buffer_get_text(sets.fold_bf)
+ 			td={'ti': info, 'save_path': pv}
+@@ -80,12 +86,12 @@ def open_tor(path,u,w):
+ 	t=tor(th,u)
+ 	torrents.insert(0,t)
+ 	ratio.gain(w)
+-	log.addT(path)
++	log.addT("added: "+path)
+ 	return True
+ 
+ def close():
+ 	if timer>0:
+-		k.g_source_remove(timer)
++		k2.g_source_remove(timer)
+ 	i=gtk.GtkTreeIter()
+ 	it=gtk.byref(i)
+ 	mod=layout.list
+@@ -95,7 +101,8 @@ def close():
+ 	while b:
+ 		gtk.gtk_tree_model_get (mod, it, layout.COLUMNS.PATH, gtk.byref(item_text))
+ 		th=torrents[j].h
+-		with open(item_text.value.decode()+".fastresume", "w") as f:
++		tpath=listtor.tor_path(item_text.value.decode()+".fastresume")
++		with open(tpath, "w") as f:
+ 			f.write(str(th.write_resume_data()))
+ 		ses.remove_torrent(th)
+ 		b=k.gtk_tree_model_iter_next(mod,it)
+@@ -103,7 +110,7 @@ def close():
+ 
+ def remsel(i):
+ 	global timer
+-	k.g_source_remove(timer)
++	k2.g_source_remove(timer)
+ 	timer=0
+ 	ses.remove_torrent(h)
+-	del torrents[i]
+\ No newline at end of file
++	del torrents[i]
+--- torra-1.orig/torra/treesel.py
++++ torra-1/torra/treesel.py
+@@ -1,6 +1,7 @@
+ from . import gtk
+ from . import layout
+ k=gtk.k
++k2=gtk.k2
+ 
+ def text(f,tree,data):
+ 	mod=gtk.c_void_p()
+@@ -11,7 +12,7 @@ def text(f,tree,data):
+ 	item_text=gtk.c_char_p()
+ 	gtk.gtk_tree_model_get (mod, i, layout.COLUMNS.PATH, gtk.byref(item_text))
+ 	f(item_text.value,data)
+-	k.g_free(item_text)
++	k2.g_free(item_text)
+ 
+ def position__iter(f,tree):
+ 	mod=gtk.c_void_p()
+--- torra-1.orig/v2
++++ torra-1/v2
+@@ -1 +1 @@
+-1.0.39
+\ No newline at end of file
++1.0.41
+\ No newline at end of file
