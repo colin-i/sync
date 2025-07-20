@@ -1,0 +1,139 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+237) xenial; urgency=medium
+ .
+   * allow callret, is a marker in case of otoc
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-20
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+236
++2-5+237
+--- ocompiler-2.orig/ocompiler.conf
++++ ocompiler-2/ocompiler.conf
+@@ -102,5 +102,5 @@
+ #x_file=0
+ 
+ #25. Warn on callret;endfunction
+-#0 is No and Error; 1 is Yes
+-#callret_end_warn=1
+\ No newline at end of file
++#0 is No and error; 1 is Yes; 2 is No and ok
++#callret_end_warn=2
+\ No newline at end of file
+--- ocompiler-2.orig/src/files/functions/global/end.oc
++++ ocompiler-2/src/files/functions/global/end.oc
+@@ -34,15 +34,17 @@ function endfunction(sd parses)
+ 				else
+ 					call set_programentrypoint()
+ 					if main.ret_cont_break=(ret_cont_break_canskip_warn)
+-						if main.xbool!=(Yes_strict) #at c is ok, is return argument
+-							whiletrue
+-								if main.xbool=(Yes)
+-									if main.callret_end_warn=(Yes)
+-										call Message("CallRet;EndFunction warning") #at c more important
+-										break
++						if main.callret_end_warn!=(callret_end_no_strict)
++							if main.xbool!=(Yes_strict) #at c is ok, is return argument
++								whiletrue
++									if main.xbool=(Yes)
++										if main.callret_end_warn=(Yes)
++											call Message("CallRet;EndFunction warning") #at c more important
++											break
++										end
+ 									end
++									return uselessret ##at only o or o more important
+ 								end
+-								return uselessret ##at only o or o more important
+ 							end
+ 						end
+ 					end
+--- ocompiler-2.orig/src/files/functions/pref/preffuncs.oc
++++ ocompiler-2/src/files/functions/pref/preffuncs.oc
+@@ -235,7 +235,7 @@ function initpreferences()
+ 	set ptr_nobits_virtual# (Yes)
+ 	set ptr_has_debug# (No)
+ 	set main.xbool (No)
+-	set main.callret_end_warn (Yes)
++	set main.callret_end_warn (callret_end_no_strict)
+ 
+ 	#this is used also at arguments
+ 
+--- ocompiler-2.orig/src/files/headers/commons.oh
++++ ocompiler-2/src/files/headers/commons.oh
+@@ -3,9 +3,11 @@
+ Const TRUE=1
+ Const FALSE=0
+ Const NULL=0
+-Const No=FALSE
+-Const Yes=TRUE
+-Const Yes_strict=2
++Const No=0
++Const Yes=1
++Const After_no_yes=2
++Const Yes_strict=After_no_yes
++Const callret_end_no_strict=After_no_yes
+ const negative=-1
+ const nonzero=-1
+ 
+--- ocompiler-2.orig/src/windows/files/platform.oc
++++ ocompiler-2/src/windows/files/platform.oc
+@@ -2,7 +2,7 @@
+ function platform_free()
+ 	sd a%p_argv
+ 	if a#!=(NULL)
+-		call free(a#)
++		call LocalFree(a#)
+ 	endif
+ 	sd b%p_path_free
+ 	if b#!=(NULL)
+--- ocompiler-2.orig/src/windows/files/winimports.oh
++++ ocompiler-2/src/windows/files/winimports.oh
+@@ -15,6 +15,7 @@ Import "strcat" strcat
+ Library "kernel32.dll"
+ Import "GetCommandLineW" GetCommandName
+ Import "GetTickCount" GetTickCount
++Import "LocalFree" LocalFree
+ 
+ Library "user32.dll"
+ Import "MessageBoxA" MessageBox
+--- ocompiler-2.orig/src/windows/files/winobj64imports.oh
++++ ocompiler-2/src/windows/files/winobj64imports.oh
+@@ -22,6 +22,7 @@ Importx "strcat" strcat
+ #kernel32
+ Importx "GetCommandLineW" GetCommandName
+ Importx "GetTickCount" GetTickCount
++Importx "LocalFree" LocalFree
+ 
+ #user32
+ Importx "MessageBoxA" MessageBox
+--- ocompiler-2.orig/src/windows/files/winobjimports.oh
++++ ocompiler-2/src/windows/files/winobjimports.oh
+@@ -22,6 +22,7 @@ Import "_strcat" strcat
+ #kernel32
+ Import "_GetCommandLineW@0" GetCommandName
+ Import "_GetTickCount@0" GetTickCount
++Import "_LocalFree@4" LocalFree
+ 
+ #user32
+ Import "_MessageBoxA@16" MessageBox
