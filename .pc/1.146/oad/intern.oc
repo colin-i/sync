@@ -1,0 +1,598 @@
+
+format elfobj64
+
+override include_sec 1
+include "common.h" "common.oh"
+
+#multithread unsafe
+dataxu xoffset#1
+charx blog#1
+#
+
+^importx "fopen" fopen 2
+importx "fseek" fseek
+^importx "ftell" ftell 1                             #this is hard to catch must compile and look at asm to see is an int
+importx "malloc" malloc                              #to catch practical but to catch only by warnings, is a long if also this warning comes -Wbuiltin-declaration-mismatch
+importx "fread" fread
+importx "fclose" fclose
+#
+import "branch_add" branch_add
+#
+import "re_calloc_add" re_calloc_add
+import "frame_actions" frame_actions
+import "string_add" string_add
+import "string_id" string_id
+^import "branch_init" branch_init 3
+import "ibranch_add" ibranch_add
+import "ibranch_done" ibranch_done
+import "tree_entry_ex" tree_entry_ex
+import "tree_entry_start" tree_entry_start
+import "tree_entry_end" tree_entry_end
+import "jumpforward_resolve" jumpforward_resolve
+import "jumpforwardif_resolve" jumpforwardif_resolve
+import "jumpbackward_resolve" jumpbackward_resolve
+import "jumpbackward_resolved" jumpbackward_resolved
+import "printe" printe
+import "function_resolved" function_resolved
+#
+import "presprite_init" presprite_init
+import "presprite_done" presprite_done
+^import "get_nframe" get_nframe 5
+#
+importx "strlen" strlen                              #same as malloc realloc. fwrite and memcpy. fread is not builtin but not using the return so no register high part clean there
+importx "memcpy" memcpy
+importx "free" free
+import "compare" compare
+#
+import "save" save
+
+function global_blog()
+	return global.blog
+end
+
+function fcontent(sd path,sv psize) #2
+	sd f;set f fopen(path,"rb")
+	if f!=(NULL)
+		call fseek(f,0,(SEEK_END))
+		sd size;set size ftell(f)
+		if size!=-1
+			call fseek(f,0,(SEEK_SET))
+			sd mem;set mem malloc(size)
+			if mem!=(NULL)
+				call fread(mem,size,1,f)
+				call fclose(f)
+				set psize# size
+				return mem
+			end
+		end
+		call fclose(f)
+	end
+	return (NULL)
+end
+
+#at these memnl the last row is ending in nl from src
+ #here is moving through text, an example with cr: ffdec action output is \r\n
+function memnlcr(ss log,sv pnext,sv _cr) #3
+	set pnext# 1
+	if log#!=(xlog_nl) #empty row / last row
+		whiletrue
+			if log#=(text_nl)
+				add pnext# log
+				dec log
+				if log#!=(text_cr)
+					inc log
+				end
+				break
+			end
+			if log#=(text_cr)
+				add pnext# log
+				ss next;set next pnext#
+				if next#=(text_nl)
+					add pnext# 1
+					if _cr!=(NULL)
+						add _cr# 1
+					end
+				end
+				break
+			end
+			inc log
+		end
+	else
+		add pnext# log
+	end
+	return log
+end
+#here is moving only on nl from src
+function memnl(ss log,sv pnext) #2
+	set pnext# 1
+	if log#!=(xlog_nl) #emptyrow
+		inc log
+		while log#!=(xlog_nl)
+			inc log
+		end
+		add pnext# log
+	else
+		add pnext# log
+	end
+	return log
+end
+function memdec(ss start,value end) #2
+	sub end start
+	add start end
+	sd nr=1
+	sd n;sd val=0
+	while end>^0
+		dec start
+
+		set n start#
+		sub n (ZeroChar)
+		mult n nr
+		add val n
+
+		mult nr 10 #is ok on 32 where sizeof long is 4
+		dec end
+	end
+	return val
+end
+#end
+#arecordheader,function,if,jump are 15/16 bits at max
+function memhex_parse_withinc(ss start,swu out)
+	inc start
+	ss a;set a start
+	whiletrue #the action row is ending in new line
+		charx c#1;set c a#
+		if c<(ZeroChar);break;end
+		if c<=(NineChar)
+		elseif c<(A);break;end
+		if c>(F);break;end
+		inc a
+	end
+	set out# 0
+	if a!=start   ##there are many ,, with no size
+		ss b;set b a
+		wordxu n#1;set n 1
+		while start!=b
+			dec b
+			wordxu nr#1
+			set nr b#
+			if nr<=(NineChar)
+				sub nr (ZeroChar)
+			else
+				sub nr (A+10)
+			end
+			mult nr n
+			add out# nr
+			mult n 0x10
+		end
+	end
+	return a
+end
+
+function newbranch(sv px,sv pxx,valueu prefr)
+	sd xx;set xx pxx#
+	dataxu branchoffset#1;set branchoffset xx#
+	charx ok#1;set ok branch_add(prefr,branchoffset,global.xoffset,px#)
+	sub branchoffset global.xoffset
+	add px# branchoffset
+	add global.xoffset branchoffset
+	add pxx# (xlog_code_size)
+	return ok
+end
+
+function actionrow(ss inlog,sd end,sv px,sv pxx,valueu prefr,valueu fr,valueu strings_base,valueu data,svu _text,svu _pointer_to_action_loop,ss _expecting_function_start)
+	ss start;set start inlog
+	inc inlog    ##first is a digit
+	whiletrue # break} is still with / (also resolves are there) but it is a row with \n end anyway
+		charx chr#1
+		set chr inlog#
+		if chr<(ZeroChar)
+			break
+		end
+		if chr>(NineChar)
+			break
+		end
+		inc inlog
+	end
+	valueu number_of_lines#1;set number_of_lines memdec(start,inlog)
+	charx ok#1
+	valueu actions#1
+	#valueu actions_start_on_this_line#1
+	set ok frame_actions(fr,number_of_lines,inlog,end,_text,#actions) #_start_on_this_line
+	if ok=(EXIT_SUCCESS)
+		datax recalculation#1 #int? 16 to 8 can be almost on full ui32. a push inside an action is limited by maxuint16 totalvalues
+			#not outside actionrow? 'a','a' on multiple rows is still on same row
+		sd _recalculation
+		if global.blog=(TRUE)
+			set recalculation 0
+			set _recalculation #recalculation
+		else
+			set _recalculation (NULL)
+		end
+		#set actions actions_start_on_this_line
+		while inlog!=end
+			wordxu number#1  #4 places
+			valueu branch_item#1
+			valueu act#1
+			if inlog#=(xlog_act) #action
+				set inlog memhex_parse_withinc(inlog,#number) #Length If code >= 0x80, UI16
+				if number=0 # code < 0x80
+					add prefr#:preframe.size (actionrecordheader_tag_size)
+				else
+					add prefr#:preframe.size (actionrecordheader_size)
+					add prefr#:preframe.size number
+					if global.blog=(TRUE)
+						if recalculation!=0
+							add prefr#:preframe.log_recalculation recalculation
+							set recalculation 0
+						end
+					end
+				end
+				svu p_a
+				if _pointer_to_action_loop#!=(NULL) #can also be on first action, this if is not relevant for action_if (both cases can be)
+					set p_a _pointer_to_action_loop#
+					set p_a# actions
+					set _pointer_to_action_loop# (NULL)
+				end
+				set branch_item prefr#:preframe.branchpointer
+				if branch_item#:branch.action_top=(NULL)
+					set branch_item#:branch.action_top actions ##this is better than _pointer_to_action# because is working between action calls
+					if _expecting_function_start#=(TRUE)
+						if global.blog=(TRUE)
+							call function_resolved(data,actions,prefr)
+						else
+							call function_resolved(data,actions,(NULL))
+						end
+						set _expecting_function_start# (FALSE)
+					end
+				end
+				if prefr#:preframe.action_last!=(NULL) #cannot work on first frame action, here is also for action_if
+					svu begin;svu pointer
+					if prefr#:preframe.actions_if_size!=0
+						set begin prefr#:preframe.actions_if
+						set pointer begin
+						add pointer prefr#:preframe.actions_if_size
+						while begin!=pointer
+							sub pointer :
+							set act pointer#
+							set act#:action.nextif actions
+						end
+						set prefr#:preframe.actions_if_size 0
+					end
+					if prefr#:preframe.actions_jump_size!=0  # inline ifelse and inter_for are resolved at innerbranch out, here only conditions_ends/breaks jumps
+						set begin prefr#:preframe.actions_jump
+						set pointer begin
+						add pointer prefr#:preframe.actions_jump_size
+						if global.blog=(TRUE)
+							while begin!=pointer
+								sub pointer :
+								set act pointer#
+								set act#:action.next actions
+								inc branch_item#:branch.log_fwdjumps
+							end
+						else
+							while begin!=pointer
+								sub pointer :
+								set act pointer#
+								set act#:action.next actions
+							end
+						end
+						set prefr#:preframe.actions_jump_size 0
+					end
+					set act prefr#:preframe.action_last
+					if act#:action.next=(action_next_default) #else is a jumpback, this if is not relevant for action_if (both cases can be)
+						charx flags#1;set flags act#:action.flags
+						and flags (return_flag)
+						if flags!=(return_flag) #why not next=~NULL? is not cosmetic
+							set act#:action.next actions
+						end
+					end
+				end
+				set prefr#:preframe.action_last actions
+				add actions \action\
+			elseif inlog#=(xlog_string) #string
+				inc inlog ## xlog_const8_log or xlog_const16_log
+
+				ss xxcontent;set xxcontent pxx#
+				add pxx# (xlog_type_size)
+				if xxcontent#!=(xlog_id) # xlog_new xlog_unique , not parsing .x, ok straight in .xx
+					set ok string_add(prefr,pxx#,strings_base,xxcontent#,_recalculation,inlog#)
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+					add pxx# (xlog_unique_new_size)
+				else #xlog_id
+					set ok string_id(prefr,pxx#,_recalculation,inlog#)
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+					add pxx# (xlog_id_size)
+				end
+				inc inlog
+			elseif inlog#=(xlog_jumpif)
+				set inlog memhex_parse_withinc(inlog,#number)   #ActionIf BranchOffset SI16(here 15 bits)
+				set ok jumpforwardif_resolve(prefr,number)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+			elseif inlog#=(xlog_jump)
+				set inlog memhex_parse_withinc(inlog,#number)   #ActionJump BranchOffset SI16(here 15 bits)
+				set ok jumpforward_resolve(prefr,number)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+			elseif inlog#=(xlog_branch) #branch start
+				set ok newbranch(px,pxx,prefr)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+				set branch_item prefr#:preframe.branchpointer
+				valueu branch_value#1
+				set branch_value branch_init(prefr,branch_item#:branch.topbranch,branch_item)
+				if branch_value=(NULL)
+					return (EXIT_FAILURE)
+				end
+				set branch_item#:branch.subbranch branch_value
+				set branch_value#:branch.action_if prefr#:preframe.action_last ##can also be NULL if there are whiletrue break tricks
+				#										is not always required, example at simple if end
+				if global.blog=(TRUE)
+					call tree_entry_ex(prefr,(xlog_branch))
+				end
+				inc inlog
+			elseif inlog#=(xlog_call)
+				set act prefr#:preframe.action_last
+				or act#:action.flags (call_flag)
+				inc inlog
+			elseif inlog#=(xlog_innerbranch)
+				set ok newbranch(px,pxx,prefr)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+				set branch_item prefr#:preframe.branchpointer
+				set branch_item#:branch.action_cut prefr#:preframe.action_last
+				set ok ibranch_add(prefr)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+				if global.blog=(TRUE)
+					call tree_entry_start(prefr)
+				end
+				inc inlog
+			elseif inlog#=(xlog_innerbranchend) #innerbranch end
+				set ok newbranch(px,pxx,prefr)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+				call ibranch_done(prefr)
+				set branch_item prefr#:preframe.branchpointer
+				set act branch_item#:branch.action_cut
+				set act#:action.next (action_next_default)  #in a normal case when the inner branch is not 0, was jump/definefunction linked to next
+				set prefr#:preframe.action_last act
+				#set _pointer_to_action# (NULL) #in case was 0 size with no actions, this branch already has this, last action was DefineFunction/ActionJump/ActionIf
+				if global.blog=(TRUE)
+					call tree_entry_end(prefr)
+				end
+				set _expecting_function_start# (FALSE) #in case was a 0 size function
+				inc inlog
+			elseif inlog#=(xlog_return)
+				set act prefr#:preframe.action_last
+				or act#:action.flags (return_flag)
+				inc inlog
+			elseif inlog#=(xlog_function)
+				set ok re_calloc_add(#data#:oadata.functions,#data#:oadata.functions_size,global.blog) #some functions have no size
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+				set inlog memhex_parse_withinc(inlog,#number) #codeSize UI16
+				if global.blog=(TRUE)
+					add prefr#:preframe.log_recalculation (actionrecordheader_size+actionpush_type+actionpush_integer+actionrecordheader_tag_size) #adding func dtitles
+					#what if there are no func dtitles? the debugger will not work without that at this moment. maybe a to do
+
+					set branch_item prefr#:preframe.branchpointer
+					set branch_item#:branch.log_fn number
+				end
+				set _expecting_function_start# (TRUE)
+			elseif inlog#=(xlog_jumpback) # at loop end , continue. is goot to set next action to be somewhere inside a suprabranch
+				set inlog memhex_parse_withinc(inlog,#number)  #ActionJump BranchOffset SI16(here 15 bits)
+				call jumpbackward_resolve(prefr,number,global.blog)
+			elseif inlog#=(xlog_loop) # is for branch loop start mark and then will leave the branch for a subbranch
+				set branch_item prefr#:preframe.branchpointer
+				set branch_item#:branch.offset_loop prefr#:preframe.size
+				set _pointer_to_action_loop# #branch_item#:branch.action_loop
+				inc inlog
+			elseif inlog#=(xlog_break)
+				set branch_item prefr#:preframe.branchpointer
+				if branch_item#:branch.offset_break!=(no_loop)
+					call printe("two breaks same branch")
+					return (EXIT_FAILURE)
+				end
+				set branch_item#:branch.offset_break prefr#:preframe.size
+				set branch_item#:branch.action_break prefr#:preframe.action_last
+				inc inlog
+			else #xlog_forin
+				inc inlog
+				set act actions
+				sub act 4*\action\
+				if inlog#=(xlog_forin_break) #back jump,if,eq,push
+					call jumpbackward_resolved(act,prefr#:preframe.action_last,global.blog,prefr#:preframe.branchpointer)
+				else # xlog_forin_return     #backif jump,not,eq,push
+					set act#:action.nextif prefr#:preframe.action_last
+				end
+				inc inlog
+			end
+		end
+		return (EXIT_SUCCESS)
+	end
+	return (EXIT_FAILURE)
+end
+
+function text_after_nlines(ss inlog,valueu linesnr,valueu crs) #3
+	ss next
+	while linesnr>^0
+		call memnlcr(inlog,#next,crs)
+		set inlog next
+		dec linesnr
+	end
+	return inlog
+end
+
+function loop(ss inlog,sv x,sd xx,sd logsize,sv ppresprites,sv psprites,sv data,charx log)
+	add logsize inlog
+	if inlog!=logsize  ##else no action sprites/shows
+		set global.blog log
+		sd next
+		ss p;set p memnl(inlog,#next)
+		whiletrue
+			wordxu preid#1
+			set preid memdec(inlog,p) #[inlog,p) ui16
+			set inlog next
+
+			charx ok#1
+			set p memnl(inlog,#next)
+			if inlog=p
+				set inlog next
+				# empty: show/done
+				set p memnl(inlog,#next)
+				if inlog=p ##show ui16
+					set ok presprite_init(preid,ppresprites,psprites,(from_show))
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+				else #done, here for sprite, already opened or ignore it (no action/show)
+					wordxu id#1
+					set id memdec(inlog,p) #[inlog,p) ui16
+					set ok presprite_done(psprites#,preid,id,data,ppresprites#)
+					if ok!=(EXIT_SUCCESS)
+						return (EXIT_FAILURE)
+					end
+				end
+				set inlog next
+				if inlog=logsize
+					return (EXIT_SUCCESS) #exit after show/done. exit 2
+				end
+				set p memnl(inlog,#next)
+			else
+				#ainit
+				charx ainit#1;set ainit memdec(inlog,p) #[inlog,p) 0/1
+				set inlog next
+
+				#linesnr
+				set p memnl(inlog,#next)
+				valueu linesnr#1;set linesnr memdec(inlog,p)
+				set inlog next
+
+				set ok presprite_init(preid,ppresprites,psprites,(from_action),ainit,linesnr)
+				if ok!=(EXIT_SUCCESS)
+					return (EXIT_FAILURE)
+				end
+
+				valueu text#1;set text inlog
+				set inlog text_after_nlines(inlog,linesnr,(NULL))
+
+				sv pf;sv f;set f get_nframe(ppresprites#,psprites#,preid,ainit,#pf) #and from sprites since total lines sum, but will be needed at more, anyway
+
+				valueu strings_size#1
+				set strings_size x#
+				add x (xlog_strings_size)
+				valueu strings_base#1;set strings_base x
+				add x strings_size
+				dataxu xcode_size#1
+				set xcode_size x#
+
+				if log=(TRUE)
+					add pf#:preframe.log_xsize xcode_size
+				end
+
+				add x (xlog_xcode_size)
+				valueu xcode#1;set xcode x
+				add x xcode_size
+				set global.xoffset 0
+				svu pointer_to_action_loop=NULL
+				charx expecting_function_start#1
+				set expecting_function_start (FALSE)
+
+				#[actions]
+				whiletrue
+					if inlog=logsize
+						set ok branch_add(pf,xcode_size,global.xoffset,xcode)
+						if ok=(EXIT_SUCCESS)
+							return (EXIT_SUCCESS) #no [more] actions and nothing else. exit 3
+						end
+						return (EXIT_FAILURE)
+					end
+					set p memnl(inlog,#next)
+					if inlog#=(xlog_actions)
+						inc inlog
+						set ok actionrow(inlog,p,#xcode,#xx,pf,f,strings_base,data,#text,#pointer_to_action_loop,#expecting_function_start)
+						if ok!=(EXIT_SUCCESS)
+							return (EXIT_FAILURE)
+						end
+					else
+						set ok branch_add(pf,xcode_size,global.xoffset,xcode)
+						if ok!=(EXIT_SUCCESS)
+							return (EXIT_FAILURE)
+						end
+						break #[inlog,p) will continue at preid
+					end
+					set inlog next   ##was a row with actions
+				end
+			end
+		end
+	end
+	return (EXIT_SUCCESS) #exit 1
+end
+
+char inter_last_extension_data=".last.data";vstr p_inter_last_extension_data^inter_last_extension_data
+function inter_last_extension(sv psize) #1
+	set psize# (\global.inter_last_extension_data)
+	return global.p_inter_last_extension_data
+end
+function inter(valueu presprites,ss swf_fullpath,valueu data)
+	sd size;set size strlen(swf_fullpath)
+	sd size1=\global.inter_last_extension_data
+	add size1 size
+	sd from;set from malloc(size1)
+	if from!=(NULL)
+		call memcpy(from,swf_fullpath,size)
+		sub size1 size
+		add size from
+		call memcpy(size,global.p_inter_last_extension_data,size1)
+		sd file
+		set file fopen(from,"wb")
+		call free(from)
+		if file!=(NULL)
+			charx exit#1
+			set exit save(presprites,file)
+			call fclose(file)
+			if exit=(EXIT_SUCCESS)
+				set exit compare(swf_fullpath,presprites,data)
+				return exit
+			end
+		end
+	end
+	return (EXIT_FAILURE)
+end
+
+function oadata_init(sv poadata)
+	set poadata# malloc(\oadata\)
+	sv a;set a poadata#
+	if a!=(NULL)
+		set a#:oadata.sprites malloc((sprites_realloc_onepart))
+		if a#:oadata.sprites!=(NULL)
+			set a#:oadata.sprites_size 0
+
+			set a#:oadata.functions malloc((sprites_realloc_onepart))
+			if a#:oadata.functions!=(NULL)
+				set a#:oadata.functions_size 0
+
+				set a#:oadata.marks malloc(1)
+				if a#:oadata.marks!=(NULL)
+					set a#:oadata.size 0
+					return (EXIT_SUCCESS)
+				end
+			end
+		end
+	end
+	return (EXIT_FAILURE)
+end
+
+entryraw global() #this blank (an empty struct). is here only for global variables

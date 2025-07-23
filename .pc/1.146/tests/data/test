@@ -1,0 +1,52 @@
+#!/bin/bash
+# 1 cc conv_64 e g rd xxd_args
+
+if [ -z "${CC}" ]; then
+	if [ "${conv_64}" = 1 ]; then
+		e=32
+	fi
+else
+	e=32
+fi
+
+etest=../../example/example.swf.data
+
+if [ ! -e ${etest} ]; then
+	${RUN__SHELL} ./a || exit 1
+	if [ -n "${rd}" ]; then
+		read -t $((60*60*24))
+	fi
+fi
+
+{ ${RUN__SHELL} ./a ${g} ; echo $? > ./test.status ; } | tee data.txt
+status=`cat ./test.status`; rm ./test.status
+if [ ${status} != 0 ]; then  exit 1; fi          #set -o pipefail && a | tee || exit
+
+at_folder=../ . ../integ && {
+	diff ../.expected/data${e}.txt data.txt
+	if [ $? != 0 ]; then
+		if [ -n "${1}" ]; then exit 1; fi
+		echo y \?; read -n1 -t $((60*60*24)) ans
+		if [ "${ans}" != "y" ]; then exit 1; fi
+		cat data.txt>../.expected/data${e}.txt #a mv was here but now data32.txt is a hard link and will break that
+	fi
+
+	etestexp=../.expected/example.swf.data${e}
+	etestexpt=${etestexp}.txt
+	base64 -d ${etestexpt} > ${etestexp}
+	diff ${etestexp} ${etest}
+	if [ $? -ne 0 ]; then
+		if [ -n "${1}" ]; then exit 1; fi
+		. ../xxd
+		xxd${xxd_args} ${etestexp} > 1
+		xxd${xxd_args} ${etest} > 2
+		diff --color 1 2
+		rm 1 2
+		echo y \?; read -n1 -t $((60*60*24)) ans
+		if [ "${ans}" != "y" ]; then exit 1; fi
+		base64 ${etest} > ${etestexpt}
+	fi
+
+	rm ${etestexp}
+}
+rm data.txt

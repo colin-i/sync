@@ -1,0 +1,1740 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-146) bionic; urgency=medium
+ .
+   * clipped/repeating
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-23
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -13,8 +13,10 @@ endif
+ ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), i386)
+ conv_64=1
+ else
++ifndef conv_64  #when there is no dpkg-architecture
+ conv_64=0
+ endif
++endif
+ 
+ $(TOPTARGETS): $(SUBDIRS)
+ $(MEDTARGETS): $(ALLDIRS)
+@@ -28,9 +30,9 @@ test:
+ clean:
+ 	RUN__SHELL=$(SHELL) . ./shl && cd tests && $${RUN__SHELL} ./c && cd ffdec && $${RUN__SHELL} ./c && cd ../data && $${RUN__SHELL} ./c
+ install:
+-	install -D oaalternative $(DESTDIR)$(prefix)/bin/oaalternative
++	install -D oaalternative.sh $(DESTDIR)$(prefix)/bin/oaalternative.sh
+ uninstall:
+-	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative
++	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.sh
+ 
+ .PHONY: $(TOPTARGETS) $(MEDTARGETS) $(ALLDIRS)
+ .NOTPARALLEL:
+--- actionswf-1.orig/dev/action_swf.oh
++++ actionswf-1/dev/action_swf.oh
+@@ -3,7 +3,7 @@
+ const no_fill=-1
+ const solid_fill=0
+ const repeating_bitmap_fill=0x40
+-#const clipped_bitmap_fill=0x41
++const clipped_bitmap_fill=0x41
+ #const nonsmoothed_repeating_bitmap=0x42
+ #const nonsmoothed_clipped_bitmap=0x43
+ #
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -129,6 +129,8 @@ int swf_shape_basic(int width,int height
+ //id
+ int swf_shape_bitmap(int bitmapId,int width,int height);
+ //id
++int swf_shape_bitmap_clipped(int bitmapId,int width,int height);
++//id
+ int swf_shape_border(int width,int height,int linesize,int linecolor);
+ 
+ //dbl
+@@ -156,6 +158,10 @@ int swf_imagej_alpha(char* imagepath,int
+ int swf_jpeg(char* imagepath);
+ //id
+ int swf_jpeg_alpha(char* imagepath,char* alphapath);
++//id
++int swf_jpeg_clipped(char* imagepath);
++//id
++int swf_jpeg_alpha_clipped(char* imagepath,char* alphapath);
+ //width
+ int swf_gif_width(char* imagepath);
+ //height
+--- actionswf-1.orig/dev/importf.oh
++++ actionswf-1/dev/importf.oh
+@@ -22,6 +22,8 @@ importX "swf_shape_basic" swf_shape_basi
+ #id
+ importX "swf_shape_bitmap" swf_shape_bitmap
+ #id
++importX "swf_shape_bitmap_clipped" swf_shape_bitmap_clipped
++#id
+ importX "swf_shape_border" swf_shape_border
+ 
+ #dbl
+@@ -47,6 +49,10 @@ importX "swf_imagej_alpha" swf_imagej_al
+ importX "swf_jpeg" swf_jpeg
+ #id
+ importX "swf_jpeg_alpha" swf_jpeg_alpha
++#id
++importX "swf_jpeg_clipped" swf_jpeg_clipped
++#id
++importX "swf_jpeg_alpha_clipped" swf_jpeg_alpha_clipped
+ #width
+ importX "swf_gif_width" swf_gif_width
+ #height
+--- actionswf-1.orig/example/Makefile
++++ actionswf-1/example/Makefile
+@@ -112,7 +112,7 @@ expected.swf:
+ 	base64 -d expected.c.swf.txt > expected.c.swf
+ 	ffdec -decompress expected.c.swf $@
+ test: all expected.swf
+-	diff ${sfile} expected.swf
++	diff ${sfile} expected.swf && echo $$?
+ expected.c.swf: build
+ 	x3=x $(MAKE) exe
+ 	mv ${sfile} $@
+--- actionswf-1.orig/example/mrwd
++++ actionswf-1/example/mrwd
+@@ -1,2 +1,2 @@
+ 
+-WINEPATH=${HOME}/a/x86_64_lib_mingw launcher=wine64 linkerflags= ./makewin64 "$@"
++WINEPATH=${HOME}/a/x86_64_lib_mingw launcher=wine6 linkerflags= ./makewin64 "$@"
+--- /dev/null
++++ actionswf-1/example/rtest
+@@ -0,0 +1 @@
++./mrd test
+\ No newline at end of file
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -1,19 +1,25 @@
+ 
+-cd src
+-
+ ver=${1}
+ shift
+ 
++cd src && \
+ ./makewin${ver} $@ && \
+-\
++cd .. && \
++cd oad && \
++./mw${ver}${s} $@ && \
+ cd .. && \
+ mkdir actionswf && \
+ mv src/actionswf.dll actionswf && \
++mv oad/liboadbgdata.dll actionswf && \
+ ln ${depend_dll_path}/libzlib1.dll actionswf && \
+-ln ${depend_dll_path}/libssp-0.dll actionswf && \
+ cd src && \
+ ./makewin${ver} clean && \
+ cd .. && \
++cd oad && \
++./mw clean && \
++cd .. && \
++cp oaalternative.sh actionswf && \
++cp oaalternative.cmd actionswf && \
+ zip -r actionswf.zip actionswf && \
+ rm -r ./actionswf && \
+ \
+--- actionswf-1.orig/oaalternative
++++ /dev/null
+@@ -1,157 +0,0 @@
+-#!/bin/sh
+-
+-#1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
+-#isdebug=
+-#wait=
+-#no_number_check=
+-
+-if [ -z "${1}" ]; then echo file path required; exit 1; fi
+-
+-dname=`dirname ${1}`
+-cd ${dname} || exit 1
+-
+-bname=`basename ${1}`
+-
+-log=${bname}.log.log
+-if [ ! -e ${log} ]; then
+-	log=${bname}.log
+-	if [ ! -e ${log} ]; then echo no log; exit 1; fi
+-fi
+-
+-folder="${bname%.*}"
+-if [ -n "${isdebug}" ]; then echo ${folder}; fi
+-
+-if [ -z "${isdebug}" ]; then
+-	ffdec -export script ${folder} ${1} > /dev/null || exit 1
+-else
+-	echo ffdec -export script ${folder} ${1}
+-	ffdec -export script ${folder} ${1} || exit 1
+-fi
+-if [ -n "${wait}" ]; then read; fi
+-
+-out=${folder}.dbg
+-mkdir -p ${out}
+-
+-cd ${folder}
+-
+-move () {
+-	mv ${v} "${1}" ${2}
+-	if [ -n "${isdebug}" ]; then
+-		cat ${2}
+-	fi
+-}
+-doaction () {
+-	to=${1}
+-	shift
+-	if [ ${#@} = 0 ]; then
+-		return #is empty
+-	fi
+-	for var in "${@}"; do
+-		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
+-		f=$(expr substr ${f} 1 $(echo $(echo -n ${f} | wc -m)-1 | bc))
+-		#f=${f::-1}
+-		f=${to}_$(expr substr ${f} 7 $(echo $(echo -n ${f} | wc -m)-6 | bc))
+-		#f=${to}_${f:6}
+-		move ${var} ../${out}/${f}
+-	done
+-}
+-number_expected () {
+-	if [ -z "${no_number_check}" ]; then
+-		case ${p} in
+-			''|*[!0-9]*) echo "error: Not a number"; exit 1 ;;
+-		esac #This rejects empty strings and strings containing non-digits
+-	fi
+-}
+-new_tag () {
+-	number_expected
+-	s=${p}
+-	t= #type
+-	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
+-}
+-
+-ainits_ar_key=
+-ainits_ar_val=
+-ainits_ar_set () {
+-	ainits_ar_key="${ainits_ar_key} $1"
+-	ainits_ar_val="${ainits_ar_val} $2"
+-}
+-ainits_ar_get () {
+-	i=0
+-	for a in ${ainits_ar_key}; do
+-		if [ $a = $s ]; then
+-			break
+-		fi
+-		i=$((i+1))
+-	done
+-	j=0
+-	for a in ${ainits_ar_val}; do
+-		if [ $j = $i ]; then
+-			return $a
+-		fi
+-		j=$((j+1))
+-	done
+-}
+-#ainits=( )
+-ainits_counter=1
+-s= #id
+-v=
+-if [ -n "${isdebug}" ]; then v=-v; fi #; set -x
+-while read p; do
+-	if [ -z "${s}" ]; then
+-		new_tag
+-	else
+-		if [ -z "${t}" ]; then
+-			if [ -z "${p}" ]; then
+-				t=1 #can be show or done
+-			else
+-				number_expected
+-				t=2 #action
+-				at=${p}
+-				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
+-				ainits_ar_set ${s} ${at}
+-				#ainits[${s}]=${at}
+-			fi
+-		elif [ ${t} = 1 ]; then
+-			if [ -z "${p}" ]; then
+-				echo show
+-			else
+-			#done
+-				number_expected
+-				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
+-				ainits_ar_get ${s}; if [ $? = 1 ]; then #button or DoInitAction sprite
+-				#if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
+-					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"`
+-					if [ -n "${f}" ]; then #is a button
+-						d=../${out}/${s}
+-						move "${f}" ${d}
+-						sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
+-					else #sprite init
+-						if [ ${ainits_counter} != 1 ]; then
+-							ainits_file="_${ainits_counter}.as"
+-						else
+-							ainits_file=".as"
+-						fi
+-						f=`find -name DoInitAction${ainits_file}`
+-						move  ${f} ../${out}/${s}
+-						ainits_counter=$((ainits_counter+1))
+-					fi
+-				fi
+-				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"`  #else is empty
+-			fi
+-			s=
+-		else
+-			new_tag
+-		fi
+-	fi
+-done <../${log}
+-
+-doaction 0 `find -maxdepth 3 -name DoAction.as`
+-
+-#part 2
+-if [ -n "${2}" ]; then
+-	cd ..
+-	mv ${v} ${1} ${1}.orig && \
+-	${2} && \
+-	diff ${1} ${1}.orig && \
+-	rm -r ${v} ${folder}
+-fi
+--- /dev/null
++++ actionswf-1/oaalternative.cmd
+@@ -0,0 +1,20 @@
++@{' 2>nul&::'={\"<<BATCH_SCRIPT 2>/dev/null;#"}}[0]<#
++@ECHO OFF
++REM ===== Batch Script Begin =====
++ECHO Batch detected. The script can run in /bin/sh. Exiting...
++GOTO :eof
++REM ====== Batch Script End ======
++TYPE CON >NUL
++BATCH_SCRIPT
++#>
++
++echo \" <<'POWERSHELL_SCRIPT' >/dev/null # " | Out-Null
++# ===== PowerShell Script Begin =====
++echo "PowerShell detected. The script can run in /bin/sh. Exiting..."
++return
++# ====== PowerShell Script End ======
++<#
++POWERSHELL_SCRIPT
++#>
++
++`dirname $0`/oaalternative.sh "$@"
+--- /dev/null
++++ actionswf-1/oaalternative.sh
+@@ -0,0 +1,160 @@
++#!/bin/sh
++
++#1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
++#isdebug=
++#skip_ffdec=
++#wait=
++#no_number_check=
++
++if [ -z "${1}" ]; then echo file path required; exit 1; fi
++
++dname=`dirname ${1}`
++cd ${dname} || exit 1
++
++bname=`basename ${1}`
++
++log=${bname}.log.log
++if [ ! -e ${log} ]; then
++	log=${bname}.log
++	if [ ! -e ${log} ]; then echo no log; exit 1; fi
++fi
++
++folder="${bname%.*}"
++if [ -n "${isdebug}" ]; then echo ${folder}; fi
++
++if [ -z "${skip_ffdec}" ]; then
++	if [ -z "${isdebug}" ]; then
++		ffdec -export script ${folder} ${1} > /dev/null || exit 1
++	else
++		echo ffdec -export script ${folder} ${1}
++		ffdec -export script ${folder} ${1} || exit 1
++	fi
++	if [ -n "${wait}" ]; then read; fi
++fi
++
++out=${folder}.dbg
++mkdir -p ${out}
++
++cd ${folder}
++
++move () {
++	mv ${v} "${1}" ${2}
++	if [ -n "${isdebug}" ]; then
++		cat ${2}
++	fi
++}
++doaction () {
++	to=${1}
++	shift
++	if [ ${#@} = 0 ]; then
++		return #is empty
++	fi
++	for var in "${@}"; do
++		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
++		f=$(expr substr ${f} 1 $(echo $(echo -n ${f} | wc -m)-1 | bc))
++		#f=${f::-1}
++		f=${to}_$(expr substr ${f} 7 $(echo $(echo -n ${f} | wc -m)-6 | bc))
++		#f=${to}_${f:6}
++		move ${var} ../${out}/${f}
++	done
++}
++number_expected () {
++	if [ -z "${no_number_check}" ]; then
++		case ${p} in
++			''|*[!0-9]*) echo "error: Not a number"; exit 1 ;;
++		esac #This rejects empty strings and strings containing non-digits
++	fi
++}
++new_tag () {
++	number_expected
++	s=${p}
++	t= #type
++	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
++}
++
++ainits_ar_key=
++ainits_ar_val=
++ainits_ar_set () {
++	ainits_ar_key="${ainits_ar_key} $1"
++	ainits_ar_val="${ainits_ar_val} $2"
++}
++ainits_ar_get () {
++	i=0
++	for a in ${ainits_ar_key}; do
++		if [ $a = $s ]; then
++			break
++		fi
++		i=$((i+1))
++	done
++	j=0
++	for a in ${ainits_ar_val}; do
++		if [ $j = $i ]; then
++			return $a
++		fi
++		j=$((j+1))
++	done
++}
++#ainits=( )
++ainits_counter=1
++s= #id
++v=
++if [ -n "${isdebug}" ]; then v=-v; fi #; set -x
++while read p; do
++	if [ -z "${s}" ]; then
++		new_tag
++	else
++		if [ -z "${t}" ]; then
++			if [ -z "${p}" ]; then
++				t=1 #can be show or done
++			else
++				number_expected
++				t=2 #action
++				at=${p}
++				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
++				ainits_ar_set ${s} ${at}
++				#ainits[${s}]=${at}
++			fi
++		elif [ ${t} = 1 ]; then
++			if [ -z "${p}" ]; then
++				echo show
++			else
++			#done
++				number_expected
++				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
++				ainits_ar_get ${s}; if [ $? = 1 ]; then #button or DoInitAction sprite
++				#if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
++					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"`
++					if [ -n "${f}" ]; then #is a button
++						d=../${out}/${s}
++						move "${f}" ${d}
++						sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
++					else #sprite init
++						if [ ${ainits_counter} != 1 ]; then
++							ainits_file="_${ainits_counter}.as"
++						else
++							ainits_file=".as"
++						fi
++						f=`find -name DoInitAction${ainits_file}`
++						move  ${f} ../${out}/${s}
++						ainits_counter=$((ainits_counter+1))
++					fi
++				fi
++				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"`  #else is empty
++			fi
++			s=
++		else
++			new_tag
++		fi
++	fi
++done <../${log}
++
++doaction 0 `find -maxdepth 3 -name DoAction.as`
++
++#part 2
++if [ -n "${2}" ]; then
++	cd ..
++	mv ${v} ${1} ${1}.orig && \
++	${2} && \
++	diff ${1} ${1}.orig && \
++	rm -r ${v} ${folder}
++fi
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -20,18 +20,26 @@ endif
+ ifndef prefix
+ prefix=/usr
+ endif
++ifndef platform
++platform=lin
++endif
+ 
+ ifeq (${conv_64},1) #to cross compile
+ 	ifneq ($(CC),arm-linux-gnueabihf-gcc)
+ 		model=-m32
+ 	endif
+-#else
++else
+ #	model=
++	ifeq (${platform},win) #to long long
++		OCONVFLAGS=-
++	endif
+ endif
+ 
+ OFLAGS=x_file 2
+ 
+-libname=liboadbgdata.so
++libfirstname=liboadbgdata
++libname=${libfirstname}.so
++libnamedll=${libfirstname}.dll
+ exte=libexte.a
+ 
+ all: ${libname} oadbgdata.h
+@@ -43,7 +51,7 @@ re:
+ 
+ xlog=../include/xlog.
+ 
+-items=intern compare frame string branch ibranch log save mark
++items=intern compare frame string branch ibranch log save mark ${platform}
+ #$(eval subobjects = )
+ $(foreach var,$(items),$(eval subobjects += ${var}.o))
+ #$(eval sublogs = )
+@@ -60,12 +68,16 @@ ${exte}: ${subobjects}
+ 	$(AR) cr ${exte} $^
+ ${libname}: main.o ${exte}
+ 	${OLINK} main.oc.log ${sublogs}
+-	$(CC) ${model} ${linkerflags} -shared $< -o ${libname} -L. -l:${exte} -Wl,--exclude-libs ${exte}
++	if [ "${platform}" = "lin" ]; then \
++		$(CC) ${model} ${linkerflags} -shared $< -o ${libname} -L. -l:${exte} -Wl,--exclude-libs=${exte}; \
++	else \
++		x86_64-w64-mingw32-gcc --no-leading-underscore ${linkerflags} ${objects} -shared -lmsvcrt -o ${libnamedll} -Wl,--exclude-modules-for-implib `printf ',%s' ${subobjects} | cut -c2-`; \
++	fi
+ # -l:intern.o ? is ok but exclude-libs intern.o/libintern.a will not exclude
+ 
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS}
+-	${OCONV} $<.x import
++	${OCONV} ${OCONVFLAGS} $<.x import
+ 	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c
+ #-Wno are a must at pkgbuild
+ #-fPIC since launchpad bionic build
+@@ -78,7 +90,7 @@ ${libname}: main.o ${exte}
+ %.h: %.ohi
+ #	if [ $@ = common.h ]; then $(MAKE) ${xlog}h;fi
+ 	${OCOMP} $< ${OFLAGS} logfile 0
+-	${OCONV} $<.x
++	${OCONV} ${OCONVFLAGS} $<.x
+ 
+ clean:
+ 	-rm -f common.ohi            common.ohi.x     common.h
+@@ -88,7 +100,7 @@ clean:
+ 	-rm -f           main.oc.log main.oc.x        main.c
+ 	-rm -f oadbgdata.ohi         oadbgdata.ohi.x  oadbgdata.h
+ 
+-	-rm -f ${exte} ${libname}
++	-rm -f ${exte} ${libname} ${libnamedll}
+ 
+ distclean: clean
+ 
+--- actionswf-1.orig/oad/intern.oc
++++ actionswf-1/oad/intern.oc
+@@ -15,6 +15,7 @@ importx "fseek" fseek
+ importx "malloc" malloc                              #to catch practical but to catch only by warnings, is a long if also this warning comes -Wbuiltin-declaration-mismatch
+ importx "fread" fread
+ importx "fclose" fclose
++import "printe" printe
+ #
+ import "branch_add" branch_add
+ #
+@@ -32,7 +33,6 @@ import "jumpforward_resolve" jumpforward
+ import "jumpforwardif_resolve" jumpforwardif_resolve
+ import "jumpbackward_resolve" jumpbackward_resolve
+ import "jumpbackward_resolved" jumpbackward_resolved
+-import "printe" printe
+ import "function_resolved" function_resolved
+ #
+ import "presprite_init" presprite_init
+@@ -67,6 +67,7 @@ function fcontent(sd path,sv psize) #2
+ 		end
+ 		call fclose(f)
+ 	end
++	call printe("file error")
+ 	return (NULL)
+ end
+ 
+--- /dev/null
++++ actionswf-1/oad/lin.oc
+@@ -0,0 +1,17 @@
++
++format elfobj64
++
++^importx "stdout" stdout
++^importx "stderr" stderr
++
++function platform_stdout()
++	svu s^stdout
++	return s#
++end
++
++function platform_stderr()
++	svu s^stderr
++	return s#    #no return s? unfortunately here at C &stderr is the same as stderr, else use !set s s#
++end
++
++entryraw global()
+--- /dev/null
++++ actionswf-1/oad/m
+@@ -0,0 +1 @@
++make -j4 $@
+\ No newline at end of file
+--- actionswf-1.orig/oad/main.oc
++++ actionswf-1/oad/main.oc
+@@ -30,6 +30,7 @@ import "presprite_done" presprite_done
+ import "tree_init" tree_init
+ import "tree_exit" tree_exit
+ #
++importx "unlink" unlink
+ importx "rename" rename
+ ^import "inter_extension" inter_extension 1
+ ^import "inter_last_extension" inter_last_extension 1
+@@ -182,6 +183,7 @@ functionx oadata_ok(ss swf_fullpath)
+ 			call memcpy(size,sinterfinal,size2)
+ 
+ 			datax r#1 ;#same 0/-1, here is int
++			call unlink(to) #same 0/-1, on windows will not rename if "File exists"
+ 			set r rename(from,to)
+ 
+ 			call free(from)
+--- actionswf-1.orig/oad/md
++++ actionswf-1/oad/md
+@@ -1,2 +1,2 @@
+ 
+-compilerflags="-g" linkerflags=" " make -j4 $@
++compilerflags="-g" linkerflags=" " ./m${what_m2} $@
+--- actionswf-1.orig/oad/mds
++++ actionswf-1/oad/mds
+@@ -1,6 +1,2 @@
+ 
+-if [ -z "${launcher}" ]; then launcher="q"; fi
+-if [ -z "${OCOMP}" ]; then OCOMP="${launcher} ~/o/ocompiler-1/src/o"; fi
+-if [ -z "${OCONV}" ]; then OCONV="${launcher}${launcher} ~/o/ocompiler-1/otoc/otoc"; fi
+-if [ -z "${OLINK}" ]; then OLINK="${launcher} ~/o/ocompiler-1/ounused/ounused"; fi
+-OCONV="${OCONV}" OCOMP="${OCOMP}" OLINK="${OLINK}" ./md $@
++what_m2=s ./md $@
+--- /dev/null
++++ actionswf-1/oad/ms
+@@ -0,0 +1,6 @@
++
++if [ -z "${launcher}" ]; then launcher="q"; fi
++if [ -z "${OCOMP}" ]; then OCOMP="${launcher} ~/o/ocompiler-2/src/o"; fi
++if [ -z "${OCONV}" ]; then OCONV="${launcher}${launcher} ~/o/ocompiler-2/otoc/otoc"; fi
++if [ -z "${OLINK}" ]; then OLINK="${launcher} ~/o/ocompiler-2/ounused/ounused"; fi
++OCONV="${OCONV}" OCOMP="${OCOMP}" OLINK="${OLINK}" ./m $@
+--- /dev/null
++++ actionswf-1/oad/mw
+@@ -0,0 +1,2 @@
++
++CC=x86_64-w64-mingw32-gcc platform=win ./m${what_m} $@
+--- /dev/null
++++ actionswf-1/oad/mw64
+@@ -0,0 +1,9 @@
++
++./mw${what_m} && \
++cd ../example && \
++./mrwd && \
++cd ../tests/data && \
++./testw${what_m} && \
++./c && \
++cd ../../example && \
++make clean
+--- /dev/null
++++ actionswf-1/oad/mw64s
+@@ -0,0 +1,2 @@
++
++what_m=s ./mw64
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/oad/mwd
+@@ -0,0 +1,2 @@
++
++what_m=d${what_m} ./mw $@
+--- /dev/null
++++ actionswf-1/oad/mwds
+@@ -0,0 +1,2 @@
++
++what_m=s ./mwd $@
+--- /dev/null
++++ actionswf-1/oad/mws
+@@ -0,0 +1,2 @@
++
++what_m=s ./mw $@
+--- actionswf-1.orig/oad/string.oc
++++ actionswf-1/oad/string.oc
+@@ -16,13 +16,13 @@ importx "free" free
+ importx "strlen" strlen
+ #
+ importx "fputs" fputs
+-^importx "stdout" stdout
++^import "platform_stdout" platform_stdout
+ importx "fputc" fputc
+ #
+ ^import "memnl" memnl 2
+ importx "fwrite" fwrite
+ #
+-^importx "stderr" stderr
++^import "platform_stderr" platform_stderr
+ #
+ import "re_alloc_add" re_alloc_add
+ 
+@@ -109,12 +109,12 @@ function printn(sv s)
+ 	call fputc((output_nl),s)
+ end
+ function print_inline_done()
+-	sv so^stdout  #isn't at c an extra step? who cares, at o is not possible without this
+-	call printn(so#)
++	valueu so#1;set so platform_stdout()
++	call printn(so)
+ end
+ function printt(ss str)
+-	svu so^stdout  #isn't at c an extra step? who cares, at o, to put stdout an arg is like putting the pointer
+-	call fputs(str,so#)
++	valueu so#1;set so platform_stdout()
++	call fputs(str,so)
+ end
+ function print_indent()
+ 	inc global.indents
+@@ -152,7 +152,7 @@ function prints_inline(ss format)
+ end
+ 
+ function print_text(ss a,valueu c)
+-	sv so^stdout
++	valueu so#1;set so platform_stdout()
+ 	ss b
+ 	valueu d#1
+ 	add c a
+@@ -161,7 +161,7 @@ function print_text(ss a,valueu c)
+ 		if d!=a  #why to write a whitespaces row?
+ 			sub d a
+ 			call indent()
+-			call fwrite(a,d,1,so#)
++			call fwrite(a,d,1,so)
+ 			call print_inline_done()
+ 		end
+ 		set a b
+@@ -169,8 +169,7 @@ function print_text(ss a,valueu c)
+ end
+ 
+ function printe(ss er)
+-	sv se^stderr
+-	set se se#
++	valueu se#1;set se platform_stderr()
+ 	call fputs(er,se)
+ 	call printn(se)
+ end
+--- /dev/null
++++ actionswf-1/oad/win.oc
+@@ -0,0 +1,27 @@
++
++format elfobj64
++
++^importx "__iob_func" __iob_func
++
++#const STDIN_FILENO=0
++const STDOUT_FILENO=1
++const STDERR_FILENO=2
++function file_struct()
++	vstrx *_ptr#1
++	datax *_cnt#1
++	vstrx *_base#1
++	datax *_flag#1;datax *_file#1
++	datax *_charbuf#1;datax *_bufsiz#1
++	vstrx *_tmpfname#1
++end
++
++function platform_stdout()
++	valueu s#1;set s __iob_func()
++	add s \file_struct\*STDOUT_FILENO
++	return s
++end
++function platform_stderr()
++	valueu s#1;set s __iob_func()
++	add s \file_struct\*STDERR_FILENO
++	return s
++end
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -25,7 +25,25 @@ sudo dnf install actionswf
+ There is also <i>actionswf-devel</i>.\
+ \
+ \
+-On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases) has the dll.
++On openSUSE, run the following as __root__:\
++For openSUSE Tumbleweed:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
++```
++For openSUSE Leap:
++```sh
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
++```
++Replace *16.0* with *15.6* if needed.\
++And:
++```sh
++zypper refresh
++zypper install actionswf
++```
++An optional step is to install **actionswf-devel**.\
++\
++\
++On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases).
+ 
+ ## From source
+ Compile with [O Compiler](https://github.com/colin-i/o).
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -31,6 +31,10 @@ ifndef nobits_virtual
+ nobits_virtual=1
+ endif
+ 
++ifndef strippy
++strippy=ostriputil
++endif
++
+ #if modifying OFLAGS will lose inside data (at kinetic is reversed: first that def, then this def)
+ OFLAGS=conv_64 ${conv_64} ${OFLAGSEXTRA}
+ 
+@@ -62,8 +66,6 @@ $(eval logs = )
+ $(foreach var,$(expitems),$(eval logs += ${items_prefix}${var}.e.oc.log))
+ $(foreach var,$(items),$(eval logs += ${items_prefix}${var}.oc.log))
+ 
+-strippy=ostriputil
+-
+ ifeq (${platform},win)
+ OFLAGS += inplace_reloc 0 include_sec 1
+ all: compile ounused link def
+@@ -85,7 +87,10 @@ OFLAGS += underscore_pref 1
+ all: ${libname}
+ 
+ ifeq (${conv_64},1)
+-ATLDCOM = $(LD) ${linkerflags} -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${eobs} -shared -entry DllMain -o ${prefname} -lc ${L} `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
++#this past that focal ld is not. the cc variant is linking but the result will be bad with binutils
++#ATLDCOM=$(CC) -m32 ${linkerflags} ${linkerflagsextra} ${eobs} -shared -shared -Wl,-entry=DllMain -o ${prefname} -lc ${L} `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} -Wl,--exclude-libs=${exte}
++#need to use LLVM lld for a solution, even then still getting relocation cannot be used against symbol, recompile with -fPIC
++ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${eobs} -shared -entry DllMain -o ${prefname} ${Lc} -lc ${L} `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+ 
+@@ -101,11 +106,12 @@ ${libname}: ${name}
+ else
+ ${libname}: ${name}
+ 	$(eval strp = )
+-	$(foreach var,$(expitems),$(eval strp += ${items_prefix}${var}.e.oc.log ${items_prefix}${var}.o))
+-	$(foreach var,$(items),$(eval strp += ${items_prefix}${var}.oc.log ${items_prefix}${var}.o))
+-	${OSTRIP} ${name} ${strp}
+-	#if [ ! -e "./strip.py" ]; then wget https://raw.githubusercontent.com/colin-i/o/master/ostrip/strip.py; fi
+-	${strippy} ${name} ${libname}
++	$(foreach var,$(expitems),$(eval strp += ${items_prefix}${var}.e.oc.log ${items_prefix}${var}.e.o))
++	cat 1 | grep ^./libexte.a | grep -o '^[^ ]*' | grep -Po '(?<=\()[^\)]*' > 2
++	for a in `cat 2`; do if [ -n "$$b" ]; then b="$$b $${a}c.log $$a"; else b="$${a}c.log $$a"; fi; done; echo $$b > 3
++	${OSTRIP} ${name} ${strp} `cat 3`
++	${strippy} ${name} ${libname} ${anotherobjcopy}
++#if [ ! -e "./strip.py" ]; then wget https://raw.githubusercontent.com/colin-i/o/master/ostrip/strip.py; fi
+ endif
+ 
+ endif
+@@ -113,7 +119,8 @@ endif
+ ${name}: ${obs} ${eobs}
+ 	${OLINK} ${logs}
+ 	$(AR) cr ${exte} ${obs}
+-	${ATLDCOM}
++	${ATLDCOM} > 1
++# > 1 for ostrip
+ endif
+ 
+ %.o: %.oc
+@@ -143,7 +150,7 @@ clean:
+ 	-rm -f ${name}
+ 	-rm -f ${projname}.dll
+ 	-rm -f ${defname}
+-	-rm -f strip.py
++	-rm -f 1 2 3
+ 	-rm -f .data
+ 	-rm -f .text
+ 	-rm -f .rela.dyn
+@@ -184,5 +191,3 @@ uninstall:
+ #make compile && make link linkerflags= items_prefix=/home/bc/s/actionswf-1/src/ LD=/home/bc/Desktop/out/LD-.glibc2.27-x86_64.AppImage
+ #make linkerflags= conv_64=0
+ #make linkerflags= conv_64=0 link
+-
+-#make strippy="python /home/bc/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" OFLAGSEXTRA="function_name 1 nul_res_pref 1"
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -188,7 +188,7 @@ function infinite_loop_check(sd codepoin
+ end
+ function action_true_compare(ss command)
+ 	sd compare
+-	set compare strcmp("true",command)
++	set compare strcmp("true",command) #int
+ 	return compare
+ end
+ 
+@@ -352,8 +352,7 @@ function action__code_row_ex(sd codepoin
+ 	if attrib=(else_marker)
+ 		call error("ELSE is not linked at this point")
+ 	end
+-	setcall codepointer action_code_pack(codepointer)
+-	return codepointer
++	callret action_code_pack(codepointer)
+ endfunction
+ function action_code_pack(sd codepointer)
+ 	sd attrib
+@@ -837,13 +836,11 @@ function action_code_right(sd codepointe
+     if pointer!=codepointer
+         return pointer
+     endif
+-    setcall codepointer action_code_right_util(codepointer)
+-    return codepointer
++	callret action_code_right_util(codepointer)
+ endfunction
+ #codepointer
+ function action_code_right_util(sd codepointer)
+-	set codepointer action_code_right_util_ex(codepointer,(NULL))
+-	return codepointer
++	callret action_code_right_util_ex(codepointer,(NULL))
+ end
+ function action_code_right_util_ex(sd codepointer,sd outside_compare2)
+ 	if codepointer#=(new_action)
+@@ -910,13 +907,11 @@ endfunction
+ function action_code_right_number(sd codepointer)
+     if codepointer#=(parenthesis_start)
+         add codepointer (DWORD)
+-        setcall codepointer action_code_right_util(codepointer)
+-        return codepointer
++		callret action_code_right_util(codepointer)
+     endif
+     if codepointer#=(call_action_right)
+ 		sd want_return=TRUE
+-        setcall codepointer action_code_write_function_call(codepointer,#want_return)
+-        return codepointer
++		callret action_code_write_function_call(codepointer,#want_return)
+     endif
+     sd attrib;sd var
+     set attrib codepointer#
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -43,9 +43,7 @@ import "is_numeric" is_numeric
+ #strpbrk
+ function action_code_membersplit(ss ac)
+     char delims=".["
+-    ss next
+-    setcall next strpbrk(ac,#delims)
+-    return next
++	callret strpbrk(ac,#delims) #pointer
+ endfunction
+ 
+ #str
+@@ -75,9 +73,7 @@ endfunction
+ function cond_blocks_noerror()
+     sd c
+     setcall c brace_blocks_counter()
+-    sd blocks
+-    setcall blocks cond_blocks_at_index(c#)
+-    return blocks
++	callret cond_blocks_at_index(c#)
+ endfunction
+ 
+ function cond_blocks_at_index(sd i)
+@@ -91,9 +87,7 @@ endfunction
+ 
+ import "swf_actionblock" swf_actionblock
+ function brace_blocks_get_memblock()
+-    sd memblock
+-    setcall memblock swf_actionblock((mem_exp_get_block))
+-    return memblock
++	callret swf_actionblock((mem_exp_get_block))
+ endfunction
+ 
+ function for_in(datax flag)
+@@ -141,8 +135,7 @@ const sar_shr=Greaterthan
+ const ifElse_sign=Questionmark
+ #pointer
+ function action_code_row(ss ac,sd a_block_detected)
+-	setcall ac action_code_row_ex(ac,a_block_detected,-1)
+-    return ac
++	callret action_code_row_ex(ac,a_block_detected,-1)
+ endfunction
+ #pointer
+ function action_code_row_ex(ss ac,sd a_block_detected,sd else_index)
+@@ -306,8 +299,7 @@ function action_code_row_parse(ss ac,sd
+             call error("unexpected closing brace sign after code block opened")
+         endif
+         inc ac
+-        setcall ac else_verify(ac,else_index)
+-        return ac
++		callret else_verify(ac,else_index)
+ 	endif
+     setcall ac action_code_row_parse_instrument(ac)
+     if a_block_detected=(TRUE)
+@@ -338,7 +330,7 @@ function else_verify(ss ac,sd else_index
+ 
+     ss pointer
+     setcall pointer else_elseif_expression(ac,#bool_is_elseif)
+-    if pointer=ac
++    if ac=pointer
+         return ac
+     endif
+     while pointer!=ac
+@@ -372,7 +364,7 @@ function else_elseif_expression(ss ac,sd
+     set p_elseif# (FALSE)
+     ss pointer
+     setcall pointer str_expression_at_start(ac,"else")
+-    if pointer=ac
++    if ac=pointer
+         return ac
+     endif
+     setcall ac str_expression_at_start(pointer,"if")
+@@ -393,8 +385,7 @@ function action_code_row_parse_instrumen
+     if pointer!=ac
+         call action_code_set((ActionReturn))
+         char an_end=";"
+-        setcall ac action_code_row_parse_tool(pointer,an_end)
+-        return ac
++		callret action_code_row_parse_tool(pointer,an_end)
+     endif
+     setcall pointer str_expression_at_start_withEndCare(ac,"break")
+     if pointer!=ac
+@@ -407,8 +398,7 @@ function action_code_row_parse_instrumen
+         return pointer
+     endif
+     #
+-    setcall pointer action_parse_pack(ac,(Semicolon))
+-    return pointer
++	callret action_parse_pack(ac,(Semicolon))
+ endfunction
+ #pointer
+ function action_parse_pack(ss ac,sd endChar)
+@@ -509,8 +499,7 @@ function action_parse_pack(ss ac,sd endC
+ 		return ac
+ 	endelse
+ 	set ac spaces(ac) #ffdec
+-	setcall ac action_parse_right(ac,endChar)
+-	return ac
++	callret action_parse_right(ac,endChar)
+ endfunction
+ function action_parse_left_holder(ss pointer,sd ac1,sd ac2)
+     ss test
+@@ -563,8 +552,7 @@ function action_parse_test_mixt_equal(ss
+ 	endelseif
+ 	set p_ac# ac
+ 	#this was for strings but now is memtrail()	set ac# 0
+-	sd action;setcall action action_parse_take_action(op,pointer)
+-	return action
++	callret action_parse_take_action(op,pointer)
+ endfunction
+ #pointer
+ function action_parse_right(ss ac,sd endChar)
+@@ -575,13 +563,11 @@ function action_parse_right(ss ac,sd end
+         return pointer
+     endif
+     #
+-    setcall ac action_code_row_parse_tool(ac,endChar)
+-    return ac
++	callret action_code_row_parse_tool(ac,endChar)
+ endfunction
+ #pointer
+ function action_code_row_parse_tool(ss ac,sd endtype)
+-    setcall ac action_code_row_parse_tool_util(ac,0,endtype,0)
+-    return ac
++	callret action_code_row_parse_tool_util(ac,0,endtype,0)
+ endfunction
+ 
+ #pointer
+@@ -646,8 +632,7 @@ function action_parse_loop(ss ac,ss p_op
+                 call action_code_set((ifElse_start))
+                 set p_ifElse_bool# (TRUE)
+                 setcall ac action_code_row_parse_tool(ac,(Colon))
+-                setcall ac action_code_row_parse_tool_util(ac,p_op,endtype1,endtype2)
+-                return ac
++				callret action_code_row_parse_tool_util(ac,p_op,endtype1,endtype2)
+             endif
+         endif
+         #
+@@ -1028,9 +1013,7 @@ function cond_blocks()
+     if c#=(brace_blocks_max)
+         call error("too many blocks: {}")
+     endif
+-    sd blocks
+-    setcall blocks cond_blocks_at_index(c#)
+-    return blocks
++	callret cond_blocks_at_index(c#)
+ endfunction
+ function brace_blocks_counter_dec()
+     sd c
+@@ -1316,8 +1299,7 @@ function action_code_parse_new_or_call(s
+                 set last_dot pointer
+                 set bool (TRUE)
+             elseif pointer#=(Openparenthesis)
+-                setcall pointer action_code_parse_function_detected(ac,last_dot,pointer,type)
+-                return pointer
++				callret action_code_parse_function_detected(ac,last_dot,pointer,type)
+             endelseif
+         endif
+     endwhile
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -23,10 +23,9 @@ endfunction
+ import "struct_ids_actionpool" struct_ids_actionpool
+ #block
+ function actionpool_currentblock()
+-    sd poolid;sd block
++    sd poolid
+     setcall poolid actionpoolid_get()
+-    setcall block struct_ids_actionpool((ids_get),poolid)
+-    return block
++	callret struct_ids_actionpool((ids_get),poolid)
+ endfunction
+ 
+ importx "free" free
+@@ -210,9 +209,7 @@ end
+ 
+ #pool id (U16)
+ function actionpool_value(ss value)
+-	sd id
+-	set id actionpool_value_ex(value,(FALSE))
+-	return id
++	callret actionpool_value_ex(value,(FALSE))
+ end
+ #pool id
+ function actionpool_value_ex(ss value,sd force)
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -331,9 +331,7 @@ function swf_shape_simple(sd width,sd he
+         set xNV xcurve
+         data *=0
+     data *=-1
+-    sd id
+-    setcall id swf_shape_local(width,height,struct)
+-    return id
++	callret swf_shape_local(width,height,struct)
+ endfunction
+ 
+ #id
+@@ -345,9 +343,7 @@ function swf_text_initial_font_centered(
+     call edittext_text(text)
+     sd e_struct
+     setcall e_struct edittext_struct()
+-    sd text_id
+-    setcall text_id swf_text_local(width,height,"",(HasFont|HasText|HasTextColor|HasLayout|ReadOnly|NoSelect),e_struct)
+-    return text_id
++	callret swf_text_local(width,height,"",(HasFont|HasText|HasTextColor|HasLayout|ReadOnly|NoSelect),e_struct)
+ endfunction
+ 
+ #button
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -420,14 +420,21 @@ function swf_shape_local(sd width,sd hei
+ endfunction
+ 
+ #id
+-function swf_shape_bitmap_local(sd bitmapId,sd width,sd height)
++function swf_shape_bitmap_local_repeating(sd bitmapId,sd width,sd height)
++	callret swf_shape_bitmap_local(bitmapId,width,height,(repeating_bitmap_fill))
++end
++function swf_shape_bitmap_local_clipped(sd bitmapId,sd width,sd height)
++	callret swf_shape_bitmap_local(bitmapId,width,height,(clipped_bitmap_fill))
++end
++function swf_shape_bitmap_local(sd bitmapId,sd width,sd height,sd bitmap_fill)
++#                                                                 ruffle will extra pixel at repeating image and at transparent is annoying
+ #sd bitmapId    id, e.g.: from swf_dbl
+-    sd shape_id
+-    sd width_variable
+-    set width_variable width
+-    sd height_variable
+-    set height_variable height
+-    data struct=repeating_bitmap_fill
++	sd width_variable
++	set width_variable width
++	sd height_variable
++	set height_variable height
++	data struct#1
++	set struct bitmap_fill
+         data refid#1
+         set refid bitmapId
+     data *=0
+@@ -447,8 +454,7 @@ function swf_shape_bitmap_local(sd bitma
+         mult height_variable -1
+         set h2 height_variable
+     data *=-1
+-	setcall shape_id swf_shape_local(width,height,#struct)
+-    return shape_id
++	callret swf_shape_local(width,height,#struct)
+ endfunction
+ 
+ #id
+@@ -458,10 +464,8 @@ function swf_image_ex_local(ss imagepath
+     sd dbl_id
+     setcall dbl_id swf_dbl_ex_local(imagepath,p_wh)
+     #add dbl to a shape
+-    sd shape_id
+     sd width;set width p_wh#;add p_wh (DWORD)
+-    setcall shape_id swf_shape_bitmap_local(dbl_id,width,p_wh#)
+-    return shape_id
++	callret swf_shape_bitmap_local_clipped(dbl_id,width,p_wh#)
+ endfunction
+ import "swf_tag_recordheader_long_entry" swf_tag_recordheader_long_entry
+ import "word_swap" word_swap
+--- actionswf-1.orig/src/mrds
++++ actionswf-1/src/mrds
+@@ -1,2 +1,2 @@
+ 
+-OCOMP="q ~/o/ocompiler-1/src/o" ./mrd $@
++OCOMP="q ~/o/ocompiler-2/src/o" ./mrd $@
+--- /dev/null
++++ actionswf-1/src/rteststrip
+@@ -0,0 +1 @@
++anotherobjcopy=xobjcopy arm=x ./teststrip
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -137,9 +137,7 @@ vstr actions#1
+         setcall text_id swf_text_initial_font_centered(width,height,text,font_id,font_height,font_color)
+     endelse
+ 
+-    sd id
+-    setcall id swf_button_base(shape_up,shape_over,shape_down,noText,text_id,text_y,actions)
+-    return id
++	callret swf_button_base(shape_up,shape_over,shape_down,noText,text_id,text_y,actions)
+ endfunction
+ #id
+ functionX swf_button_last(ss newtext,ss actions)
+@@ -165,9 +163,7 @@ functionX swf_button_last(ss newtext,ss
+         setcall newtext_id swf_text_initial_font_centered(width,height,newtext,font_id,font_height,font_color)
+     endif
+ 
+-    sd id
+-    setcall id swf_button_base(shape_up,shape_over,shape_down,noText,newtext_id,text_y,actions)
+-    return id
++	callret swf_button_base(shape_up,shape_over,shape_down,noText,newtext_id,text_y,actions)
+ endfunction
+ 
+ #font
+@@ -176,16 +172,13 @@ endfunction
+ import "swf_font_local" swf_font_local
+ functionX swf_font(ss fontname,sd font_flags)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	sd id;set id swf_font_local(fontname,font_flags)
+-	return id
++	callret swf_font_local(fontname,font_flags)
+ endfunction
+ #id
+ functionX swf_font_basic(ss fontname)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss fontname    = a string with the browser font, for example "_sans"
+-	sd id
+-	setcall id swf_font_local(fontname,0)
+-	return id
++	callret swf_font_local(fontname,0)
+ endfunction
+ 
+ #text
+@@ -194,16 +187,14 @@ endfunction
+ import "swf_text_local" swf_text_local
+ functionX swf_text(sd bound_width,sd bound_height,ss variablename,sd flags,sv structure)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	sd id;set id swf_text_local(bound_width,bound_height,variablename,flags,structure)
+-	return id
++	callret swf_text_local(bound_width,bound_height,variablename,flags,structure)
+ endfunction
+ 
+ #id
+ import "swf_shape_local" swf_shape_local
+ functionX swf_shape(sd width,sd height,sd args)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	sd id;set id swf_shape_local(width,height,args)
+-	return id
++	callret swf_shape_local(width,height,args)
+ endfunction
+ 
+ #id
+@@ -217,17 +208,19 @@ functionX swf_shape_basic(sd width,sd he
+ 	sd ycurve_value;set ycurve_value height;div ycurve_value 6
+ 	sd lineheight;set lineheight width;if lineheight>height;set lineheight height;endif;div lineheight 20
+ 	#xc width/6;yc..hg..;lh (min(w,h))/20
+-	sd id
+-	setcall id swf_shape_simple(width,height,fillcolor,lineheight,linecolor,xcurve_value,ycurve_value)
+-	return id
++	callret swf_shape_simple(width,height,fillcolor,lineheight,linecolor,xcurve_value,ycurve_value)
+ endfunction
+ 
+ #id
+-import "swf_shape_bitmap_local" swf_shape_bitmap_local
++import "swf_shape_bitmap_local_repeating" swf_shape_bitmap_local_repeating
+ functionX swf_shape_bitmap(sd bitmapId,sd width,sd height)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	sd id;set id swf_shape_bitmap_local(bitmapId,width,height)
+-	return id
++	callret swf_shape_bitmap_local_repeating(bitmapId,width,height)
++endfunction
++import "swf_shape_bitmap_local_clipped" swf_shape_bitmap_local_clipped
++functionX swf_shape_bitmap_clipped(sd bitmapId,sd width,sd height)
++	base swf_new.bp;call ebase(swf_new.bp)
++	callret swf_shape_bitmap_local_clipped(bitmapId,width,height)
+ endfunction
+ #id
+ functionX swf_shape_border(sd width,sd height,sd linesize,sd linecolor)
+@@ -236,7 +229,6 @@ functionX swf_shape_border(sd width,sd h
+ #sd height     border height
+ #sd linesize  line size
+ #sd linecolor  0xRGBA color
+-    sd shape
+     sd neg_w=-1
+     sd neg_h=-1
+     mult neg_w width
+@@ -263,8 +255,7 @@ functionX swf_shape_border(sd width,sd h
+     data *=0;data nord#1
+         set nord neg_h
+     data *=-1
+-    setcall shape swf_shape_local(width,height,#border)
+-    return shape
++	callret swf_shape_local(width,height,#border)
+ endfunction
+ 
+ ######################dbl
+@@ -274,25 +265,21 @@ functionX swf_image(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+ 	data width#1;data *height#1
+-	sd shape_id;setcall shape_id swf_image_ex_local(imagepath,#width)
+-	return shape_id
++	callret swf_image_ex_local(imagepath,#width)
+ endfunction
+ #id
+ import "swf_image_ex_local" swf_image_ex_local
+ functionX swf_image_ex(ss imagepath,sd p_wh)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath, sd p_wh
+-	sd id;set id swf_image_ex_local(imagepath,p_wh)
+-	return id
++	callret swf_image_ex_local(imagepath,p_wh)
+ endfunction
+ 
+ #id
+ functionX swf_dbl(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	sd id
+-	setcall id swf_dbl_ex_local(imagepath,(NULL))
+-	return id
++	callret swf_dbl_ex_local(imagepath,(NULL))
+ endfunction
+ #id
+ import "swf_dbl_ex_local" swf_dbl_ex_local
+@@ -309,27 +296,23 @@ functionX swf_dbl_width(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+ 	#format? ming newSWFDBLBitmap_fromInput
+-	dataxu size#1;charx t#1;sw dim
++	dataxu size#1;charx t#1;#sw dim
+ 	sd file;set file dblsize_start(imagepath,#size,#t)
+ 	if t=(l)
+-		set dim dblsize_end(file,size,(dblsignature+dblsize+dblformat))
+-	else
+-		set dim dblsize_end(file,size,(dblsignature+dblsize16+dblformat))
++		callret dblsize_end(file,size,(dblsignature+dblsize+dblformat))
+ 	end
+-	return dim
++	callret dblsize_end(file,size,(dblsignature+dblsize16+dblformat))
+ endfunction
+ #height
+ functionX swf_dbl_height(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	dataxu size#1;charx t#1;sw dim
++	dataxu size#1;charx t#1;#sw dim
+ 	sd file;set file dblsize_start(imagepath,#size,#t)
+ 	if t=(l)
+-		set dim dblsize_end(file,size,(dblsignature+dblsize+dblformat+WORD))
+-	else
+-		set dim dblsize_end(file,size,(dblsignature+dblsize16+dblformat+WORD))
++		callret dblsize_end(file,size,(dblsignature+dblsize+dblformat+WORD))
+ 	end
+-	return dim
++	callret dblsize_end(file,size,(dblsignature+dblsize16+dblformat+WORD))
+ endfunction
+ 
+ #jpeg/png/gif
+@@ -338,17 +321,24 @@ import "swf_jpeg_local" swf_jpeg_local
+ #id
+ functionX swf_imagej(ss imagepath,sd width,sd height)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-#ss imagepath, width, height
+ 	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+-	sd shape_id;setcall shape_id swf_shape_bitmap_local(id,width,height)
+-	return shape_id
++	callret swf_shape_bitmap_local_repeating(id,width,height)
+ endfunction
+-#id
+ functionX swf_imagej_alpha(ss imagepath,sd width,sd height,ss alphapath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
++#ss imagepath, width, height, alpha
+ 	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+-	sd shape_id;setcall shape_id swf_shape_bitmap_local(id,width,height)
+-	return shape_id
++	callret swf_shape_bitmap_local_repeating(id,width,height)
++endfunction
++functionX swf_imagej_clipped(ss imagepath,sd width,sd height)
++	base swf_new.bp;call ebase(swf_new.bp)
++	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
++	callret swf_shape_bitmap_local_clipped(id,width,height)
++endfunction
++functionX swf_imagej_alpha_clipped(ss imagepath,sd width,sd height,ss alphapath)
++	base swf_new.bp;call ebase(swf_new.bp)
++	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
++	callret swf_shape_bitmap_local_clipped(id,width,height)
+ endfunction
+ 
+ #libming is skipping at least FFE[0-F] , src/blocks/jpeg.c methodWriteJpegFile
+@@ -363,16 +353,12 @@ endfunction
+ functionX swf_jpeg(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	sd id
+-	setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+-	return id
++	callret swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+ endfunction
+ functionX swf_jpeg_alpha(ss imagepath,ss alphapath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	sd id
+-	setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+-	return id
++	callret swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+ endfunction
+ 
+ import "filepath_get_word" filepath_get_word
+@@ -382,15 +368,15 @@ functionX swf_gif_width(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the gif image
+ 	vstr err="invalid gif file"
+-	sw dim;set dim filepath_get_word(imagepath,(gifsignature),err)
+-	return dim
++	#sw dim
++	callret filepath_get_word(imagepath,(gifsignature),err)
+ endfunction
+ #height
+ functionX swf_gif_height(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the gif image
+-	sw dim;set dim filepath_get_word(imagepath,(gifsignature+WORD),swf_gif_width.err)
+-	return dim
++	#sw dim
++	callret filepath_get_word(imagepath,(gifsignature+WORD),swf_gif_width.err)
+ endfunction
+ 
+ ##############
+--- /dev/null
++++ actionswf-1/src/teststrip
+@@ -0,0 +1,6 @@
++
++if [ -z "${arm}" ]; then mk=make; else mk=./mrd; fi
++if [ -z "${OCOMP}" ]; then OCOMP=o; fi
++if [ -z "${OSTRIP}" ]; then OSTRIP=ostrip; fi
++strippy="python /home/bc/a/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" \
++	nobits_virtual=0 linkerflags=-M OCOMP=${OCOMP} OSTRIP=${OSTRIP} OFLAGSEXTRA="function_name 1 nul_res_pref 1" ${mk}
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -125,9 +125,7 @@ function block_get_psize(sd block)
+ endfunction
+ #size
+ function block_get_fullsize(sd block)
+-    sd size
+-    setcall size struct_off(block,(mem_struct__size_off))
+-    return size
++	callret struct_off(block,(mem_struct__size_off))
+ endfunction
+ #mem
+ function block_get_mem(sd block)
+@@ -177,8 +175,7 @@ function part_of_variable(sd value)
+     if bool=(TRUE)
+         return (TRUE)
+     endif
+-    setcall bool is_letter(value)
+-    return bool
++	callret is_letter(value)
+ endfunction
+ #bool
+ function is_letter(sd value)
+@@ -257,8 +254,7 @@ function str_expression_at_start(ss stri
+     if bool=(TRUE)
+         return string
+     endif
+-    setcall next spaces(next)
+-    return next
++	callret spaces(next)
+ endfunction
+ #next/same
+ function str_expression_at_start_withEndCare(ss ac,ss expression)
+@@ -430,9 +426,7 @@ function memrealloc(sd mem,sd size)
+     return ptr
+ endfunction
+ function memalloc(sd size)
+-    sd mem
+-    setcall mem memrealloc(0,size)
+-    return mem
++	callret memrealloc(0,size)
+ endfunction
+ function memalloc_errors(sd size,sd file)
+ 	sd mem
+@@ -448,9 +442,7 @@ endfunction
+ 
+ #id
+ function def_mem()
+-    sd id
+-    setcall id struct_ids((ids_set))
+-    return id
++	callret struct_ids((ids_set))
+ endfunction
+ #mem
+ function def_data()
+@@ -671,9 +663,7 @@ function dupreserve_string(ss str)
+     sd len
+     setcall len strlen(str)
+     inc len
+-    sd mem
+-    setcall mem memalloc(len)
+-    return mem
++	callret memalloc(len)
+ endfunction
+ 
+ #pointer after "abc"
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -3,7 +3,12 @@
+ CFLAGS=$(echo $(cat ../../oad/cflags) | grep -Poe "(?<==).*")
+ 
+ if [ -n "${1}" ]; then
+-	g="gdb -ex start --args"
++	if [ "${platform}" = "win" ]; then
++		gdb=/home/bc/a/wgdb/gdb.exe
++	else
++		gdb=gdb
++	fi
++	g="${gdb} -ex start --args"
+ fi
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ if [ -z "${OCONV}" ]; then OCONV=otoc; fi
+@@ -13,12 +18,20 @@ if [ -z "${CC}" ]; then
+ 		model=-m32
+ 	fi
+ fi
+-
++if [ "${platform}" = "win" ]; then
++	ext=exe
++	exelauncher=wine6
++	export WINEPATH=../../oad
++	OCONVFLAGS=-
++else
++	ext=out
++	export LD_LIBRARY_PATH=../../oad
++fi
+ if [ -z "${f}" ]; then
+ 	f=../../example/example.swf
+ fi
+-${OCOMP} a.oc x_file 2 logfile 0 && \
+-${OCONV} a.oc.x && \
++${launcher} ${OCOMP} a.oc x_file 2 logfile 0 && \
++${launcher64} ${OCONV} ${OCONVFLAGS} a.oc.x && \
+ ${CC} ${model} ${CFLAGS} -g a.c -L../../oad -loadbgdata && \
+-LD_LIBRARY_PATH=../../oad ${g} ./a.out ${f} || { echo a.out error; exit 1; }
++${exelauncher} ${g} ./a.${ext} ${f} || { echo a.out error; exit 1; }
+ #if [ -z "${d}" ]; then rm ${f}.data; else cp ${f}.data .; fi
+--- actionswf-1.orig/tests/data/a.oc
++++ actionswf-1/tests/data/a.oc
+@@ -4,6 +4,24 @@ format elfobj64
+ override include_sec 1
+ einclude "../../oad/oadbgdata.h" "../../oad/oadbgdata.oh"
+ 
++#importx "printf" printf
++#^importx "strerror" strerror
++
++#importx "__errno_location" __errno_location
++#function err()
++#	sd _e;set _e __errno_location()
++#	datax e#1;set e _e#
++#	ss s;set s strerror(e)
++#	call printf("%s\n",s)
++#end
++
++#importx "_get_errno" _get_errno
++#function err()
++#	datax e#1
++#	call _get_errno(#e)
++#	ss s;set s strerror(e)
++#	call printf("%s\n",s)
++#endfunction
+ 
+ entry main(data srgc,sv argv)
+ 	call oadata_logpad_set(0x30)
+@@ -11,7 +29,13 @@ entry main(data srgc,sv argv)
+ 	ss path;set path argv#
+ 	sd data
+ 	sd a;set a oadata_make(path,#data,(TRUE))
+-	if a!=0;return a;end
++	if a!=0
++#		call err()
++		return a
++	end
+ 	call oadata_free(data,(TRUE))
+ 	set a oadata_ok(path)
++#	if a!=0
++#		call err()
++#	end
+ 	return a
+--- /dev/null
++++ actionswf-1/tests/data/aw
+@@ -0,0 +1,2 @@
++
++CC=x86_64-w64-mingw32-gcc platform=win ./a $@
+--- actionswf-1.orig/tests/data/c
++++ actionswf-1/tests/data/c
+@@ -1,2 +1,2 @@
+ #!/bin/sh
+-rm -f a.oc.x a.c a.out
++rm -f a.oc.x a.c a.out a.exe
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -11,18 +11,25 @@ fi
+ 
+ etest=../../example/example.swf.data
+ 
++if [ "${platform}" = "win" ]; then
++	what_a=w
++fi
++
+ if [ ! -e ${etest} ]; then
+-	${RUN__SHELL} ./a || exit 1
++	${RUN__SHELL} ./a${what_a} || exit 1
+ 	if [ -n "${rd}" ]; then
+ 		read -t $((60*60*24))
+ 	fi
+ fi
+ 
+-{ ${RUN__SHELL} ./a ${g} ; echo $? > ./test.status ; } | tee data.txt
++{ ${RUN__SHELL} ./a${what_a} ${g} ; echo $? > ./test.status ; } | tee data.txt
+ status=`cat ./test.status`; rm ./test.status
+ if [ ${status} != 0 ]; then  exit 1; fi          #set -o pipefail && a | tee || exit
+ 
+ at_folder=../ . ../integ && {
++	if [ "${platform}" = "win" ]; then
++		sed -i 's/\r$//' data.txt
++	fi
+ 	diff ../.expected/data${e}.txt data.txt
+ 	if [ $? != 0 ]; then
+ 		if [ -n "${1}" ]; then exit 1; fi
+--- /dev/null
++++ actionswf-1/tests/data/testw
+@@ -0,0 +1,2 @@
++
++platform=win ./test $@
+--- /dev/null
++++ actionswf-1/tests/data/testws
+@@ -0,0 +1,2 @@
++
++launcher=q OCOMP=~/o/ocompiler-2/src/o launcher64=qq OCONV=~/o/ocompiler-2/otoc/otoc ./testw
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/as
++++ actionswf-1/tests/ffdec/as
+@@ -2,4 +2,4 @@
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+ isdebug=x _L=../ ${RUN__SHELL} ../asv && \
+ extra=x isdebug=x _L=../ ${RUN__SHELL} ../asv && \
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${RUN__SHELL} ../../oaalternative a.swf "./a.out x x" && cat a.swf.log
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${RUN__SHELL} ../../oaalternative.sh a.swf "./a.out x x" && cat a.swf.log
+--- actionswf-1.orig/tests/ffdec/bench1
++++ actionswf-1/tests/ffdec/bench1
+@@ -1,4 +1,4 @@
+ eval prexx_flags flagpre_mix
+-"../../oaalternative a.swf" flag_alt flag_pool_read
++"../../oaalternative.sh a.swf" flag_alt flag_pool_read
+ eval xx_flags flag_titles
+ eval xxu_flags flag_compress
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/bench2
++++ actionswf-1/tests/ffdec/bench2
+@@ -1,4 +1,4 @@
+ eval prexx_flags flagpre_mix flagpre_write_no
+ eval xx_flags flag_titles
+ eval xx_flags flag_compress
+-"../../oaalternative a.swf" flag_alt flag_pool_read_unlink flag_compress
+\ No newline at end of file
++"../../oaalternative.sh a.swf" flag_alt flag_pool_read_unlink flag_compress
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -16,7 +16,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 			LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} qq ./a.out x && {
+ 				if [ ${a} = 1 ]; then exit; fi
+ 				if [ -n "${wait}" ]; then read; fi
+-				isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${bashdbg} ../../oaalternative a.swf "qq ./a.out x x" || {
++				isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${bashdbg} ../../oaalternative.sh a.swf "qq ./a.out x x" || {
+ 					swfdump -D${1} a.swf.orig > 1
+ 					swfdump -D${1} a.swf > 2
+ 					diff 1 2 --color
+--- actionswf-1.orig/teststrip
++++ actionswf-1/teststrip
+@@ -1,5 +1,5 @@
+-
+-#cd ~/Desktop/ostriputil/ostriputil-1; ./i
+-nobits_virtual=0 OCOMP=~/o/ocompiler-1/src/o OSTRIP=~/o/ocompiler-1/ostrip/ostrip make OFLAGSEXTRA="nul_res_pref 1"
+-echo git diff example/example.swf
+-git diff example/example.swf
++set -e
++cd src
++OCOMP=~/o/ocompiler-2/src/o OSTRIP=~/o/ocompiler-2/ostrip/ostrip ./teststrip
++cd ../example
++make test
