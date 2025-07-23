@@ -1,0 +1,96 @@
+
+const asciinewline=0xa
+const EOF=-1
+#const STDIN_FILENO=0
+const STDOUT_FILENO=1
+const STDERR_FILENO=2
+
+importx "___iob_func" _iob_func
+function iob_func(sd type)
+	#typedef struct FILE{ #char *_ptr; #int _cnt; #char *_base; #int _flag; #int _file; #int _charbuf;#int _bufsiz; #char *_tmpfname; #}
+	sd std
+	setcall std _iob_func()
+	const size_of_FILE_noPad=:+dword+:+dword+dword+dword+dword+:
+	const pad_align_calc1=:-1;const pad_align_calc2=~pad_align_calc1;const pad_align_calc3=size_of_FILE_noPad+pad_align_calc1
+	const size_of_FILE=pad_align_calc3&pad_align_calc2
+	mult type (size_of_FILE)
+	add std type
+	return std
+endfunction
+
+function std_err()
+	sd a;set a iob_func((STDERR_FILENO))
+	return a
+end
+
+importx "_getcwd" getcwd
+#inits
+function _get_current_dir_name()
+	ss a;set a getcwd((NULL),0) #NULL is at loop.oc
+	return a
+end
+
+#files
+importx "_GetFullPathNameA@16" GetFullPathName
+function _realpath(ss a,ss *b)
+#b is null here
+	datax sz#1;set sz GetFullPathName(a,0,(NULL),(NULL))
+	if sz!=0  #easy to test with a ushort+ path,a long time ago was MAX_PATH=255, maybe nowadays is same
+		sd b;set b malloc(sz)
+		if b!=(NULL)
+			call GetFullPathName(a,sz,b,(NULL)) #now size return will not include null termination
+			return b
+		end
+	end
+	return (NULL)
+end
+
+#loop
+const getline_increments=0x80
+importx "_fgetc" fgetc
+function _getline(sv lineptr,sv n,sd stream)
+#lineptr is ok, n is ok and with a minimum size, stream is ok, ssize_t return
+#knowing line\r\n from ocompiler, but basing only on \n
+#to match linux behavior, return size+termsize+null
+#here no term+null termination write, and n+= is negligent
+	charxs c#1
+	set c fgetc(stream) #unsigned char cast to int
+	if c=(EOF)
+		return -1
+	end
+	ss bufptr;set bufptr lineptr#
+	ss pointer;set pointer bufptr
+	ss end;set end pointer
+	add end n#
+	whiletrue
+		set pointer# c
+		inc pointer
+		set c fgetc(stream)
+		if c=(EOF)
+			break
+		end
+		if c=(asciinewline)
+			inc pointer
+			break
+		end
+		if pointer=end
+			add n# (getline_increments)
+			ss newstart;set newstart realloc(bufptr,n#)
+			if newstart=(NULL)
+				return -1
+			end
+			sub bufptr newstart
+			sub pointer bufptr
+			sub end bufptr
+			add end (getline_increments)
+			set bufptr newstart
+			set lineptr# bufptr
+		end
+	end
+	sub pointer bufptr
+	return pointer
+end
+function std_out()
+	sd a;set a iob_func((STDOUT_FILENO))
+	return a
+end

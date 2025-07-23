@@ -1,0 +1,2602 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+238) xenial; urgency=medium
+ .
+   * callret optimizations
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-23
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+237
++2-5+238
+--- ocompiler-2.orig/ostrip/Makefile
++++ ocompiler-2/ostrip/Makefile
+@@ -12,7 +12,9 @@ linkerflags=-O3 -s
+ #             1
+ endif
+ 
++ifndef strippy
+ strippy=ostriputil
++endif
+ 
+ ifndef ldprefer
+ 	OFLAGSPRE= include_sec 1
+--- ocompiler-2.orig/ostrip/file.oc
++++ ocompiler-2/ostrip/file.oc
+@@ -1,4 +1,6 @@
+ 
++#aftercalli
++
+ include "mem.oc"
+ 
+ #Data sh64_name#1
+@@ -194,8 +196,8 @@ function get_section_many(sd file,sd off
+ 		#the sh64_name is first
+ 		datax offs#1;call read(file,#offs,(datasize))
+ 		if offs=nrsec
+-			sd sz;setcall sz get_section(file,offset,p_sec)
+-			return sz   ##it's in use at rels,syms and can verify errors at data/text . and also at data/text
++			callret get_section(file,offset,p_sec)
++			#it's in use at rels,syms and can verify errors at data/text . and also at data/text
+ 		endif
+ 		call seekc(file,rest)
+ 		add offset shentsize
+--- ocompiler-2.orig/ostrip/md
++++ ocompiler-2/ostrip/md
+@@ -1,3 +1,8 @@
+ 
++if [ -e ostrip.o ]; then rm ostrip.o; fi
++if [ -z "${ccprefer}" ]; then
++	ldprefer=1
++fi
+ OFLAGSEXTRA+=" function_name 1 nul_res_pref 1"
+-OFLAGSEXTRA="${OFLAGSEXTRA}" make linkerflags= ldprefer=1 $@
++OFLAGSEXTRA="${OFLAGSEXTRA}" make linkerflags= ldprefer=${ldprefer} $@
++if [ -n "${test}" ]; then OFLAGSEXTRA="${OFLAGSEXTRA}" make linkerflags= ldprefer=${ldprefer} test; fi
+--- ocompiler-2.orig/ostrip/obj.oc
++++ ocompiler-2/ostrip/obj.oc
+@@ -1,4 +1,6 @@
+ 
++#aftercalli
++
+ #data extra align at realoffset,concat,reldyn then unaligned at reloc,reldyn
+ #text extra aligned
+ 
+@@ -149,12 +151,12 @@ function write_symtab_offset(sd file,sd
+ 			if offs=nr
+ 				sd off=sh64_addr_to_offset
+ 				call get_section_loc(file,offset,#off)
+-				sd fout;setcall fout fopen(#main.s3o,"wb")
++				sd fout;setcall fout fopen(#wrap.s3o,"wb")
+ 				if fout!=(NULL)
+ 					call writeclose(fout,#off,:)
+ 					ret
+ 				endif
+-				call fError(#main.s3o)
++				call fError(#wrap.s3o)
+ 			endif
+ 			call seekc(file,rest)
+ 			add offset shentsize
+--- ocompiler-2.orig/ostrip/ostrip.oc
++++ ocompiler-2/ostrip/ostrip.oc
+@@ -45,6 +45,16 @@ Function Message(ss text)
+ 	Call fprintf(st#,text)
+ 	call messagedelim(st)
+ EndFunction
++
++Function Message_start(ss value)
++	sv st^stdout
++	Call fprintf(st#,"\n%s",value)
++EndFunction
++Function lMessage_short(sd value)
++	sv st^stdout
++	Call fprintf(st#," %lx",value)
++EndFunction
++
+ Function eMessage(ss text)
+ 	sv st^stderr
+ 	Call fprintf(st#,text)
+@@ -53,8 +63,7 @@ EndFunction
+ function erEnd()
+ 	call frees()
+ 	aftercall er
+-	set er ~0
+-	return (EXIT_FAILURE)
++	set er ~EXIT_SUCCESS
+ endfunction
+ function erMessage(ss text)
+ 	call eMessage(text)
+@@ -66,18 +75,8 @@ function erMessages(ss m1,ss m2)
+ 	call erEnd()
+ endfunction
+ 
+-char s1=".data";char s2=".text";char s3=".symtab";char s3o=".symtab_offset";char s4=".strtab"
+-
+-include "file.oc"
+-include "obj.oc"
+-include "after.oc"
+-include "reldyn.oc"
+-
+-include "entryraw.oc" "entry.oc"
+-
+-if argc>=(1+3)  #0 is all the time
+-	sd verb%%ptrverbose
+-	setcall verb# access(".debug",(F_OK))
++function wrap(sd argc,sv argv)
++	char s1=".data";char s2=".text";char s3=".symtab";char s3o=".symtab_offset";char s4=".strtab"
+ 
+ 	sv pfile%%pexefile
+ 	const s1c^s1;const s2c^s2;const s3c^s3;const s4c^s4
+@@ -168,7 +167,20 @@ if argc>=(1+3)  #0 is all the time
+ 	call write_sec(".rela.dyn",frees.execreladyn,frees.execreladynsize)
+ 
+ 	call frees()
+-	call exit((EXIT_SUCCESS))
++end
++
++include "file.oc"
++include "obj.oc"
++include "after.oc"
++include "reldyn.oc"
++
++include "entryraw.oc" "entry.oc"
++
++if argc>=(1+3)  #0 is all the time
++	sd verbo%%ptrverbose
++	setcall verbo# access(".debug",(F_OK))
++	callg wrap(argc,argv)
++	call exit(erEnd.er)
+ endif
+ call eMessage("Usage: ostrip exec log1 o1 [... logN oN]")
+ call exit((EXIT_FAILURE))
+--- ocompiler-2.orig/ostrip/rel.oc
++++ ocompiler-2/ostrip/rel.oc
+@@ -68,6 +68,7 @@ function reloc_sec(sv object,sd doffset,
+ 				sv rel_offset;set rel_offset pointer#
+ 				add rel_offset soffset
+ 				set rel_offset# addend
++				call verb(addend)
+ 				call verbose((verbose_count))
+ 			endif
+ 		endif
+--- ocompiler-2.orig/ostrip/reldyn.oc
++++ ocompiler-2/ostrip/reldyn.oc
+@@ -1,4 +1,5 @@
+ 
++#aftercalli
+ 
+ function reloc_dyn(sd datavaddrstart,sd datavaddrend)
+ 	sd pointer;set pointer frees.execreladyn
+--- ocompiler-2.orig/ostrip/reldynt.oc
++++ ocompiler-2/ostrip/reldynt.oc
+@@ -113,6 +113,7 @@ function reloc_iteration(sv pointer,sd e
+ 						break
+ 					endif
+ 					incst reloc_dyn_initobj.objects
++					call verbstart("rd")
+ 					if reloc_dyn_initobj.objects#!=(NULL)
+ 						setcall datavaddr reloc_dyn_initobj(datavaddr)
+ 						continue
+@@ -120,6 +121,7 @@ function reloc_iteration(sv pointer,sd e
+ 					ret     #it's not in .data anymore
+ 				endwhile
+ 				setcall cursor# reloc_dyn_value(offset)
++				call verb(cursor#)
+ 				add cursor (rel_size)
+ 				call verbose((verbose_count))
+ 			endwhile
+--- /dev/null
++++ ocompiler-2/ostrip/test
+@@ -0,0 +1,3 @@
++
++strippy="python /home/bc/a/Desktop/ostriputil/ostriputil-1/ostriputil/main.py"\
++	nobits_virtual=0 test=x ./md
+--- ocompiler-2.orig/ostrip/throwless.oc
++++ ocompiler-2/ostrip/throwless.oc
+@@ -74,12 +74,22 @@ function verbose(sd action)
+ 		else
+ 		#if action==(verbose_flush)
+ 			char out#10+1   ;#max 32
+-			call sprintf(#out,"%u",n)
++			call sprintf(#out,"\n%u",n)
+ 			call Message(#out)
+ 			set n 0
+ 		endelse
+ 	endif
+ endfunction
++function verb(sd value)
++	if verbose.a=0
++		call lMessage_short(value)
++	end
++end
++function verbstart(ss value)
++	if verbose.a=0
++		call Message_start(value)
++	end
++end
+ 
+ #file
+ 
+@@ -102,8 +112,7 @@ function shnames_find_sec(sv sec,sd str)
+ 	incst sec
+ 	sd end;set end mem
+ 	add end sec#
+-	sd pos;setcall pos shnames_find(mem,end,str)
+-	return pos
++	callret shnames_find(mem,end,str)
+ endfunction
+ 
+ #obj
+--- ocompiler-2.orig/otoc/decl.oc
++++ ocompiler-2/otoc/decl.oc
+@@ -36,8 +36,8 @@ function functiondef_r(sv pbuffer,sd out
+ 	call write(outfile,#main.long_long_reserve,\main.long_long_reserve)
+ 	call write(outfile,pointer,sz)
+ 	call writel(outfile)
+-	sd args;set args functiondef_d(pbuffer,outfile)
+-	return args ##for varargs
++	callret functiondef_d(pbuffer,outfile)
++	# ret for varargs
+ end
+ function functiondef_ext(sv pbuffer,sd outfile,sd pointer,sd sz,sd vargs)
+ 	sd args;set args functiondef_r(pbuffer,outfile,pointer,sz)
+--- ocompiler-2.orig/ounused/files.oc
++++ ocompiler-2/ounused/files.oc
+@@ -80,7 +80,7 @@ function fileentry_exists(sd s)
+ 	set fls fls#d^
+ 	add fls p
+ 	while p!=fls
+-		sd b
++		datax b#1
+ 		setcall b fileentry_compare(p#,s,sz)
+ 		if b=0
+ 			call skip_set()
+--- ocompiler-2.orig/ounused/lin.oc
++++ ocompiler-2/ounused/lin.oc
+@@ -8,22 +8,19 @@ end
+ #inits
+ importx "get_current_dir_name" get_current_dir_name
+ function _get_current_dir_name()
+-	ss a;set a get_current_dir_name()
+-	return a
++	callret get_current_dir_name() #pointer
+ end
+ 
+ #files
+ importx "realpath" realpath
+ function _realpath(ss a,ss b)
+-	ss c;set c realpath(a,b)
+-	return c
++	callret realpath(a,b) #pointer
+ end
+ 
+ #loop
+ importx "getline" getline
+ function _getline(sv a,sv b,sd c)
+-	sd d;set d getline(a,b,c)
+-	return d
++	callret getline(a,b,c) #ssize_t
+ end
+ importx "stdout" stdout
+ function std_out()
+--- ocompiler-2.orig/ounused/throwless.oc
++++ ocompiler-2/ounused/throwless.oc
+@@ -214,9 +214,7 @@ function fileentry_compare(sd existent,s
+ 		return (~0)
+ 	endif
+ 	add existent (dword)
+-	sd c
+-	setcall c memcmp(existent,new,sz)
+-	return c
++	callret memcmp(existent,new,sz) #int return, attention at datax ?
+ endfunction
+ 
+ include "skip.oc"
+--- ocompiler-2.orig/ounused/win.oc
++++ ocompiler-2/ounused/win.oc
+@@ -19,15 +19,13 @@ function iob_func(sd type)
+ endfunction
+ 
+ function std_err()
+-	sd a;set a iob_func((STDERR_FILENO))
+-	return a
++	callret iob_func((STDERR_FILENO)) #FILE*
+ end
+ 
+ importx "_getcwd" getcwd
+ #inits
+ function _get_current_dir_name()
+-	ss a;set a getcwd((NULL),0) #NULL is at loop.oc
+-	return a
++	callret getcwd((NULL),0) #NULL is at loop.oc
+ end
+ 
+ #files
+@@ -91,6 +89,5 @@ function _getline(sv lineptr,sv n,sd str
+ 	return pointer
+ end
+ function std_out()
+-	sd a;set a iob_func((STDOUT_FILENO))
+-	return a
++	callret iob_func((STDOUT_FILENO)) #FILE*
+ end
+--- ocompiler-2.orig/src/Makefile
++++ ocompiler-2/src/Makefile
+@@ -147,7 +147,7 @@ test: test-obj
+ 	if [ -z "${testlinker}" ]; then \
+ 		RUN__SHELL=$(SHELL) . ../../shl && cd ../../ && $${RUN__SHELL} ./test32; \
+ 	else \
+-		LD_LIBRARY_PATH=${testlinker} ${testlinker}/ld-linux.so.2 ./z o.oc nul_res_pref 1; \
++		LD_LIBRARY_PATH=${testlinker} ${launcher2} ${testlinker}/ld-linux.so.2 ./z o.oc nul_res_pref 1; \
+ 		diff o z; \
+ 	fi
+ #cannot extern LD_LIBRARY_PATH, will wrong between them
+--- ocompiler-2.orig/src/files/functions/64/align.oc
++++ ocompiler-2/src/files/functions/64/align.oc
+@@ -43,9 +43,7 @@ function stack_align(sd nr)
+ 		#Stack aligned on 16 bytes. Depending on the number of arguments
+ 		vdata code%%ptr_codesec
+ 		char align={REX_Operand_64,0x83,0xEC,8}
+-		sd err
+-		SetCall err addtosec(#align,(4),code)
+-		return err
++		callret addtosec(#align,(4),code)
+ 	endif
+ 	return (noerror)
+ endfunction
+@@ -190,9 +188,7 @@ function align_entryscope()
+ 			set jump (0x72)
+ 		endelse
+ 		vdata code%%ptr_codesec
+-		sd err
+-		SetCall err addtosec(#bt,(4+6),code)
+-		return err
++		callret addtosec(#bt,(4+6),code)
+ 	endif
+ 	return (noerror)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/64/bit.oc
++++ ocompiler-2/src/files/functions/64/bit.oc
+@@ -108,8 +108,7 @@ function is_big(sd dataarg,sd sufix)
+ 				return (FALSE)
+ 			endif
+ 		endif
+-		setcall b is_for_64()
+-		return b
++		callret is_for_64()
+ 	endif
+ 	return (FALSE)
+ endfunction
+@@ -158,8 +157,7 @@ function stack64_base(sv data)
+ 	if is_arg=0
+ 		return 0
+ 	endif
+-	sd val;setcall val stack64_enlarge((stackinitpush+dwsz))  #ebp/ebx+return
+-	return val
++	callret stack64_enlarge((stackinitpush+dwsz))  #ebp/ebx+return
+ endfunction
+ 
+ #setx
+@@ -321,7 +319,7 @@ function function_call_64f(sd hex_n,sd c
+ 				#sub esp,x;default 4 args stack space convention
+ 				char hex_w={REX_Operand_64,0x83,0xEC};char argspush#1
+ 				set argspush nr_of_args;sub argspush conv;mult argspush ~qwszbits #minus 1 mult qwsz
+-				SetCall err addtosec(#hex_w,4,code)
++				callret addtosec(#hex_w,4,code)
+ 			endif
+ 		elseif nr_of_args>0
+ 			#lin_convention
+@@ -329,7 +327,7 @@ function function_call_64f(sd hex_n,sd c
+ 			char hex_x={REX_Operand_64,0x83,regregmod|espregnumber};char adjuster#1
+ 			if nr_of_args>conv;set adjuster conv;else;set adjuster nr_of_args;endelse
+ 			mult adjuster (qwsz)
+-			SetCall err addtosec(#hex_x,4,code)
++			callret addtosec(#hex_x,4,code)
+ 		endelseif
+ 	endIf
+ 	return err
+@@ -342,8 +340,7 @@ function function_call_64(sd is_callex)
+ 	call convdata((convdata_call),#hex_1)
+ 	#
+ 	if is_callex=(FALSE)
+-		setcall err function_call_64f(#hex_1,conv,code)
+-		Return err
++		callret function_call_64f(#hex_1,conv,code)
+ 	endif
+ 	##
+ 	#mov edx,eax
+@@ -412,8 +409,8 @@ function function_call_64(sd is_callex)
+ 		set shadow_neg conv;dec shadow_neg
+ 		set j_off 12
+ 		SetCall err addtosec(#cmp_je,8,code);If err!=(noerror);Return err;EndIf
+-		SetCall err addtosec(#callex_shadow,12,code)
+-	else
++		callret addtosec(#callex_shadow,12,code)
++	end
+ 		#lin_convention
+ 		#cmp rax,imm32
+ 		char callex_unshadow={REX_Operand_64,0x3d};data *cmp_imm32=lin_convention
+@@ -429,18 +426,14 @@ function function_call_64(sd is_callex)
+ 		#add rsp,rax
+ 		char *={REX_Operand_64,0x03,espregnumber*toregopcode|regregmod}
+ 		#
+-		SetCall err addtosec(#callex_unshadow,28,code)
+-	endelse
+-	return err
++		callret addtosec(#callex_unshadow,28,code)
+ endfunction
+ #err
+ function function_start_64(sd nr_of_args)
+ 	Data code%%ptr_codesec
+ 	sd data;sd sz
+ 	setcall data convdata((convdata_fn),#sz,nr_of_args)
+-	sd err
+-	SetCall err addtosec(data,sz,code)
+-	return err
++	callret addtosec(data,sz,code)
+ endfunction
+ #err
+ function callex64_call()
+@@ -478,7 +471,5 @@ function callex64_call()
+ 	#mov rdx,rcx
+ 	char *keep_nr_args={REX_Operand_64,0x8b,edxregnumber*toregopcode|ecxregnumber|regregmod}
+ 	sd ptrcodesec%%ptr_codesec
+-	sd err
+-	SetCall err addtosec(#callex64_code,(\-callex64_start),ptrcodesec)
+-	return err
++	callret addtosec(#callex64_code,(\-callex64_start),ptrcodesec)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/64/reloc.oc
++++ ocompiler-2/src/files/functions/64/reloc.oc
+@@ -38,23 +38,17 @@ endfunction
+ function reloc64_post_base_extension(sd struct,sd fill)
+ 	sd a%p_elf64_r_info_type
+ 	if a#=(R_X86_64_64)
+-		sd err
+ 		#extension is for example -1 at sd=const, mostly are 0
+-		SetCall err addtosec(#fill,(reloc64_add),struct)
+-		return err
++		callret addtosec(#fill,(reloc64_add),struct)
+ 	endif
+ 	return (noerror)
+ endfunction
+ #er
+ function reloc64_post_base(sd struct)
+-	sd err
+-	setcall err reloc64_post_base_extension(struct,(reloc64_main))
+-	return err
++	callret reloc64_post_base_extension(struct,(reloc64_main))
+ endfunction
+ #er
+ function reloc64_post()
+ 	sd ptrcodesec%%ptr_codesec
+-	sd err
+-	setcall err reloc64_post_base(ptrcodesec)
+-	return err
++	callret reloc64_post_base(ptrcodesec)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/actions/argstwo.oc
++++ ocompiler-2/src/files/functions/actions/argstwo.oc
+@@ -51,15 +51,13 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 		setcall subtype_test x_call_test(subtype,ptrcontent#,ptrsize#)
+ 		if subtype_test=0
+ 			if parses=(pass_init)
+-				setcall errnr getarg(ptrcontent,ptrsize,ptrsize#,(allow_later),(FORWARD)) #there are 4 more arguments but are not used
+-				return errnr
++				callret getarg(ptrcontent,ptrsize,ptrsize#,(allow_later),(FORWARD)) #there are 4 more arguments but are not used
+ 			endif
+ 			#skip this at pass_calls
+ 			Call advancecursors(ptrcontent,ptrsize,ptrsize#)
+ 		else
+ 			#and subtype (x_callx_flag) #call and callex are testing without and
+-			SetCall errnr parsefunction(ptrcontent,ptrsize,callfn,subtype) #there is 1 more argument but is not used
+-			return errnr
++			callret parsefunction(ptrcontent,ptrsize,callfn,subtype) #there is 1 more argument but is not used
+ 		endelse
+ 		return (noerror)
+ 	endif
+@@ -425,10 +423,9 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 			setcall errnr addtosec(#storeex,2,codeptr)
+ 		else
+ 			if rem=(FALSE)
+-				SetCall errnr writeop(dataargprim,storeex,sufixprim,eaxreg,lowprim)
+-			else
+-				SetCall errnr writeoperation(dataargprim,storeex,sufixprim,(edxregnumber),ecxreg,lowprim)
+-			endelse
++				callret writeop(dataargprim,storeex,sufixprim,eaxreg,lowprim)
++			endif
++			callret writeoperation(dataargprim,storeex,sufixprim,(edxregnumber),ecxreg,lowprim)
+ 		endelse
+ 	ElseIf ptrcondition!=false
+ 		Char jumpifnotcond={0x0f}
+@@ -441,7 +438,7 @@ Function twoargs_ex(sv ptrcontent,sd ptr
+ 
+ 		Set cond conditionmodrm
+ 
+-		SetCall errnr addtosec(jumpcond,conddatasz,codeptr)
++		callret addtosec(jumpcond,conddatasz,codeptr)
+ 	EndElseIf
+ 	Return errnr
+ EndFunction
+@@ -499,51 +496,49 @@ function writeoper(sd takeindex,sd locat
+ endfunction
+ 
+ function writeop_prim(sd dataargprim,sd opprim,sd sufixprim,sd lowprim,sd sameimportant,sd lowsec)
+-	sd err
+ 	if sameimportant=(FALSE)
+ 		if lowsec=(TRUE)
+ 			#this is and/or... at sd low not needing to write rex
++			sd err
+ 			setcall err writeoper((edxregnumber),dataargprim,sufixprim)
+ 			if err!=(noerror);return err;endif
+-			setcall err writeoperation_op(opprim,(FALSE),(eaxregnumber),(edxregnumber))
+-			return err
++			callret writeoperation_op(opprim,(FALSE),(eaxregnumber),(edxregnumber))
+ 		endif
+ 	endif
+-	SetCall err writeop(dataargprim,opprim,sufixprim,(eaxregnumber),lowprim)
+-	return err
++	callret writeop(dataargprim,opprim,sufixprim,(eaxregnumber),lowprim)
+ endfunction
+ 
+ #err
+ function writeop_promotes(sd dataarg,sd op,sd sufix,sd regopcode,sd low,sd comp_at_bigs)
+ 	sd err
+ 	if comp_at_bigs=-1
+-		SetCall err writeop(dataarg,op,sufix,regopcode,low)
+-	else #0-2
+-		setcall err writeoper((edxregnumber),dataarg,sufix) #no val64 recordings
+-		if err=(noerror)
+-			sd s
+-			if comp_at_bigs=1 #these are all 64
+-				# sd    data    must take signextended data at 64
+-				set s signbit(dataarg)
+-				if s=0 #signed (default)
+-					set op (moveatprocthemem_sign)
+-					sd p;setcall p val64_p_get()
+-					set p# (val64_willbe)
+-				else #unsigned
+-					set op (moveatprocthemem)
+-				end
+-			elseif comp_at_bigs=2
+-				#2 for zero extend; these are all low
+-				set s signbit(dataarg)
+-				if s=0 #unsigned (default)
+-					set op 0xB6
+-				else #signed
+-					set op 0xBE
+-				endelse
+-			endelseif
+-			setcall err writeoperation_op(op,low,regopcode,(edxregnumber))
+-		endif
+-	endelse
++		callret writeop(dataarg,op,sufix,regopcode,low)
++	end
++	#0-2
++	setcall err writeoper((edxregnumber),dataarg,sufix) #no val64 recordings
++	if err=(noerror)
++		sd s
++		if comp_at_bigs=1 #these are all 64
++			# sd    data    must take signextended data at 64
++			set s signbit(dataarg)
++			if s=0 #signed (default)
++				set op (moveatprocthemem_sign)
++				sd p;setcall p val64_p_get()
++				set p# (val64_willbe)
++			else #unsigned
++				set op (moveatprocthemem)
++			end
++		elseif comp_at_bigs=2
++			#2 for zero extend; these are all low
++			set s signbit(dataarg)
++			if s=0 #unsigned (default)
++				set op 0xB6
++			else #signed
++				set op 0xBE
++			endelse
++		endelseif
++		callret writeoperation_op(op,low,regopcode,(edxregnumber))
++	endif
+ 	return err
+ endfunction
+ 
+--- ocompiler-2.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-2/src/files/functions/actions/dataparse.oc
+@@ -127,12 +127,10 @@ Function addvarreference(sv ptrcontent,s
+ 		#this will be set outside Set value 0
+ 	EndElse
+ 
+-	SetCall errnr addaref(value,ptrcontent,ptrsize,valsize,typenumber,mask)
+-	Return errnr
++	callret addaref(value,ptrcontent,ptrsize,valsize,typenumber,mask)
+ EndFunction
+ #err
+ function addvarreferenceorunref(sv ptrcontent,sd ptrsize,sd valsize,sd typenumber,sd mask,sd stackoffset,sd is_expand)
+-	data err#1
+ 	data noerr=noerror
+ 
+ 	Data zero=0
+@@ -164,8 +162,7 @@ function addvarreferenceorunref(sv ptrco
+ 				or mask (aftercallthrowlessbit)
+ 			endif
+ 		endelseif
+-		SetCall err addvarreference(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
+-		Return err
++		callret addvarreference(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
+ 	EndIf
+ 	If typenumber=(constantsnumber)
+ 		Char unrefconstant="Unexpected unreference sign ('*') at constant declaration."
+@@ -180,8 +177,7 @@ function addvarreferenceorunref_signed(s
+ 	if is_signed=(Xfile_declext_yes)
+ 		or mask (signbit)
+ 	endif
+-	sd er;set er addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
+-	return er
++	callret addvarreferenceorunref(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
+ endfunction
+ 
+ function getsign_size(sd start,sd last,sd mark,sd pdest) #mark is if was ended by a sign or whitespaces
+--- ocompiler-2.orig/src/files/functions/actions/enumcomma.oc
++++ ocompiler-2/src/files/functions/actions/enumcomma.oc
+@@ -34,7 +34,7 @@ function writevar(sd ptrvalue,sd unitsiz
+ 				#endif
+ 				SetCall err addtosec(ptrvalue,(dwsz),ptrdatasec)
+ 				If err=(noerror)
+-					setcall err reloc64_post_base(ptrdatasec)
++					callret reloc64_post_base(ptrdatasec)
+ 				EndIf
+ 				return err
+ 			endif
+@@ -76,8 +76,7 @@ function writevar(sd ptrvalue,sd unitsiz
+ 			endif
+ 			#else s^dat
+ 			call inplace_reloc(ptrvalue)
+-			setcall err addtocodefordata(ptrvalue#,for_64,(NULL))
+-			return err
++			callret addtocodefordata(ptrvalue#,for_64,(NULL))
+ 		EndIf
+ 	endif
+ 	if rightstackpointer!=(NULL)
+--- ocompiler-2.orig/src/files/functions/actions/fn.oc
++++ ocompiler-2/src/files/functions/actions/fn.oc
+@@ -9,25 +9,22 @@ Function unresolvedcallsfn(data struct,d
+ 	Call getcontReg(struct,poff)
+ 	add offset inneroffset
+ 
+-	Data err#1
+ 	Data true=TRUE
+ 	Data ptrobject%ptrobject
+ 
+ 	If ptrobject#=true
+ 		Data ptrextra%%ptr_extra
+-		SetCall err addrel_base(offset,valuedata,atend,ptrextra)
+-	Else
+-		#add to resolve at end
+-		Data unressz=3*dwsz
+-		Data uncall%%ptr_unresolvedcalls
+-		data ptrstruct^structure
++		callret addrel_base(offset,valuedata,atend,ptrextra)
++	endif
++	#add to resolve at end
++	Data unressz=3*dwsz
++	Data uncall%%ptr_unresolvedcalls
++	data ptrstruct^structure
+ 
+-		set structure struct
+-		set addatend atend
++	set structure struct
++	set addatend atend
+ 
+-		SetCall err addtosec(ptrstruct,unressz,uncall)
+-	EndElse
+-	Return err
++	callret addtosec(ptrstruct,unressz,uncall)
+ EndFunction
+ 
+ #err
+@@ -411,7 +408,7 @@ function prepare_function_call(sv pconte
+ 		char espebx={moveatregthemodrm,0xe3}
+ 		Str ptrespebx^espebx
+ 		Data sizeespebx=2
+-		SetCall err addtosec(ptrespebx,sizeespebx,code)
++		callret addtosec(ptrespebx,sizeespebx,code)
+ 	endif
+ 	Return err
+ endfunction
+@@ -571,9 +568,7 @@ endfunction
+ function entryraw_top()
+ 	char s={0x6a,0}
+ 	data code%%ptr_codesec
+-	sd err
+-	setcall err addtosec(#s,2,code)
+-	return err
++	callret addtosec(#s,2,code)
+ endfunction
+ 
+ #err
+--- ocompiler-2.orig/src/files/functions/actions/fndecargs.oc
++++ ocompiler-2/src/files/functions/actions/fndecargs.oc
+@@ -117,8 +117,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 		endelse
+ 	endelse
+ 	if parses=(pass_init) # long_mask and again datasize are extra
+-		setcall err xfile_proto_arg(xfile_decltype,is_stack,is_expand,is_signed)
+-		return err
++		callret xfile_proto_arg(xfile_decltype,is_stack,is_expand,is_signed)
+ 	endif
+ 	setcall err xfile_add_declare_fndec_if(xfile_decltype,is_stack,is_expand,is_signed,ptrcontent#,sz)
+ 	If err!=noerr
+@@ -217,8 +216,7 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 		#at 64 code:
+ 		#A3 XX.XX.XX.XX_XX.XX.XX.XX
+ 		sd z=i386_obj_default_reloc_rah
+-		SetCall err addtosec(#z,(dwsz),_codesec)
+-		return err
++		callret addtosec(#z,(dwsz),_codesec)
+ 	endif
+ 
+ 	Return (noerror)
+--- ocompiler-2.orig/src/files/functions/add/add.oc
++++ ocompiler-2/src/files/functions/add/add.oc
+@@ -9,9 +9,7 @@ Function is_variable_char(sd byte)
+ 	If byte<=(asciinine)
+ 		Return (TRUE)
+ 	EndIf
+-	sd bool
+-	setcall bool is_variable_char_not_numeric(byte)
+-	return bool
++	callret is_variable_char_not_numeric(byte)
+ EndFunction
+ 
+ #bool
+--- ocompiler-2.orig/src/files/functions/add/addstresc.oc
++++ ocompiler-2/src/files/functions/add/addstresc.oc
+@@ -2,13 +2,11 @@
+ 
+ #errnr
+ Function addtosecstresc(sd pcontent,sd psize,sd sz,sd escapes,sd pdest,sd wordpad)
+-	sd err;setcall err addtosecstresc_base(pcontent,psize,sz,escapes,pdest,wordpad,(FALSE))
+-	return err
++	callret addtosecstresc_base(pcontent,psize,sz,escapes,pdest,wordpad,(FALSE))
+ endFunction
+ #errnr
+ Function addtosecstresc_xfile(sd pcontent,sd psize,sd sz,sd escapes,sd pdest)
+-	sd err;setcall err addtosecstresc_base(pcontent,psize,sz,escapes,pdest,(FALSE),(TRUE))
+-	return err
++	callret addtosecstresc_base(pcontent,psize,sz,escapes,pdest,(FALSE),(TRUE))
+ endFunction
+ #errnr
+ Function addtosecstresc_base(sd pcontent,sd psize,sd sz,sd escapes,sd pdest,sd wordpad,sd write_to_xfile)
+@@ -75,8 +73,7 @@ Function addtosecstresc_base(sd pcontent
+ 
+ 	if write_to_xfile=(TRUE)
+ 		#ifif only for include tag
+-		setcall errnr xfile_add_multistring_ifif(xfileloc,xfilesz,is_multiline)
+-		return errnr
++		callret xfile_add_multistring_ifif(xfileloc,xfilesz,is_multiline)
+ 	endif
+ 
+ 	Return (noerror)
+--- ocompiler-2.orig/src/files/functions/add/addtomem.oc
++++ ocompiler-2/src/files/functions/add/addtomem.oc
+@@ -121,6 +121,5 @@ Function addtosecstr(str content,data si
+ 	Char null={0}
+ 	Data sz=1
+ 	Str ptrnull^null
+-	SetCall errnr addtosec(ptrnull,sz,dst)
+-	Return errnr
++	callret addtosec(ptrnull,sz,dst)
+ EndFunction
+--- ocompiler-2.orig/src/files/functions/argument/arg.oc
++++ ocompiler-2/src/files/functions/argument/arg.oc
+@@ -145,8 +145,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 				return (noerror)
+ 			endif
+ 			add q_size 2
+-			setcall errnr verify_syntax_end_and_restore(ptrcontent,ptrsize,q_size)
+-			return errnr
++			callret verify_syntax_end_and_restore(ptrcontent,ptrsize,q_size)
+ 		endelse
+ 	elseif allowdata!=(allow_later)  #exclude pass_init, but even there jump over first arg
+ 		call arg_size(content,argsize,#argsize)  #spc,tab
+@@ -193,8 +192,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 				if sens=(FORWARD)
+ 					return (noerror)
+ 				endif
+-				setcall errnr verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize)
+-				return errnr
++				callret verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize)
+ 			endif
+ 			sd imm;setcall imm getimm()
+ 			if imm=(TRUE) #if is FALSE, this is the only option for xfile. also allow(string) is no
+@@ -314,8 +312,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 			if sens=(FORWARD)
+ 				return (noerror)
+ 			endif
+-			setcall errnr verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize)
+-			return errnr
++			callret verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize)
+ 		endif
+ 	endelseif
+ 	If sens=(FORWARD)
+@@ -329,7 +326,7 @@ function getarg_dot_any(sd content,sd ar
+ 	sd scope
+ 	setcall errnr get_scope_inner(#content,#argsize,container_sz,#scope)
+ 	if errnr=(noerror)
+-		SetCall errnr varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
++		callret varsufix_ex(content,argsize,ptrdata,ptrlow,ptrsufix,scope)
+ 	endif
+ 	return errnr
+ endfunction
+@@ -346,7 +343,7 @@ function getarg_dot(sd content,sd argsiz
+ 		if test=0
+ 			return (noerror)
+ 		endif
+-		setcall errnr there_is_nothing_there()
++		callret there_is_nothing_there()
+ 	endif
+ 	return errnr
+ endfunction
+@@ -456,12 +453,10 @@ function getarg_colon(sd content,sd args
+ 				endif
+ 				sd nr;setcall ptrdata# searchinvars_scope(content,container_sz,#nr,scope)
+ 				if ptrdata#=(NULL)
+-					setcall err undefinedvariable()
+-					return err
++					callret undefinedvariable()
+ 				endif
+ 				if nr>=(totalmemvariables)
+-					setcall err there_is_nothing_there()
+-					return err
++					callret there_is_nothing_there()
+ 				endif
+ 				set is_stack 0   #use later when keeping location
+ 			else
+@@ -472,8 +467,7 @@ function getarg_colon(sd content,sd args
+ 			if err=(noerror)
+ 				setcall ptrdata# searchinvars(content,container_sz,(NULL),(NULL),1)
+ 				if ptrdata#=(NULL)
+-					setcall err undefinedvariable()
+-					return err
++					callret undefinedvariable()
+ 				endif
+ 				setcall is_stack stackbit(ptrdata#)
+ 			else
+@@ -570,15 +564,12 @@ function getarg_colon(sd content,sd args
+ endfunction
+ #err
+ function getarg_testdot(sd content,sd size,sd ptrdata,sd ptrlow,sd ptrsufix)
+-	sd errnr
+ 	sd container_sz
+ 	setcall container_sz valinmem(content,size,(asciidot))
+ 	if container_sz!=size
+-		setcall errnr getarg_dot(content,size,container_sz,ptrdata,ptrlow,ptrsufix)
+-	else
+-		SetCall errnr varsufix(content,size,ptrdata,ptrlow,ptrsufix)
+-	endelse
+-	return errnr
++		callret getarg_dot(content,size,container_sz,ptrdata,ptrlow,ptrsufix)
++	end
++	callret varsufix(content,size,ptrdata,ptrlow,ptrsufix)
+ endfunction
+ 
+ #err
+@@ -682,8 +673,7 @@ function get_scope_pos(ss content,sd sz,
+ 			return und
+ 		endif
+ 	endelse
+-	sd err;setcall err xfile_add_string_if(content,sz)
+-	return err
++	callret xfile_add_string_if(content,sz)
+ endfunction
+ 
+ function function_in_code()
+@@ -718,9 +708,7 @@ Function arg(sv ptrcontent,sd ptrsize,sd
+ 	sd szarg
+ 	set szarg ptrsize#
+ 
+-	Data errnr#1
+-	SetCall errnr getarg(ptrcontent,ptrsize,szarg,allowdata,sens,ptrdata,ptrlow,ptrsufix)
+-	Return errnr
++	callret getarg(ptrcontent,ptrsize,szarg,allowdata,sens,ptrdata,ptrlow,ptrsufix)
+ EndFunction
+ 
+ #err
+@@ -736,13 +724,11 @@ endfunction
+ #err
+ function argfilters_helper(sd ptrcondition,sv ptrcontent,sd ptrsize,sd ptrdata,sd ptrlow,sd ptrsufix,sd allowdata)
+ 	Data null=NULL
+-	Data err#1
+ 	Data forward=FORWARD
+ 
+ 	If ptrcondition=null
+ 		call unsetimm()
+-		SetCall err arg(ptrcontent,ptrsize,ptrdata,ptrlow,ptrsufix,forward,allowdata)
+-		Return err
++		callret arg(ptrcontent,ptrsize,ptrdata,ptrlow,ptrsufix,forward,allowdata)
+ 	EndIf
+ 	call setimm()
+ 
+@@ -824,7 +810,6 @@ function argfilters_helper(sd ptrconditi
+ 	Char conderr="Condition sign(s) expected."
+ 	Str _conderr^conderr
+ 	Return _conderr
+-	Return err
+ EndFunction
+ 
+ function prefix_bool()
+--- ocompiler-2.orig/src/files/functions/argument/argument.oc
++++ ocompiler-2/src/files/functions/argument/argument.oc
+@@ -50,9 +50,7 @@ function argument_return(sd termswitch,s
+ 	if termswitch=(TRUE)
+ 		data ebxregnumber=ebxregnumber
+ 		set pregopcode# ebxregnumber
+-		sd err
+-		setcall err getexit(pptrcontinuation,psizeofcontinuation)
+-		return err
++		callret getexit(pptrcontinuation,psizeofcontinuation)
+ 	endif
+ 	set pregopcode# (eaxregnumber)
+ 	setcall psizeofcontinuation# getreturn(pptrcontinuation)
+@@ -270,7 +268,6 @@ endfunction
+ 
+ #err
+ function argument_init(sv ptrcontent,sd ptrsize,sd subtype)
+-	sd err
+ 	if subtype!=(cRETURN)
+ 		if subtype!=(cEXIT)
+ 			#exclude strings at inc,dec,...
+@@ -281,6 +278,5 @@ function argument_init(sv ptrcontent,sd
+ 		endif
+ 	endif
+ 	call xfile_proto()
+-	setcall err getarg(ptrcontent,ptrsize,ptrsize#,(allow_later),(FORWARD)) #there are 3 more arguments but are not used
+-	return err
++	callret getarg(ptrcontent,ptrsize,ptrsize#,(allow_later),(FORWARD)) #there are 3 more arguments but are not used
+ endfunction
+--- ocompiler-2.orig/src/files/functions/argument/comwrite.oc
++++ ocompiler-2/src/files/functions/argument/comwrite.oc
+@@ -51,9 +51,7 @@ function takewithimm(sd ind,sd addr)
+ 	Data ptrcodesec%%ptr_codesec
+ 	Data sz1=bsz+dwsz
+ 
+-	sd err
+-	SetCall err addtosec(#takeop,sz1,ptrcodesec)
+-	return err
++	callret addtosec(#takeop,sz1,ptrcodesec)
+ endfunction
+ #er
+ function datatake_reloc(sd takeindex,sd take_loc)
+@@ -67,16 +65,14 @@ function datatake_reloc(sd takeindex,sd
+ 			Return errnr
+ 		EndIf
+ 	endif
+-	setcall errnr datatake(takeindex,take_loc)
+-	return errnr
++	callret datatake(takeindex,take_loc)
+ endfunction
+ #er
+ function datatake(sd takeindex,sd take_loc)
+ 	sd errnr
+ 	setcall errnr reloc64_ante();If errnr!=(noerror);Return errnr;EndIf
+ 	setcall errnr takewithimm(takeindex,take_loc);If errnr!=(noerror);Return errnr;EndIf
+-	setcall errnr reloc64_post()
+-	return errnr
++	callret reloc64_post()
+ endfunction
+ #err
+ function adddirectrel_base_inplace(sd relocoff,sd p_take_loc,sd sectionind)
+@@ -137,8 +133,8 @@ function writetake(sd takeindex,sd entry
+ 				endif
+ 			endelse
+ 		endif
+-		setcall errnr datatake(takeindex,take_loc)
+-	else
++		callret datatake(takeindex,take_loc)
++	endif
+ 		char stack_relative#1
+ 		char regreg=RegReg
+ 		setcall stack_relative stack_get_relative(entry)
+@@ -153,9 +149,7 @@ function writetake(sd takeindex,sd entry
+ 		else;set getfromstack (moveatprocthemem);endelse
+ 		setcall errnr rex_w_if64();if errnr!=(noerror);return errnr;endif
+ 		Data ptrcodesec%%ptr_codesec
+-		SetCall errnr addtosec(ptrgetfromstack,sizegetfromstack,ptrcodesec)
+-	endelse
+-	Return errnr
++	callret addtosec(ptrgetfromstack,sizegetfromstack,ptrcodesec)
+ endfunction
+ #er
+ function writetake_offset(sd takeindex,sd entry)
+@@ -192,7 +186,7 @@ function writetake_offset(sd takeindex,s
+ 							set op (0x81)
+ 							set sz 6
+ 						endelse
+-						SetCall er addtosec(#op,sz,ptrcodesec)
++						callret addtosec(#op,sz,ptrcodesec)
+ 					endif
+ 				endif
+ 			endif
+@@ -261,8 +255,7 @@ function sufix_take(sd takeindex,sd take
+ 	Str ptrnewtake^newtake
+ 	Data sz2=bsz+bsz
+ 	setcall newtakemodrm formmodrm((mod_0),takeindex,takeindex)
+-	SetCall err addtosec(ptrnewtake,sz2,ptrcodesec)
+-	return err
++	callret addtosec(ptrnewtake,sz2,ptrcodesec)
+ endfunction
+ #v64
+ function sufix64(sd location)
+@@ -329,8 +322,7 @@ Function writeoperation_op(sd operationo
+ 
+ 	Set actionop operationopcode
+ 	SetCall actionmodrm formmodrm(mod,regopcode,takeindex)
+-	SetCall errnr addtosec(#actionop,sz2,ptrcodesec)
+-	Return errnr
++	callret addtosec(#actionop,sz2,ptrcodesec)
+ Endfunction
+ #er
+ Function writeoperation(sd location,sd operationopcode,sd sufix,sd regopcode,sd takeindex,sd is_low)
+@@ -338,16 +330,13 @@ Function writeoperation(sd location,sd o
+ 	setcall v_64 writeoperation_take(#err,location,sufix,takeindex,is_low)
+ 	if err!=(noerror);return err;endif
+ 	sd v64;setcall v64 val64_p_get();set v64# v_64
+-	setcall err writeoperation_op(operationopcode,(FALSE),regopcode,takeindex)
+-	return err
++	callret writeoperation_op(operationopcode,(FALSE),regopcode,takeindex)
+ Endfunction
+ 
+ #er
+ Function writeop(sd location,sd operationopcode,sd sufix,sd regopcode,sd is_low)
+-	Data err#1
+ 	Data edxregnumber=edxregnumber
+-	SetCall err writeoperation(location,operationopcode,sufix,regopcode,edxregnumber,is_low)
+-	Return err
++	callret writeoperation(location,operationopcode,sufix,regopcode,edxregnumber,is_low)
+ EndFunction
+ 
+ #er
+@@ -355,7 +344,7 @@ function writeopera(sd location,sd opera
+ 	sd err
+ 	setcall err writetake(takeindex,location)
+ 	if err=(noerror)
+-		setcall err writeoperation_op(operationopcode,(FALSE),regopcode,takeindex)
++		callret writeoperation_op(operationopcode,(FALSE),regopcode,takeindex)
+ 	endif
+ 	return err
+ endfunction
+--- ocompiler-2.orig/src/files/functions/argument/imm.oc
++++ ocompiler-2/src/files/functions/argument/imm.oc
+@@ -78,10 +78,8 @@ function write_imm(sd dataarg,sd op)
+ endfunction
+ #er
+ function write_imm_simple(sd value,sd reg)
+-	sd err
+ 	add reg (ateaximm)
+-	setcall err write_imm(value,reg)
+-	return err
++	callret write_imm(value,reg)
+ endfunction
+ #er
+ function write_imm_sign(sd val,sd regopcode)
+@@ -94,36 +92,31 @@ function write_imm_sign(sd val,sd regopc
+ 		if err=(noerror)
+ 			sd op
+ 			SetCall op formmodrm((RegReg),0,regopcode)
+-			setcall err write_imm(val,op)
++			callret write_imm(val,op)
+ 		endif
+ 	endif
+ 	return err
+ endfunction
+ #er
+ function write_imm_sign_dependent(sd val,sd regopcode,sd dataargdependent)
+-	ss err
+ 	sd s
+ 	set s signbit(dataargdependent)
+ 	if s=0 #signed (default)
+-		set err write_imm_sign(val,regopcode)
+-	else #unsigned
+-		set err write_imm_simple(val,regopcode)
++		callret write_imm_sign(val,regopcode)
+ 	end
+-	return err
++	#unsigned
++	callret write_imm_simple(val,regopcode)
+ endfunction
+ #err
+ function write_imm_trunc(sd value,sd reg,sd low,sd data,sd sufix)
+-	sd err
+ 	if low=(FALSE)
+ 		sd bool;setcall bool is_big_imm(data,sufix)
+ 		if bool=(FALSE)
+ 			#mediu
+-			setcall err write_imm_simple(value,reg)
+-			return err
++			callret write_imm_simple(value,reg)
+ 		endif
+ 		#big
+-		setcall err write_imm_sign_dependent(value,reg,data)  #there is one if64 inside that extends the sign
+-		return err
++		callret write_imm_sign_dependent(value,reg,data)  #there is one if64 inside that extends the sign
+ 	endif
+ 	#low
+ 	char a#2
+@@ -133,6 +126,5 @@ function write_imm_trunc(sd value,sd reg
+ 	set b# value
+ 	dec b
+ 	vData codeptr%%ptr_codesec
+-	setcall err addtosec(b,2,codeptr)
+-	return err
++	callret addtosec(b,2,codeptr)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/commands/cond.oc
++++ ocompiler-2/src/files/functions/commands/cond.oc
+@@ -17,11 +17,9 @@ Function coderegtocondloop()
+ 
+ 	Call getcontReg(codesec,ptrcodeReg)
+ 
+-	Data err#1
+ 	Data condloopsec%%ptr_conditionsloops
+ 
+-	SetCall err addtosec(ptrcodeReg,(condpack_codereg),condloopsec)
+-	Return err
++	callret addtosec(ptrcodeReg,(condpack_codereg),condloopsec)
+ EndFunction
+ 
+ #err
+@@ -37,14 +35,12 @@ Function condbeginwrite(data condnumber)
+ 	vData condloopsec%%ptr_conditionsloops
+ 
+ 	vData ptrcondnumber^condnumber
+-	SetCall err addtosec(ptrcondnumber,(condpack_number),condloopsec)
+-	Return err
++	callret addtosec(ptrcondnumber,(condpack_number),condloopsec)
+ EndFunction
+ 
+ #err
+ Function condbegin(sv ptrcontent,sd ptrsize,sd condnumber)
+-	sd err;setcall err condbegin_ex(ptrcontent,ptrsize,condnumber,(TRUE))
+-	return err
++	callret condbegin_ex(ptrcontent,ptrsize,condnumber,(TRUE))
+ endfunction
+ function condbegin_ex(sv ptrcontent,sd ptrsize,sd condnumber,sd write_xfile_cond)
+ 	Data cond#1
+@@ -61,9 +57,10 @@ function condbegin_ex(sv ptrcontent,sd p
+ 		end
+ 		if condnumber!=(whiletruenumber)
+ 			SetCall err twoargs(ptrcontent,ptrsize,(not_a_subtype),ptrcond)
+-			If err!=noerr;Return err;EndIf
+-			SetCall err condbeginwrite(condnumber)
+-			return err
++			If err=noerr
++				callret condbeginwrite(condnumber)
++			EndIf
++			Return err
+ 		endif
+ 		set condnr (whilenumber)
+ 	else
+@@ -75,8 +72,7 @@ function condbegin_ex(sv ptrcontent,sd p
+ 		endelse
+ 	endelse
+ 	vData condloopsec%%ptr_conditionsloops
+-	SetCall err addtosec(#dummy,(condpacksize),condloopsec)
+-	Return err
++	callret addtosec(#dummy,(condpacksize),condloopsec)
+ EndFunction
+ 
+ #err
+@@ -108,10 +104,8 @@ Function condjump(data size)
+ 
+ 	Data pjump^jump
+ 
+-	Data err#1
+ 	Data code%%ptr_codesec
+-	SetCall err addtosec(pjump,bjsz,code)
+-	Return err
++	callret addtosec(pjump,bjsz,code)
+ EndFunction
+ 
+ #err
+@@ -287,9 +281,7 @@ function jumpback(sd codeoffset,sd conds
+ 	sub condstruct (condpack_codereg)
+ 	sub codeoffset condstruct#
+ 	neg codeoffset
+-	sd err
+-	SetCall err condjump(codeoffset)
+-	return err
++	callret condjump(codeoffset)
+ endfunction
+ 
+ #err
+@@ -374,7 +366,7 @@ Function closeifopenelse(sd xfile_type)
+ 			setcall err addtosec(#e1,(condpack_elseinscribe),structure)
+ 			if err=(noerror)
+ 				Data elsenr=elsenumber
+-				SetCall err condbeginwrite(elsenr)
++				callret condbeginwrite(elsenr)
+ 			endif
+ 		else # ret_cont_break_canskip ret_cont_break_canskip_warn ret_cont_break_mustskip ret_cont_break_notyet
+ 			if main.ret_cont_break!=(ret_cont_break_notyet) #is useless JMP, if no previous JMP in this ifinscribe, is also useless ELSE
+@@ -386,7 +378,7 @@ Function closeifopenelse(sd xfile_type)
+ 			data e2=elseinscribe_skip
+ 			data *ignored codesection index#1
+ 			data *nr=elsenumber
+-			setcall err addtosec(#e2,(condpack_elseinscribe+condpacksize),structure)
++			callret addtosec(#e2,(condpack_elseinscribe+condpacksize),structure)
+ 		endelse
+ 	endif
+ 	Return err
+@@ -427,8 +419,7 @@ function continue()
+ 					sd codeoffset
+ 					call getcontReg(ptrcodesec,#codeoffset)
+ 					Add codeoffset (backjumpsize)
+-					sd err;setcall err jumpback(codeoffset,structure)
+-					return err
++					callret jumpback(codeoffset,structure)
+ 				endif
+ 				if type=(elsenumber)
+ 					sub structure (condpack_elseinscribe)
+@@ -458,7 +449,7 @@ function break()
+ 					sd err
+ 					SetCall err condjump(0)
+ 					if err=(noerror)
+-						SetCall err condbeginwrite((breaknumber))
++						callret condbeginwrite((breaknumber))
+ 					endif
+ 					Return err
+ 				endif
+@@ -479,7 +470,7 @@ function whilebegin(sd pcontent,sd pcoms
+ 	If err=(noerror)
+ 		SetCall err coderegtocondloop()
+ 		If err=(noerror)
+-			SetCall err condbegin(pcontent,pcomsize,number)
++			callret condbegin(pcontent,pcomsize,number)
+ 		EndIf
+ 	endif
+ 	return err
+@@ -488,7 +479,7 @@ endfunction
+ function whileend()
+ 	sd err;setcall err xfile_add_end_ifif()
+ 	If err=(noerror)
+-		SetCall err condend((whilenumber))
++		callret condend((whilenumber))
+ 	EndIf
+ 	return err
+ endfunction
+--- ocompiler-2.orig/src/files/functions/commands/lib.oc
++++ ocompiler-2/src/files/functions/commands/lib.oc
+@@ -25,9 +25,7 @@ Function openlib()
+ 	Data iid^OriginalFirstThunk
+ 	Data iid_size=IMAGE_IMPORT_DESCRIPTORsize
+ 	Data itable%%ptr_table
+-	Data err#1
+-	SetCall err addtosec(iid,iid_size,itable)
+-	Return err
++	callret addtosec(iid,iid_size,itable)
+ EndFunction
+ 
+ #er
+@@ -75,6 +73,5 @@ Function closelib()
+ 
+ 	Sub adrsize firstthunk
+ 
+-	SetCall err addtosec(src,adrsize,iaddresses)
+-	Return err
++	callret addtosec(src,adrsize,iaddresses)
+ EndFunction
+--- ocompiler-2.orig/src/files/functions/commands/ret.oc
++++ ocompiler-2/src/files/functions/commands/ret.oc
+@@ -29,9 +29,7 @@ endfunction
+ function after_after_call(sd subtype)
+ 	setcall subtype callret_flag(subtype)
+ 	if subtype!=0
+-		sd err
+-		setcall err writeret((ret_cont_break_canskip_warn)) #if was only o, mustskip was a rule, but at otoc this is: return operation
+-		return err
++		callret writeret((ret_cont_break_canskip_warn)) #if was only o, mustskip was a rule, but at otoc this is: return operation
+ 	endif
+ 	return (noerror)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/commons/base.oc
++++ ocompiler-2/src/files/functions/commons/base.oc
+@@ -132,23 +132,18 @@ endfunction
+ function addtolog_term(sd filehandle)
+ 	sd sz
+ 	ss text;setcall text log_term(#sz)
+-	sd err
+-	setcall err writefile_errversion(filehandle,text,sz)
+-	return err
++	callret writefile_errversion(filehandle,text,sz)
+ endfunction
+ #err
+ function addtolog_handle(ss content,sd sizetowrite,sd filehandle)
+ 	sd err
+ 	setcall err writefile_errversion(filehandle,content,sizetowrite)
+ 	if err!=(noerror);return err;endif
+-	setcall err addtolog_term(filehandle)
+-	return err
++	callret addtolog_term(filehandle)
+ endfunction
+ #err
+ function addtolog_char(sd type,sd handle)
+-	sd err
+-	setcall err addtolog_withchar_handle((NULL),0,type,handle)
+-	return err
++	callret addtolog_withchar_handle((NULL),0,type,handle)
+ endfunction
+ #err
+ function addtolog_withchar_handle(ss content,sd size,sd type,sd handle)
+@@ -157,7 +152,7 @@ function addtolog_withchar_handle(ss con
+ 		sd err
+ 		setcall err writefile_errversion(handle,#type,1)
+ 		if err=(noerror)
+-			setcall err addtolog_handle(content,size,handle)
++			callret addtolog_handle(content,size,handle)
+ 		endif
+ 		return err
+ 	endif
+@@ -166,17 +161,13 @@ endfunction
+ #err
+ function addtolog_withchar_ex(ss content,sd size,sd type)
+ 	vdata ptrfilehandle%ptrlogfile
+-	sd err
+-	setcall err addtolog_withchar_handle(content,size,type,ptrfilehandle#)
+-	return err
++	callret addtolog_withchar_handle(content,size,type,ptrfilehandle#)
+ endfunction
+ #err
+ function addtolog_withchar(ss content,sd type)
+ 	sd len
+ 	setcall len strlen(content)
+-	sd err
+-	setcall err addtolog_withchar_ex(content,len,type)
+-	return err
++	callret addtolog_withchar_ex(content,len,type)
+ endfunction
+ #err
+ function addtolog_array_withchar(sv array,sd type)
+@@ -192,7 +183,7 @@ function addtolog_array_withchar(sv arra
+ 				if err!=(noerror);return err;endif
+ 				add array (dwsz)
+ 			endwhile
+-			setcall err addtolog_term(ptrfilehandle#)
++			callret addtolog_term(ptrfilehandle#)
+ 		endif
+ 		return err
+ 	endif
+@@ -200,22 +191,21 @@ function addtolog_array_withchar(sv arra
+ endfunction
+ #err
+ function addtolog_withchar_parses(ss content,sd type,sd both)
+-	sd err
+ 	if both=(FALSE)
+ 		sd ptrparses%ptr_parses
+ 		if ptrparses#=(pass_init)
+-			setcall err addtolog_withchar(content,type)
+-		elseif ptrparses#=(pass_write)
+-			setcall err addtodebug_withchar(content,type)
+-		else
++			callret addtolog_withchar(content,type)
++		end
++		if ptrparses#=(pass_write)
++			callret addtodebug_withchar(content,type)
++		end
+ 		#skip pass_calls
+-			return (noerror)
+-		endelse
+-		return err
++		return (noerror)
+ 	endif
++	sd err
+ 	setcall err addtolog_withchar(content,type)
+ 	if err=(noerror)
+-		setcall err addtodebug_withchar(content,type)
++		callret addtodebug_withchar(content,type)
+ 	endif
+ 	return err
+ endfunction
+@@ -223,9 +213,7 @@ endfunction
+ function addtolog_withchar_ex_atunused(ss content,sd size,sd type)
+ 	data ptrobject%ptrobject
+ 	if ptrobject#=(TRUE)
+-		sd err
+-		setcall err addtolog_withchar_ex(content,size,type)
+-		return err
++		callret addtolog_withchar_ex(content,size,type)
+ 	endif
+ 	return (noerror)
+ endfunction
+@@ -233,9 +221,7 @@ endfunction
+ function addtolog_withchar_ex_atunused_handle(ss content,sd size,sd type,sd filehandle)
+ 	data ptrobject%ptrobject
+ 	if ptrobject#=(TRUE)
+-		sd err
+-		setcall err addtolog_withchar_handle(content,size,type,filehandle)
+-		return err
++		callret addtolog_withchar_handle(content,size,type,filehandle)
+ 	endif
+ 	return (noerror)
+ endfunction
+@@ -243,6 +229,5 @@ endfunction
+ function addtolog_natural(sd number)
+ 	char buf#8+1
+ 	call sprintf(#buf,"%08x",number)  #for file seek at position
+-	sd err;setcall err addtolog_withchar(#buf,(log_expand))
+-	return err
++	callret addtolog_withchar(#buf,(log_expand))
+ endfunction
+--- ocompiler-2.orig/src/files/functions/commons/comfn.oc
++++ ocompiler-2/src/files/functions/commons/comfn.oc
+@@ -29,11 +29,9 @@ EndFunction
+ 
+ #err
+ Function memoryalloc(data pathsize,data memptr)
+-	Data err#1
+ 	Data null=NULL
+ 	Set memptr# null
+-	SetCall err memrealloc(memptr,pathsize)
+-	Return err
++	callret memrealloc(memptr,pathsize)
+ EndFunction
+ 
+ #null or ptr
+@@ -144,19 +142,15 @@ Function openfile(sd pfile,sd path,sd of
+ 	Data openfalse=openno
+ 	SetCall pfile# open(path,oflag,permissions)
+ 	If pfile#=openfalse
+-		str errorreturn#1
+ 		Str fileOpenErr="Cannot open a file:"
+-		setcall errorreturn errorDefOut(fileOpenErr,path)
+-		Return errorreturn
++		callret errorDefOut(fileOpenErr,path)
+ 	EndIf
+ 	Data noerr=noerror
+ 	Return noerr
+ EndFunction
+ #err
+ function openfile_write_add_extension(ss path,ss extension,sd popen)
+-	sd er
+-	setcall er openfile_mode_add_extension(path,extension,popen,(_open_write),(nonexec_perms))
+-	return er
++	callret openfile_mode_add_extension(path,extension,popen,(_open_write),(nonexec_perms))
+ endfunction
+ #err
+ function openfile_mode_add_extension(ss path,ss extension,sd popen,sd mod,sd perms)
+@@ -223,9 +217,7 @@ Function padwrite(data hfile,data size)
+ 	If padmem=null
+ 		return writefalse
+ 	EndIf
+-	Data writeres#1
+-	SetCall writeres writefile(hfile,padmem,size)
+-	Return writeres
++	callret writefile(hfile,padmem,size)
+ EndFunction
+ 
+ #return writefile
+@@ -253,17 +245,14 @@ Function paddedwrite(data hfile,str buf,
+ 			Return writeres
+ 		EndIf
+ 	EndIf
+-	SetCall writeres padwrite(hfile,padvalue)
+-	Return writeres
++	callret padwrite(hfile,padvalue)
+ EndFunction
+ 
+ #return writeres
+ Function padsec(data hfile,data value,data pad)
+ 	Data valuetopad#1
+ 	SetCall valuetopad requiredpad(value,pad)
+-	Data writeres#1
+-	SetCall writeres padwrite(hfile,valuetopad)
+-	Return writeres
++	callret padwrite(hfile,valuetopad)
+ EndFunction
+ 
+ #true if match or false
+@@ -307,14 +296,12 @@ function changedir(ss path)
+ 	sd testsamefolder
+ 	data null=0
+ 	data chdirok=chdirok
+-	data chdirresult#1
+ 
+ 	setcall testsamefolder strlen(path)
+ 	if testsamefolder=null
+ 		return chdirok
+ 	endif
+-	SetCall chdirresult chdir(path)
+-	return chdirresult
++	callret chdir(path) #pointer
+ endfunction
+ 
+ #lseek
+--- ocompiler-2.orig/src/files/functions/commons/strcommons.oc
++++ ocompiler-2/src/files/functions/commons/strcommons.oc
+@@ -173,8 +173,7 @@ endfunction
+ #err
+ function warn_hidden_whitespaces_after(sd inc,sd dot_comma_end)
+ 	if dot_comma_end=0
+-		sd er;setcall er warn_hidden_whitespaces(inc)
+-		return er
++		callret warn_hidden_whitespaces(inc)
+ 	endif
+ 	return (noerror)
+ endfunction
+@@ -276,9 +275,7 @@ EndFunction
+ #return stringsatmemspc
+ Function stratmemspc(data pcontent,data psize,str match,data spacereq)
+ 	Data null=NULL
+-	Data bool#1
+-	SetCall bool stringsatmemspc(pcontent,psize,match,spacereq,null,null,null)
+-	Return bool
++	callret stringsatmemspc(pcontent,psize,match,spacereq,null,null,null)
+ EndFunction
+ 
+ #used at quotinmem and quotescaped
+@@ -385,18 +382,15 @@ Function quotinmem(sv ptrcontent,sd ptrs
+ 	If intnr=0
+ 		Return "Expecting quotation mark."
+ 	EndIf
+-	sd err;setcall err quotinmem_err(ptrcontent#,pquotsz,pescapes,(FALSE))
+-	return err
++	callret quotinmem_err(ptrcontent#,pquotsz,pescapes,(FALSE))
+ endfunction
+ Function quotinmem_started(sv ptrcontent,sd ptrsize,sd pquotsz,sd pescapes)
+ 	call stepcursors(ptrcontent,ptrsize)
+-	sd err;setcall err quotinmem_err(ptrcontent#,pquotsz,pescapes,(FALSE))
+-	return err
++	callret quotinmem_err(ptrcontent#,pquotsz,pescapes,(FALSE))
+ EndFunction
+ Function quotinmem_started_blind(sv ptrcontent,sd ptrsize,sd pquotsz,sd pescapes)
+ 	call stepcursors(ptrcontent,ptrsize)
+-	sd err;setcall err quotinmem_err(ptrcontent#,pquotsz,pescapes,(TRUE))
+-	return err
++	callret quotinmem_err(ptrcontent#,pquotsz,pescapes,(TRUE))
+ EndFunction
+ Function quotinmem_started_blind_noerr(sv ptrcontent,sd ptrsize,sd pquotsz,sd pescapes)
+ 	call stepcursors(ptrcontent,ptrsize)
+@@ -416,9 +410,7 @@ function maxpathverif(str safecurrentdir
+ 	add size1 size2
+ 	inc size1
+ 
+-	data err#1
+-	setcall err compareagainstmaxpath(size1)
+-	return err
++	callret compareagainstmaxpath(size1)
+ endfunction
+ 
+ function quotes_new_line(ss content)
+--- ocompiler-2.orig/src/files/functions/commons/valinmem.oc
++++ ocompiler-2/src/files/functions/commons/valinmem.oc
+@@ -36,8 +36,6 @@ Function valinmemsens(str content,data s
+ EndFunction
+ 
+ Function valinmem(str content,data size,char delim)
+-	Data returnvalue#1
+ 	Data forward=FORWARD
+-	SetCall returnvalue valinmemsens(content,size,delim,forward)
+-	Return returnvalue
++	callret valinmemsens(content,size,delim,forward)
+ EndFunction
+--- ocompiler-2.orig/src/files/functions/commons/vars.oc
++++ ocompiler-2/src/files/functions/commons/vars.oc
+@@ -50,8 +50,7 @@ function warn_or_log_vars_full(sd return
+ 			return return_value
+ 		endif
+ 	endif
+-	setcall return_value warn_or_log_vars(return_value,symbolname,p_err,size)
+-	return return_value
++	callret warn_or_log_vars(return_value,symbolname,p_err,size)
+ endfunction
+ 
+ function vars_log(sd type,sd val,sd sz)
+@@ -92,18 +91,14 @@ function vars_log_prepare(ss content,sd
+ 				inc content;dec size
+ 			endif
+ 			sd vals;setcall vals vars_log((get),content,size)
+-			sd err
+-			setcall err addtolog_array_withchar(vals,(log_offset))
+-			return err
++			callret addtolog_array_withchar(vals,(log_offset))
+ 		endif
+ 	endif
+ 	return (noerror)
+ endfunction
+ 
+ function vars_core_ref(ss content,sd size,sv ptrstructure,sv warningssearch,sd setref)
+-	sd data
+-	setcall data vars_core_ref_scope(content,size,ptrstructure,warningssearch,setref,(NULL))
+-	return data
++	callret vars_core_ref_scope(content,size,ptrstructure,warningssearch,setref,(NULL))
+ endfunction
+ 
+ #null or a pointer to the constant/variable/function
+@@ -246,32 +241,24 @@ endfunction
+ 
+ #null or a pointer to the constant/variable/function
+ Function varscore(str content,data size,data ptrstructure,data warningssearch)
+-	sd pointer
+-	setcall pointer vars_core_ref(content,size,ptrstructure,warningssearch,1)
+-	return pointer
++	callret vars_core_ref(content,size,ptrstructure,warningssearch,1)
+ EndFunction
+ 
+ #vars_core_ref
+ function vars_ignoreref(str content,data size,data ptrstructure)
+-	Data pointer#1
+ 	Data false=FALSE
+-	SetCall pointer vars_core_ref(content,size,ptrstructure,(NULL),false)
+-	Return pointer
++	callret vars_core_ref(content,size,ptrstructure,(NULL),false)
+ endfunction
+ 
+ #varscore
+ Function vars(str content,data size,data ptrstructure)
+-	Data pointer#1
+-	SetCall pointer varscore(content,size,ptrstructure,(NULL))
+-	Return pointer
++	callret varscore(content,size,ptrstructure,(NULL))
+ EndFunction
+ 
+ function vars_number(ss content,sd size,sd number)
+-	sd pointer
+ 	sd container
+ 	setcall container getstructcont(number)
+-	setcall pointer vars(content,size,container)
+-	return pointer
++	callret vars(content,size,container)
+ endfunction
+ 
+ Const notype=0
+@@ -336,15 +323,11 @@ EndFunction
+ 
+ #searchinvars
+ Function strinvars(str content,data size,data ptrtype)
+-	Data pointer#1
+-	SetCall pointer searchinvars(content,size,ptrtype,(NULL),1)
+-	Return pointer
++	callret searchinvars(content,size,ptrtype,(NULL),1)
+ EndFunction
+ #searchinvars
+ Function strinvars_ignoreref(str content,data size,data ptrtype)
+-	Data pointer#1
+-	SetCall pointer searchinvars(content,size,ptrtype,(NULL),0)
+-	Return pointer
++	callret searchinvars(content,size,ptrtype,(NULL),0)
+ EndFunction
+ 
+ #err
+@@ -365,7 +348,7 @@ Function varsufix(ss content,sd size,sd
+ 	sd err
+ 	setcall err xfile_add_char_if((Xfile_arg_varfn_dot_no))
+ 	if err=(noerror)
+-		setcall err varsufix_ex(content,size,ptrdata,ptrlow,ptrsufix,(NULL))
++		callret varsufix_ex(content,size,ptrdata,ptrlow,ptrsufix,(NULL))
+ 	endif
+ 	return err
+ endfunction
+@@ -391,8 +374,7 @@ function varsufix_ex(ss content,sd size,
+ 		setcall data searchinvars_scope(content,size,ptrtype,scope)
+ 	endelse
+ 	If data=null
+-		SetCall err undefinedvariable()
+-		Return err
++		callret undefinedvariable()
+ 	EndIf
+ 
+ 	setcall err xfile_add_varsufix_if(content,size,ptrsufix#,cast)
+--- ocompiler-2.orig/src/files/functions/dataassign.oc
++++ ocompiler-2/src/files/functions/dataassign.oc
+@@ -334,13 +334,11 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			endelse
+ 		Else
+ 			If typenumber=constantsnr
+-				SetCall err undefinedvariable()
+-				Return err
++				callret undefinedvariable()
+ 			EndIf
+ 			SetCall pointer vars(content,size,ptrfunctions)
+ 			If pointer=zero
+-				setcall err undefinedvar_fn()
+-				return err
++				callret undefinedvar_fn()
+ 			EndIf
+ 			setcall err xfile_add_char_if((Xfile_declsign_pointer_fn))
+ 			if err!=(noerror)
+@@ -461,7 +459,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 				sd ptrdata;call getptrcontReg(ptrdatasec,#ptrdata)
+ 				sub ptrdata# trim
+ 			endif
+-			setcall err xfile_add_char_if(trim)
++			callret xfile_add_char_if(trim)
+ 		endif
+ 		return err
+ 	endif
+@@ -543,7 +541,7 @@ function get_reserve_size(sv ptrcontent,
+ 				SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
+ 				If err=(noerror)
+ 					if long_mask!=(dummy_mask)
+-						SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
++						callret maxsectioncheck(ptrvalue#,ptrvalue)
+ 					endif
+ 				endIf
+ 			EndIf
+@@ -556,7 +554,7 @@ function get_reserve_size(sv ptrcontent,
+ 				#at format 64 can be a *2 at growramp
+ 				sd b;setcall b is_for_64()
+ 				if b=(TRUE)
+-					SetCall err maxsectioncheck(ptrvalue#,ptrvalue)
++					callret maxsectioncheck(ptrvalue#,ptrvalue)
+ 				endIf
+ 			endIf
+ 		endIf
+--- ocompiler-2.orig/src/files/functions/debug.oc
++++ ocompiler-2/src/files/functions/debug.oc
+@@ -66,7 +66,7 @@ function addtodebug_withchar(ss content,
+ 			setcall err addtosec(content,ln,ptrdebug)
+ 			if err=(noerror)
+ 				sd t;sd sz;setcall t log_term(#sz)
+-				setcall err addtosec(t,sz,ptrdebug)
++				callret addtosec(t,sz,ptrdebug)
+ 			endif
+ 		endif
+ 		return err
+--- ocompiler-2.orig/src/files/functions/elf/elf.oc
++++ ocompiler-2/src/files/functions/elf/elf.oc
+@@ -3,18 +3,14 @@
+ Function addtonamessized(data str,data sz,data regoff)
+ 	Data ptrnames%%ptr_names
+ 	Call getcontReg(ptrnames,regoff)
+-	Data err#1
+-	SetCall err addtosecstr(str,sz,ptrnames)
+-	Return err
++	callret addtosecstr(str,sz,ptrnames)
+ EndFunction
+ 
+ #err
+ Function addtonames(data str,data regoff)
+ 	Data sz#1
+ 	SetCall sz strlen(str)
+-	Data err#1
+-	SetCall err addtonamessized(str,sz,regoff)
+-	Return err
++	callret addtonamessized(str,sz,regoff)
+ EndFunction
+ 
+ #err
+@@ -79,42 +75,33 @@ function elfaddsec_base(sd stringname,sd
+ 	#	EndIf
+ 	#EndIf
+ 
+-	Data err#1
+ 	#is false at inits, no worry about only at object
+ 	sd e64;setcall e64 is_for_64()
+ 	if e64=(TRUE)
+ 		Set sh64_name stringname;Set sh64_type type;Set sh64_flags flags;set sh64_addr addr;Set sh64_offset fileoffset
+ 		set sh64_size bsize;Set sh64_link link;Set sh64_info info;Set sh64_addralign align;Set sh64_entsize entsize
+-		setcall err addtosec(#sh64_name,(elf64_section_size),ptrbag)
+-	else
++		callret addtosec(#sh64_name,(elf64_section_size),ptrbag)
++	endif
+ 		Set sh_name stringname;Set sh_type type;Set sh_flags flags;set sh_addr addr;Set sh_offset fileoffset
+ 		set sh_size bsize;Set sh_link link;Set sh_info info;Set sh_addralign align;Set sh_entsize entsize
+-		SetCall err addtosec(#sh_name,(elf_section_size),ptrbag)
+-	endelse
+-	Return err
++	callret addtosec(#sh_name,(elf_section_size),ptrbag)
+ endfunction
+ #err
+ function elfaddsecn()
+ 	Data ptrmiscbag%%ptr_miscbag
+-	sd err
+-	SetCall err elfaddsec_base((NULL),(SHT_NULL),0,(NULL),(NULL),0,0,0,0,(NULL),ptrmiscbag)
+-	Return err
++	callret elfaddsec_base((NULL),(SHT_NULL),0,(NULL),(NULL),0,0,0,0,(NULL),ptrmiscbag)
+ endfunction
+ #err
+ Function elfaddsecs(sd stringoff,sd type,sd flags,sd fileoffset,sd bsize,sd align)
+ 	Data ptrmiscbag%%ptr_miscbag
+-	sd err
+-	SetCall err elfaddsec_base(stringoff,type,flags,fileoffset,bsize,0,0,align,0,(NULL),ptrmiscbag)
+-	Return err
++	callret elfaddsec_base(stringoff,type,flags,fileoffset,bsize,0,0,align,0,(NULL),ptrmiscbag)
+ EndFunction
+ #err
+ Function elfaddsec(data stringoff,data type,data flags,data fileoffset,data seccont,data link,data info,data align,data entsize)
+ 	sd bsize
+ 	Call getcontReg(seccont,#bsize)
+ 	Data ptrmiscbag%%ptr_miscbag
+-	sd err
+-	SetCall err elfaddsec_base(stringoff,type,flags,fileoffset,bsize,link,info,align,entsize,(NULL),ptrmiscbag)
+-	Return err
++	callret elfaddsec_base(stringoff,type,flags,fileoffset,bsize,link,info,align,entsize,(NULL),ptrmiscbag)
+ EndFunction
+ #err
+ Function elfaddstrsec(data stringofname,data type,data flags,data fileoffset,data seccont,data link,data info,data align,data entsize)
+@@ -123,7 +110,7 @@ Function elfaddstrsec(data stringofname,
+ 	sd ptrregnr^regnr
+ 	SetCall err addtonames(stringofname,ptrregnr)
+ 	If err=(noerror)
+-		setcall err elfaddsec(regnr,type,flags,fileoffset,seccont,link,info,align,entsize)
++		callret elfaddsec(regnr,type,flags,fileoffset,seccont,link,info,align,entsize)
+ 	endif
+ 	return err
+ EndFunction
+@@ -139,7 +126,6 @@ const elf_sym_st_info_tohibyte=16
+ 	Data ptrndxsrc^index
+ 	Data wsz=wsz
+ 
+-	sd err
+ 	sd x;setcall x is_for_64()
+ 	if x=(TRUE)
+ 		Data elf64_sym_st_name#1
+@@ -157,8 +143,8 @@ const elf_sym_st_info_tohibyte=16
+ 		Call memtomem(#elf64_sym_st_shndx,ptrndxsrc,wsz)
+ 
+ 		Const elf64_sym_start^elf64_sym_st_name
+-		SetCall err addtosec(#elf64_sym_st_name,(\-elf64_sym_start),struct)
+-	else
++		callret addtosec(#elf64_sym_st_name,(\-elf64_sym_start),struct)
++	endif
+ 		#Symbol table entry
+ 		#Symbol name (string tbl index)
+ 		Data elf32_sym_st_name#1
+@@ -185,10 +171,7 @@ const elf_sym_st_info_tohibyte=16
+ 		Call memtomem(#elf32_sym_st_shndx,ptrndxsrc,wsz)
+ 
+ 		Const elf_sym_start^elf32_sym_st_name
+-		SetCall err addtosec(#elf32_sym_st_name,(\-elf_sym_start),struct)
+-	endelse
+-
+-	Return err
++	callret addtosec(#elf32_sym_st_name,(\-elf_sym_start),struct)
+ EndFunction
+ #err
+ Function elfaddstrszsym(data stringstroff,data sz,data value,data size,char type,char bind,data index,data struct)
+@@ -198,7 +181,7 @@ Function elfaddstrszsym(data stringstrof
+ 	Data noerr=noerror
+ 	SetCall err addtonamessized(stringstroff,sz,ptrregnr)
+ 	If err=noerr
+-		SetCall err elfaddsym(regnr,value,size,type,bind,index,struct)
++		callret elfaddsym(regnr,value,size,type,bind,index,struct)
+ 	EndIf
+ 	Return err
+ EndFunction
+@@ -206,9 +189,7 @@ EndFunction
+ Function elfaddstrsym(data stringstroff,data value,data size,char type,char bind,data index,data struct)
+ 	Data sz#1
+ 	SetCall sz strlen(stringstroff)
+-	Data err#1
+-	SetCall err elfaddstrszsym(stringstroff,sz,value,size,type,bind,index,struct)
+-	Return err
++	callret elfaddstrszsym(stringstroff,sz,value,size,type,bind,index,struct)
+ EndFunction
+ 
+ Data STT_NOTYPE=STT_NOTYPE
+@@ -244,7 +225,6 @@ Function addrel_base(sd offset,sd symbol
+ 	#const R_X86_64_PC32=R_386_PC32
+ 	#const R_X86_64_PC64=24
+ 
+-	sd err
+ 	sd x;setcall x is_for_64()
+ 	if x=(TRUE)
+ 		Data elf64_r_offset#1;data *=0
+@@ -261,8 +241,8 @@ Function addrel_base(sd offset,sd symbol
+ 		set elf64_r_info_symbolindex symbolindex
+ 		set elf64_r_addend addend
+ 
+-		SetCall err addtosec(#elf64_r_offset,(elf64_dyn_d_val_relent),struct)
+-	else
++		callret addtosec(#elf64_r_offset,(elf64_dyn_d_val_relent),struct)
++	endif
+ 		#offset
+ 		Data elf_r_offset#1
+ 		#Relocation type and symbol index
+@@ -276,21 +256,16 @@ Function addrel_base(sd offset,sd symbol
+ 		Call memtomem(#elf_r_info_symbolindex,#symbolindex,3)
+ 		set elf_r_addend addend
+ 
+-		SetCall err addtosec(#elf_r_offset,(elf32_dyn_d_val_relent),struct)
+-	endelse
+-	Return err
++	callret addtosec(#elf_r_offset,(elf32_dyn_d_val_relent),struct)
+ EndFunction
+ 
+ #err
+ Function addrel(sd offset,sd symbolindex,sd struct)
+-	sd err
+-	setcall err addrel_base(offset,symbolindex,0,struct)
+-	return err
++	callret addrel_base(offset,symbolindex,0,struct)
+ endfunction
+ 
+ #err
+ Function adddirectrel_base(sd relsec,sd extraoff,sd index,sd addend)
+-	Data err#1
+ 	Data off#1
+ 	Data ptroff^off
+ 	Data ptrdatasec%%ptr_datasec
+@@ -304,6 +279,5 @@ Function adddirectrel_base(sd relsec,sd
+ 	EndElse
+ 	Call getcontReg(struct,ptroff)
+ 	Add off extraoff
+-	SetCall err addrel_base(off,index,addend,relsec)
+-	Return err
++	callret addrel_base(off,index,addend,relsec)
+ EndFunction
+--- ocompiler-2.orig/src/files/functions/enumbags.oc
++++ ocompiler-2/src/files/functions/enumbags.oc
+@@ -24,8 +24,7 @@ EndFunction
+ function enumbags_alloc(sd container)
+ 	sd max;call getcontMax(container,#max)
+ 	sd pcont;call getptrcont(container,#pcont)
+-	sd err;setcall err mem_alloc(max,pcont)
+-	return err
++	callret mem_alloc(max,pcont)
+ endfunction
+ function enumbags_free(sd container)
+ 	sd cont;call getcont(container,#cont)
+--- ocompiler-2.orig/src/files/functions/global/funcs.oc
++++ ocompiler-2/src/files/functions/global/funcs.oc
+@@ -71,9 +71,7 @@ function unresLc(sd addition,sd structur
+ 	set isdirect direct
+ 
+ 	data unresLocal%%ptr_unresLocal
+-	sd err
+-	SetCall err addtosec(ptradd,12,unresLocal)
+-	return err
++	callret addtosec(ptradd,12,unresLocal)
+ endfunction
+ 
+ #e
+@@ -91,12 +89,9 @@ endfunction
+ #e
+ function unresReloc(sd section)
+ 	sd for_64
+-	sd err
+ 	setcall for_64 is_for_64()
+ 	if for_64=(TRUE)
+-		setcall err unresLc((-qwsz),section,0)
+-	else
+-		setcall err unresLc((-dwsz),section,0)
+-	endelse
+-	return err
++		callret unresLc((-qwsz),section,0)
++	end
++	callret unresLc((-dwsz),section,0)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/include.oc
++++ ocompiler-2/src/files/functions/include.oc
+@@ -178,11 +178,11 @@ function include_sec_skip(sv pcontent,sd
+ 			setcall err xfile_add_char_ifif((Xfile_include_alternative_yes))
+ 			if err=(noerror)
+ 				Value ptrtemp%%ptr_tempdata
+-				setcall err addtosecstresc_xfile(pcontent,pcomsize,sz,escapes,ptrtemp) #misc has first include file, and is ok with casts
++				callret addtosecstresc_xfile(pcontent,pcomsize,sz,escapes,ptrtemp) #misc has first include file, and is ok with casts
+ 			endif
+ 		endif
+ 	else
+-		setcall err xfile_add_char_ifif((Xfile_include_alternative_no))
++		callret xfile_add_char_ifif((Xfile_include_alternative_no))
+ 	endelse
+ 	return err
+ endfunction
+--- ocompiler-2.orig/src/files/functions/inits.oc
++++ ocompiler-2/src/files/functions/inits.oc
+@@ -4,10 +4,9 @@
+ function prefs_set(ss name,ss value,sv p_p)
+ 	sd err
+ 	setcall err comline_pointer(name,p_p)
+-	if err!=(noerror)
+-		return err
++	if err=(noerror)
++		callret comline_value(value,p_p#)
+ 	endif
+-	setcall err comline_value(value,p_p#)
+ 	return err
+ endfunction
+ #err
+--- ocompiler-2.orig/src/files/functions/mask.oc
++++ ocompiler-2/src/files/functions/mask.oc
+@@ -8,53 +8,35 @@ function data_get_maskbit(sd pointer,sd
+ 	return bit
+ endfunction
+ function importbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(idatabitfunction))
+-	return bit
++	callret data_get_maskbit(pointer,(idatabitfunction))
+ endfunction
+ function stackbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(stackbit))
+-	return bit
++	callret data_get_maskbit(pointer,(stackbit))
+ endfunction
+ function stackrelativebit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(stackrelativebit))
+-	return bit
++	callret data_get_maskbit(pointer,(stackrelativebit))
+ endfunction
+ function datapointbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(datapointbit))
+-	return bit
++	callret data_get_maskbit(pointer,(datapointbit))
+ endfunction
+ function expandbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(expandbit))
+-	return bit
++	callret data_get_maskbit(pointer,(expandbit))
+ endfunction
+ function expandbit_wrap(sd pointer)
+ 	vdata ptr_nobits_virtual%ptr_nobits_virtual
+ 	if ptr_nobits_virtual#=(Yes)
+-		sd bit
+-		setcall bit data_get_maskbit(pointer,(expandbit))
+-		return bit
++		callret data_get_maskbit(pointer,(expandbit))
+ 	endif
+ 	return 0
+ endfunction
+ function pointbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(pointbit))
+-	return bit
++	callret data_get_maskbit(pointer,(pointbit))
+ endfunction
+ function suffixbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(suffixbit))
+-	return bit
++	callret data_get_maskbit(pointer,(suffixbit))
+ endfunction
+ function signbit(sd pointer)
+-	sd bit
+-	setcall bit data_get_maskbit(pointer,(signbit))
+-	return bit
++	callret data_get_maskbit(pointer,(signbit))
+ endfunction
+ 
+ function stack_get_relative(sd location)
+--- ocompiler-2.orig/src/files/functions/pref/preffuncs.oc
++++ ocompiler-2/src/files/functions/pref/preffuncs.oc
+@@ -326,10 +326,8 @@ endfunction
+ function inplace_reloc_unres(sd p,sd add)
+ 	sd p_inplace_reloc_pref%p_inplace_reloc_pref
+ 	if p_inplace_reloc_pref#!=(zero_reloc)
+-		sd err
+ 		sd ptrcodesec%%ptr_codesec
+-		setcall err unresLc(add,ptrcodesec,0)
+-		return err
++		callret unresLc(add,ptrcodesec,0)
+ 	endif
+ 	set p# (i386_obj_default_reloc)
+ 	return (noerror)
+--- ocompiler-2.orig/src/files/functions/stack.oc
++++ ocompiler-2/src/files/functions/stack.oc
+@@ -55,9 +55,7 @@ endfunction
+ function addramp(sv perr)
+ 	sd index
+ 	setcall index stack64_enlarge((dwsz))
+-	data ramp#1
+-	setcall ramp growramp(index,perr)
+-	return ramp
++	callret growramp(index,perr)
+ endfunction
+ #ind
+ function getramp_ebxrel()
+@@ -94,8 +92,7 @@ function entryscope()
+ 		data set=0;call ramp_index(set,container) #here is storing the sum when stackvariables(ebx) is required
+ 	endif
+ 
+-	setcall err align_entryscope()
+-	return err
++	callret align_entryscope()
+ endfunction
+ 
+ #
+@@ -138,7 +135,7 @@ function addtocode_decstack(sd for_64)
+ 			setcall modrm formmodrm((disp32),0,(ebxregnumber))
+ 			set size 6
+ 		endelse
+-		setcall err addtosec(stack,size,ptrcodesec)
++		callret addtosec(stack,size,ptrcodesec)
+ 	endif
+ 	return err
+ endfunction
+@@ -153,8 +150,7 @@ function addtocodeforstack(sd rightstack
+ 		return err
+ 	endif
+ 
+-	setcall err addtocode_decstack(for_64)
+-	return err
++	callret addtocode_decstack(for_64)
+ endfunction
+ #er
+ function addtocodefordata(sd value,sd for_64,sd ext)
+@@ -168,6 +164,5 @@ function addtocodefordata(sd value,sd fo
+ 	setcall err addtosec(#code,5,ptrcodesec);If err!=(noerror);Return err;EndIf
+ 	setcall err reloc64_post_base_extension(ptrcodesec,ext);If err!=(noerror);Return err;EndIf
+ 
+-	setcall err addtocode_decstack(for_64)
+-	return err
++	callret addtocode_decstack(for_64)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/values/numbersandconstants.oc
++++ ocompiler-2/src/files/functions/values/numbersandconstants.oc
+@@ -208,8 +208,7 @@ function numbertoint(vstrx content,datax
+ 			#the current data cursor   [calculation]
+ 			setcall outval# get_img_vdata_dataReg()
+ 
+-			setcall err xfile_add_char_ifif((Xfile_numbers_type_idata))
+-			return err
++			callret xfile_add_char_ifif((Xfile_numbers_type_idata))
+ 		endif
+ 
+ 		vdata p_parses%ptr_parses
+@@ -228,8 +227,7 @@ function numbertoint(vstrx content,datax
+ 				endif
+ 				setcall outval# get_img_vdata_dataSize()
+ 
+-				setcall err xfile_add_char_ifif((Xfile_numbers_type_idatax))
+-				return err
++				callret xfile_add_char_ifif((Xfile_numbers_type_idatax))
+ 			endif
+ 
+ 			#[calculation][calculation]fsize
+@@ -240,7 +238,7 @@ function numbertoint(vstrx content,datax
+ 			endif
+ 			setcall err xfile_add_char_if((Xfile_numbers_type_fsizeX))  #next in get_scope_pos
+ 			if err=(noerror)
+-				setcall err get_sizeoffunction(content,size,outval,(fsizeX))
++				callret get_sizeoffunction(content,size,outval,(fsizeX))
+ 			endif
+ 			return err
+ 		endif
+@@ -326,12 +324,12 @@ function numbertoint(vstrx content,datax
+ 				dec size
+ 				setcall err xfile_add_char_if((Xfile_numbers_type_fsizeXX))  #next in get_scope_pos
+ 				if err=(noerror)
+-					setcall err get_sizeoffunction(content,size,outval,(fsize_fsizeX))
++					callret get_sizeoffunction(content,size,outval,(fsize_fsizeX))
+ 				endif
+ 			else #[calculation]fsize
+ 				setcall err xfile_add_char_if((Xfile_numbers_type_fsize))  #next in get_scope_pos
+ 				if err=(noerror)
+-					setcall err get_sizeoffunction(content,size,outval,(fsize))
++					callret get_sizeoffunction(content,size,outval,(fsize))
+ 				endif
+ 			end
+ 		endelse
+@@ -343,26 +341,22 @@ function numbertoint(vstrx content,datax
+ 		if b=(FALSE);set outval# (dwsz)
+ 		else;set outval# (qwsz);endelse
+ 
+-		setcall err xfile_add_char_ifif((Xfile_numbers_type_ilong))
+-		return err
++		callret xfile_add_char_ifif((Xfile_numbers_type_ilong))
+ 	endelseif
+ 	#0X ?
+ 	SetCall bool memtohex(content,size,outval)
+ 	If bool=(TRUE)
+-		setcall err xfile_add_base_ifif((Xfile_numbers_type_thexadec),content,size)
+-		return err
++		callret xfile_add_base_ifif((Xfile_numbers_type_thexadec),content,size)
+ 	endif
+ 	#0 ?
+ 	SetCall bool memtooct(content,size,outval)
+ 	If bool=(TRUE)
+-		setcall err xfile_add_base_ifif((Xfile_numbers_type_toctal),content,size)
+-		return err
++		callret xfile_add_base_ifif((Xfile_numbers_type_toctal),content,size)
+ 	endif
+ 	#decimal number
+ 	SetCall bool memtoint(content,size,outval,minusbool)
+ 	If bool=(TRUE)
+-		setcall err xfile_add_base_ifif((Xfile_numbers_type_tdecimal),content,size)
+-		return err
++		callret xfile_add_base_ifif((Xfile_numbers_type_tdecimal),content,size)
+ 	endif
+ 	Char _intvalerr="Integer(dec/oct/hex) value not recognized."
+ 	vStr intvallerr^_intvalerr
+@@ -490,7 +484,5 @@ endfunction
+ 
+ #len
+ function dwtomem(sd dw,ss mem)
+-	sd len
+-	setcall len sprintf(mem,"%u",dw)
+-	return len
++	callret sprintf(mem,"%u",dw) #int , here is a char, attention at otoc returns
+ endfunction
+--- ocompiler-2.orig/src/files/functions/values/operations.oc
++++ ocompiler-2/src/files/functions/values/operations.oc
+@@ -122,8 +122,7 @@ Function operation(sv ptrcontent,sd size
+ 		Return errptr
+ 	EndIf
+ 
+-	setcall errptr operation_core(inoutvalue,number,newitem)
+-	return errptr
++	callret operation_core(inoutvalue,number,newitem)
+ EndFunction
+ 
+ #err
+@@ -381,8 +380,7 @@ endfunction
+ 
+ #err pointer
+ Function parseoperations(sd ptrcontent,sd ptrsize,sd sz,sd outvalue,sd comments)
+-	sd er;setcall er parseoperations_base(ptrcontent,ptrsize,sz,outvalue,comments,(Xfile_numbers_done))
+-	return er
++	callret parseoperations_base(ptrcontent,ptrsize,sz,outvalue,comments,(Xfile_numbers_done))
+ EndFunction
+ #err pointer
+ Function parseoperations_base(sd ptrcontent,sd ptrsize,sd sz,sd outvalue,sd comments,sd xfile_numbers)
+@@ -460,8 +458,7 @@ Function parseoperations_base(sd ptrcont
+ 	endif
+ 	Call advancecursors(ptrcontent,ptrsize,sz)
+ 
+-	setcall errptr xfile_add_char_ifif(xfile_numbers)
+-	Return errptr
++	callret xfile_add_char_ifif(xfile_numbers)
+ EndFunction
+ 
+ function multisignoperation(ss pnr,sv pcontent,sd end)
+--- ocompiler-2.orig/src/files/functions/xfile.oc
++++ ocompiler-2/src/files/functions/xfile.oc
+@@ -6,47 +6,40 @@ const Xfile_yesignore_sign=asciiexclamat
+ 
+ #err
+ function xfile_add_int(sd int)
+-	sd err;setcall err writefile_errversion(main.xfile,#int,(Xfile_sz_int))
+-	return err
++	callret writefile_errversion(main.xfile,#int,(Xfile_sz_int))
+ endfunction
+ #err
+ function xfile_add_int_if(sd int)
+ 	if main.xfile!=(openno)
+-		sd err;setcall err xfile_add_int(int)
+-		return err
++		callret xfile_add_int(int)
+ 	endif
+ 	return (noerror)
+ endfunction
+ function xfile_add_char(sd type)
+-	sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+-	return err
++	callret writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+ endfunction
+ function xfile_add_char_if(sd type)
+ 	if main.xfile!=(openno)
+-		sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+-		return err
++		callret writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+ 	endif
+ 	return (noerror)
+ endfunction
+ function xfile_add_char_ifif(sd type)
+ 	if main.parses=(pass_write)
+-		sd err;setcall err xfile_add_char_if(type)
+-		return err
++		callret xfile_add_char_if(type)
+ 	endif
+ 	return (noerror)
+ endfunction
+ function xfile_add_string(sd text,sd size)
+ 	sd err;setcall err writefile_errversion(main.xfile,#size,(Xfile_sz_int))
+ 	if err=(noerror)
+-		setcall err writefile_errversion(main.xfile,text,size)
++		callret writefile_errversion(main.xfile,text,size)
+ 	endif
+ 	return err
+ endfunction
+ function xfile_add_string_if(sd text,sd size)
+ 	if main.xfile!=(openno)
+-		sd err
+-		setcall err xfile_add_string(text,size)
+-		return err
++		callret xfile_add_string(text,size)
+ 	endif
+ 	return (noerror)
+ endfunction
+@@ -56,7 +49,7 @@ function xfile_add_multistring_ifif(sd t
+ 			sd err
+ 			setcall err xfile_add_char(is_multiline)
+ 			if err=(noerror)
+-				setcall err xfile_add_string_if(text,size)
++				callret xfile_add_string_if(text,size)
+ 			endif
+ 			return err
+ 		endif
+@@ -66,42 +59,37 @@ endfunction
+ function xfile_add_base(sd type,sd text,sd size)
+ 	sd err;setcall err writefile_errversion(main.xfile,#type,(Xfile_sz_char))
+ 	if err=(noerror)
+-		setcall err xfile_add_string(text,size)
++		callret xfile_add_string(text,size)
+ 	endif
+ 	return err
+ endfunction
+ function xfile_add_base_if(sd type,sd text,sd size)
+ 	if main.xfile!=(openno)
+-		sd err;setcall err xfile_add_base(type,text,size)
+-		return err
++		callret xfile_add_base(type,text,size)
+ 	endif
+ 	return (noerror)
+ endfunction
+ function xfile_add_base_ifif(sd type,sd text,sd size)
+ 	if main.parses=(pass_write)
+-		sd err;setcall err xfile_add_base_if(type,text,size)
+-		return err
++		callret xfile_add_base_if(type,text,size)
+ 	endif
+ 	return (noerror)
+ endfunction
+ function xfile_add_base_area_if(sd type,sd start,sd end)
+ 	sub end start
+-	sd e;setcall e xfile_add_base_if(type,start,end)
+-	return e
++	callret xfile_add_base_if(type,start,end)
+ endfunction
+ function xfile_add_comment_ifif(sd start,sd end,sd comment)
+ 	if main.parses=(pass_write)
+ 		inc start ##one for commentascii
+-		sd e;setcall e xfile_add_base_area_if(comment,start,end)
+-		return e
++		callret xfile_add_base_area_if(comment,start,end)
+ 	endif
+ 	return (noerror)
+ endfunction
+ function xfile_add_comment_multi_ifif(sd start,sd end)
+ 	if main.parses=(pass_write)
+ 		add start 2 #one for commentascii and one for asciiexclamationmark
+-		sd e;setcall e xfile_add_base_area_if((Xfile_commentmulti),start,end)
+-		return e
++		callret xfile_add_base_area_if((Xfile_commentmulti),start,end)
+ 	endif
+ 	return (noerror)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/xfile_details.oc
++++ ocompiler-2/src/files/functions/xfile_details.oc
+@@ -29,7 +29,7 @@ function xfile_add_declare_base(sd declt
+ 			endelse
+ 		endelse
+ 		if err=(noerror)
+-			setcall err xfile_add_char(decltype)
++			callret xfile_add_char(decltype)
+ 		endif
+ 	endif
+ 	return err
+@@ -56,24 +56,25 @@ function xfile_add_declare_dec_if(sd dec
+ 		if err=(noerror)
+ 			if sign=(assignsign)
+ 				if reloc=(FALSE)
+-					setcall err xfile_add_char((Xfile_declsign_equal))
+-				elseif relocx=(FALSE)
+-					setcall err xfile_add_char((Xfile_declsign_ereloc))
+-				else
+-					setcall err xfile_add_char((Xfile_declsign_erelocx))
+-				endelse
+-			elseif sign=(reservesign)
+-				setcall err xfile_add_char((Xfile_declsign_reserve))
+-			elseif sign=(pointersigndeclare)
+-				setcall err xfile_add_char((Xfile_declsign_pointer))
+-			else
++					callret xfile_add_char((Xfile_declsign_equal))
++				end
++				if relocx=(FALSE)
++					callret xfile_add_char((Xfile_declsign_ereloc))
++				end
++				callret xfile_add_char((Xfile_declsign_erelocx))
++			end
++			if sign=(reservesign)
++				callret xfile_add_char((Xfile_declsign_reserve))
++			end
++			if sign=(pointersigndeclare)
++				callret xfile_add_char((Xfile_declsign_pointer))
++			end
+ 			#if sign=(nosign) reserve#1 but need to add N=1
+-				setcall err xfile_add_char((Xfile_declsign_reserve))
+-				if err=(noerror)
+-					char n1={Xfile_numbers_prefix_none,Xfile_numbers_type_tdecimal,1,0,0,0,asciione,Xfile_numbers_done}
+-					setcall err writefile_errversion(main.xfile,#n1,\.n1)
+-				endif
+-			endelse
++			setcall err xfile_add_char((Xfile_declsign_reserve))
++			if err=(noerror)
++				char n1={Xfile_numbers_prefix_none,Xfile_numbers_type_tdecimal,1,0,0,0,asciione,Xfile_numbers_done}
++				callret writefile_errversion(main.xfile,#n1,\.n1)
++			endif
+ 		endif
+ 		return err
+ 	endif
+@@ -106,7 +107,7 @@ function xfile_add_declare_ex(sd decltyp
+ 		endif
+ 	endelse
+ 	if err=(noerror)
+-		setcall err xfile_add_string(content,size)
++		callret xfile_add_string(content,size)
+ 	endif
+ 	return err
+ endfunction
+@@ -244,7 +245,7 @@ function xfile_add_varsufix_if(sd conten
+ 			setcall err xfile_add_char(sufix)
+ 			if sufix=(Xfile_suffix_true)
+ 				if err=(noerror)
+-					setcall err xfile_add_char(cast)
++					callret xfile_add_char(cast)
+ 				endif
+ 			endif
+ 		endif
+@@ -302,7 +303,7 @@ function xfile_add_commas_interncall_if(
+ 		sd err
+ 		SetCall err enumcommas(#content,#size,sz,(FALSE),(pass_calls)) #there are 7 more arguments but are not used
+ 		if err=(noerror)
+-			setcall err xfile_add_int(p#)
++			callret xfile_add_int(p#)
+ 		endif
+ 		return err
+ 	endif
+@@ -325,7 +326,7 @@ function xfile_add_call_if(sd content,sd
+ 			setcall err xfile_add_char((Xfile_arg_call_extern|Xfile_arg_call_skipaftercall))
+ 		endelse
+ 		if err=(noerror)
+-			setcall err xfile_add_string(content,size)
++			callret xfile_add_string(content,size)
+ 		endif
+ 		return err
+ 	endif
+@@ -340,10 +341,9 @@ function xfile_add_callret(sd action,sd
+ 		#this can go also with primsec with a test against CALL_primsec, add that flag at getcommand, but still there is a wrong cosmetic at subtype_test=0 and not subtype_test=CALL_primsec in a case
+ 		setcall subtype callret_flag(subtype)
+ 		if subtype=0
+-			setcall err xfile_add_char((Xfile_call_normal))
+-		else
+-			setcall err xfile_add_char((Xfile_call_ret))
+-		endelse
++			callret xfile_add_char((Xfile_call_normal))
++		endif
++		callret xfile_add_char((Xfile_call_ret))
+ 	endif
+ 
+ 	return err
+@@ -351,30 +351,26 @@ endfunction
+ #err
+ function xfile_add_callret_if(sd action,sd subtype)
+ 	if main.xfile!=(openno)
+-		sd err
+-		setcall err xfile_add_callret(action,subtype)
+-		return err
++		callret xfile_add_callret(action,subtype)
+ 	endif
+ 	return (noerror)
+ endfunction
+ #err
+ function xfile_add_callret_ifif(sd action,sd subtype)
+ 	if main.parses=(pass_write)
+-		sd err
+-		setcall err xfile_add_callret_if(action,subtype)
+-		return err
++		callret xfile_add_callret_if(action,subtype)
+ 	endif
+ 	return (noerror)
+ endfunction
+ 
+ #err
+ function xfile_add_end_if()
+-	sd err;setcall err xfile_add_char_if((Xfile_end));return err
++	callret xfile_add_char_if((Xfile_end))
+ endfunction
+ #err
+ function xfile_add_end_ifif()
+ 	if main.parses=(pass_write)
+-		sd err;setcall err xfile_add_end_if();return err
++		callret xfile_add_end_if()
+ 	endif
+ 	return (noerror)
+ endfunction
+@@ -391,23 +387,18 @@ function xfile_add_format_if(sd format,s
+ 					sd b;setcall b is_for_64()
+ 					if b=(TRUE)
+ 						if ignore=(FALSE)
+-							setcall err xfile_add_char((Xfile_format_elfobj64))
+-						else
+-							setcall err xfile_add_char((Xfile_format_elfobj64ig))
+-						endelse
+-					else
+-						if ignore=(FALSE)
+-							setcall err xfile_add_char((Xfile_format_elfobj))
+-						else
+-							setcall err xfile_add_char((Xfile_format_elfobjig))
+-						endelse
+-					endelse
+-				else
+-					setcall err xfile_add_char((Xfile_format_elf))
+-				endelse
+-			else
+-				setcall err xfile_add_char((Xfile_format_exe))
+-			endelse
++							callret xfile_add_char((Xfile_format_elfobj64))
++						endif
++						callret xfile_add_char((Xfile_format_elfobj64ig))
++					endif
++					if ignore=(FALSE)
++						callret xfile_add_char((Xfile_format_elfobj))
++					endif
++					callret xfile_add_char((Xfile_format_elfobjig))
++				endif
++				callret xfile_add_char((Xfile_format_elf))
++			endif
++			callret xfile_add_char((Xfile_format_exe))
+ 		endif
+ 		return err
+ 	endif
+@@ -489,7 +480,7 @@ function xfile_add_override_if(sd name,s
+ 		sd err
+ 		setcall err xfile_add_base((Xfile_override),name,size)
+ 		if err=(noerror)
+-			setcall err xfile_add_char(value)
++			callret xfile_add_char(value)
+ 		endif
+ 		return err
+ 	endif
+@@ -534,9 +525,7 @@ endfunction
+ 
+ function xfile_proto_arg(sd type,sd is_stack,sd is_expand,sd is_signed)
+ 	if main.xfile!=(openno)
+-		sd err
+-		setcall err xfile_add_declare_base(type,is_stack,is_expand,is_signed)
+-		return err
++		callret xfile_add_declare_base(type,is_stack,is_expand,is_signed)
+ 	end
+ 	return (noerror)
+ endfunction
+--- /dev/null
++++ ocompiler-2/src/rtest
+@@ -0,0 +1,2 @@
++
++LD=/usr/i686-linux-gnu/bin/ld launcher=q launcher2=qemu-i386 testlinker=/home/bc/Desktop/libc6-i386-amd64-jammy/lib32 ./test32
+--- ocompiler-2.orig/src/test32
++++ ocompiler-2/src/test32
+@@ -1,6 +1,7 @@
+ #!/bin/sh
++if [ -z "${testlinker}" ]; then export testlinker=/home/bc/Desktop/out/libc6/lib32; fi
+ make && \
+-testlinker=/home/bc/Desktop/out/libc6/lib32 make test && \
++make test && \
+ if [ $? = 0 ]; then
+ 	make clean && \
+ 	cat ../debian/changelog | head -1 | grep -Poe "[^\(]*(?=\))" > ../localtest && \
+--- ocompiler-2.orig/test32local
++++ ocompiler-2/test32local
+@@ -1,4 +1,5 @@
+ 
+-echo a key when local test is ready
+-read -n1 -t $((60*60*24))
+-./test32
++#echo a key when local test is ready
++#read -n1 -t $((60*60*24))
++#./test32
++cd src && ./rtest
