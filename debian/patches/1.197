@@ -1,0 +1,1745 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-197) bionic; urgency=medium
+ .
+   * callret optimizations
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-24
+
+--- ovideo-1.orig/readme.md
++++ ovideo-1/readme.md
+@@ -1,8 +1,8 @@
+ # O Video
+ 
+ ## Install
+-On Ubuntu, <i>.deb</i> file from [releases](https://github.com/colin-i/ostream/releases).\
+-Or from PPA.
++On Ubuntu, <i>.deb</i> file from [releases](https://github.com/colin-i/ostream/releases)(jammy also working at noble).\
++Or from PPA(i386)(xenial bionic focal jammy).
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+@@ -12,7 +12,7 @@ Install:
+ sudo apt-get install ovideo
+ ```
+ \
+-On openSUSE (i586), run the following as __root__:\
++On openSUSE(i586), run the following as __root__:\
+ For openSUSE Tumbleweed:
+ ```sh
+ zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
+@@ -31,7 +31,7 @@ On Windows, <i>.windows.zip</i> file fro
+ <i>Gstreamer sdk</i> x86 0.10 from [here](https://cgit.freedesktop.org/gstreamer/gstreamer/refs/heads).
+ \
+ \
+-On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/ostream/releases).
++On linux distributions(x86_64), <i>.AppImage</i> file from [releases](https://github.com/colin-i/ostream/releases).
+ 
+ ## From source
+ Compile with [O Compiler](https://github.com/colin-i/o). At linux, for example: link with <i>lld</i> and having gstreamer1(with good/bad plugins), gtk2, libsoup2, libasound2, libjpeg8.
+--- ovideo-1.orig/src/Makefile
++++ ovideo-1/src/Makefile
+@@ -74,7 +74,7 @@ all: ${projname}
+ ${projname}: ${lshare} ${extra} ${obs}
+ 	${OLINK} ${logs}
+ 	export PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig:${PKG_CONFIG_PATH}; \
+-	$(LD) -melf_i386 --dynamic-linker=${dynlink} ${linkerflags} ${obs} -o ${items_prefix}${projname} ${Lc} -l:libc.so.6 -l:libm.so.6 `pkg-config --libs gtk+-2.0 gstreamer-pbutils-1.0 gstreamer-app-1.0` -ljpeg -lsoup-2.4 -lasound -lgthread-2.0 -lpthread;
++	$(LD) -melf_i386 --dynamic-linker=${dynlink} ${linkerflags} ${obs} -o ${items_prefix}${projname} ${Lc} -l:libc.so.6 -l:libm.so.6 ${Lg} `pkg-config --libs gtk+-2.0 gstreamer-pbutils-1.0 gstreamer-app-1.0` -ljpeg -lsoup-2.4 -lasound -lgthread-2.0 -lpthread;
+ #same CC problem like at actionswf # $(CC) -m32 ${linkerflagsextra}
+ #need to use LLVM lld to work
+ ${lshare}:
+@@ -107,12 +107,13 @@ ${wprojname}: ${extra} ${obs}
+ 	#this is also working
+ 	#i686-w64-mingw32-gcc -Wl,--large-address-aware ${linkerflags} ${obs} -o ${wprojname} -Wl,--start-group \
+ 	#-Wl,--end-group
+-	i686-w64-mingw32-ld --large-address-aware ${linkerflags} ${obs} -o ${wprojname} -entry _start --start-group \
++	i686-w64-mingw32-ld --large-address-aware ${linkerflags} ${obs} -o ${wprojname} -entry _start --allow-multiple-definition --start-group \
+ 	`dpkg -L mingw-w64-i686-dev | grep '\.a' | sed 's/..$$//' | grep -o '[^\/]*$$' | sed 's/^lib/-l/' | xargs echo` \
+-	--end-group -L`echo ~`/.wine/drive_c/gstreamer-sdk/0.10/x86/lib/ \
++	--end-group -L`echo ~`/${wineroot}/drive_c/gstreamer-sdk/0.10/x86/lib \
+ 	-lgtk-win32-2.0 -lgdk-win32-2.0 -lgdk_pixbuf-2.0 -lglib-2.0 -lgobject-2.0 -lgio-2.0 -lgthread-2.0 \
+ 	-lgstreamer-0.10 -lgstapp-0.10 -lgstinterfaces-0.10 -lgstpbutils-0.10 \
+ 	-lcairo -lpango-1.0 -lsoup-2.4 -ljpeg;
++#--allow-multiple-definition is for _time
+ platform-clean:
+ 	-rm -f ${wprojname}
+ install-proc:
+--- ovideo-1.orig/src/_capture/capture.oc
++++ ovideo-1/src/_capture/capture.oc
+@@ -553,9 +553,7 @@ endfunction
+ 
+ function capture_obtain_screenshot()
+     call capture_rect_screenshot((value_screenshot))
+-    sd pixbuf
+-    setcall pixbuf capture_pixbuf((value_get))
+-    return pixbuf
++	callret capture_pixbuf((value_get))
+ endfunction
+ 
+ const CAIRO_FORMAT_RGB24=1
+--- ovideo-1.orig/src/_dif/dif~lin.oc
++++ ovideo-1/src/_dif/dif~lin.oc
+@@ -47,16 +47,12 @@ endfunction
+ 
+ importx "time" time
+ function timeNode(data ptrtime_t)
+-    data time_t#1
+-    setcall time_t time(ptrtime_t)
+-    return time_t
++	callret time(ptrtime_t) #can't work if remain int after 2038...
+ endfunction
+ 
+ importx "chdir" chd
+ function chdr(str value)
+-    data x#1
+-    setcall x chd(value)
+-    return x
++	callret chd(value) #pointer
+ endfunction
+ 
+ importx "snprintf" snprintf
+@@ -68,18 +64,16 @@ endfunction
+ 
+ importx "gtk_file_chooser_get_filename" gtk_file_chooser_get_filename
+ function file_chooser_get_fname(sd dialog)
+-	sd file
+-	setcall file gtk_file_chooser_get_filename(dialog) #platform encoding
+-	return file
++	callret gtk_file_chooser_get_filename(dialog) #pointer #platform encoding
+ endfunction
+ function ov_frame_clone(ss file) #here is from filechooser
+ 	importx "g_filename_to_utf8" g_filename_to_utf8
+-	ss f;set f g_filename_to_utf8(file,-1,(NULL),(NULL),(NULL)) #G_CONVERT_ERROR_EMBEDDED_NUL(output contains a nul character) is not because len is -1
++	callret g_filename_to_utf8(file,-1,(NULL),(NULL),(NULL)) #pointer
++	#G_CONVERT_ERROR_EMBEDDED_NUL(output contains a nul character) is not because len is -1
+ 	#G_CONVERT_ERROR_ILLEGAL_SEQUENCE(A nul character found inside the string) , same -1 len
+ 	#if f!=(NULL) #"or NULL on an error"
+ 	#	call g_free(file) can't free orig here, is from filechooser forward
+ 	#end
+-	return f
+ end
+ 
+ 
+@@ -286,8 +280,7 @@ function fd_mask(sd d)
+     import "shl" shl
+     sd mask
+     setcall mask rest(d,(nfdbits))
+-    setcall mask shl(1,mask)
+-    return mask
++	callret shl(1,mask)
+ endfunction
+ function fds_bits(sd fds,sd d)
+     #__FDS_BITS(set) ((set)->fds_bits)
+@@ -297,9 +290,7 @@ function fds_bits(sd fds,sd d)
+     setcall elt fd_elt(d)
+ 
+     import "array_get_int" array_get_int
+-    sd value
+-    setcall value array_get_int(fds,elt)
+-    return value
++	callret array_get_int(fds,elt)
+ endfunction
+ function fd_elt(sd d)
+     #__FD_ELT(d)	((d) / __NFDBITS)
+@@ -354,9 +345,7 @@ endfunction
+ #er
+ function file_seek_dif_cursor(sd file,sd off)
+     import "file_seek_cursor" file_seek_cursor
+-    sd err
+-    setcall err file_seek_cursor(file,off)
+-    return err
++	callret file_seek_cursor(file,off)
+ endfunction
+ 
+ 
+@@ -839,8 +828,7 @@ endfunction
+ #path
+ function real_path(sd p)
+ importx "realpath" realpath
+-	sd mem;setcall mem realpath(p,(NULL))
+-	return mem
++	callret realpath(p,(NULL)) #pointer
+ endfunction
+ 
+ #e
+--- ovideo-1.orig/src/_dif/dif~win.oc
++++ ovideo-1/src/_dif/dif~win.oc
+@@ -108,18 +108,15 @@ function system_variables_alignment_pad(
+ endfunction
+ 
+ 
+-importx "__time32" time
++#importx "__time32" time #is not for future
++importx "_time" time
+ function timeNode(data ptrtime_t)
+-    data time_t#1
+-    setcall time_t time(ptrtime_t)
+-    return time_t
++	callret time(ptrtime_t) #cannot
+ endfunction
+ 
+ importx "_chdir" chd
+ function chdr(str value)
+-    data x#1
+-    setcall x chd(value)
+-    return x
++	callret chd(value) #pointer
+ endfunction
+ 
+ importx "_snprintf" snprintf
+@@ -132,14 +129,11 @@ endfunction
+ 
+ importx "_gtk_file_chooser_get_filename_utf8" gtk_file_chooser_get_filename_utf8
+ function file_chooser_get_fname(sd dialog)
+-    sd file
+-    setcall file gtk_file_chooser_get_filename_utf8(dialog)
+-    return file
++	callret gtk_file_chooser_get_filename_utf8(dialog) #pointer
+ endfunction
+ importx "_g_strdup" g_strdup
+ function ov_frame_clone(ss file) #already utf8
+-	set file g_strdup(file) #nothing about null return
+-	return file
++	callret g_strdup(file) #pointer #nothing about null return
+ end
+ 
+ 
+@@ -171,7 +165,7 @@ endfunction
+ function get_time()
+     importx "_GetTickCount@0" GetTickCount
+     sd milliseconds
+-    setcall milliseconds GetTickCount()
++	setcall milliseconds GetTickCount() #DWORD
+     return milliseconds
+ endfunction
+ 
+@@ -521,9 +515,7 @@ function mass_init_file()
+         return 0
+     endif
+     call files_counter((value_set),0)
+-    sd foldername
+-    setcall foldername filechooserfield_folder()
+-    return foldername
++	callret filechooserfield_folder()
+ endfunction
+ 
+ ##all folders
+@@ -621,9 +613,7 @@ function file_seek_dif_cursor(sd file,sd
+     import "seek_err" seek_err
+     sd int
+     setcall int fseek64(file,off,0,(SEEK_CUR))
+-    sd err
+-    setcall err seek_err(int)
+-    return err
++	callret seek_err(int)
+ endfunction
+ 
+ #sound preview
+@@ -910,9 +900,7 @@ function filechooserfield_folder()
+     str GTK_STOCK_OK="gtk-ok"
+     sd dialog
+     setcall dialog gtk_file_chooser_dialog_new(select_folder,main,(GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER),GTK_STOCK_CANCEL,responsecancel,GTK_STOCK_OK,(GTK_RESPONSE_ACCEPT),0)
+-    sd filename
+-    setcall filename filechooserfield_dialog(dialog)
+-    return filename
++	callret filechooserfield_dialog(dialog)
+ endfunction
+ 
+ #e
+@@ -1118,6 +1106,5 @@ endfunction
+ importx "__fullpath" fullpath
+ #path
+ function real_path(sd path)
+-	sd mem;setcall mem fullpath((NULL),path,(MAX_PATH))
+-	return mem
++	callret fullpath((NULL),path,(MAX_PATH))
+ endfunction
+--- ovideo-1.orig/src/_exec/capture/save.oc
++++ ovideo-1/src/_exec/capture/save.oc
+@@ -122,9 +122,7 @@ function capture_path(ss format,sd extra
+ endfunction
+ 
+ function save_destination(ss format)
+-    sd path
+-    setcall path capture_path(format,0)
+-    return path
++	callret capture_path(format,0)
+ endfunction
+ 
+ 
+@@ -159,10 +157,8 @@ const save_get_audio_format_sz=\-save_ge
+ endfunction
+ function save_get_ogg_dest()
+ #these formats are related to format_max
+-    str format="ogg"
+-    sd dest
+-    setcall dest save_destination(format)
+-    return dest
++	vstr format="ogg"
++	callret save_destination(format)
+ endfunction
+ 
+ #v
+--- ovideo-1.orig/src/_exec/mainhandles.oc
++++ ovideo-1/src/_exec/mainhandles.oc
+@@ -27,23 +27,19 @@ endfunction
+ function boxwidget()
+         data widget#1
+         setcall widget mainwidget()
+-        setcall widget firstwidgetFromcontainer(widget)
+-        return widget
++	callret firstwidgetFromcontainer(widget)
+ endfunction
+ #vbox/nth
+ function boxwidget_nth(data index)
+     data widget#1
+     setcall widget boxwidget()
+-    setcall widget nthwidgetFromcontainer(widget,index)
+-    return widget
++	callret nthwidgetFromcontainer(widget,index)
+ endfunction
+ 
+ #######edit
+ function editWidget()
+-    data widget#1
+     Data i=mainwinEditIndex
+-    setcall widget boxwidget_nth(i)
+-    return widget
++	callret boxwidget_nth(i)
+ endfunction
+ #buffer, forward
+ importx "_gtk_entry_get_text" gtk_entry_get_text
+@@ -61,34 +57,27 @@ endfunction
+ 
+ #######draw
+ function drawwidget()
+-    data widget#1
+     Data draw=mainwinDrawIndex
+-    setcall widget boxwidget_nth(draw)
+-    return widget
++	callret boxwidget_nth(draw)
+ endfunction
+ 
+ #######buttons
+ function buttonsalignWidget()
+-    data widget#1
+     Data mainwinButtonsIndex=mainwinButtonsIndex
+-    setcall widget boxwidget_nth(mainwinButtonsIndex)
+-    return widget
++		callret boxwidget_nth(mainwinButtonsIndex)
+ endfunction
+ 
+ function buttonswidget()
+     data widget#1
+     setcall widget buttonsalignWidget()
+-    setcall widget firstwidgetFromcontainer(widget)
+-    return widget
++	callret firstwidgetFromcontainer(widget)
+ endfunction
+ 
+ #######stage
+ #stage window widget
+ function stagewidget()
+-    data widget#1
+     Data st=mainwinStageIndex
+-    setcall widget boxwidget_nth(st)
+-    return widget
++	callret boxwidget_nth(st)
+ endfunction
+ 
+ #######info
+--- ovideo-1.orig/src/_prepare/effect/scale_effect.oc
++++ ovideo-1/src/_prepare/effect/scale_effect.oc
+@@ -191,8 +191,6 @@ endfunction
+ 
+ function stage_effect_scale_orientation(sd part,sd argument)
+     import "stage_effect_orientation" stage_effect_orientation
+-    sd value
+     ss text="Orientation"
+-    setcall value stage_effect_orientation(part,argument,(TRUE),text)
+-    return value
++	callret stage_effect_orientation(part,argument,(TRUE),text)
+ endfunction
+--- ovideo-1.orig/src/_prepare/frame/add.oc
++++ ovideo-1/src/_prepare/frame/add.oc
+@@ -253,12 +253,6 @@ function stage_frame_form_data(sd action
+     setcall color color_widget_get_color_to_rgb(color_entry)
+ 
+     import "new_pixbuf_color" new_pixbuf_color
+-    sd pixbuf
+-    setcall pixbuf new_pixbuf_color(width,height,color)
+-    if pixbuf=0
+-        return 0
+-    endif
+-
+-    return pixbuf
++	callret new_pixbuf_color(width,height,color)
+ endfunction
+ 
+--- ovideo-1.orig/src/_prepare/frame/frametime.oc
++++ ovideo-1/src/_prepare/frame/frametime.oc
+@@ -237,9 +237,7 @@ endfunction
+ function stage_get_fr_length(sd eventbox)
+     sd pos
+     setcall pos stage_frame_index(eventbox)
+-    sd length
+-    setcall length stage_frame_time_numbers((stage_frame_time_get_at_index),pos)
+-    return length
++	callret stage_frame_time_numbers((stage_frame_time_get_at_index),pos)
+ endfunction
+ 
+ #length of the stage sel
+@@ -247,9 +245,7 @@ function stage_get_sel_fr_length()
+     sd container
+     sd ptr_container^container
+     call stage_get_sel_parent(ptr_container)
+-    sd length
+-    setcall length stage_get_fr_length(container)
+-    return length
++	callret stage_get_fr_length(container)
+ endfunction
+ 
+ const frame_unit_red=0xff
+--- ovideo-1.orig/src/_prepare/frame/pencil.oc
++++ ovideo-1/src/_prepare/frame/pencil.oc
+@@ -71,9 +71,7 @@ function stage_pencil_zoomvalue(sd actio
+         set zoomfield value
+     else
+         import "hscale_get" hscale_get
+-        sd pos
+-        setcall pos hscale_get(zoomfield)
+-        return pos
++		callret hscale_get(zoomfield)
+     endelse
+ endfunction
+ 
+--- ovideo-1.orig/src/_prepare/output/all.oc
++++ ovideo-1/src/_prepare/output/all.oc
+@@ -102,9 +102,7 @@ function stage_nthwidgetFromcontainer(sd
+     import "stage_get_frames_container" stage_get_frames_container
+     sd container
+     setcall container stage_get_frames_container()
+-    sd eventbox
+-    setcall eventbox nthwidgetFromcontainer(container,value)
+-    return eventbox
++	callret nthwidgetFromcontainer(container,value)
+ endfunction
+ 
+ import "object_get_dword_name" object_get_dword_name
+@@ -118,9 +116,7 @@ function stage_nthPixbufFromContainer(sd
+     if eventbox=0
+         return 0
+     endif
+-    sd pixbuf
+-    setcall pixbuf object_get_dword_name(eventbox)
+-    return pixbuf
++	callret object_get_dword_name(eventbox)
+ endfunction
+ 
+ import "texter" texter
+@@ -468,9 +464,7 @@ function stage_jpeg_write(sd file,sd pix
+     setcall quality rule3_two_offsets((jpeg_min_quality),quality,(jpeg_max_quality),(jpeg_max_quality),(jpeg_min_quality))
+ 
+     import "write_jpeg" write_jpeg
+-    sd bool
+-    setcall bool write_jpeg(file,pixbuf,quality)
+-    return bool
++	callret write_jpeg(file,pixbuf,quality)
+ endfunction
+ 
+ 
+@@ -493,11 +487,7 @@ function av_frames(sd action,sd value)
+         if eventbox=0
+             return 0
+         endif
+-
+-        sd pix
+-        setcall pix object_get_dword_name(eventbox)
+-
+-        return pix
++		callret object_get_dword_name(eventbox)
+     endelse
+ endfunction
+ 
+--- ovideo-1.orig/src/_prepare/output/avi.oc
++++ ovideo-1/src/_prepare/output/avi.oc
+@@ -1326,9 +1326,7 @@ function avi_read_video(sd bytes,sd rows
+     setcall buffer avi_read_buffer((value_get))
+ 
+     import "av_read_row" av_read_row
+-    sd bool
+-    setcall bool av_read_row(width,height,buffer,bytes,rowstride,rowindex)
+-    return bool
++	callret av_read_row(width,height,buffer,bytes,rowstride,rowindex)
+ endfunction
+ 
+ function avi_read_sound(sd mem,sd size)
+--- ovideo-1.orig/src/_prepare/output/mkv.oc
++++ ovideo-1/src/_prepare/output/mkv.oc
+@@ -284,8 +284,7 @@ function mkv_seekhead_fn(sd action,sd fi
+         char KaxTracks={0x16,0x54,0xAE,0x6B}
+         sd dodata^KaxTracks
+ 
+-        setcall bool seek_entry(dodata#,file,ptr_tracks)
+-        return bool
++		callret seek_entry(dodata#,file,ptr_tracks)
+ 	endif
+         sd seg_base%ptr_segment_base
+         sd position_value
+@@ -312,9 +311,7 @@ endfunction
+ 
+ #bool
+ function mkv_seekhead(sd file)
+-    sd bool
+-    setcall bool mkv_seekhead_fn(0,file)
+-    return bool
++	callret mkv_seekhead_fn(0,file)
+ endfunction
+ 
+ #bool
+@@ -529,8 +526,7 @@ function mkv_track(sd file,sd size,sd fi
+     endelse
+ 
+     data sound_f^mkv_sound
+-    setcall bool mkv_size_pass(file,sound_f,start,end)
+-    return bool
++	callret mkv_size_pass(file,sound_f,start,end)
+ endfunction
+ 
+ importx "_gdk_pixbuf_get_pixels" gdk_pixbuf_get_pixels
+@@ -766,12 +762,10 @@ import "file_get_size_forward" file_get_
+ 
+ function mkv_codecid(sd file,sd size,sd *filepos)
+     sd err
+-    sd bool
+     sd io
+     setcall io mkv_write_read_get()
+ 	if io=(mkv_write)
+-        setcall bool mkv_codecid_data(io,file)
+-        return bool
++		callret mkv_codecid_data(io,file)
+ 	endif
+         data f^mkv_codecid_read
+         setcall err file_get_size_forward(file,size,f)
+@@ -1642,10 +1636,8 @@ function mkv_readentry(sd frames,sd newt
+     call g_object_unref(pixbuf)
+ 
+     #add to stage
+-    sd bool
+     sd entry^px
+-    setcall bool stage_read_values((value_append),entry,8)
+-    return bool
++	callret stage_read_values((value_append),entry,8)
+ endfunction
+ 
+ 
+@@ -1851,9 +1843,7 @@ const audiospec_=\
+     const audio_size=audiospec_@-_audio
+     data audio^CodecID
+ 
+-    sd bool
+-    setcall bool mkv_write_seek(audio,(audio_size),file)
+-    return bool
++	callret mkv_write_seek(audio,(audio_size),file)
+ endfunction
+ 
+ function mkv_read_sound(sd mem,sd size)
+--- ovideo-1.orig/src/_prepare/output/sound.oc
++++ ovideo-1/src/_prepare/output/sound.oc
+@@ -603,15 +603,11 @@ function stage_sound_alloc_expand(sd new
+ endfunction
+ #sz
+ function stage_sound_alloc_getremainingsize()
+-    sd sz
+-    setcall sz stage_sound_alloc((stage_sound_alloc_getremainingsize))
+-    return sz
++	callret stage_sound_alloc((stage_sound_alloc_getremainingsize))
+ endfunction
+ #bytes
+ function stage_sound_alloc_getbytes()
+-    sd bytes
+-    setcall bytes stage_sound_alloc((stage_sound_alloc_getbytes))
+-    return bytes
++	callret stage_sound_alloc((stage_sound_alloc_getbytes))
+ endfunction
+ 
+ function stage_sound_subsize(sd action,sd value)
+--- ovideo-1.orig/src/_prepare/output/stagefileoptions.oc
++++ ovideo-1/src/_prepare/output/stagefileoptions.oc
+@@ -399,8 +399,7 @@ function stage_file_get_format()
+     sd index
+     set index ptr_index#
+     ss iter^entry1
+-    setcall iter get_string_at_index(iter,index)
+-    return iter
++	callret get_string_at_index(iter,index)
+ endfunction
+ #get the name string of the output format for gstreamer options
+ function stage_file_get_format_name()
+@@ -500,10 +499,7 @@ function stage_get_output_container()
+     setcall format stage_file_get_format()
+     import "save_destination" save_destination
+ 
+-    sd output_container
+-    setcall output_container save_destination(format)
+-
+-    return output_container
++	callret save_destination(format)
+ endfunction
+ 
+ 
+@@ -601,8 +597,5 @@ function write_sound_options(sd file,sd
+     if err!=(noerror)
+         return err
+     endif
+-    setcall err file_write(p_bps,4,file)
+-    if err!=(noerror)
+-        return err
+-    endif
++	callret file_write(p_bps,4,file)
+ endfunction
+--- ovideo-1.orig/src/_prepare/pipe.oc
++++ ovideo-1/src/_prepare/pipe.oc
+@@ -16,9 +16,7 @@ function stage_get_frames()
+     setcall box stage_get_frames_container()
+ 
+     import "widget_get_children_number" widget_get_children_number
+-    sd elements
+-    setcall elements widget_get_children_number(box)
+-    return elements
++	callret widget_get_children_number(box)
+ endfunction
+ 
+ #display the index of frames and the string
+@@ -41,9 +39,7 @@ function stage_frame_index(sd frame)
+     import "widget_position_in_container" widget_position_in_container
+     sd box
+     setcall box stage_get_frames_container()
+-    sd pos
+-    setcall pos widget_position_in_container(frame,box)
+-    return pos
++	callret widget_position_in_container(frame,box)
+ endfunction
+ 
+ #frame clicked function
+@@ -133,15 +129,11 @@ function unselectedframe()
+ const unselected_bmp_start=\
+     vstr frame="frame.bmp"
+ const unselected_bmp_size=\-unselected_bmp_start-1
+-    ss file
+-    setcall file stage_get_image(frame)
+-    return file
++	callret stage_get_image(frame)
+ endfunction
+ function selectedframe()
+     vstr frame="sel.bmp"
+-    ss file
+-    setcall file stage_get_image(frame)
+-    return file
++	callret stage_get_image(frame)
+ endfunction
+ 
+ import "move_to_share_core" move_to_share_core
+@@ -166,9 +158,7 @@ function stage_new_click_area()
+     setcall box stage_get_frames_container()
+     #eventbox
+     import "eventboxfield" eventboxfield
+-    sd eventbox
+-    setcall eventbox eventboxfield(box)
+-    return eventbox
++	callret eventboxfield(box)
+ endfunction
+ 
+ import "connect_signal" connect_signal
+--- ovideo-1.orig/src/_prepare/sel.oc
++++ ovideo-1/src/_prepare/sel.oc
+@@ -10,9 +10,7 @@ function stage_unselected_frame(sd paren
+     ss normalframe
+     import "unselectedframe" unselectedframe
+     setcall normalframe unselectedframe()
+-    sd img
+-    setcall img stage_img_with_length(normalframe,parent)
+-    return img
++	callret stage_img_with_length(normalframe,parent)
+ endfunction
+ 
+ #selected frame
+@@ -187,9 +185,7 @@ function stage_sel_framebar_pixbuf()
+         return 0
+     endif
+     importx "_gtk_image_get_pixbuf" gtk_image_get_pixbuf
+-    sd pixbuf
+-    setcall pixbuf gtk_image_get_pixbuf(img)
+-    return pixbuf
++	callret gtk_image_get_pixbuf(img) #pointer
+ endfunction
+ 
+ function stage_sel_pointer()
+@@ -309,9 +305,7 @@ function frame_jobs()
+     if img=0
+         return 0
+     endif
+-    sd bool
+-    setcall bool mass_remove_job()
+-    return bool
++	callret mass_remove_job()
+ endfunction
+ 
+ #bool
+@@ -354,9 +348,7 @@ function stage_get_sel_pos()
+     sd selparent
+     sd p_selparent^selparent
+     call stage_get_sel_parent(p_selparent)
+-    sd pos
+-    setcall pos stage_frame_index(selparent)
+-    return pos
++	callret stage_frame_index(selparent)
+ endfunction
+ #e
+ function stage_get_sel_position(sd p_pos)
+--- ovideo-1.orig/src/_prepare/stagempeg.oc
++++ ovideo-1/src/_prepare/stagempeg.oc
+@@ -18,9 +18,7 @@ function stage_mpeg_init(sd file)
+     setcall totalframes stage_get_frames()
+ 
+     import "mpeg_init" mpeg_init
+-    sd bool
+-    setcall bool mpeg_init(file,pixbuf,totalframes)
+-    return bool
++	callret mpeg_init(file,pixbuf,totalframes)
+ endfunction
+ 
+ #bool
+@@ -30,9 +28,7 @@ function stage_mpeg_encode(sd pixbuf,sd
+     setcall position stage_frame_time_numbers((stage_frame_time_sum_at_index),currentframe)
+ 
+     import "mpeg_encode" mpeg_encode
+-    sd bool
+-    setcall bool mpeg_encode(pixbuf,position,p_is_keyframe)
+-    return bool
++	callret mpeg_encode(pixbuf,position,p_is_keyframe)
+ endfunction
+ 
+ 
+--- ovideo-1.orig/src/_search/dialog_fns.oc
++++ ovideo-1/src/_search/dialog_fns.oc
+@@ -231,10 +231,8 @@ function setdisplay_setfile_search(sd me
+             sd size
+             setcall size slen(buffer)
+             inc size
+-            sd e
+             import "file_write" file_write
+-            setcall e file_write(buffer,size,file)
+-            return e
++			callret file_write(buffer,size,file)
+         endelse
+     endelse
+     data noe=noerror
+--- ovideo-1.orig/src/event/event.oc
++++ ovideo-1/src/event/event.oc
+@@ -83,7 +83,5 @@ function eventbutton_get_coords(sd event
+     if p_y!=0
+         setcall p_y# double_to_int(_p_y)
+     endif
+-    sd x
+-    setcall x double_to_int(_p_x)
+-    return x
++	callret double_to_int(_p_x)
+ endfunction
+--- ovideo-1.orig/src/file-folder/file-base.oc
++++ ovideo-1/src/file-folder/file-base.oc
+@@ -55,28 +55,21 @@ endfunction
+ function file_seek(sd file,sd off,sd method)
+     data seekint#1
+     SetCall seekint fseek(file,off,method)
+-    sd err
+-    setcall err seek_err(seekint)
++	callret seek_err(seekint)
+ endfunction
+ 
+ #e
+ function file_seek_set(sd file,sd off)
+-    sd err
+-    setcall err file_seek(file,off,(SEEK_SET))
+-    return err
++	callret file_seek(file,off,(SEEK_SET))
+ endfunction
+ 
+ #e
+ function file_seek_end(sd file)
+-    sd err
+-    setcall err file_seek(file,0,(SEEK_END))
+-    return err
++	callret file_seek(file,0,(SEEK_END))
+ endfunction
+ #e
+ function file_seek_cursor(sd file,sd off)
+-    sd err
+-    setcall err file_seek(file,off,(SEEK_CUR))
+-    return err
++	callret file_seek(file,off,(SEEK_CUR))
+ endfunction
+ 
+ #e
+@@ -98,8 +91,7 @@ function file_length(sd file,sd ptr_size
+         return err
+     endif
+ 
+-    setcall err file_tell(file,ptr_size)
+-    return err
++	callret file_tell(file,ptr_size)
+ endfunction
+ 
+ #e
+@@ -225,10 +217,8 @@ EndFunction
+ 
+ #err
+ function file_get_content(str path,data ptrsize,data ptrmem)
+-    data err#1
+     data null=0
+-    setcall err file_get_content_offset_trail(path,ptrsize,ptrmem,null,null)
+-    return err
++	callret file_get_content_offset_trail(path,ptrsize,ptrmem,null,null)
+ EndFunction
+ 
+ function file_get_content_forward(ss filename,sv forward)
+@@ -252,9 +242,7 @@ endfunction
+ function file_forward_read(ss path,sd forward)
+     sd method
+     setcall method getreadmode()
+-    sd returnvalue
+-    setcall returnvalue file_forward(path,method,forward)
+-    return returnvalue
++	callret file_forward(path,method,forward)
+ endfunction
+ #e
+ function file_read(sd mem,sd size,sd file)
+@@ -286,9 +274,7 @@ function file_get_size_forward(sd file,s
+ endfunction
+ #e
+ function file_get_dword(sd file,sd p_dw)
+-    sd err
+-    setcall err file_read(p_dw,4,file)
+-    return err
++	callret file_read(p_dw,4,file)
+ endfunction
+ #e
+ function file_get_dword_reverse(sd file,sd p_dw)
+--- ovideo-1.orig/src/file-folder/folder-base.oc
++++ ovideo-1/src/file-folder/folder-base.oc
+@@ -30,8 +30,7 @@ function folder_enterleave_data(ss folde
+         return err
+     endif
+     call forward(data)
+-    setcall err dirch("../")
+-    return err
++	callret dirch("../")
+ endfunction
+ 
+ function folder_enterleave(ss folder,data forward)
+--- ovideo-1.orig/src/media/audiovideo.oc
++++ ovideo-1/src/media/audiovideo.oc
+@@ -155,9 +155,7 @@ function riff_chunk_w_r(sd file,sd forwa
+ endfunction
+ 
+ function riff_w_r_name(sd file,ss name)
+-    sd bool
+-    setcall bool av_writeseek(name,4,file)
+-    return bool
++	callret av_writeseek(name,4,file)
+ endfunction
+ 
+ 
+@@ -524,8 +522,7 @@ endfunction
+ 
+ #bool
+ function riff_head(sd mem_sz,ss chunk,sd p_chunk_size,ss riff_ex)
+-	sd bool;set bool riff_head_ex(mem_sz,chunk,p_chunk_size,riff_ex,(riff_noflag))
+-	return bool
++	callret riff_head_ex(mem_sz,chunk,p_chunk_size,riff_ex,(riff_noflag))
+ end
+ function riff_head_ex(sd mem_sz,ss chunk,sd p_chunk_size,ss riff_ex,sd flags)
+     sd mem
+@@ -582,17 +579,14 @@ endfunction
+ 
+ function combo_location(sd bool,sd data)
+     import "stage_get_output_container" stage_get_output_container
+-    sd location
+-    if bool=0
+-        setcall location stage_get_output_container()
+-    else
++	if bool=0
++		callret stage_get_output_container()
++	end
+         import "capture_path" capture_path
+         import "stage_file_get_format" stage_file_get_format
+         ss format
+         setcall format stage_file_get_format()
+-        setcall location capture_path(format,1,data)
+-    endelse
+-    return location
++	callret capture_path(format,1,data)
+ endfunction
+ 
+ 
+--- ovideo-1.orig/src/media/jpeg.oc
++++ ovideo-1/src/media/jpeg.oc
+@@ -99,8 +99,7 @@ function read_jpeg(sd file,sd forward)
+     importx "_jpeg_destroy_decompress" jpeg_destroy_decompress
+     call jpeg_destroy_decompress(jdestruct)
+ 
+-    setcall continue jpeg_continue((value_get))
+-    return continue
++	callret jpeg_continue((value_get))
+ endfunction
+ 
+ function read_jpeg_prepare(sd file,sd forward)
+--- ovideo-1.orig/src/media/jpeg_enc.oc
++++ ovideo-1/src/media/jpeg_enc.oc
+@@ -40,8 +40,7 @@ function write_jpeg_file(sd pixbuf,sd qu
+         return 0
+     endif
+ 
+-    setcall bool jpeg_encode_main(pixbuf)
+-    return bool
++	callret jpeg_encode_main(pixbuf)
+ endfunction
+ 
+ 
+@@ -138,6 +137,7 @@ function write_jpeg_blocks(sd pixbuf)
+ 
+     #write blocks from top to bottom 8x8 pieces
+     sd j=0
++	sd bool
+     while j<h
+         sd i=0
+         while i<w
+@@ -151,8 +151,6 @@ function write_jpeg_blocks(sd pixbuf)
+             ##1
+             call jpeg_blocks_8x8(Y,Cb,Cr,pixbuf,i,j,w,h)
+ 
+-            sd bool
+-
+             #apply fast DCT and zigzag
+             #int16
+             char DCT_Quant_Y_data#64*2
+@@ -191,8 +189,7 @@ function write_jpeg_blocks(sd pixbuf)
+ 		#Write End of Image Marker
+ 		char EOI_data={0xFF,0xD9}
+ 		vstr EOI^EOI_data
+-		setcall bool jpeg_file_mem_add(EOI,2)
+-		return bool
++		callret jpeg_file_mem_add(EOI,2)
+ 	end
+ 	return 0
+ endfunction
+@@ -241,9 +238,7 @@ function jpeg_file_mem(sd action,sd arg,
+ endfunction
+ 
+ function jpeg_file_mem_add(sd append,sd append_size)
+-    sd bool
+-    setcall bool jpeg_file_mem((value_append),append,append_size)
+-    return bool
++	callret jpeg_file_mem((value_append),append,append_size)
+ endfunction
+ 
+ 
+@@ -562,9 +557,7 @@ function Huffman_DC_Luminance(sd action,
+ 
+         set Values_size (YDC_Values_-YDC_Values)
+ 
+-        sd bool
+-        setcall bool Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+-        return bool
++		callret Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+     endif
+ 
+     set ptr_values# p_Values
+@@ -613,9 +606,7 @@ function Huffman_AC_Luminance(sd action,
+ 
+         set Values_size (YAC_Values_-YAC_Values)
+ 
+-        sd bool
+-        setcall bool Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+-        return bool
++		callret Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+     endif
+     set ptr_values# p_Values
+     return p_NRCodes
+@@ -643,9 +634,7 @@ function Huffman_DC_Chromiance(sd action
+ 
+         set Values_size (CbDC_Values_-CbDC_Values)
+ 
+-        sd bool
+-        setcall bool Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+-        return bool
++		callret Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+     endif
+     set ptr_values# p_Values
+     return p_NRCodes
+@@ -693,9 +682,7 @@ function Huffman_AC_Chromiance(sd action
+ 
+         set Values_size (CbAC_Values_-CbAC_Values)
+ 
+-        sd bool
+-        setcall bool Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+-        return bool
++		callret Huffman_init_write(HT,p_NRCodes,NRCodes_size,p_Values,Values_size)
+     endif
+     set ptr_values# p_Values
+     return p_NRCodes
+@@ -883,17 +870,13 @@ function jpeg_YCbCr_256color_equation(sd
+     call double_add(p_double,p_pre_double)
+     call double_mult(p_double,p_color_double)
+ 
+-    sd res
+-    setcall res double_to_int(p_double)
+-    return res
++	callret double_to_int(p_double)
+ endfunction
+ 
+ function bytemult4_getfromstruct(sd index,sd block)
+     mult index 4
+     import "structure_get_int" structure_get_int
+-    sd value
+-    setcall value structure_get_int(block,index)
+-    return value
++	callret structure_get_int(block,index)
+ endfunction
+ function jpeg_YCbCr_256color_get3(sd red,sd green,sd blue,sd red_tab,sd green_tab,sd blue_tab)
+     sd value
+@@ -901,8 +884,7 @@ function jpeg_YCbCr_256color_get3(sd red
+     addcall value bytemult4_getfromstruct(green,green_tab)
+     addcall value bytemult4_getfromstruct(blue,blue_tab)
+     import "sar32" sar32
+-    setcall value sar32(value,16)
+-    return value
++	callret sar32(value,16)
+ endfunction
+ 
+ function jpeg_blocks_8x8(ss Y_tab,ss Cb_tab,ss Cr_tab,sd pixbuf,sd i,sd j,sd max_i,sd max_j)
+@@ -1334,14 +1316,11 @@ function gettwofloats_offs_and_op(sd flo
+     mult offset 4
+     add f2 offset
+ 
+-    sd value
+-    #0=add,1=sub
+-    if operation=0
+-        setcall value float_add(f1,f2#)
+-    else
+-        setcall value float_sub(f1,f2#)
+-    endelse
+-    return value
++	#0=add,1=sub
++	if operation=0
++		callret float_add(f1,f2#)
++	end
++	callret float_sub(f1,f2#)
+ endfunction
+ 
+ ###
+@@ -1761,8 +1740,7 @@ function jpeg_write_byte(ss p)
+ 	if bool=1
+ 		if p#=0xff
+ 			vstr null=""
+-			setcall bool jpeg_file_mem_add(null,1)
+-			return bool
++			callret jpeg_file_mem_add(null,1)
+ 		endif
+ 		return 1
+ 	endif
+@@ -1782,8 +1760,7 @@ function jpeg_write_last()
+ 		mult bytenew f
+ 		sub f 1
+ 		or bytenew f
+-		sd bool;set bool jpeg_write_byte(#bytenew)
+-		return bool
++		callret jpeg_write_byte(#bytenew)
+ 	end
+ 	return 1
+ end
+--- ovideo-1.orig/src/media/mp4.oc
++++ ovideo-1/src/media/mp4.oc
+@@ -257,16 +257,12 @@ endfunction
+ 
+ #bool
+ function mp4_piece(sd file,sd name,sd forward)
+-    sd bool
+-    setcall bool mp4_content(file,name,forward,0,4,0)
+-    return bool
++	callret mp4_content(file,name,forward,0,4,0)
+ endfunction
+ 
+ #bool
+ function mp4_content(sd file,sd name,sd forward,sd f_data,sd sizefield_bytes,sd substract)
+-    sd bool
+-    setcall bool mp4_wrap(file,name,forward,f_data,sizefield_bytes,substract,0)
+-    return bool
++	callret mp4_wrap(file,name,forward,f_data,sizefield_bytes,substract,0)
+ endfunction
+ import "file_read" file_read
+ #bool
+@@ -2519,9 +2515,7 @@ function mp4_write_or_no(sd mem,sd size,
+     if procedure=(mp4_expand)
+         return (noerror)
+     endif
+-    sd err
+-    setcall err file_write(mem,size,file)
+-    return err
++	callret file_write(mem,size,file)
+ endfunction
+ 
+ #implement expand mp4
+--- ovideo-1.orig/src/media/mpeg-avc_data.oc
++++ ovideo-1/src/media/mpeg-avc_data.oc
+@@ -311,9 +311,7 @@ function avc_residual_ac_ch()
+     return residual_ac_ch
+ endfunction
+ function avc_residual_ac_u()
+-    sd residual_ac_u
+-    setcall residual_ac_u avc_residual_ac_ch()
+-    return residual_ac_u
++	callret avc_residual_ac_ch()
+ endfunction
+ function avc_residual_ac_v()
+     sd residual_ac_v
+@@ -328,9 +326,7 @@ function avc_chroma_dc()
+     return chroma_dc
+ endfunction
+ function avc_chroma_dc_u()
+-    sd res
+-    setcall res avc_chroma_dc()
+-    return res
++	callret avc_chroma_dc()
+ endfunction
+ function avc_chroma_dc_v()
+     sd res
+--- ovideo-1.orig/src/media/mpeg-avc_encode.oc
++++ ovideo-1/src/media/mpeg-avc_encode.oc
+@@ -46,9 +46,7 @@ function avc_encode(sd file,sd settype,s
+         call avc_enc_frame(pixbuf)
+     endelse
+ 
+-    sd bool
+-    setcall bool avc_write(file)
+-    return bool
++	callret avc_write(file)
+ endfunction
+ 
+ #bool
+--- ovideo-1.orig/src/media/mpeg-mp3_iteration.oc
++++ ovideo-1/src/media/mpeg-mp3_iteration.oc
+@@ -107,9 +107,7 @@ endfunction
+ #bits
+ function mp3_outer_loop(sd l3enc_tt,sd gr_info,sd max_bits)
+     call mp3_search_StepSize(l3enc_tt,gr_info,max_bits)
+-    sd value
+-    setcall value mp3_inner_loop(l3enc_tt,gr_info,max_bits)
+-    return value
++	callret mp3_inner_loop(l3enc_tt,gr_info,max_bits)
+ endfunction
+ 
+ function mp3_ResvFrameEnd(sd ResvSize,sd ResvMax,sd mean_bits)
+--- ovideo-1.orig/src/media/mpeg.oc
++++ ovideo-1/src/media/mpeg.oc
+@@ -69,9 +69,7 @@ endfunction
+ function mpeg_encode(sd pixbuf,sd position,sd p_is_key_frame)
+     data b#1
+     data p_b^b
+-    sd bool
+-    setcall bool mpeg_write_frame(p_b,pixbuf,position,p_is_key_frame)
+-    return bool
++	callret mpeg_write_frame(p_b,pixbuf,position,p_is_key_frame)
+ endfunction
+ 
+ function mpeg_release()
+@@ -326,7 +324,6 @@ endfunction
+ #pbuf
+ function mpeg_bframe_values(sd p_sec,sd p_nth_sec,sd bframes_store,sd flush_counter)
+     import "array_get_int" array_get_int
+-    sd pbuf
+     sd ind
+ 
+     set ind flush_counter
+@@ -337,9 +334,7 @@ function mpeg_bframe_values(sd p_sec,sd
+     inc ind
+     setcall p_nth_sec# array_get_int(bframes_store,ind)
+     inc ind
+-    setcall pbuf array_get_int(bframes_store,ind)
+-
+-    return pbuf
++	callret array_get_int(bframes_store,ind)
+ endfunction
+ 
+ #bool
+@@ -691,9 +686,7 @@ function mpeg_write(sd buffer,sd size)
+ endfunction
+ 
+ function mpeg_file_mem_append(sd append,sd append_bits)
+-    sd bool
+-    setcall bool mpeg_file_mem((value_append),append,append_bits)
+-    return bool
++	callret mpeg_file_mem((value_append),append,append_bits)
+ endfunction
+ 
+ ####output memory
+@@ -840,23 +833,17 @@ function mpeg_mem_pad(sd mode)
+     sd p_stuff^stuff
+     add p_stuff value
+ 
+-    sd bool
+-    setcall bool mpeg_file_mem_append(p_stuff#,pad)
+-    return bool
++	callret mpeg_file_mem_append(p_stuff#,pad)
+ endfunction
+ 
+ #bool
+ function mpeg_mem_bit(sd value)
+-    sd bool
+-    setcall bool mpeg_file_mem_append(value,1)
+-    return bool
++	callret mpeg_file_mem_append(value,1)
+ endfunction
+ 
+ #bool
+ function mpeg_mem_marker()
+-    sd bool
+-    setcall bool mpeg_file_mem_append(1,1)
+-    return bool
++	callret mpeg_file_mem_append(1,1)
+ endfunction
+ 
+ #bool
+@@ -1006,8 +993,7 @@ function log2_resolution()
+     setcall bits log2bin(fps)
+ 
+     import "get_higher" get_higher
+-    setcall bits get_higher(bits,1)
+-    return bits
++	callret get_higher(bits,1)
+ endfunction
+ 
+ ###########################################VOL header
+--- ovideo-1.orig/src/media/mpeg_pred.oc
++++ ovideo-1/src/media/mpeg_pred.oc
+@@ -60,9 +60,7 @@ function mpeg_mb_prediction(sd x,sd y,sd
+         endwhile
+     endelse
+ 
+-    sd cbp
+-    setcall cbp mpeg_calc_cbp(qcoeff)
+-    return cbp
++	callret mpeg_calc_cbp(qcoeff)
+ endfunction
+ 
+ const mb_pred_values=0
+@@ -145,9 +143,7 @@ function macro_blocks_core(sd action,sd
+ endfunction
+ 
+ function macro_blocks(sd action,sd mbpos,sd sector)
+-    sd value
+-    setcall value macro_blocks_core(action,mbpos,sector,(mb_pred_values))
+-    return value
++	callret macro_blocks_core(action,mbpos,sector,(mb_pred_values))
+ endfunction
+ 
+ function macro_blocks_mode(sd action,sd mbpos,sd value)
+@@ -350,11 +346,9 @@ function mpeg_predict_acdc(sd x,sd mb_wi
+ endfunction
+ 
+ function mb_rescale(sd coef)
+-    sd x
+ 	if coef!=0
+         mult coef (DEFAULT_QUANT)
+-        setcall x mb_div(coef,(DEFAULT_QUANT))
+-        return x
++		callret mb_div(coef,(DEFAULT_QUANT))
+ 	endif
+         return 0
+ endfunction
+--- ovideo-1.orig/src/mem/alloc.oc
++++ ovideo-1/src/mem/alloc.oc
+@@ -22,9 +22,7 @@ EndFunction
+ 
+ #0/mem
+ function memalloc(sd size)
+-    sd mem
+-    setcall mem memrealloc(0,size)
+-    return mem
++	callret memrealloc(0,size)
+ endfunction
+ 
+ #################
+@@ -46,11 +44,9 @@ EndFunction
+ 
+ #err
+ function memoryalloc(data size,data memptr)
+-        Data err#1
+         Data null=NULL
+         Set memptr# null
+-        SetCall err memoryrealloc(memptr,size)
+-        Return err
++	callret memoryrealloc(memptr,size)
+ endfunction
+ 
+ import "slen" slen
+@@ -78,9 +74,7 @@ function allocsum_null(sd strings,sd ptr
+ 
+     inc sizetoalloc
+ 
+-    data err#1
+-    setcall err memoryalloc(sizetoalloc,ptrmem)
+-    return err
++	callret memoryalloc(sizetoalloc,ptrmem)
+ endfunction
+ 
+ #e
+--- ovideo-1.orig/src/mem/op.oc
++++ ovideo-1/src/mem/op.oc
+@@ -85,10 +85,8 @@ endfunction
+ 
+ #e
+ function get_mem_int_advance(sd dest,sd src_sz)
+-    sd er
+     data a=4
+-    setcall er cpymem_safesrc_advance(dest,src_sz,a)
+-    return er
++	callret cpymem_safesrc_advance(dest,src_sz,a)
+ endfunction
+ #e
+ function get_str_advance(sd dest,sd size,sd src_sz)
+@@ -144,9 +142,7 @@ function cmpmem_s(str m1,data s1,str m2,
+     if s1!=s2
+         return different
+     endif
+-    data result#1
+-    setcall result cmpmem(m1,m2,s1)
+-    return result
++	callret cmpmem(m1,m2,s1)
+ endfunction
+ 
+ import "slen" slen
+@@ -157,9 +153,7 @@ function cmpstr(ss s1,ss s2)
+     sd size2
+     setcall size1 slen(s1)
+     setcall size2 slen(s2)
+-    sd result
+-    setcall result cmpmem_s(s1,size1,s2,size2)
+-    return result
++	callret cmpmem_s(s1,size1,s2,size2)
+ endfunction
+ 
+ ##valinmem
+--- ovideo-1.orig/src/obj/containers.oc
++++ ovideo-1/src/obj/containers.oc
+@@ -116,16 +116,12 @@ endfunction
+ function dialogfield_size(ss title,sd modal_flag,sd forward1,sd forward2,sd width,sd height)
+     str GTK_STOCK_OK="gtk-ok"
+     data responseok=GTK_RESPONSE_OK
+-    sd dialog
+-    setcall dialog dialogfield_size_button(title,modal_flag,forward1,forward2,width,height,GTK_STOCK_OK,responseok)
+-    return dialog
++	callret dialogfield_size_button(title,modal_flag,forward1,forward2,width,height,GTK_STOCK_OK,responseok)
+ endfunction
+ 
+ function dialogfield(ss title,sd modal_flag,sd forward1,sd forward2)
+     data default=-1
+-    sd dialog
+-    setcall dialog dialogfield_size(title,modal_flag,forward1,forward2,default,default)
+-    return dialog
++	callret dialogfield_size(title,modal_flag,forward1,forward2,default,default)
+ endfunction
+ #true to not propagate
+ function dialogfield_modal_texter_expose(sd widget)
+@@ -249,9 +245,7 @@ function dialogfield_modal_texter_core(s
+     sd p%p_forward_init
+     set p# forward_init
+     data init^dialogfield_modal_texter_init
+-    sd dialog
+-    setcall dialog dialogfield_size_button_core(title,(GTK_DIALOG_MODAL),init,(modal_texter_parentdialog_width),-1,buttontext,(GTK_RESPONSE_CANCEL))
+-    return dialog
++	callret dialogfield_size_button_core(title,(GTK_DIALOG_MODAL),init,(modal_texter_parentdialog_width),-1,buttontext,(GTK_RESPONSE_CANCEL))
+ endfunction
+ #void
+ #function dialogfield_modal_texter(ss title,sd forward_init,ss buttontext)
+@@ -277,8 +271,7 @@ endfunction
+ importx "_gtk_type_new" gtk_type_new
+ function ov_gtk_event_box_new()
+ 	valuex type#1  #gsize
+-	sd ebox;set ebox gtk_type_new(type)
+-	return ebox
++	callret gtk_type_new(type)
+ end
+ importx "_g_type_class_add_private" g_type_class_add_private
+ function ov_gtk_event_box_class_init(sd class)
+@@ -404,9 +397,7 @@ function filechooserfield_core()
+     str GTK_STOCK_OPEN="gtk-open"
+     data null=0
+     importx "_gtk_file_chooser_dialog_new" gtk_file_chooser_dialog_new
+-    sd dialog
+-    setcall dialog gtk_file_chooser_dialog_new(open_file,main,open,GTK_STOCK_CANCEL,responsecancel,GTK_STOCK_OPEN,(GTK_RESPONSE_ACCEPT),null)
+-    return dialog
++	callret gtk_file_chooser_dialog_new(open_file,main,open,GTK_STOCK_CANCEL,responsecancel,GTK_STOCK_OPEN,(GTK_RESPONSE_ACCEPT),null)
+ endfunction
+ 
+ importx "_g_free" g_free
+@@ -415,9 +406,7 @@ importx "_g_free" g_free
+ function filechooserfield()
+     sd dialog
+     setcall dialog filechooserfield_core()
+-    sd filename
+-    setcall filename filechooserfield_dialog(dialog)
+-    return filename
++	callret filechooserfield_dialog(dialog)
+ endfunction
+ 
+ function filechooserfield_dialog(sd dialog)
+@@ -477,9 +466,7 @@ endfunction
+ function fchooserbuttonfield_open_label(sd container,ss dialog_label_text)
+     sd hbox
+     setcall hbox hboxfield_label(container,dialog_label_text)
+-    sd fchooser
+-    setcall fchooser fchooserbuttonfield_open(hbox,dialog_label_text)
+-    return fchooser
++	callret fchooserbuttonfield_open(hbox,dialog_label_text)
+ endfunction
+ 
+ ##########frame
+@@ -496,10 +483,8 @@ endfunction
+ importx "_gtk_hbox_new" gtk_hbox_new
+ ##########hbox
+ function hboxfield_prepare()
+-    data gtkwidget#1
+     data null=0
+-    setcall gtkwidget gtk_hbox_new(null,null)
+-    return gtkwidget
++	callret gtk_hbox_new(null,null) #pointer
+ endfunction
+ function hboxfield_pack_pad(data container,data padding)
+     data gtkwidget#1
+--- ovideo-1.orig/src/obj/images.oc
++++ ovideo-1/src/obj/images.oc
+@@ -27,11 +27,12 @@ function yuv_rgb(ss Y,ss U,ss V,sd y_coe
+     add value add
+ 
+     div value 100
+-    if value<0
+-        set value 0
+-    elseif value>0xff
+-        set value 0xff
+-    endelseif
++	if value<0
++		return 0
++	end
++	if value>0xff
++		return 0xff
++	end
+     return value
+ endfunction
+ import "multiple_of_nr" multiple_of_nr
+@@ -60,8 +61,7 @@ endfunction
+ #rowstride
+ function rgb_get_rowstride(sd width)
+     mult width 3
+-    setcall width multiple_of_nr(width,4)
+-    return width
++	callret multiple_of_nr(width,4)
+ endfunction
+ #void
+ function yuvi420_to_rgb(ss yuv,ss rgb,sd width,sd height)
+@@ -208,9 +208,7 @@ function yuv_get_all_sizes(sd width,sd h
+ endfunction
+ #yuv size
+ function yuv_get_size(sd width,sd height)
+-    sd size
+-    setcall size yuv_get_all_sizes(width,height,0,0)
+-    return size
++	callret yuv_get_all_sizes(width,height,0,0)
+ endfunction
+ 
+ function rgb_to_yuvi420(ss bitmap_rgb,ss yuv,sd width,sd height)
+@@ -468,16 +466,12 @@ endfunction
+ #e
+ function rgb_to_yuvi420_write_fn(sd yuv,sd size,sd file)
+     import "file_write" file_write
+-    sd err
+-    setcall err file_write(yuv,size,file)
+-    return err
++	callret file_write(yuv,size,file)
+ endfunction
+ #e
+ function rgb_to_yuvi420_write(sd rgb,sd width,sd height,sd file)
+     data f^rgb_to_yuvi420_write_fn
+-    sd err
+-    setcall err rgb_to_yuvi420_forward_data(rgb,width,height,f,file)
+-    return err
++	callret rgb_to_yuvi420_forward_data(rgb,width,height,f,file)
+ endfunction
+ 
+ importx "_gdk_pixbuf_get_rowstride" gdk_pixbuf_get_rowstride
+@@ -580,9 +574,7 @@ function gdkcolor2byte(ss ptr_g)
+     inc p_word_color
+     set p_word_color# ptr_g#
+     import "rule3" rule3
+-    sd x
+-    setcall x rule3(word_color,0xffFF,255)
+-    return x
++	callret rule3(word_color,0xffFF,255)
+ endfunction
+ 
+ #considering bps=8(<8 will be bad, >8 the return will be strange)
+@@ -632,9 +624,7 @@ function rgb_pixbuf_get_pixel(ss pixbuf,
+     setcall pixels gdk_pixbuf_get_pixels(pixbuf)
+     sd rowstride
+     setcall rowstride gdk_pixbuf_get_rowstride(pixbuf)
+-    sd value
+-    setcall value rgb_px_get(pixels,x,y,bps,n_chan,rowstride)
+-    return value
++	callret rgb_px_get(pixels,x,y,bps,n_chan,rowstride)
+ endfunction
+ function rgb_pixbuf_set_pixel(sd value,ss pixbuf,sd x,sd y,sd bps,sd n_chan)
+     sd pixels
+--- ovideo-1.orig/src/obj/items.oc
++++ ovideo-1/src/obj/items.oc
+@@ -77,9 +77,7 @@ function color_widget_get_color_to_rgb(s
+     add value_colors 2
+     setcall blue_const gdkcolor2byte(value_colors)
+ 
+-    sd color
+-    setcall color colors_to_littlewithalpha_color(red_const,green_const,blue_const)
+-    return color
++	callret colors_to_littlewithalpha_color(red_const,green_const,blue_const)
+ endfunction
+ 
+ #color
+@@ -304,27 +302,21 @@ endfunction
+ 
+ #field
+ function edit_info_prepare_green(ss text)
+-	sd w
+-	setcall w edit_info_prepare_texter_green(text,(NULL))
+-	return w
++	callret edit_info_prepare_texter_green(text,(NULL))
+ endfunction
+ 
+ #field
+ function edit_info_prepare_blue(ss text)
+     char infocolors={0x00,0x00,0xff}
+     data infoptrcolors^infocolors
+-    sd widget
+-    setcall widget edit_info_prepare_texter(infoptrcolors,text,(NULL))
+-    return widget
++	callret edit_info_prepare_texter(infoptrcolors,text,(NULL))
+ endfunction
+ 
+ #field
+ function edit_info_prepare_texter_green(ss text,sd p_texter)
+     char infocolors={0x00,0xff,0x00}
+     data infoptrcolors^infocolors
+-    sd widget
+-    setcall widget edit_info_prepare_texter(infoptrcolors,text,p_texter)
+-    return widget
++	callret edit_info_prepare_texter(infoptrcolors,text,p_texter)
+ endfunction
+ 
+ function editinfofield_green(sd box)
+@@ -373,18 +365,14 @@ function label_and_edit(sd box,ss text)
+     sd hbox
+     setcall hbox hboxfield_cnt(box)
+     call labelfield_l(text,hbox)
+-    sd edit
+-    setcall edit editfield_pack(hbox)
+-    return edit
++	callret editfield_pack(hbox)
+ endfunction
+ 
+ #bool
+ function entry_to_int_min_N(sd entry,sd p_int,sd N)
+     ss text
+     setcall text gtk_entry_get_text(entry)
+-    sd bool
+-    setcall bool strtoint_positive_N_or_Greater(text,p_int,N)
+-    return bool
++	callret strtoint_positive_N_or_Greater(text,p_int,N)
+ endfunction
+ 
+ #bool
+@@ -437,9 +425,7 @@ function hscalefield_main(sd box,sd min,
+ endfunction
+ 
+ function hscalefield(sd box,sd min,sd max,sd step,sd pos)
+-    sd hscale
+-    setcall hscale hscalefield_main(box,min,max,step,pos,(TRUE))
+-    return hscale
++	callret hscalefield_main(box,min,max,step,pos,(TRUE))
+ endfunction
+ 
+ #int pos
+@@ -493,7 +479,6 @@ importx "_gtk_widget_new" gtk_widget_new
+ importx "_gtk_label_get_type" gtk_label_get_type
+ ##############label
+ function labelfield_left_prepare(ss text)
+-    sd widget
+     sd GTK_TYPE_LABEL
+     str label="label"
+     str x="xalign"
+@@ -501,8 +486,7 @@ function labelfield_left_prepare(ss text
+     data n=0
+ 
+     setcall GTK_TYPE_LABEL gtk_label_get_type()
+-    setcall widget gtk_widget_new(GTK_TYPE_LABEL,label,text,x,left,left,n)
+-    return widget
++	callret gtk_widget_new(GTK_TYPE_LABEL,label,text,x,left,left,n) #pointer
+ endfunction
+ function labelfield_l(ss text,sd box)
+     sd label
+@@ -576,10 +560,7 @@ function msgelement_pixbuf(sd msg)
+     setcall value gst_structure_get_value(struct,pix)
+ 
+     importx "_g_value_dup_object" g_value_dup_object
+-    sd pixbuf
+-    setcall pixbuf g_value_dup_object(value)
+-
+-    return pixbuf
++	callret g_value_dup_object(value) #pointer
+ endfunction
+ 
+ function msgelement_pixbuf_forward_data(sd msg,sv forward,sd data)
+@@ -901,9 +882,7 @@ function pixbuf_get_pixel(sd pixbuf,sd x
+     sd rowstride
+     setcall bytes gdk_pixbuf_get_pixels(pixbuf)
+     setcall rowstride gdk_pixbuf_get_rowstride(pixbuf)
+-    sd value
+-    setcall value rgb_px_get(bytes,x,y,8,3,rowstride)
+-    return value
++	callret rgb_px_get(bytes,x,y,8,3,rowstride)
+ endfunction
+ 
+ function pixbuf_over_pixbuf(sd overpixbuf,sd laypixbuf,sd min_i,sd max_i,sd min_j,sd max_j)
+--- ovideo-1.orig/src/util/lists.oc
++++ ovideo-1/src/util/lists.oc
+@@ -34,9 +34,7 @@ endfunction
+ #nr of widget childrens
+ function widget_get_children_number(sd widget)
+     data fn^widget_get_children_number_count
+-    sd ret
+-    setcall ret widget_forward_children_data(widget,fn)
+-    return ret
++	callret widget_forward_children_data(widget,fn)
+ endfunction
+ 
+ 
+@@ -44,9 +42,7 @@ endfunction
+ function widget_position_in_container(sd widget,sd container)
+     importx "_g_list_index" g_list_index
+     data f^g_list_index
+-    sd ret
+-    setcall ret widget_forward_children_data(container,f,widget)
+-    return ret
++	callret widget_forward_children_data(container,f,widget)
+ endfunction
+ 
+ importx "_g_list_nth_data" g_list_nth_data
+@@ -62,7 +58,5 @@ function nthwidgetFromcontainer(data con
+ endfunction
+ 
+ function firstwidgetFromcontainer(sd container)
+-    sd widget
+-    setcall widget nthwidgetFromcontainer(container,0)
+-    return widget
++	callret nthwidgetFromcontainer(container,0)
+ endfunction
+--- ovideo-1.orig/src/util/numbers.oc
++++ ovideo-1/src/util/numbers.oc
+@@ -178,9 +178,7 @@ import "slen" slen
+ function strtoint(sd str,sd ptrout)
+     sd sz
+     setcall sz slen(str)
+-    sd bool
+-    setcall bool memtoint(str,sz,ptrout)
+-    return bool
++	callret memtoint(str,sz,ptrout)
+ endfunction
+ 
+ import "texter" texter
+@@ -319,9 +317,7 @@ function rule3_two_offsets(sd k_off,sd k
+ #x+off
+     sub knownA k_off
+     sub knownB k_off
+-    sd x
+-    setcall x rule3_offset(knownA,knownB,x_off,unknownB)
+-    return x
++	callret rule3_offset(knownA,knownB,x_off,unknownB)
+ endfunction
+ 
+ #width,height in p_height
+@@ -425,8 +421,7 @@ function short_get_to_int(sd short)
+     sd value=0
+     sd p_value^value
+     call cpymem(p_value,short,2)
+-    setcall value short_to_int(value)
+-    return value
++	callret short_to_int(value)
+ endfunction
+ function int_into_short(sd int,sd p_short)
+     sd p_int^int
+@@ -497,17 +492,12 @@ function array_get_int16(ss array,sd pos
+     set highword array#
+     mult highword 0x100
+     or result highword
+-#
+-    setcall result short_to_int(result)
+-#
+-    return result
++	callret short_to_int(result)
+ endfunction
+ function array_get_int16_bi(ss array,sd set1,sd set1_size,sd set2)
+     sd pos
+     setcall pos array_bi_index(set1,set1_size,set2)
+-    sd value
+-    setcall value array_get_int16(array,pos)
+-    return value
++	callret array_get_int16(array,pos)
+ endfunction
+ 
+ function array_set_word_off(sd array,sd value,sd offset)
+--- ovideo-1.orig/src/wmake
++++ ovideo-1/src/wmake
+@@ -1,6 +1,7 @@
+ 
+ #optional 1 debug/clean
+ 
++if [ -z "${wineroot}" ]; then export wineroot=.wine; fi
+ if [ -z "${1}" ] || [ "$1" = "clean" ]; then
+ 	make platform=win $@
+ else
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.196
+\ No newline at end of file
++1.197
+\ No newline at end of file
+--- /dev/null
++++ ovideo-1/wrmake
+@@ -0,0 +1 @@
++wineroot=a/wine3 ./wmake
+\ No newline at end of file
