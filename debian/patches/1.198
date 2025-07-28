@@ -1,0 +1,1244 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ovideo (1-198) bionic; urgency=medium
+ .
+   * mkv/rgb fix
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-07-28
+
+--- ovideo-1.orig/cln
++++ ovideo-1/cln
+@@ -1 +1,2 @@
+-make clean && cd _fix && ./fix clean && cd .. && git status
+\ No newline at end of file
++make clean && cd _fix && ./fix clean
++cd .. && git status
+\ No newline at end of file
+--- ovideo-1.orig/src/_capture/capture.oc
++++ ovideo-1/src/_capture/capture.oc
+@@ -138,13 +138,13 @@ function capture_start()
+     sd bool
+     setcall bool capture_rect((value_setrect))
+     if bool!=1
+-        return 0
++        ret #urn 0
+     endif
+ 
+     #verify for output format
+     setcall bool capture_format()
+     if bool!=1
+-        return 0
++        ret #urn 0
+     endif
+ 
+     #init max allowed
+@@ -222,7 +222,7 @@ function capture_files_loop(sd action)
+             #loop 1 can be if max size detected
+             set loop 0
+ 
+-            # can be temp/raw
++            # can be straight/temp/raw
+             setcall bool capture_direct((value_run))
+             if bool=1
+             #mkv
+@@ -236,12 +236,12 @@ function capture_files_loop(sd action)
+         #restore info message
+         call stage_file_options_info_message((value_set),info)
+ 
+-        sd temp_file
+-        setcall temp_file capture_temp_file((value_get))
+-        if temp_file!=0
+-            importx "_fclose" fclose
+-            call fclose(temp_file)
+-        endif
++		sd temp_file
++		setcall temp_file capture_temp_file((value_get))
++		if temp_file!=0
++			importx "_fclose" fclose
++			call fclose(temp_file)
++		endif
+ 
+         call capture_pixbuf((value_unset))
+     endelse
+@@ -552,7 +552,7 @@ function capture_time(sd action)
+ endfunction
+ 
+ function capture_obtain_screenshot()
+-    call capture_rect_screenshot((value_screenshot))
++	call capture_rect_screenshot((value_screenshot))
+ 	callret capture_pixbuf((value_get))
+ endfunction
+ 
+@@ -742,7 +742,7 @@ function capture_pixbuf(sd action,sd x,s
+         if raw_flag=0
+             sd encoder
+             setcall encoder stage_file_get_mkv_encoder()
+-            if encoder!=(format_mkv_rgb24)
++            if encoder!=(format_mkv_rgb24) #for this format will reverse at mkv, or no reverse(faster) if raw
+                 #reverse bytes
+                 call bytes_swap_reverse(mem,pix_width,pix_height)
+             endif
+@@ -818,8 +818,8 @@ function capture_direct(sd action)
+ 
+         import "av_dialog_run" av_dialog_run
+         data forward^capture_direct_start
+-        sd bool
+-        setcall bool av_dialog_run(forward,0)
++        charx bool#1
++        call av_dialog_run(forward) #,0)
+ 
+         #temp flag
+         #before dialog run no;after dialog run for capture_take_screenshot
+@@ -830,12 +830,12 @@ function capture_direct(sd action)
+ endfunction
+ 
+ function capture_temp_file(sd action,sd value)
+-    data temp_file#1
+-    if action=(value_set)
+-        set temp_file value
+-    else
+-        return temp_file
+-    endelse
++	valuex temp_file#1
++	if action=(value_set)
++		set temp_file value
++	else
++		return temp_file
++	endelse
+ endfunction
+ function capture_direct_frames(sd action,sd value)
+     data temp_frames#1
+@@ -872,57 +872,44 @@ function capture_direct_start(sd *data)
+     #init captured frames counter
+     call capture_direct_frames((value_set),0)
+ 
+-    ss format
+-    ss method
+-    sd raw_flag
+-    setcall raw_flag capture_raw_option((value_get))
+-    if raw_flag=0
+-#these formats are related to format_max
+-        ss temp_format="temp"
+-        ss temp_method="w+Db"
+-        set format temp_format
+-        set method temp_method
+-    else
+-        ss raw_method="wb"
+-        setcall format capture_raw_extension()
+-        set method raw_method
+-    endelse
+-    import "save_destination" save_destination
+-    sd output_file
+-    setcall output_file save_destination(format)
+-
+-    sd bool
+-    setcall bool capture_direct_run(output_file,method)
+-
+-    if raw_flag=1
+-    #here all raw files will be processed
+-        call capture_raw_files(output_file)
+-        set bool 0
+-    endif
++	import "save_destination" save_destination
++	sd output_file
++	sd file
++	ss format
++	sd raw_flag
++	setcall raw_flag capture_raw_option((value_get))
++	if raw_flag=0
++		import "tmp_file" tmp_file
++		set file tmp_file()
++	else
++		setcall format capture_raw_extension()
++		setcall output_file save_destination(format)
++		vstr raw_method="wb"
++		call openfile(#file,output_file,raw_method)
++	endelse
++	if file=(NULL)
++		ret #urn 0
++	endif
++	set capture_direct.bool capture_direct_run(file)
++	if raw_flag=1
++	#here all raw files will be processed
++		call capture_raw_files(output_file)
++		set capture_direct.bool 0
++	end
+ 
+     import "av_dialog_close" av_dialog_close
+     call av_dialog_close()
+-    return bool
+ endfunction
+ 
+ function capture_raw_extension()
+ #these formats are related to format_max
+-    str raw_format="raw"
+-    return raw_format
++	vstr raw_format="raw"
++	return raw_format
+ endfunction
+ 
+ #bool
+-function capture_direct_run(sd output_file,sd method)
+-    sd file
+-    sd er
+-    #open file
+-    import "openfile" openfile
+-    sd p_file^file
+-    setcall er openfile(p_file,output_file,method)
+-    if er!=(noerror)
+-        return 0
+-    endif
+-    call capture_temp_file((value_set),file)
++function capture_direct_run(sd file)
++	call capture_temp_file((value_set),file)
+ 
+     #get rect size
+     sd width
+@@ -947,6 +934,7 @@ function capture_direct_run(sd output_fi
+         importx "_gdk_pixbuf_get_pixels" gdk_pixbuf_get_pixels
+         sd bytes
+         setcall bytes gdk_pixbuf_get_pixels(pixbuf)
++		sd er
+         setcall er file_write(bytes,rgb_rect_size,file)
+         if er!=(noerror)
+             return 0
+@@ -1140,11 +1128,15 @@ function capture_raw_files(sd output_fil
+             sub all_frames frames_per_file
+         endelse
+ 
+-        importx "_sprintf" sprintf
+-        char outfile_data#100
+-        str outfile^outfile_data
+-        str outformat="%s.%u"
+-        call sprintf(outfile,outformat,output_file,files)
++		importx "_snprintf" snprintf
++		charx outfile_data#PATH_MAX
++		vstr outfile^outfile_data
++		vstr outformat="%s.%u"
++		datax n#1;set n snprintf(outfile,(PATH_MAX),outformat,output_file,files) #int return
++		if n>=(PATH_MAX)
++			call texter("big path error at raw capture")
++			ret
++		end
+         import "file_write_forward" file_write_forward
+         data forward_raw^capture_raw_writeOnFile
+         call file_write_forward(outfile,forward_raw)
+@@ -1167,7 +1159,7 @@ function capture_raw_read(ss filepath)
+     sd bool
+     setcall bool stage_read_values((value_set))
+     if bool!=1
+-        return 0
++		ret #urn 0
+     endif
+ 
+     data f^capture_raw_read_start
+@@ -1205,13 +1197,18 @@ function capture_raw_read_file(sd file,s
+     char delim="."
+     setcall sz valinmemsens(filepath,sz,delim) #,(BACKWARD)
+     sub filepath sz
+-    set filepath# 0
+-
+-    data f_raw^capture_raw_read_filedata
+-    call file_forward_read(path,f_raw)
++	if path!=filepath
++		dec filepath
++		set filepath# 0
++		import "file_forward_data_read" file_forward_data_read
++		data f_raw^capture_raw_read_filedata
++		call file_forward_data_read(path,f_raw,(FALSE))
++	else  #this case is new when saving the stage to raw
++		call capture_raw_read_filedata(file,(TRUE))
++	end
+ endfunction
+ 
+-function capture_raw_read_filedata(sd file)
++function capture_raw_read_filedata(sd file,sd is_stage)
+     sd width
+     sd height
+     sd frames_per_file
+@@ -1234,7 +1231,7 @@ function capture_raw_read_filedata(sd fi
+         import "file_seek_dif_cursor" file_seek_dif_cursor
+         setcall er file_seek_dif_cursor(file,size)
+         if er!=(noerror)
+-            return 0
++			ret #urn 0
+         endif
+         inc i
+     endwhile
+@@ -1255,32 +1252,34 @@ function capture_raw_read_filedata(sd fi
+         sd stop
+         setcall stop av_dialog_stop((value_get))
+         if stop=1
+-            return 0
++			ret #urn 0
+         endif
+ 
+         sd mem
+         setcall mem memalloc(rgb_size)
+         if mem=0
+-            return 0
++			ret #urn 0
+         endif
+ 
+         setcall er file_read(mem,rgb_size,file)
+         if er!=(noerror)
+-            return 0
++			ret #urn 0
+         endif
+-        call bytes_swap_reverse(mem,width,height)
++		if is_stage=(FALSE)
++			call bytes_swap_reverse(mem,width,height)
++		end
+         data free_mem^free
+         setcall pixbuf gdk_pixbuf_new_from_data(mem,(GDK_COLORSPACE_RGB),(FALSE),8,width,height,rowstride,free_mem,mem)
+ 
+         setcall er file_read(p_length,4,file)
+         if er!=(noerror)
+-            return 0
++			ret #urn 0
+         endif
+ 
+         sd bool
+         setcall bool stage_read_values((value_append),entry,8)
+         if bool!=1
+-            return 0
++			ret #urn 0
+         endif
+ 
+         #info display
+@@ -1290,3 +1289,80 @@ function capture_raw_read_filedata(sd fi
+         inc i
+     endwhile
+ endfunction
++
++function capture_save()
++	ss location
++	import "stage_get_output_container" stage_get_output_container
++	setcall location stage_get_output_container()
++	call av_dialog_run(capture_save_run,location)
++end
++function capture_save_run(ss filename)
++	sd file
++	sd p_file^file
++	import "openfile" openfile
++	call openfile(p_file,filename,capture_direct_start.raw_method)
++	if file!=(NULL)
++		sd ebox
++		import "stage_nthwidgetFromcontainer" stage_nthwidgetFromcontainer
++		setcall ebox stage_nthwidgetFromcontainer(0) #isn't this thread unsafe? gtk_container_get_children? or is simple value get
++		import "object_get_dword_name" object_get_dword_name
++		sd pixbuf
++		setcall pixbuf object_get_dword_name(ebox) #no unref required
++
++		datax w#1
++		datax h#1
++		value wh^w
++		import "pixbuf_get_wh" pixbuf_get_wh
++		call pixbuf_get_wh(pixbuf,wh)
++		sd rgb_size
++		setcall rgb_size rgb_get_size(w,h)
++
++		sd er
++		setcall er file_write(wh,(DWORD+DWORD),file)
++		if er=(noerror)
++			sd position_total
++			import "stage_get_frames" stage_get_frames
++			setcall position_total stage_get_frames()
++			setcall er file_write(#position_total,(DWORD),file)
++			if er=(noerror)
++				setcall er file_write(#position_total,(DWORD),file)
++				if er=(noerror)
++					data nr_of_file=0
++					setcall er file_write(#nr_of_file,(DWORD),file)
++					if er=(noerror)
++						sd i=0
++						while i!=position_total
++							setcall ebox stage_nthwidgetFromcontainer(i)
++							setcall pixbuf object_get_dword_name(ebox)
++							sd bytes
++							setcall bytes gdk_pixbuf_get_pixels(pixbuf)
++							setcall er file_write(bytes,rgb_size,file)
++							if er!=(noerror)
++								break
++							end
++							sd len
++							import "stage_get_fr_length" stage_get_fr_length
++							set len stage_get_fr_length(ebox)
++							setcall er file_write(#len,(DWORD),file)
++							if er!=(noerror)
++								break
++							end
++							import "av_display_info_progress" av_display_info_progress
++							call av_display_info_progress(file,i)
++							inc i
++						end
++						if er=(noerror)
++							import "save_inform_saved_th" save_inform_saved_th
++							call save_inform_saved_th(filename)
++						end
++					end
++				end
++			end
++		end
++		call fclose(file)
++	endif
++	#if er!=(noerror) #err is texted already
++	#	call texter(er)
++	#end
++	call av_dialog_close()
++end
+--- ovideo-1.orig/src/_dif/difl.oc
++++ ovideo-1/src/_dif/difl.oc
+@@ -1,6 +1,9 @@
+ 
+ entryraw _start(sd argc,sv argv)
+ 
++#importx "XInitThreads" XInitThreads
++#at qemu ./mrd still sometimes crashing, and sometimes saying about this
++#call XInitThreads()
+ 
+ import "init_args" init_args
+ sd bool;setcall bool init_args(argc,#argv)
+--- ovideo-1.orig/src/_dif/dif~lin.oc
++++ ovideo-1/src/_dif/dif~lin.oc
+@@ -360,6 +360,8 @@ const SND_PCM_FORMAT_S16_LE=2
+ const SND_PCM_NONBLOCK=1
+ #const SND_PCM_ASYNC=2
+ 
++#at this time, alsa will ask for pipewire-alsa
++
+ importx "snd_pcm_open" snd_pcm_open
+ importx "snd_pcm_hw_params_malloc" snd_pcm_hw_params_malloc
+ importx "snd_pcm_hw_params_free" snd_pcm_hw_params_free
+@@ -934,7 +936,6 @@ function share_folder(sv p_err,sv prefix
+ 	return #prestart
+ endfunction
+ 
+-const PATH_MAX=4096
+ importx "malloc" malloc
+ importx "free" free
+ importx "strlen" strlen
+@@ -1005,6 +1006,15 @@ function ulltoa(sd low,sd high,sd str)
+ 	call sprintf(str,"%llu",low,high)
+ endfunction
+ 
++function tmp_file()
++	sd file
++	importx "tmpfile" tmpfile
++	set file tmpfile() #opens a unique temporary file in binary read/write (w+b) mode
++	return file
++end
++
++
++
+ 
+ importx "gdk_x11_drawable_get_xid" gdk_x11_drawable_get_xid
+ importx "gst_video_overlay_get_type" gst_video_overlay_get_type
+--- ovideo-1.orig/src/_dif/dif~win.oc
++++ ovideo-1/src/_dif/dif~win.oc
+@@ -1108,3 +1108,14 @@ importx "__fullpath" fullpath
+ function real_path(sd path)
+ 	callret fullpath((NULL),path,(MAX_PATH))
+ endfunction
++
++function tmp_file()
++	sd output_file
++	import "save_destination" save_destination
++	setcall output_file save_destination("temp")
++	#these formats are related to format_max. D is temporary file
++	sd file
++	import "openfile" openfile
++	call openfile(#file,output_file,"w+Db")
++	return file
++end
+--- ovideo-1.orig/src/_exec/capture/save.oc
++++ ovideo-1/src/_exec/capture/save.oc
+@@ -109,6 +109,9 @@ function capture_path(ss format,sd extra
+ 	if extrabool=0
+ 		ss null=""
+ 		set extra null
++		if format#=(Nullchar) #a new case for raw
++			set fmt "%s/%s%u%s"
++		end
+ 	else
+ 		sd extra_data#5
+ 		ss extra_str^extra_data
+--- ovideo-1.orig/src/_exec/init.oc
++++ ovideo-1/src/_exec/init.oc
+@@ -80,7 +80,7 @@ function init_user_sys(sv forward)
+ 	const d55=\-d5
+ 	char *="stage"
+ 	const d6=\
+-	char *={0x0a,0x00,0x00,0x00,0x09,0x00,0x00,0x00,0x01,0x00,0x00,0x00}
++	char *={0x0a,0x00,0x00,0x00,0x08,0x00,0x00,0x00,0x01,0x00,0x00,0x00}
+ 	const d66=\-d6
+ 	char *="update"
+ 	const d7=\
+--- ovideo-1.orig/src/_include/files/commons.oh
++++ ovideo-1/src/_include/files/commons.oh
+@@ -17,6 +17,8 @@ Const SEEK_END=2
+ 
+ const F_OK=0
+ 
++const PATH_MAX=4096
++
+ const bitsperbyte=8
+ 
+ 
+@@ -41,4 +43,3 @@ const to_mod=to_regopcode*8
+ const mod_disp8=1*to_mod
+ #const mod_disp32=2*to_mod
+ const mod_reg=3*to_mod
+-
+--- ovideo-1.orig/src/_include/files/mpeg.oh
++++ ovideo-1/src/_include/files/mpeg.oh
+@@ -63,6 +63,8 @@ const avc_mb_size=avc_mb_cache_offset+av
+ const avc_I_16x16=2
+ const avc_P_SKIP=6
+ 
++const avc_minimum=16
++
+ 
+ #mp3
+ const mp3_channels_stereo=2
+--- ovideo-1.orig/src/_include/files/olang.oh
++++ ovideo-1/src/_include/files/olang.oh
+@@ -9,7 +9,7 @@ Const error=-1
+ 
+ 
+ const dword_max=10
+-const format_max=6
++const format_max=6   ;# 3+mux
+ 
+ #Const charnullcompilationstyle=1
+ #-charnullcompilationstyle
+@@ -98,10 +98,10 @@ const value_custom=5
+ const format_raw=-1
+ 
+ const format_avi=0
+-    const format_avi_raw=0
+-    const format_avi_i420=1
+-    const format_avi_mjpg=2
+-    const format_avi_xvid=3
++#    const format_avi_raw=0
++    const format_avi_i420=0
++    const format_avi_mjpg=1
++    const format_avi_xvid=2
+         const format_avi_last=format_avi+format_avi_xvid
+ const format_mxf=format_avi_last+1
+ const format_mkv=format_mxf+1
+--- ovideo-1.orig/src/_prepare/frame/add.oc
++++ ovideo-1/src/_prepare/frame/add.oc
+@@ -222,37 +222,38 @@ function stage_frame_form_data_init(sd v
+ endfunction
+ 
+ function stage_frame_form_data(sd action,sd value)
+-	if action=0
+-        data width_entry#1
+-        set width_entry value
+-        return 0
++	if action=(stage_frame_form_data_width)
++		data width_entry#1
++		set width_entry value
++		ret #urn 0
+ 	endif
+-	if action=1
+-        data height_entry#1
+-        set height_entry value
+-        return 0
++	if action=(stage_frame_form_data_height)
++		data height_entry#1
++		set height_entry value
++		ret #urn 0
+ 	endif
+-	if action=2
+-        data color_entry#1
+-        set color_entry value
+-        return 0
++	if action=(stage_frame_form_data_color)
++		data color_entry#1
++		set color_entry value
++		ret #urn 0
+ 	endif
+ 
+-    import "entry_to_nr_minValue" entry_to_nr_minValue
++	#stage_frame_form_data_pixbuf
++	import "entry_to_nr_minValue_preferredValue" entry_to_nr_minValue_preferredValue
+ 
+-    sd width
+-    sd p_w^width
+-    call entry_to_nr_minValue(width_entry,p_w,4)
++	sd width
++	sd p_w^width
++	call entry_to_nr_minValue_preferredValue(width_entry,p_w,4,(avc_minimum))
++
++	sd height
++	sd p_h^height
++	call entry_to_nr_minValue_preferredValue(height_entry,p_h,4,(avc_minimum))
++
++	import "color_widget_get_color_to_rgb" color_widget_get_color_to_rgb
++	sd color
++	setcall color color_widget_get_color_to_rgb(color_entry)
+ 
+-    sd height
+-    sd p_h^height
+-    call entry_to_nr_minValue(height_entry,p_h,4)
+-
+-    import "color_widget_get_color_to_rgb" color_widget_get_color_to_rgb
+-    sd color
+-    setcall color color_widget_get_color_to_rgb(color_entry)
+-
+-    import "new_pixbuf_color" new_pixbuf_color
++	import "new_pixbuf_color" new_pixbuf_color
+ 	callret new_pixbuf_color(width,height,color)
+ endfunction
+ 
+--- ovideo-1.orig/src/_prepare/frame/frametime.oc
++++ ovideo-1/src/_prepare/frame/frametime.oc
+@@ -90,7 +90,7 @@ function stage_frame_time_numbers(sd met
+         data ptr_frames^frames
+         set size 0
+         set frames 0
+-        return 1
++        ret #urn 1
+ 	endif
+ 	if method=(stage_frame_time_append)
+         #const stage_frame_time_append=1
+@@ -105,7 +105,7 @@ function stage_frame_time_numbers(sd met
+             sub pointer 4
+             set pointer# index
+         endif
+-        return 1
++		ret #urn 1
+ 	endif
+ 	if method=(stage_frame_time_free)
+         #const stage_frame_time_free=2
+@@ -113,7 +113,7 @@ function stage_frame_time_numbers(sd met
+         if frames!=0
+             call free(frames)
+         endif
+-        return 1
++		ret #urn 1
+ 	endif
+ 	if method=(stage_frame_time_get_at_index)
+     #get the index from the created database
+@@ -130,13 +130,13 @@ function stage_frame_time_numbers(sd met
+     #modify a frame length
+         mult index 4
+         if index>=size
+-            return 1
++			ret #urn 1
+         endif
+         sd loc
+         set loc frames
+         add loc index
+         set loc# newvalue
+-        return 1
++		ret #urn 1
+ 	endif
+ 	if method=(stage_frame_time_insert)
+     #insert at index newvalue and numberoftimes
+@@ -174,13 +174,13 @@ function stage_frame_time_numbers(sd met
+                 sub newzone 4
+             endwhile
+         endif
+-        return 1
++		ret #urn 1
+ 	endif
+ 	if method=(stage_frame_time_delete_frame)
+     #a frame was deleted
+         mult index 4
+         if index>=size
+-            return 1
++			ret #urn 1
+         endif
+ 
+         sd mem_src_cursor
+@@ -199,7 +199,7 @@ function stage_frame_time_numbers(sd met
+             add index 4
+         endwhile
+         sub size 4
+-        return 1
++		ret #urn 1
+ 	endif
+ 	if method=(stage_frame_time_sum_at_index)
+     #length at pos returned
+--- ovideo-1.orig/src/_prepare/output/all.oc
++++ ovideo-1/src/_prepare/output/all.oc
+@@ -376,7 +376,7 @@ function stage_save_all()
+ 	end
+ 
+     #file format
+-    sd format
++    ss format
+     import "stage_file_get_format" stage_file_get_format
+     setcall format stage_file_get_format()
+     import "cmpmem" cmpmem
+@@ -407,6 +407,12 @@ function stage_save_all()
+         ret #urn 1
+     endif
+ 
++	if format#=(Nullchar)
++		import "capture_save" capture_save
++		call capture_save()
++		ret
++	endif
++
+     data file_frames%stage_file_frames
+     set file_frames# 0
+     data file_frames_portions%stage_file_frames_portions
+--- ovideo-1.orig/src/_prepare/output/avi.oc
++++ ovideo-1/src/_prepare/output/avi.oc
+@@ -39,11 +39,12 @@ function is_local_avi()
+     sd cmp
+     setcall cmp cmpmem(format,avi,3)
+     if cmp=(equalCompare)
+-        sd encoder
+-        setcall encoder stage_file_get_avi_encoder()
+-        if encoder!=(format_avi_raw)
+-            return 1
+-        endif
++		# ok this is not working now, and there is already avi i420/pcm that is the same+- pcm sound
++		#sd encoder
++		#setcall encoder stage_file_get_avi_encoder()
++		#if encoder!=(format_avi_raw)
++		return 1
++		#endif
+     endif
+     return 0
+ endfunction
+@@ -150,7 +151,7 @@ function avidialog(sd file)
+     #encoder inits
+     sd bool
+     data f^avicontent
+-    setcall bool av_dialog_run(f,file)
++    setcall bool av_dialog_run(f,file) #this bool is 1 ok
+     if bool!=1
+         return (error)
+     endif
+--- ovideo-1.orig/src/_prepare/output/mkv.oc
++++ ovideo-1/src/_prepare/output/mkv.oc
+@@ -15,8 +15,6 @@ import "file_seek_cursor_get_dword_rever
+ import "memoryrealloc" memoryrealloc
+ import "rgb_get_all_sizes" rgb_get_all_sizes
+ 
+-import "pixbuf_from_pixbuf_reverse" pixbuf_from_pixbuf_reverse
+-
+ const mkv_yuv_init=0
+ const mkv_yuv_p_bytes=1
+ const mkv_yuv_set_size=2
+@@ -1058,24 +1056,25 @@ function mkv_simpleblock(sd file,sd size
+ 		    call pixbuf_get_wh(pixbuf,rgb_dim)
+ 		    setcall rgb_sz rgb_get_size(rgb_width,rgb_height)
+ 
+-		    sd capture_flag
+-		    setcall capture_flag mkv_capture((value_get))
+-		    if capture_flag=0
+-		        sd reverse_pixbuf
+-		        setcall reverse_pixbuf pixbuf_from_pixbuf_reverse(pixbuf)
+-		        setcall rgb_pixels gdk_pixbuf_get_pixels(reverse_pixbuf)
+-		    endif
+-		    #
+-		    setcall err file_write(rgb_pixels,rgb_sz,file)
+-		    #
+-		    if capture_flag=0
+-		        importx "_g_object_unref" g_object_unref
+-		        call g_object_unref(reverse_pixbuf)
+-		    endif
+-
+-		    if err!=(noerror)
+-		        return 0
+-		    endif
++			sd capture_flag
++			setcall capture_flag mkv_capture((value_get))
++			if capture_flag=1
++				import "rgb_reverse" rgb_reverse
++				call rgb_reverse(rgb_pixels,rgb_width,rgb_height)
++				setcall err file_write(rgb_pixels,rgb_sz,file)
++			else
++				import "pixbuf_from_pixbuf_color_swap" pixbuf_from_pixbuf_color_swap
++				sd px;set px pixbuf_from_pixbuf_color_swap(pixbuf)
++				if px=(NULL)
++					return (FALSE)
++				end
++				set rgb_pixels gdk_pixbuf_get_pixels(px)
++				setcall err file_write(rgb_pixels,rgb_sz,file)
++				call g_object_unref(px)
++			endelse
++			if err!=(noerror)
++				return 0
++			endif
+ 		endelse
+ 		#info display
+ 		call av_display_info((value_write),file,currentframe)
+@@ -1617,23 +1616,24 @@ function mkv_readentry(sd frames,sd newt
+     sd rowstride
+     sd p_rowstride^rowstride
+     call rgb_get_all_sizes(w,h,p_rowstride)
+-    sd pixbuf
+-    setcall pixbuf gdk_pixbuf_new_from_data(p_rgb#,(GDK_COLORSPACE_RGB),(FALSE),8,w,h,rowstride,(NULL),0)
++    sd pixbuf;setcall pixbuf gdk_pixbuf_new_from_data(p_rgb#,(GDK_COLORSPACE_RGB),(FALSE),8,w,h,rowstride,(NULL),0)
++    #setcall px gdk_pixbuf_new_from_data(p_rgb#,(GDK_COLORSPACE_RGB),(FALSE),8,w,h,rowstride,(NULL),0)
+ 
+-    #keep the pixbuf
+-    import "pixbuf_copy" pixbuf_copy
+-    setcall px pixbuf_copy(pixbuf)
+-    if px=0
+-        return 0
+-    endif
+-    if encoder=(format_mkv_rgb24)
+-        #bitmap is right to left from file
+-        import "rgb_color_swap" rgb_color_swap
+-        sd newbytes
+-        setcall newbytes gdk_pixbuf_get_pixels(px)
+-        call rgb_color_swap(newbytes,w,h)
+-    endif
+-    call g_object_unref(pixbuf)
++    #keep the pixbuf. ? . must be something with "Note that this does not copy the options set on the original GdkPixbuf" at gdk_pixbuf_copy, else I see blank if not this way
++	import "pixbuf_copy" pixbuf_copy
++	setcall px pixbuf_copy(pixbuf)
++	if px=0
++		return 0
++	endif
++	if encoder=(format_mkv_rgb24)
++		# bmp is right to left from file
++		sd pxbytes
++		setcall pxbytes gdk_pixbuf_get_pixels(px)
++		import "rgb_color_swap" rgb_color_swap
++		call rgb_color_swap(pxbytes,w,h)
++	endif
++	importx "_g_object_unref" g_object_unref
++	call g_object_unref(pixbuf)
+ 
+     #add to stage
+     sd entry^px
+--- ovideo-1.orig/src/_prepare/output/stagefileoptions.oc
++++ ovideo-1/src/_prepare/output/stagefileoptions.oc
+@@ -213,8 +213,8 @@ function stage_file_options_structure(sd
+ 
+         importx "_gtk_combo_box_text_append_text" gtk_combo_box_text_append_text
+ 
+-        str entry1="AVI yuv"
+-        call gtk_combo_box_text_append_text(outformat_list,entry1)
++#        str entry1="AVI yuv"
++#        call gtk_combo_box_text_append_text(outformat_list,entry1)
+         str entry1_i420="AVI/I420\\PCM"
+         call gtk_combo_box_text_append_text(outformat_list,entry1_i420)
+         str entry1_jpg="AVI/MJPEG\\PCM"
+@@ -227,7 +227,7 @@ function stage_file_options_structure(sd
+ 
+         str entry3_1="MKV/I420\\PCM"
+         call gtk_combo_box_text_append_text(outformat_list,entry3_1)
+-        str entry3_2="MKV/MJEPG\\PCM"
++        str entry3_2="MKV/MJPEG\\PCM"
+         call gtk_combo_box_text_append_text(outformat_list,entry3_2)
+         str entry3_3="MKV/MPG4-ASP\\PCM"
+         call gtk_combo_box_text_append_text(outformat_list,entry3_3)
+@@ -237,6 +237,9 @@ function stage_file_options_structure(sd
+         str entry4_1="MP4/MPG4-AVC\\MP3"
+         call gtk_combo_box_text_append_text(outformat_list,entry4_1)
+ 
++		vstr entry5_1="raw"
++		call gtk_combo_box_text_append_text(outformat_list,entry5_1)
++
+         importx "_gtk_combo_box_set_active" gtk_combo_box_set_active
+         call gtk_combo_box_set_active(outformat_list,ptr_out#)
+ 
+@@ -307,21 +310,20 @@ function stage_file_options_structure(sd
+         setcall currentframestext gtk_entry_get_text(fps_edit)
+ 
+         sd err
+-        data noerr=noerror
+ 
+         import "strtoint" strtoint
+         sd fpspointer%ptr_fps
+         call strtoint(currentframestext,fpspointer)
+         call av_good_fps(fpspointer)
+         setcall err file_write(fpspointer,4,arg1)
+-        if err!=noerr
+-            return err
+-        endif
++		if err!=(noerror)
++			ret #urn err
++		endif
+ 
+         setcall err file_write(ptr_out,4,arg1)
+-        if err!=noerr
+-            return err
+-        endif
++		if err!=(noerror)
++			ret #urn err
++		endif
+ #
+         ss file_sound
+         setcall file_sound sound_file()
+@@ -329,10 +331,10 @@ function stage_file_options_structure(sd
+         sd p_audio_file^audio_file
+         str s_fmode="wb"
+         import "openfile" openfile
+-        setcall err openfile(p_audio_file,file_sound,s_fmode)
+-        if err!=noerr
+-            return err
+-        endif
++		call openfile(p_audio_file,file_sound,s_fmode)
++		if p_audio_file=(NULL)
++			ret #urn err
++		endif
+         import "entry_to_nr_minValue" entry_to_nr_minValue
+ 
+         call entry_to_nr_minValue(ch_opt,p_channels,1)
+@@ -355,14 +357,13 @@ function stage_file_options_structure(sd
+         setcall toggle_flag gtk_toggle_button_get_active(results_toggle)
+         call stage_file_options_info_message((value_set),toggle_flag)
+         setcall err file_write(p_toggle_flag,4,arg1)
+-        if err!=noerr
+-            return err
+-        endif
++		if err!=(noerror)
++			ret #urn err
++		endif
+         #
+         sd up_flag
+         setcall up_flag gtk_toggle_button_get_active(update_toggle)
+         call update_set(up_flag)
+-        #
+     endelse
+ endfunction
+ function stage_oformat_changed(sd combo,sd p_loc)
+@@ -374,11 +375,11 @@ import "get_string_at_index" get_string_
+ #type/extension
+ function stage_file_get_format()
+     sd ptr_index%ptr_output
+-#these formats are related to format_max
++#these formats are related to format_max , and default format preference
+     #Audio Video Interleaved
+-    char entry1="avi"
++    #char entry1="avi"
+     #Audio Video Interleaved / I420
+-    char *="avi"
++    char entry1="avi"
+     #Audio Video Interleaved / MJPEG
+     char *="avi"
+     #Audio Video Interleaved / MPG4-ASP
+@@ -395,6 +396,8 @@ function stage_file_get_format()
+     char *="mkv"
+     #Mp4 / MPEG4-AVC
+     char *="mp4"
++    #raw
++    char *=""
+ 
+     sd index
+     set index ptr_index#
+--- ovideo-1.orig/src/_prepare/pipe.oc
++++ ovideo-1/src/_prepare/pipe.oc
+@@ -57,20 +57,16 @@ endfunction
+ import "stage_frame_time_numbers" stage_frame_time_numbers
+ 
+ function stage_display_info(sd widget)
+-    #display the frame position and time informations
+-    str format="Frame: %u/%u; Time: %u:%02u from %u:%02u; Position: %u from %u"
+-    char data#200
+-    str string^data
++	#display the frame position and time informations
++	vstr  format="Frame: %u/%u; Time: %u:%02u/%u:%02u; Position: %u/%u"
++	charx data#7+        10+1+10+8+   10+1+2+1+10+1+2+2+10+       10+1+10+1
++	vstr string^data
+     sd length_at_index
+     sd length_total
+ 
+     sd position
+     setcall position stage_frame_index(widget)
+     #
+-    sd position_total
+-    setcall position_total stage_get_frames()
+-    dec position_total
+-    #
+     import "stage_file_options_fps" stage_file_options_fps
+     import "rest" rest
+     sd fps
+@@ -96,8 +92,12 @@ function stage_display_info(sd widget)
+     setcall seconds_total rest(seconds_total,60)
+     div minutes_total 60
+     #
+-    call sprintf(string,format,position,position_total,minutes_pos,seconds_pos,minutes_total,seconds_total,length_at_index,length_total)
+-    call texter(string)
++	sd position_total
++	setcall position_total stage_get_frames()
++	dec position_total
++	dec length_total
++	call sprintf(string,format,position,position_total,minutes_pos,seconds_pos,minutes_total,seconds_total,length_at_index,length_total)
++	call texter(string)
+ endfunction
+ 
+ function stage_display_pixbuf(sd widget)
+--- ovideo-1.orig/src/_prepare/sel.oc
++++ ovideo-1/src/_prepare/sel.oc
+@@ -281,8 +281,8 @@ function stage_save_img()
+ 		import "openfile" openfile
+ 		importx "_fclose" fclose
+ 		ss mode="wb"
+-		setcall err openfile(p_file,location,mode)
+-		if err=(noerror)
++		call openfile(p_file,location,mode)
++		if file!=(NULL)
+ 			sd pixbuf
+ 			setcall pixbuf object_get_dword_name(eventbox)
+ 
+--- ovideo-1.orig/src/_prepare/view.oc
++++ ovideo-1/src/_prepare/view.oc
+@@ -52,7 +52,7 @@ function stage_buttons_enter(sd containe
+         #
+     import "stage_files_read" stage_files_read
+     char *="open.bmp"
+-    char *="Append a file created with mkv(i420,mjpeg,rgb24), avi(i420,mjpeg), raw capture output format"
++    char *="Append a file created with mkv(i420,mjpeg,rgb24), avi(i420,mjpeg) or raw capture output formats"
+     data *^stage_files_read
+         #
+     import "stage_sound" stage_sound
+--- ovideo-1.orig/src/_search/dialog_fns.oc
++++ ovideo-1/src/_search/dialog_fns.oc
+@@ -169,7 +169,7 @@ function search_preferences_read_set()
+ 
+     setcall err file_get_content(path,ptrsz,ptr_search_mem)
+     if err!=noerr
+-        return err
++        ret #urn err
+     endif
+     set mem ptr_search_mem#
+ 
+--- ovideo-1.orig/src/file-folder/file-base.oc
++++ ovideo-1/src/file-folder/file-base.oc
+@@ -144,17 +144,16 @@ endfunction
+ 
+ #err/returns what forward returns
+ function file_forward(ss path,sd method,sv forward)
+-    sd returnvalue
+-    data noerr=noerror
+-    sd file
+-    sd ptrfile^file
+-    SetCall returnvalue openfile(ptrfile,path,method)
+-    If returnvalue!=noerr
+-            Return returnvalue
+-    EndIf
+-    setcall returnvalue forward(file,path)
+-    call fclose(file)
+-    return returnvalue
++	sd file
++	sd ptrfile^file
++	Call openfile(ptrfile,path,method)
++	If file!=(NULL)
++		sd returnvalue
++		setcall returnvalue forward(file,path)
++		call fclose(file)
++		return returnvalue
++	end
++	return (error)
+ EndFunction
+ 
+ ##read
+@@ -198,17 +197,16 @@ endfunction
+ #get: offset+size+trail
+ Function file_get_content_offset_trail(str path,data ptrsize,data ptrmem,data offset,data trail)
+         Data err#1
+-        Data noerr=noerror
+ 
+         Data file#1
+         Data ptrfile^file
+ 
+         str readfile#1
+         setcall readfile getreadmode()
+-        SetCall err openfile(ptrfile,path,readfile)
+-        If err!=noerr
+-                Return err
+-        EndIf
++	call openfile(ptrfile,path,readfile)
++	If file=(NULL)
++		Return (error)
++	EndIf
+ 
+         setcall err readtomem(file,ptrsize,ptrmem,offset,trail)
+         Call fclose(file)
+@@ -231,7 +229,7 @@ function file_get_content_forward(ss fil
+     sd ptr_mem^mem
+     setcall err file_get_content(filename,ptr_size,ptr_mem)
+     if err!=noerr
+-        return err
++        ret #urn err
+     endif
+     call forward(mem,size)
+     importx "_free" free
+@@ -245,6 +243,17 @@ function file_forward_read(ss path,sd fo
+ 	callret file_forward(path,method,forward)
+ endfunction
+ #e
++function file_forward_data_read(ss path,sv forward,sd data)
++	sd method
++	setcall method getreadmode()
++	sd file
++	Call openfile(#file,path,method)
++	If file!=(NULL)
++		call forward(file,data)
++		call fclose(file)
++	end
++endfunction
++#e
+ function file_read(sd mem,sd size,sd file)
+     sd readed
+     setcall readed fread(mem,1,size,file)
+--- ovideo-1.orig/src/media/audiovideo.oc
++++ ovideo-1/src/media/audiovideo.oc
+@@ -262,7 +262,6 @@ function av_dialog_run(sd forward,sd dat
+ 		call dialog_modal_texter_drawwidget((value_set),0) #if an idle_add is still coming
+ 		call av_dialog_multiline_info((value_set),0) #if an idle_add is still coming
+ 	endif
+-
+ 	return bool
+ 
+ 	const av_dialog^dialog
+--- ovideo-1.orig/src/media/mp4.oc
++++ ovideo-1/src/media/mp4.oc
+@@ -71,12 +71,11 @@ function mp3_file(sd bool,sv extra_off1,
+ 		end
+ 		set nothing 0
+ 
+-		sd err
+ 		sd file
+ 		ss r;set r getreadmode()
+-		set err openfile(#file,src,r) #after this the resources are claimed at least to what the opened file reached
++		call openfile(#file,src,r) #after this the resources are claimed at least to what the opened file reached
+ 		#linux, for example, can rename the resources to .nfs000000000068516d00000006 if the file information header is deleted
+-		if err=(noerror)
++		if file!=(NULL)
+ 			charx aux#1;set aux dest#
+ 			set dest# 0x33   #mp4->mp3 , hacky way
+ 
+@@ -85,8 +84,8 @@ function mp3_file(sd bool,sv extra_off1,
+ 			if mp3Mem!=(NULL)
+ 				sd mp3__file
+ 				ss w;set w getwritemode()
+-				set err openfile(#mp3__file,src,w)
+-				if err=(noerror)
++				call openfile(#mp3__file,src,w)
++				if mp3__file!=(NULL)
+ 					call file_seek_set(file,extra_off1) #this was ok
+ 					sdu rd;set rd fread(mp3Mem,mp3_off,1,file)
+ 					if rd=1 #if the resources are ok at main open it doesn't mean async is not changeable for second open
+@@ -2557,9 +2556,8 @@ function mp4_expand_go(ss filepath,ss te
+     import "openfile" openfile
+     importx "_fclose" fclose
+     sd file
+-    sd err
+-    setcall err openfile(#file,temppath,"rb")
+-    if err=(noerror)
++	call openfile(#file,temppath,"rb")
++	if file!=(NULL)
+         #info
+         call dialog_modal_texter_draw("Preparing the original file")
+         #store read handle for reading at the other file
+@@ -2586,5 +2584,5 @@ function mp4_expand_go(ss filepath,ss te
+                 call remove(temppath)
+             endif
+         endelse
+-    endif
++	endif
+ endfunction
+--- ovideo-1.orig/src/media/mpeg-avc_wrap.oc
++++ ovideo-1/src/media/mpeg-avc_wrap.oc
+@@ -124,7 +124,7 @@ endfunction
+ #bool
+ function avc_rounding(sd value)
+     import "rest" rest
+-    setcall value rest(value,16)
++    setcall value rest(value,(avc_minimum))
+     if value!=0
+         import "texter" texter
+         str er="Width or height isn't a multiple of 16."
+--- ovideo-1.orig/src/obj/items.oc
++++ ovideo-1/src/obj/items.oc
+@@ -351,6 +351,15 @@ function entry_to_nr_minValue(sd entry,s
+         set p_out# min
+     endif
+ endfunction
++function entry_to_nr_minValue_preferredValue(sd entry,sd p_out,sd min,sd pref)
++	sd text
++	setcall text gtk_entry_get_text(entry)
++	sd bool
++	setcall bool strtoint_positive_N_or_Greater(text,p_out,min)
++	if bool=0
++		set p_out# pref
++	endif
++endfunction
+ 
+ function int_to_entry(sd int,sd entry)
+     sd number#4
+@@ -940,7 +949,7 @@ function surface_to_pixbufdata(sd surfac
+ endfunction
+ 
+ #pixbuf/0
+-function pixbuf_from_pixbuf_reverse(sd pixbuf_reverse)
++function pixbuf_from_pixbuf_color_swap(sd pixbuf_reverse)
+ 	#the new pixbuf
+ 	sd pixbuf
+ 	setcall pixbuf pixbuf_copy(pixbuf_reverse)
+--- ovideo-1.orig/src/util/update.oc
++++ ovideo-1/src/util/update.oc
+@@ -101,12 +101,11 @@ importx "_fclose" fclose
+ function update_set(sd value)
+     ss path
+     setcall path update_path()
+-    sd err
+     sd file
+-    setcall err openfile(#file,path,"wb")
+-    if err!=(noerror)
+-        ret #urn (void)
+-    endif
++	call openfile(#file,path,"wb")
++	if file=(NULL)
++		ret #urn (void)
++	endif
+     import "file_write" file_write
+     call file_write(#value,4,file)
+     call fclose(file)
+@@ -118,12 +117,11 @@ endfunction
+ function update_get()
+     ss path
+     setcall path update_path()
+-    sd err
+-    sd file
+-    setcall err openfile(#file,path,"rb")
+-    if err!=(noerror)
+-        return (FALSE)
+-    endif
++	sd file
++	call openfile(#file,path,"rb")
++	if file=(NULL)
++		return (FALSE)
++	endif
+     import "file_get_dword" file_get_dword
+     sd value=0
+     call file_get_dword(file,#value)
+--- ovideo-1.orig/version.txt
++++ ovideo-1/version.txt
+@@ -1 +1 @@
+-1.197
+\ No newline at end of file
++1.198
+\ No newline at end of file
