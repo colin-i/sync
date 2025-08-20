@@ -1,0 +1,1860 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-147) bionic; urgency=medium
+ .
+   * sync last changes
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-08-20
+
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -167,6 +167,17 @@ int swf_gif_width(char* imagepath);
+ //height
+ int swf_gif_height(char* imagepath);
+ 
++//both
++
++//id
++int swf_imagex(char* imagepath);
++//id
++int swf_imagex_ex(char* imagepath,int wh[2]);
++//id
++int swf_img(char* imagepath);
++//id
++int swf_img_ex(char* imagepath,int wh[2]);
++
+ //back at generic swf functions
+ 
+ void swf_done();
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -1,5 +1,5 @@
+ 
+-#init order is: pool x log alt titles asShows forin
++#init order is: pool x log alt titles asShows forin deprecation verbose
+ #a good workflow(for ffdec and oadbg): like in bench1
+ #or:                                   like in bench2
+ #a test/fasts result: 5.159259578 10.291831766
+@@ -8,24 +8,27 @@ const flag_none=0
+ const flagpre_log=0x1
+ const flag_alt=0x2
+ const flag_titles=0x4
+-const flagpre_x=0x8               #oaalternative will try to stop if the log has prexx data
++const flagpre_x=0x8                             #oaalternative will try to stop if the log has prexx data
+ const flagpre_x_pad=0x10
+ const flag_forin1=0x20
+ const flag_framesAsShows=0x40
+-const flag_x=0x80                 #will turn off antix_read flags
++const flag_x=0x80                               #will turn off antix_read flags
+ const flagpre_pool_write=0x100
+-const flag_pool_read=0x200        #will turn off flag_pool_write
++const flag_pool_read=0x200                      #will turn off flag_pool_write
+ const flagpre_mix=0x400
+-const flag_pool_read_unlink=0x800 #will turn off flag_pool_write
++const flag_pool_read_unlink=0x800
+ const flagpre_write_no=0x1000
+ const flag_compress=0x2000
+ const flag_deprecation_no=0x4000
+-const flag_deprecation_yes=0x8000 #will turn off flag_deprecation_no
++const flag_deprecation_yes=0x8000               #will turn off flag_deprecation_no
++const flag_noDuplicate=0x10000
++const flag_verbose=0x20000
++const flag_xx=0x40000                           #to let .log for alt and .x for regrab
+ 
+-const debug_xpad=flagpre_x|flagpre_x_pad
+-const flags_pool=flagpre_pool_write|flag_pool_read|flag_pool_read_unlink
+-const flags_pool_read=flag_pool_read|flag_pool_read_unlink
++const flags_pool=flagpre_pool_write|flag_pool_read
+ const flags_x=flagpre_x|flag_x
+-const prexx_flags=flagpre_log|flagpre_pool_write|flagpre_x #will turn off antixx_write
+-const antix_read=flagpre_log|flag_alt|debug_xpad
+-const antixx_write=flag_titles                             #oad and ffdec are counting on this
++const prex_flags=flagpre_log|flagpre_pool_write|flagpre_x
++const prexx_flags=prex_flags|flag_xx            #will turn off antixx_write
++const antix_read=flagpre_log|flag_alt|flagpre_x
++const antixx_write=flag_titles                  #oad and ffdec are counting on this
++const flags_xx=flag_pool_read|flag_xx
+--- actionswf-1.orig/dev/flagss.oh
++++ actionswf-1/dev/flagss.oh
+@@ -1,4 +1,7 @@
+ 
+-include "flags.h" "flags.oh"
+-const xx_flags=flag_x|flag_pool_read
+-const xxu_flags=flag_x|flag_pool_read_unlink
++include "flags.oh"
++const x_flags=flag_x|flag_pool_read
++const xu_flags=x_flags|flag_pool_read_unlink
++const xx_flags=x_flags|flag_xx
++const xxu_flags=xu_flags|flag_xx
++const read_done=flag_pool_read|flag_pool_read_unlink
+--- actionswf-1.orig/dev/importf.oh
++++ actionswf-1/dev/importf.oh
+@@ -58,6 +58,16 @@ importX "swf_gif_width" swf_gif_width
+ #height
+ importX "swf_gif_height" swf_gif_height
+ 
++#both
++#id
++importX "swf_imagex" swf_imagex
++#id
++importX "swf_imagex_ex" swf_imagex_ex
++#id
++importX "swf_img" swf_img
++#id
++importX "swf_img_ex" swf_img_ex
++
+ #utils
+ importX "swf_done" swf_done
+ importX "swf_new" swf_new
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -16,7 +16,7 @@ const shape_lat=40
+ 
+ ####################
+ 
+-const flags1=flagpre_log|flagpre_pool_write|debug_xpad
++const flags1=prexx_flags|flagpre_x_pad
+ #|flagpre_write_no
+ const flags2=xxu_flags   ;#for tests/data . flag_compress is at ffdec test, and here will compare from 2 different(maybe) zlibs
+ const flags3=flags2|flag_compress
+--- actionswf-1.orig/include/prog.oh
++++ actionswf-1/include/prog.oh
+@@ -1,129 +1,3 @@
+-
+-include "ascii.oh"
+-
+-const TRUE=1
+-const FALSE=0
+-
+-const NULL=0
+-
+-#const MAX_PATH=260
+-
+-#const ENOENT=2
+-
+-const BYTE=1
+-const WORD=2
+-const DWORD=4
+-#const QWORD=8
+-
+-const SEEK_SET=0
+-const SEEK_CUR=1
+-const SEEK_END=2
+-
+-const maxuint16=0xffFF
+-const uint16_str_len=5
+-
+-const block_size=0x1000
+-
+-const mem_struct__size_off=4
+-const mem_struct__size_size=4
+-const mem_struct_size=mem_struct__size_off+mem_struct__size_size
+-
+-const mem_exp_init=0
+-const mem_exp_add=1
+-const mem_exp_done=2
+-const mem_exp_part_done=3
+-const mem_exp_change=4
+-const mem_exp_change_back=5
+-const mem_exp_change_pool=6
+-const mem_exp_change_back_pool=7
+-const mem_exp_get_block=8
+-const mem_exp_free=9
+-
+-const NBits_size=5
+-
+-const ids_set=0
+-const ids_free=1
+-const ids_get=2
+-const ids_get_pointer=3
+-const ids_all_free=4
+-const ids_counter=5
+-
+-#const negative_means_action_sprite_pool=0x80<<8<<8<<8
+-const fd_error=-1
+-const fd_none=fd_error
+-const not_an_id=-1
+-const any_id=~not_an_id
+-const dword_to_string_char=1+9+1
+-
+-const End=0
+-const ShowFrame=1
+-const SetBackGroundColor=9
+-const DoAction=12
+-const PlaceObject2=26
+-const RemoveObject2=28
+-const DefineShape3=32
+-const DefineBitsLossless=20
+-const DefineBitsJPEG2=21
+-const DefineButton2=34
+-const DefineBitsJPEG3=35
+-const DefineBitsLossless2=36
+-const DefineEditText=37
+-const DefineSprite=39
+-const DefineFont2=48
+-const ExportAssets=56
+-const DoInitAction=59
+-
+-include "action.oh"
+-
+-include "../dev/flags.oh"
+-include "../dev/action_swf.oh"
+-
+-include "lin.oh" "win.oh"
+-
+-Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
+-Const _open_read=_O_RDONLY|flag_O_BINARY
+-Const _open_write_base=_O_WRONLY|flag_O_BINARY|flag_O_CREAT
+-Const _open_write=_open_write_base|_O_TRUNC
+-
+-const fprintf_min=2  #file,format plus ...
+-
+-const from_show=0
+-const from_done=1
+-
+-const max_structures=999
+-const ids_str_len=3 #"999"
+-const ext_str_len=1+ids_str_len+1+uint16_str_len+1 # separator ids separator word_str_len null
+-
+-const action_code_values_unit=DWORD
+-
+-const recordheader_long_mark=0x3f
+-const recordheader_upperbits=recordheader_long_mark+1
+-
+-const action_debug_free=0
+-const action_debug_get=1
+-const action_debug_get_mem=2
+-
+-const actionjump_contentsize=2
+-const smallbackjump=-actionjump_contentsize
+-
+-const action_debug_comma=1
+-
+-const ret_cont_break_nothing=0
+-const ret_cont_break_something=1
+-const ret_cont_break_break=2
+-
+-const totalvalues=maxuint16
+-
+-const doubleH_exp=0x7fF00000
+-const doubleH_sign=0x80000000
+-
+-#const F_OK=0  # 0 2 4 6 are same as windows
+-const R_OK=4
+-
+-include "xlog.oh"
+-
+-const dblsignature_major=3
+-const dblsignature=dblsignature_major+1
+-const dblsize=4
+-const dblsize16=2
+-const dblformat=1
++
++include "../dev/flags.oh"
++include "program.oh"
+--- /dev/null
++++ actionswf-1/include/program.oh
+@@ -0,0 +1,128 @@
++
++include "ascii.oh"
++
++const TRUE=1
++const FALSE=0
++
++const NULL=0
++
++#const MAX_PATH=260
++
++#const ENOENT=2
++
++const BYTE=1
++const WORD=2
++const DWORD=4
++#const QWORD=8
++
++const SEEK_SET=0
++const SEEK_CUR=1
++const SEEK_END=2
++
++const maxuint16=0xffFF
++const uint16_str_len=5
++
++const block_size=0x1000
++
++const mem_struct__size_off=4
++const mem_struct__size_size=4
++const mem_struct_size=mem_struct__size_off+mem_struct__size_size
++
++const mem_exp_init=0
++const mem_exp_add=1
++const mem_exp_done=2
++const mem_exp_part_done=3
++const mem_exp_change=4
++const mem_exp_change_back=5
++const mem_exp_change_pool=6
++const mem_exp_change_back_pool=7
++const mem_exp_get_block=8
++const mem_exp_free=9
++
++const NBits_size=5
++
++const ids_set=0
++const ids_free=1
++const ids_get=2
++const ids_get_pointer=3
++const ids_all_free=4
++const ids_counter=5
++
++#const negative_means_action_sprite_pool=0x80<<8<<8<<8
++const fd_error=-1
++const fd_none=fd_error
++const not_an_id=-1
++const any_id=~not_an_id
++const dword_to_string_char=1+9+1
++
++const End=0
++const ShowFrame=1
++const SetBackGroundColor=9
++const DoAction=12
++const PlaceObject2=26
++const RemoveObject2=28
++const DefineShape3=32
++const DefineBitsLossless=20
++const DefineBitsJPEG2=21
++const DefineButton2=34
++const DefineBitsJPEG3=35
++const DefineBitsLossless2=36
++const DefineEditText=37
++const DefineSprite=39
++const DefineFont2=48
++const ExportAssets=56
++const DoInitAction=59
++
++include "action.oh"
++
++include "../dev/action_swf.oh"
++
++include "lin.oh" "win.oh"
++
++Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
++Const _open_read=_O_RDONLY|flag_O_BINARY
++Const _open_write_base=_O_WRONLY|flag_O_BINARY|flag_O_CREAT
++Const _open_write=_open_write_base|_O_TRUNC
++
++const fprintf_min=2  #file,format plus ...
++
++const from_show=0
++const from_done=1
++
++const max_structures=999
++const ids_str_len=3 #"999"
++const ext_str_len=1+ids_str_len+1+uint16_str_len+1 # separator ids separator word_str_len null
++
++const action_code_values_unit=DWORD
++
++const recordheader_long_mark=0x3f
++const recordheader_upperbits=recordheader_long_mark+1
++
++const action_debug_free=0
++const action_debug_get=1
++const action_debug_get_mem=2
++
++const actionjump_contentsize=2
++const smallbackjump=-actionjump_contentsize
++
++const action_debug_comma=1
++
++const ret_cont_break_nothing=0
++const ret_cont_break_something=1
++const ret_cont_break_break=2
++
++const totalvalues=maxuint16
++
++const doubleH_exp=0x7fF00000
++const doubleH_sign=0x80000000
++
++const F_OK=0  # 0 2 4 6 are same as windows
++const R_OK=4
++
++include "xlog.oh"
++
++const dblsignature_major=3
++const dblsignature=dblsignature_major+1
++const dblsize=4
++const dblsize16=2
++const dblformat=1
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -1,160 +1,192 @@
+ #!/bin/sh
+ 
+ #1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
+-#isdebug=
+-#skip_ffdec=
+-#wait=
+-#no_number_check=
++#is_debug no_clean
++#skip_ffdec ffdec
++#skip_alternative no_number_check
++#scripts
+ 
+ if [ -z "${1}" ]; then echo file path required; exit 1; fi
+ 
+ dname=`dirname ${1}`
+-cd ${dname} || exit 1
+-
++if [ -n "${scripts}" ]; then
++	scripts=`readlink -f "${scripts}"`
++fi
+ bname=`basename ${1}`
+ 
+-log=${bname}.log.log
+-if [ ! -e ${log} ]; then
+-	log=${bname}.log
+-	if [ ! -e ${log} ]; then echo no log; exit 1; fi
++at_start=`pwd`
++cd "${dname}" || exit 1
++
++log="${bname}".log.log
++if [ ! -e "${log}" ]; then
++	log="${bname}".log
++	if [ ! -e "${log}" ]; then echo no log; exit 1; fi
+ fi
+ 
+ folder="${bname%.*}"
+-if [ -n "${isdebug}" ]; then echo ${folder}; fi
++if [ -n "${is_debug}" ]; then echo "${folder}"; fi
++out="${folder}".dbg
++
++v=
++if [ -n "${is_debug}" ]; then v=-v; fi #; set -x
+ 
+ if [ -z "${skip_ffdec}" ]; then
+-	if [ -z "${isdebug}" ]; then
+-		ffdec -export script ${folder} ${1} > /dev/null || exit 1
++	if [ -z "${ffdec}" ]; then
++		ffdec=ffdec
++	fi
++	if [ -z "${is_debug}" ]; then
++		"${ffdec}" -export script "${folder}" "${bname}" > /dev/null || exit 1
+ 	else
+-		echo ffdec -export script ${folder} ${1}
+-		ffdec -export script ${folder} ${1} || exit 1
++		echo ${ffdec} -export script "${folder}" "${bname}"
++		"${ffdec}" -export script "${folder}" "${bname}" || exit 1
+ 	fi
+-	if [ -n "${wait}" ]; then read; fi
+ fi
+-
+-out=${folder}.dbg
+-mkdir -p ${out}
+-
+-cd ${folder}
+-
+-move () {
+-	mv ${v} "${1}" ${2}
+-	if [ -n "${isdebug}" ]; then
+-		cat ${2}
+-	fi
+-}
+-doaction () {
+-	to=${1}
+-	shift
+-	if [ ${#@} = 0 ]; then
+-		return #is empty
+-	fi
+-	for var in "${@}"; do
+-		f=`echo ${var} | grep -o "frame_.*/"`   #/ is important to stop the search
+-		f=$(expr substr ${f} 1 $(echo $(echo -n ${f} | wc -m)-1 | bc))
+-		#f=${f::-1}
+-		f=${to}_$(expr substr ${f} 7 $(echo $(echo -n ${f} | wc -m)-6 | bc))
+-		#f=${to}_${f:6}
+-		move ${var} ../${out}/${f}
+-	done
+-}
+-number_expected () {
+-	if [ -z "${no_number_check}" ]; then
+-		case ${p} in
+-			''|*[!0-9]*) echo "error: Not a number"; exit 1 ;;
+-		esac #This rejects empty strings and strings containing non-digits
++mover () {
++	if [ -z "${no_clean}" ]; then
++		mv ${v} "${@}" || exit 1
++	else
++		cp ${v} "${@}" || exit 1
+ 	fi
+ }
+-new_tag () {
+-	number_expected
+-	s=${p}
+-	t= #type
+-	if [ -n "${isdebug}" ]; then echo id = ${s}; fi
+-}
++if [ -z "${skip_alternative}" ]; then
++	mkdir -p "${out}"
+ 
+-ainits_ar_key=
+-ainits_ar_val=
+-ainits_ar_set () {
+-	ainits_ar_key="${ainits_ar_key} $1"
+-	ainits_ar_val="${ainits_ar_val} $2"
+-}
+-ainits_ar_get () {
+-	i=0
+-	for a in ${ainits_ar_key}; do
+-		if [ $a = $s ]; then
+-			break
++	cd "${folder}"
++
++	move () {
++		mover "${1}" $2
++		if [ -n "${is_debug}" ]; then
++			cat ${2}
+ 		fi
+-		i=$((i+1))
+-	done
+-	j=0
+-	for a in ${ainits_ar_val}; do
+-		if [ $j = $i ]; then
+-			return $a
++	}
++	doaction () {
++		to=${1}
++		shift
++		if [ ${#@} = 0 ]; then
++			return #is empty
+ 		fi
+-		j=$((j+1))
+-	done
+-}
+-#ainits=( )
+-ainits_counter=1
+-s= #id
+-v=
+-if [ -n "${isdebug}" ]; then v=-v; fi #; set -x
+-while read p; do
+-	if [ -z "${s}" ]; then
+-		new_tag
+-	else
+-		if [ -z "${t}" ]; then
+-			if [ -z "${p}" ]; then
+-				t=1 #can be show or done
+-			else
+-				number_expected
+-				t=2 #action
+-				at=${p}
+-				if [ -n "${isdebug}" ]; then echo at = ${at}; fi
+-				ainits_ar_set ${s} ${at}
+-				#ainits[${s}]=${at}
++		for var in "${@}"; do
++			f=`echo ${var} | grep -o frame_.*/`   #/ is important to stop the search
++			f=$(expr substr ${f} 1 $(echo $(echo -n ${f} | wc -m)-1 | bc))
++			#f=${f::-1}
++			f=${to}_$(expr substr ${f} 7 $(echo $(echo -n ${f} | wc -m)-6 | bc))
++			#f=${to}_${f:6}
++			move ${var} ../"${out}"/${f}
++		done
++	}
++	number_expected () {
++		if [ -z "${no_number_check}" ]; then
++			case ${p} in
++				''|*[!0-9]*) echo error: Not a number; exit 1 ;;
++			esac #This rejects empty strings and strings containing non-digits
++		fi
++	}
++	new_tag () {
++		number_expected
++		s=${p}
++		t= #type
++		if [ -n "${is_debug}" ]; then echo id = ${s}; fi
++	}
++
++	ainits_ar_key=
++	ainits_ar_val=
++	ainits_ar_set () {
++		ainits_ar_key="${ainits_ar_key} $1"
++		ainits_ar_val="${ainits_ar_val} $2"
++	}
++	ainits_ar_get () {
++		i=0
++		for a in ${ainits_ar_key}; do
++			if [ $a = $s ]; then
++				break
+ 			fi
+-		elif [ ${t} = 1 ]; then
+-			if [ -z "${p}" ]; then
+-				echo show
+-			else
+-			#done
+-				number_expected
+-				if [ -n "${isdebug}" ]; then echo finalId = ${p}; fi
+-				ainits_ar_get ${s}; if [ $? = 1 ]; then #button or DoInitAction sprite
+-				#if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
+-					f=`find -name "BUTTONCONDACTION on(release).as" | grep "DefineButton2_${p}"`
+-					if [ -n "${f}" ]; then #is a button
+-						d=../${out}/${s}
+-						move "${f}" ${d}
+-						sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
+-					else #sprite init
+-						if [ ${ainits_counter} != 1 ]; then
+-							ainits_file="_${ainits_counter}.as"
+-						else
+-							ainits_file=".as"
++			i=$((i+1))
++		done
++		j=0
++		for a in ${ainits_ar_val}; do
++			if [ $j = $i ]; then
++				return $a
++			fi
++			j=$((j+1))
++		done
++	}
++	#ainits=( )
++	ainits_counter=1
++	s= #id
++	while read p; do
++		if [ -z "${s}" ]; then
++			new_tag
++		else
++			if [ -z "${t}" ]; then
++				if [ -z "${p}" ]; then
++					t=1 #can be show or done
++				else
++					number_expected
++					t=2 #action
++					at=${p}
++					if [ -n "${is_debug}" ]; then echo at = ${at}; fi
++					ainits_ar_set ${s} ${at}
++					#ainits[${s}]=${at}
++				fi
++			elif [ ${t} = 1 ]; then
++				if [ -z "${p}" ]; then
++					if [ -n "${is_debug}" ]; then
++						echo show
++					fi
++				else
++				#done
++					number_expected
++					if [ -n "${is_debug}" ]; then echo finalId = ${p}; fi
++					ainits_ar_get ${s}; if [ $? = 1 ]; then #button or DoInitAction sprite
++					#if [ "${ainits[${s}]}" = 1 ]; then #button or DoInitAction sprite
++						f=`find -name BUTTONCONDACTION' 'on'('release')'.as | grep "DefineButton2_${p}"`
++						if [ -n "${f}" ]; then #is a button
++							d=../"${out}"/${s}
++							move "${f}" ${d}
++							sed -e '1d' -e '$d' -i ${d}  #remove on(release){ ... }
++						else #sprite init
++							if [ ${ainits_counter} != 1 ]; then
++								ainits_file=_${ainits_counter}.as
++							else
++								ainits_file=.as
++							fi
++							f=`find -name DoInitAction${ainits_file}`
++							move ${f} ../"${out}"/${s}
++							ainits_counter=$((ainits_counter+1))
+ 						fi
+-						f=`find -name DoInitAction${ainits_file}`
+-						move  ${f} ../${out}/${s}
+-						ainits_counter=$((ainits_counter+1))
+ 					fi
++					doaction ${s} `find -name DoAction.as | grep DefineSprite_"${p}"_.*/`  #else is empty
+ 				fi
+-				doaction ${s} `find -name DoAction.as | grep "DefineSprite_${p}_movie"`  #else is empty
++				s=
++			else
++				new_tag
+ 			fi
+-			s=
+-		else
+-			new_tag
+ 		fi
+-	fi
+-done <../${log}
+-
+-doaction 0 `find -maxdepth 3 -name DoAction.as`
++	done <../"${log}"
+ 
++	doaction 0 `find -maxdepth 3 -name DoAction.as`
++	cd ..
++fi
+ #part 2
+ if [ -n "${2}" ]; then
+-	cd ..
+-	mv ${v} ${1} ${1}.orig && \
+-	${2} && \
+-	diff ${1} ${1}.orig && \
+-	rm -r ${v} ${folder}
++	set -e #at alternative there are return 1 and !=0 grep returns
++	mv ${v} "${bname}" "${bname}".orig
++	cd "${at_start}"
++	${2} || {
++		cd "${dname}"
++		if [ ! -e "${bname}" ]; then
++			mv ${v} "${bname}".orig "${bname}"
++		fi
++		exit 1
++	}
++	cd "${dname}"
++	diff "${bname}" "${bname}".orig
++	if [ -n "${scripts}" ]; then
++		mover "${out}"/* "${scripts}"
++	fi
++	if [ -z "${no_clean}" ]; then
++		rm -r ${v} "${out}"  #or rmdir if -n scripts
++		rm -r ${v} "${folder}"
++		rm "${bname}".orig
++	fi
+ fi
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -1,7 +1,7 @@
+ # Action SWF
+ 
+ ## Install
+-On Ubuntu from PPA.
++On Ubuntu(amd64 i386)(bionic focal jammy noble) from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+@@ -9,23 +9,23 @@ Or the *Manual installation step* from t
+ ```sh
+ sudo apt-get install actionswf
+ ```
+-There is also <i>libactionswf-dev</i>. <i>liboadbgdata</i> <i>.gz</i> file from [releases](https://github.com/colin-i/actionswf/releases) is for aarch64 architecture.\
++There is also <i>libactionswf-dev</i>(all). <i>liboadbgdata</i> <i>.gz</i> file from [releases](https://github.com/colin-i/actionswf/releases) is for aarch64 architecture.\
+ \
+ \
+-On Arch Linux, <i>.zst</i> file from [releases](https://github.com/colin-i/edor/releases). Or:
++On Arch Linux(x86_64), <i>.zst</i> file from [releases](https://github.com/colin-i/edor/releases). Or:
+ ```sh
+ yay -Sy actionswf
+ ```
+ \
+-On Fedora:
++On Fedora 42(x86_64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install actionswf
+ ```
+-There is also <i>actionswf-devel</i>.\
++There is also <i>actionswf-devel</i>(noarch).\
+ \
+ \
+-On openSUSE, run the following as __root__:\
++On openSUSE(x86_64), run the following as __root__:\
+ For openSUSE Tumbleweed:
+ ```sh
+ zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
+@@ -40,7 +40,7 @@ And:
+ zypper refresh
+ zypper install actionswf
+ ```
+-An optional step is to install **actionswf-devel**.\
++An optional step is to install **actionswf-devel**(noarch).\
+ \
+ \
+ On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases).
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -44,7 +44,7 @@ endif
+ 
+ #this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+ #	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x local actionpush
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x local actionpush img
+ expitems = action swf tool ../shared/action_dllmain
+ 
+ exte=libexte.a
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -71,7 +71,7 @@ endfunction
+ #name/null
+ function action_code_write_builtin_names(sv codepointer,sv p_action) #action is value only because is working with stack
+ 	sd name
+-	set name x_pointer_touchless(codepointer)
++	set name x_pointer(codepointer)
+ 	sd compare
+ 	vstr int="int"
+ 	setcall compare strcmp(name,int)
+@@ -155,7 +155,7 @@ endfunction
+ 
+ import "x_pointer" x_pointer
+ import "x_pointer_touchless" x_pointer_touchless
+-import "x_pointer_x" x_pointer_x
++#import "x_pointer_x" x_pointer_x
+ function action_code_get_pointer(sv p_codepointer)
+ 	sd a;set a x_pointer(p_codepointer#)
+ 	incst p_codepointer#  #to pass the pointer
+@@ -198,6 +198,9 @@ import "cond_blocks_at_index" cond_block
+ import "brace_blocks_counter_dec" brace_blocks_counter_dec
+ import "cond_blocks_noerror" cond_blocks_noerror
+ import "debug_phase_code_remove" debug_phase_code_remove
++import "flag_noDup_get" flag_noDup_get
++import "x_pointer_twice_set" x_pointer_twice_set
++import "x_pointer_twice_unset" x_pointer_twice_unset
+ 
+ #aftercallimport ebool
+ 
+@@ -375,26 +378,45 @@ function action_code_pack(sd codepointer
+ 		set need_pop (TRUE)
+ 	endelseif
+ 	#else is ActionDefineLocal/ActionSetVariable
++	sd name
+ 	if is_member=(TRUE)
++		sd member_codepointer_start;set member_codepointer_start codepointer
+ 		setcall codepointer action_member_loop_left(codepointer)
+ 	else
+ 		#definelocal or setvariable or delete2
+-		sd name;set name action_code_get_pointer(#codepointer)
++		set name action_code_get_pointer(#codepointer)
+ 		call action_push((ap_Constant8),name)
+ 	endelse
+ 	if need_right=(TRUE)
++		sd f
+ 		if codepointer#=(ActionIncrement)
+ 			add codepointer (DWORD)
+-			call action_code_inc_dec((ActionIncrement),attrib)
++			set f flag_noDup_get()
++			if attrib=(ActionSetVariable)
++				call action_code_dupGet_var_if(f,name)
++			else
++				call action_code_dupGet_member_if(f,member_codepointer_start)
++			end
++			call action_one((ActionIncrement))
+ 		elseif codepointer#=(ActionDecrement)
+ 			add codepointer (DWORD)
+-			call action_code_inc_dec((ActionDecrement),attrib)
++			set f flag_noDup_get()
++			if attrib=(ActionSetVariable)
++				call action_code_dupGet_var_if(f,name)
++			else
++				call action_code_dupGet_member_if(f,member_codepointer_start)
++			end
++			call action_one((ActionDecrement))
+ 		elseif codepointer#=(mixt_equal)
+ 			#+= .. ^= ..
+ 			add codepointer (DWORD)
+ 			sd mixt_op;set mixt_op codepointer#;add codepointer (DWORD)
+-			if attrib=(ActionSetVariable);call action_code_dupGet_var()
+-			else;call action_code_dupGet_member();endelse
++			set f flag_noDup_get()
++			if attrib=(ActionSetVariable)
++				call action_code_dupGet_var_if(f,name)
++			else
++				call action_code_dupGet_member_if(f,member_codepointer_start)
++			endelse
+ 			setcall codepointer action_code_right(codepointer)
+ 			call action_one(mixt_op)
+ 		else
+@@ -409,18 +431,13 @@ function action_code_pack(sd codepointer
+ endfunction
+ import "actionrecordheader" actionrecordheader
+ import "swf_actionblock_add" swf_actionblock_add
+-function action_code_inc_dec(sd inc_dec,sd setvar_or_setmember)
+-	if setvar_or_setmember=(ActionSetVariable)
+-		call action_code_dupGet_var()
+-		call action_one(inc_dec)
++function action_code_dupGet_var_if(sd f,sd name)
++	if f=(flag_none)
++		call action_one((ActionPushDuplicate))
+ 	else
+-		call action_code_dupGet_member()
+-		call action_one(inc_dec)
+-	endelse
+-endfunction
+-function action_code_dupGet_var()
+-    call action_one((ActionPushDuplicate))
+-    call action_one((ActionGetVariable))
++		call action_push((ap_Constant8),name)
++	end
++	callg action_one((ActionGetVariable))
+ endfunction
+ const first_storereg=0
+ const ActionStoreRegister_length=1
+@@ -435,8 +452,18 @@ function action_code_dupGet_member()
+ 	call action_one((ActionPushDuplicate))
+ 	call action_push((ap_RegisterNumber),reg)
+ 	call action_one((ActionStackSwap))
+-	call action_one((ActionGetMember))
++	callg action_one((ActionGetMember))
+ endfunction
++function action_code_dupGet_member_if(sd f,sd member_codepointer)
++	if f=(flag_none)
++		callg action_code_dupGet_member()
++		ret
++	end
++	call x_pointer_twice_set()
++	call action_member_loop_right(member_codepointer)
++	call x_pointer_twice_unset()
++end
++
+ import "brace_blocks_add_write_current" brace_blocks_add_write_current
+ 
+ import "add_dummy_jump" add_dummy_jump
+@@ -738,11 +765,13 @@ function action_code_write_builtin_funct
+ 	add pointer :  #to pass the pointer
+ 	#
+ 	sd cursor
++	sd was;set was pointer# ;#cannot set later, trace('b') is ok but trace(eval('b')) will write to .x and at next x run will wrong the pointer
+ 	setcall cursor action_code_write_builtin_set(pointer,pwant_return)
+ 	if cursor=pointer
++		set pointer# was
+ 		return codepointer
+ 	endif
+-	call x_pointer_x(pointer) #in case is to .x, must trim pointer
++	#moved above: call x_pointer_x(pointer) #in case is to .x, must trim pointer
+ 	return cursor
+ endfunction
+ #codepointer
+@@ -942,29 +971,29 @@ function action_one_command(ss command)
+ 	#
+ 	setcall compare strcmp("null",command)
+ 	if compare=0
+-		call action_push((ap_Null))
++		callg action_push((ap_Null))
+ 		ret
+ 	endif
+ 	setcall compare strcmp("undefined",command)
+ 	if compare=0
+-		call action_push((ap_Undefined))
++		callg action_push((ap_Undefined))
+ 		ret
+ 	endif
+ 	set compare action_true_compare(command)
+ 	if compare=0
+-		call action_push((ap_Boolean),1)
++		callg action_push((ap_Boolean),1)
+ 		ret
+ 	endif
+ 	setcall compare strcmp("false",command)
+ 	if compare=0
+-		call action_push((ap_Boolean),0)
++		callg action_push((ap_Boolean),0)
+ 		ret
+ 	endif
+-	call action_get_one(command)
++	callg action_get_one(command)
+ endfunction
+ function action_get_one(ss variable)
+     call action_push((ap_Constant8),variable)
+-    call action_one((ActionGetVariable))
++    callg action_one((ActionGetVariable))
+ endfunction
+ 
+ #codepointer
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -624,22 +624,22 @@ function action_parse_loop(ss ac,ss p_op
+         #set end: is static variable and can be mod again inside previous function
+         set end endtype1
+         set end2 endtype2
+-        #
+-        if was_parenthesis=0
+-            setcall ac action_code_take_main(ac,#op,op_set)
+-            if op=(ifElse_sign)
+-                inc ac
+-                call action_code_set((ifElse_start))
+-                set p_ifElse_bool# (TRUE)
+-                setcall ac action_code_row_parse_tool(ac,(Colon))
++		#
++		if was_parenthesis=0
++			setcall ac action_code_take_main(ac,#op,op_set)
++			if op=(ifElse_sign)
++				inc ac
++				call action_code_set((ifElse_start))
++				set p_ifElse_bool# (TRUE)
++				setcall ac action_code_row_parse_tool(ac,(Colon))
+ 				callret action_code_row_parse_tool_util(ac,p_op,endtype1,endtype2)
+-            endif
+-        endif
+-        #
+-        setcall ac action_code_extended_operations(ac,op)
+-        if is_compare_ptr#=(TRUE)
+-            set is_compare_ptr# (FALSE)
+-        else
++			endif
++		endif
++		#
++		setcall ac action_code_extended_operations(ac,op)
++		if is_compare_ptr#=(TRUE)
++			set is_compare_ptr# (FALSE)
++		else
+ 			if op=0
+ 				if p_op!=0
+ 					set p_op# op
+@@ -650,7 +650,7 @@ function action_parse_loop(ss ac,ss p_op
+ 			if bool=(TRUE);return ac;endif
+ 			sd x;setcall x action_parse_take_action(op,ac)
+ 			call action_code_set(x)
+-        endelse
++		endelse
+     endwhile
+ endfunction
+ #action
+@@ -726,7 +726,7 @@ function action_code_take_main(ss ac,sv
+ 	ss pointer
+ 	setcall pointer action_code_str(ac)
+ 	if pointer!=0
+-		#set pointer spaces(pointer) ffdec
++		set pointer spaces(pointer) ;#ffdec _text.message = \"Angle: \" +b
+ 		set p_op# pointer#;set pointer# 0
+ 		return pointer
+ 	endif
+@@ -810,7 +810,7 @@ function action_code_str(ss ac)
+     return next
+ endfunction
+ function action_code_take(ss ac)
+-	sd b;setcall b numeric_code(ac)
++	sd b;setcall b numeric_code_orConstruction(ac)
+ 	if b=(TRUE)
+ 		ret
+ 	endif
+@@ -828,7 +828,7 @@ function action_code_take_pointer(sd ac)
+     endelse
+ endfunction
+ #bool
+-function numeric_code(ss ac)
++function numeric_code_orConstruction(ss ac)
+ 	ss pointer;set pointer ac
+ 	char neg="-"
+ 	if pointer#=neg
+@@ -843,7 +843,15 @@ function numeric_code(ss ac)
+ 			char n="NaN"
+ 			set c mem_cmp_bool(pointer,#n,\.n)
+ 			if c=(FALSE)
+-				return (FALSE)
++				if ac=pointer
++					return (FALSE)
++				end
++				#here is -pointer
++				call action_code_set((ap_Integer))
++				call action_code_set(0)
++				call action_code_set((ActionSubtract))
++				call action_code_take_pointer(pointer)
++				return (TRUE)
+ 			end
+ 			sd b=-1^doubleH_sign
+ 			if ac!=pointer ##swfdump is seeing -nan , nan
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -53,7 +53,7 @@ function pool_init(sd flags)
+ 	sd test=flags_pool
+ 	and test flags
+ 	if test!=0
+-		and test (flags_pool_read)
++		and test (flag_pool_read)
+ 		if test=0
+ 			set pool_data.write (TRUE)
+ 			set pool_data.read (FALSE)  #is a read alone test case
+--- actionswf-1.orig/src/actionpush.oc
++++ actionswf-1/src/actionpush.oc
+@@ -67,7 +67,7 @@ function push_add_ex(sd size,sd value,sd
+ 	set push.size newsize
+ end
+ function push_add(sd size,sd value)
+-	call push_add_ex(size,value,0)
++	callg push_add_ex(size,value,0)
+ end
+ 
+ function action_push(sd type,sd valuehigh,sd valuelow)
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -7,9 +7,6 @@ importx "strrchr" strrchr
+ importx "strcpy" strcpy
+ importx "memcpy" memcpy
+ importx "sprintf" sprintf
+-importx "access" access
+-importx "unlink" unlink
+-importx "rmdir" rmdir
+ 
+ import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+ import "word_arg_to_stack" word_arg_to_stack
+@@ -24,12 +21,17 @@ function alt_join(vstr concat_point)
+ end
+ function alt_free()
+ 	if alt_join.folder!=(NULL)
+-		set alt_join.concat_point# (Nullchar)
+-		call rmdir(alt_join.folder)
++		#set alt_join.concat_point# (Nullchar)
++		#call rmdir(alt_join.folder)
+ 		call mem_free(#alt_join.folder)
+ 	end
+ end
+ 
++function flag_noDup_get()
++	datax flag_dup#1
++	return flag_dup
++end
++
+ import "ainit" ainit
+ 
+ importx "strlen" strlen
+@@ -44,6 +46,10 @@ function alt_init(sd flags,sd path)
+ 	if alt_join.folder!=(NULL)
+ 		call error("swf started, alt not closed")
+ 	end
++
++	set flag_noDup_get.flag_dup flags
++	and flag_noDup_get.flag_dup (flag_noDuplicate) #needed at ffdec reproducible
++
+ 	and flags (flag_alt)
+ 	if flags=(flag_alt)
+ 		sd size;setcall size strlen(path)
+@@ -68,28 +74,36 @@ function alt_action(sd orig_action,sd pr
+ end
+ function alt_action_base(sd orig_action,sd preid,sd has_frames)
+ 	if alt_join.folder!=(NULL)
+-		whiletrue
+-			if has_frames=(TRUE)
+-				sd ai;set ai ainit()
+-				if ai=(xlog_ainit_false)
+-					sw p
+-					#if preid!=0
+-					set p swf_sprite_frames_pointer(preid)
+-					#else #set p swf_frames_pointer()#end
+-					sd f;set f word_arg_to_stack(p)
+-					inc f  ##index 0 is frame 1 at ffdec
+-					call sprintf(alt_join.concat_point,"%u_%u",preid,f)
+-					break
++		import "struct_ids_action" struct_ids_action
++		sd block
++		setcall block struct_ids_action((ids_get),preid)
++		sd size
++		import "block_get_size" block_get_size
++		setcall size block_get_size(block)
++		if size=0 #at alt, first action from the frame is with all
++			whiletrue
++				if has_frames=(TRUE)
++					sd ai;set ai ainit()
++					if ai=(xlog_ainit_false)
++						sw p
++						#if preid!=0
++						set p swf_sprite_frames_pointer(preid)
++						#else #set p swf_frames_pointer()#end
++						sd f;set f word_arg_to_stack(p)
++						inc f  ##index 0 is frame 1 at ffdec
++						call sprintf(alt_join.concat_point,"%u_%u",preid,f)
++						break
++					end
+ 				end
++				call sprintf(alt_join.concat_point,"%u",preid)
++				break
+ 			end
+-			call sprintf(alt_join.concat_point,"%u",preid)
+-			break
+-		end
+-		datax int#1;set int access(alt_join.folder,(R_OK))
+-		if int=0
++
++			#datax int#1;set int access(alt_join.folder,(R_OK))
++			#if int=0
+ 			sd mem
+ 			set mem file_get_content(alt_join.folder,(NULL))
+-			call unlink(alt_join.folder) #if there are two action() at one frame, the second one must not see this
++			#call unlink(alt_join.folder) #if there are two action() at one frame, the second one must not see this
+ 			return mem
+ 		end
+ 		return (NULL)
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -204,6 +204,7 @@ import "for_in" for_in
+ import "frames_as_shows" frames_as_shows
+ import "ainit" ainit
+ import "pool_init" pool_init
++import "verbose" verbose
+ 
+ importx "fseek" fseek
+ importx "fread" fread
+@@ -220,7 +221,7 @@ import "x_init" x_init
+ import "f_open_mem_ex" f_open_mem_ex
+ import "strlen_of" strlen_of
+ 
+-function flags_init(sd flags,sd path)
++function flags_init(sd flags,sd path) #this order is copied in a comment at flags.oh
+ 	set flags pool_init(flags)
+ 	set flags x_init(flags,path)
+ 	set flags log_init(flags,path)
+@@ -230,6 +231,7 @@ function flags_init(sd flags,sd path)
+ 	call frames_as_shows(flags)
+ 	call for_in(flags)
+ 	call deprecation_init(flags)
++	call verbose(flags)
+ endfunction
+ 
+ function log_init(sd flags,sd path)
+@@ -246,7 +248,7 @@ function log_init(sd flags,sd path)
+ 		sd b;setcall b memalloc(size)
+ 		vstr lg="%s.log"
+ 		call sprintf(b,lg,path)
+-		setcall debug_data.file f_open_mem_ex(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character
++		setcall debug_data.file f_open_mem_ex(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character, when .log is for oad
+ 
+ 		if prexx=(prexx_flags)
+ 			set test (flagpre_mix) #first log is with prexx, second log is for alt
+@@ -601,7 +603,7 @@ end
+ 
+ function deprecation()
+ 	if deprecation_init.bool=(TRUE)
+-		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG functions, flag_deprecation_no"
++		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG/img functions, flag_deprecation_no"
+ 		if deprecation_init.full=(TRUE)
+ 			call error(e)
+ 		else
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -52,6 +52,7 @@ end
+ 
+ importx "fwrite" fwrite
+ importx "ftell" ftell
++importx "fseek" fseek
+ 
+ importx "fopen" fopen
+ importx "free" free
+@@ -164,7 +165,7 @@ function file_write(sd file,sd buffer,sd
+ 		ret
+ 	endif
+ 	vstr er="File write error"
+-	call error(er)
++	callg error(er)
+ endfunction
+ function file_write_mem(sd file,sd buffer,sd size)
+ 	sd len
+@@ -173,20 +174,20 @@ function file_write_mem(sd file,sd buffe
+ 	if len=size
+ 		ret
+ 	endif
+-	call error(file_write.er)
++	callg error(file_write.er)
+ endfunction
+ 
+ function f_printf(sd nr,sd file) #,sd *format,sd a1...,sd aN
+ 	sd r;set r f_printf_in(#file,nr)
+ 	if r=-1
+-		call error("fprintf error")
++		callg error("fprintf error")
+ 	endif
+ endfunction
+ 
+ function f_write(sd f,sd buf,sd sz)
+ 	sd r;set r fwrite(buf,sz,1,f)
+ 	if r!=1
+-		call error("fwrite error")
++		callg error("fwrite error")
+ 	end
+ endfunction
+ 
+@@ -204,9 +205,39 @@ function f_tell_errors(sd f)
+ 		return r
+ 	end
+ 	call fclose(f)
+-	call error(f_tell.er)
++	callg error(f_tell.er)
+ endfunction
+ 
++function f_size(sd path)
++	vstr rb="rb"
++	sd f;set f fopen(path,rb)
++	if f!=(NULL)
++		call fseek(f,0,(SEEK_END))
++		sd size
++		set size ftell(f)
++		call fclose(f)
++		if size!=-1
++			return size
++		end
++	end
++	vstr er="f_size error"
++	callg error(er)
++end
++function f_size_errors(sd path)
++	sd f;set f fopen(path,f_size.rb)
++	if f!=(NULL)
++		call fseek(f,0,(SEEK_END))
++		sd size
++		set size ftell(f)
++		call fclose(f)
++		if size!=-1
++			return size
++		end
++	end
++	call free(f)
++	callg error(f_size.er)
++end
++
+ import "file_resources_set" file_resources_set
+ import "file_resources_free" file_resources_free
+ function filepath_get_word(ss imagepath,sd offset,ss err)
+@@ -254,3 +285,16 @@ function dblsize_end(sd file,sd size,sd
+ 	call file_resources_free()
+ 	return dim
+ endfunction
++
++#size
++function dbl_dim(ss imagepath,sd off)
++	#format? ming newSWFDBLBitmap_fromInput
++	dataxu size#1;charx t#1;#sw dim
++	sd file;set file dblsize_start(imagepath,#size,#t)
++	if t=(l)
++		add off (dblsignature+dblsize+dblformat)
++	else
++		add off (dblsignature+dblsize16+dblformat)
++	end
++	callret dblsize_end(file,size,off)
++end
+--- /dev/null
++++ actionswf-1/src/img.oc
+@@ -0,0 +1,160 @@
++
++format elfobj64
++
++include "../include/prog.oh"
++
++function verbose(datax flag)
++	and flag (flag_verbose)
++end
++
++importx "strlen" strlen
++importx "memcmp" memcmp
++importx "memcpy" memcpy
++importx "malloc" malloc
++importx "access" access
++importx "free" free
++importx "printf" printf
++
++import "ebase" ebase
++
++#aftercalli
++
++import "f_size" f_size
++import "f_size_errors" f_size_errors
++import "error" error
++import "memalloc" memalloc
++
++function imgx(ss dbl,sd p_wh,sd is_image) #,sd is_clipped
++	sd len;set len strlen(dbl)
++	ss cr;set cr dbl
++	add cr len
++	sd sz;set sz cr
++	sd size;set size cr
++	while dbl!=cr
++		dec cr
++		if cr#=(Period)
++			set size cr
++			inc cr
++			sub sz cr
++			if sz=3
++				char jp=Period
++				char j="jpg"
++				char ms=Period
++				char m="msk"
++				sd cmp;set cmp memcmp(cr,#j,3)
++				sd cmp2;set cmp2 memcmp(cr,#m,3)
++				whiletrue
++					if cmp!=0
++						if cmp2!=0
++							break
++						end
++					end
++					call error("img is pairing with jpg/msk error") #will leave at bp
++					break #to silence the jump
++				end
++			end
++			break
++		end
++	end
++
++	sd dblsize;set dblsize f_size(dbl)
++	sub dblsize 4+4  #is unsigned compared to stay in ui32 tags, if short overflow will fail at dbl checks anyway
++
++	sub size dbl
++	set sz size
++	add size 5
++
++	sd f1;set f1 memalloc(size)
++	call memcpy(f1,dbl,sz)
++	set cr f1
++	add cr sz
++	call memcpy(cr,#ms,5)
++
++	sd id; sd jpgsize
++	sd acs;set acs access(f1,(F_OK))
++	if acs!=0 #opac
++		call memcpy(cr,#jp,5)
++		set jpgsize f_size_errors(f1)
++		set id imgx_decision(dblsize,jpgsize,dbl,f1,(NULL),p_wh,is_image)
++	else #transparent
++		set jpgsize f_size_errors(f1) #is msk size
++		sd jpg;set jpg malloc(size)
++		if jpg!=(NULL)
++			call memcpy(jpg,dbl,sz)
++			set cr jpg
++			add cr sz
++			call memcpy(cr,#jp,5)
++
++			add jpgsize f_size_errors(jpg)
++			#if jpgsize>0 #overflow can't make in swf, ui32tags
++			add jpgsize 4
++			#if jpgsize>0 #same
++			set id imgx_decision(dblsize,jpgsize,dbl,jpg,f1,p_wh,is_image)
++			#end
++			#end
++			call free(jpg)
++		end
++	end
++	call free(f1)
++	if verbose.flag!=(flag_none)
++		add dblsize 2 #again, ui32 tags
++		add jpgsize 2
++		sd c
++		if dblsize<^jpgsize
++			set c (Lessthan)
++		else
++			set c (Greaterthan)
++		end
++		ss plus
++		if acs!=0
++			set plus ""
++		else
++			set plus "+msk"
++		end
++		call printf("dbl 0x%lx %c jpg%s 0x%lx",dblsize,c,plus,jpgsize)
++		if p_wh!=(NULL)
++			sd w;set w p_wh#
++			add p_wh (DWORD)
++			call printf(" %hux%hu",w,p_wh#)
++		end
++		call printf(" %s\n",dbl)
++	end
++	return id
++end
++
++import "swf_dbl_ex_local" swf_dbl_ex_local
++import "swf_image_ex_local" swf_image_ex_local
++import "swf_jpeg_local" swf_jpeg_local
++import "dbl_dim" dbl_dim
++import "swf_shape_bitmap_local_clipped" swf_shape_bitmap_local_clipped
++
++function imgx_decision(sd dblsize,sd jpgsize,ss dbl,ss jpg,ss msk,sd p_wh,sd is_image) #,sd is_clipped
++	valuex bp#1;base bp;call ebase(bp)
++	if dblsize<^jpgsize
++		if is_image=(FALSE)
++			callret swf_dbl_ex_local(dbl,p_wh,(TRUE))
++		end
++		if p_wh=(NULL)
++			datax width#1;datax height#1
++			callret swf_image_ex_local(dbl,#width,(TRUE))
++		end
++		callret swf_image_ex_local(dbl,p_wh,(TRUE))
++	end
++	sd id
++	if msk=(NULL)
++		set id swf_jpeg_local(jpg,(DefineBitsJPEG2))
++	else
++		set id swf_jpeg_local(jpg,(DefineBitsJPEG3),msk)
++	end
++	set width dbl_dim(dbl,0)
++	set height dbl_dim(dbl,(WORD))
++	if p_wh!=(NULL)
++		set p_wh# width
++		add p_wh (DWORD)
++		set p_wh# height
++	end
++	if is_image=(FALSE)
++		return id
++	end
++	callret swf_shape_bitmap_local_clipped(id,width,height)
++end
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -458,11 +458,11 @@ function swf_shape_bitmap_local(sd bitma
+ endfunction
+ 
+ #id
+-function swf_image_ex_local(ss imagepath,sd p_wh)
++function swf_image_ex_local(ss imagepath,sd p_wh,sd verif)
+ #ss imagepath = path name for the dbl image
+ #sd p_wh      = pointer width height
+     sd dbl_id
+-    setcall dbl_id swf_dbl_ex_local(imagepath,p_wh)
++    setcall dbl_id swf_dbl_ex_local(imagepath,p_wh,verif)
+     #add dbl to a shape
+     sd width;set width p_wh#;add p_wh (DWORD)
+ 	callret swf_shape_bitmap_local_clipped(dbl_id,width,p_wh#)
+@@ -470,7 +470,7 @@ endfunction
+ import "swf_tag_recordheader_long_entry" swf_tag_recordheader_long_entry
+ import "word_swap" word_swap
+ #id
+-function swf_dbl_ex_local(ss imagepath,sd p_wh)
++function swf_dbl_ex_local(ss imagepath,sd p_wh,sd verif)
+ #ss imagepath = path name for the dbl image
+ #sd p_wh = pointer width a dword and height next dword
+ 	sd id
+@@ -543,7 +543,9 @@ function swf_dbl_ex_local(ss imagepath,s
+ 	endif
+ 	call swf_mem_add(cursor,image_size)
+ 	call file_get_content__resources_free()
+-	call deprecation()
++	if verif=(FALSE)
++		call deprecation()
++	end
+ 	return id
+ endfunction
+ 
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -265,54 +265,41 @@ functionX swf_image(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+ 	data width#1;data *height#1
+-	callret swf_image_ex_local(imagepath,#width)
++	callret swf_image_ex_local(imagepath,#width,(FALSE))
+ endfunction
+ #id
+ import "swf_image_ex_local" swf_image_ex_local
+ functionX swf_image_ex(ss imagepath,sd p_wh)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath, sd p_wh
+-	callret swf_image_ex_local(imagepath,p_wh)
++	callret swf_image_ex_local(imagepath,p_wh,(FALSE))
+ endfunction
+ 
+ #id
+ functionX swf_dbl(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	callret swf_dbl_ex_local(imagepath,(NULL))
++	callret swf_dbl_ex_local(imagepath,(NULL),(FALSE))
+ endfunction
+ #id
+ import "swf_dbl_ex_local" swf_dbl_ex_local
+ functionX swf_dbl_ex(ss imagepath,sd p_wh)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	sd id;set id swf_dbl_ex_local(imagepath,p_wh)
+-	return id
++	callret swf_dbl_ex_local(imagepath,p_wh,(FALSE))
+ endfunction
+ 
+-import "dblsize_start" dblsize_start
+-import "dblsize_end" dblsize_end
++import "dbl_dim" dbl_dim
+ #width
+ functionX swf_dbl_width(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	#format? ming newSWFDBLBitmap_fromInput
+-	dataxu size#1;charx t#1;#sw dim
+-	sd file;set file dblsize_start(imagepath,#size,#t)
+-	if t=(l)
+-		callret dblsize_end(file,size,(dblsignature+dblsize+dblformat))
+-	end
+-	callret dblsize_end(file,size,(dblsignature+dblsize16+dblformat))
++	callret dbl_dim(imagepath,0)
+ endfunction
+ #height
+ functionX swf_dbl_height(ss imagepath)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+ #ss imagepath = path name for the dbl image
+-	dataxu size#1;charx t#1;#sw dim
+-	sd file;set file dblsize_start(imagepath,#size,#t)
+-	if t=(l)
+-		callret dblsize_end(file,size,(dblsignature+dblsize+dblformat+WORD))
+-	end
+-	callret dblsize_end(file,size,(dblsignature+dblsize16+dblformat+WORD))
++	callret dbl_dim(imagepath,(WORD))
+ endfunction
+ 
+ #jpeg/png/gif
+@@ -379,6 +366,28 @@ functionX swf_gif_height(ss imagepath)
+ 	callret filepath_get_word(imagepath,(gifsignature+WORD),swf_gif_width.err)
+ endfunction
+ 
++#both
++
++import "imgx" imgx
++
++#id
++functionX swf_imagex(ss imagepath)
++	base swf_new.bp;call ebase(swf_new.bp)
++	callret imgx(imagepath,(NULL),(TRUE))
++end
++functionX swf_imagex_ex(ss imagepath,sd p_wh)
++	base swf_new.bp;call ebase(swf_new.bp)
++	callret imgx(imagepath,p_wh,(TRUE))
++end
++functionX swf_img(ss imagepath)
++	base swf_new.bp;call ebase(swf_new.bp)
++	callret imgx(imagepath,(NULL),(FALSE))
++end
++functionX swf_img_ex(ss imagepath,sd p_wh)
++	base swf_new.bp;call ebase(swf_new.bp)
++	callret imgx(imagepath,p_wh,(FALSE))
++end
++
+ ##############
+ import "exportsId_get" exportsId_get
+ functionX swf_done()
+@@ -394,9 +403,9 @@ functionX swf_done()
+ endfunction
+ 
+ import "swf_new_ex_local" swf_new_ex_local
+-functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd add_debug)
++functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd flags)
+ 	base swf_new.bp;call ebase(swf_new.bp)
+-	call swf_new_ex_local(path,width,height,backgroundcolor,fps,add_debug)
++	call swf_new_ex_local(path,width,height,backgroundcolor,fps,flags)
+ endfunction
+ 
+ import "swf_placeobject_local" swf_placeobject_local
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -27,9 +27,16 @@ function x_pointer(sv pointer)
+ 	sd value
+ 	set value pointer#
+ 	if x_data.f!=(NULL)
++		charx twice#1 #since noDuplicate flag for no duplication for members, is reserved, are witings at file when is used, touchless is only at infiniteCheck or defFuncArgsTest
+ 		import "action_debug" action_debug
+-		sub pointer# action_debug((action_debug_get_mem))
+-		inc pointer#  ##only to not be comparable with (no_pointer)
++		sd mem;set mem action_debug((action_debug_get_mem))
++		if twice=(FALSE)
++			sub pointer# mem
++			inc pointer#  ##only to not be comparable with (no_pointer)
++		else
++			add value mem
++			dec value
++		end
+ 	elseif x_data.mem!=(NULL) #flag_x
+ 		vstrx base#1
+ 		add value base ##reverse
+@@ -37,12 +44,6 @@ function x_pointer(sv pointer)
+ 	end
+ 	return value
+ end
+-function x_pointer_x(sv pointer) #same as x_pointer
+-	if x_data.f!=(NULL)
+-		sub pointer# action_debug((action_debug_get_mem))
+-		inc pointer#
+-	end
+-end
+ function x_pointer_touchless(sv pointer)
+ 	sd value
+ 	set value pointer#
+@@ -52,6 +53,18 @@ function x_pointer_touchless(sv pointer)
+ 	end
+ 	return value
+ end
++function x_pointer_twice_set()
++	set x_pointer.twice (TRUE)
++end
++function x_pointer_twice_unset()
++	set x_pointer.twice (FALSE)
++end
++#function x_pointer_x(sv pointer) #same as x_pointer
++#	if x_data.f!=(NULL)
++#		sub pointer# action_debug((action_debug_get_mem))
++#		inc pointer#
++#	end
++#end
+ 
+ import "action_code_values" action_code_values
+ import "action_code_get" action_code_get
+@@ -86,12 +99,12 @@ function actionx()
+ 	vdatax pointer#1
+ 	valuex end#1
+ 	if x_data.mem!=(NULL)
+-	#flag_x log(xx) | log, alt, debug_x|debug_x_pad
++	#flag_x log(xx) | log, alt, flagpre_x|flagpre_x_pad
+ 		if end<=^pointer
+ 			call error("error at x") # and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
+ 		end
+ 		sd size
+-		set size pointer#v            ;#size of escaped block that was at parse + pad if debug_x_pad flag . xlog_strings_size
++		set size pointer#v            ;#size of escaped block that was at parse + pad if flagpre_x_pad flag . xlog_strings_size
+ 		incst pointer                 ##here at parse was the escaped mem
+ 		set x_pointer.base pointer    ##for x_pointer function
+ 		add pointer size              ##and add DWORD since liboadata read size without parse
+@@ -137,6 +150,8 @@ function x_init(sd flags,sd path)
+ 			datax flag#1
+ 			set flag (flagpre_x_pad)
+ 			and flag flags
++
++			set x_pointer.twice (FALSE)
+ 		else #restore ,no parse, no log/alt
+ 			sd file;set file f_open_mem(b,"rb")
+ 			call fseek(file,0,(SEEK_END))
+@@ -148,9 +163,9 @@ function x_init(sd flags,sd path)
+ 			set actionx.pointer x_data.mem
+ 			add actionx.end actionx.pointer
+ 
+-			sd xx=flags_pool_read
++			sd xx=flags_xx
+ 			and xx flags
+-			if xx!=0
++			if xx=(flags_xx)
+ 				inc size
+ 				set b memalloc(size)
+ 				call sprintf(b,"%s.xx",path)
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -12,7 +12,7 @@ call xlog_pad_set(0x30)
+ 
+ sd f
+ if argc=1
+-	set f (flagpre_log|flagpre_pool_write|debug_xpad|flagpre_write_no)
++	set f (prexx_flags|flagpre_x_pad|flagpre_write_no)
+ else
+ 	importx "puts" puts
+ 	call puts("flag_pool_read_unlink flag_x flag_titles")
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -12,13 +12,13 @@ dataxu f#1
+ importx "puts" puts
+ if argc=1
+ 	call puts("prexx_flags flagpre_mix flagpre_write_no")
+-	set f (prexx_flags|flagpre_mix|flagpre_write_no)
++	set f (prexx_flags|flagpre_mix|flagpre_write_no) #xx to test also at ffdec
+ elseif argc=2
+ 	call puts("xx_flags flag_compress")
+ 	set f (xx_flags|flag_compress)
+ elseif argc=3
+-	call puts("flag_alt flag_pool_read_unlink flag_compress")
+-	set f (flag_alt|flag_pool_read_unlink|flag_compress)
++	call puts("flag_alt read_done flag_compress")
++	set f (flag_alt|read_done|flag_compress)
+ else
+ 	importx "sscanf" sscanf
+ 	call sscanf(a1,"%x",#f)  #long is only to test
+@@ -84,10 +84,16 @@ a=a==2?b:c;
+ 
+ a=function(){return 2;}
+ 
+-while(a<9){if(a==1){a=2;}else if(a==2){continue;}else if(a==4){break;}else{a=6;}}
++while(a<9){if(a==1){break;}a=2+a;}
+ 
+ for(i=0;i<2;i=1+i){
+-	if(a==1){a=2;}else if(a==2){continue;}
++	if(a==1){
++		if(a==3){
++			a=4;continue;
++		}
++		a=3;
++	}
++	a=2+a;
+ }
+ 
+ for(a in b){c=1+c;}
+--- actionswf-1.orig/tests/ffdec/as
++++ actionswf-1/tests/ffdec/as
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+-isdebug=x _L=../ ${RUN__SHELL} ../asv && \
+-extra=x isdebug=x _L=../ ${RUN__SHELL} ../asv && \
++is_debug=x _L=../ ${RUN__SHELL} ../asv && \
++extra=x is_debug=x _L=../ ${RUN__SHELL} ../asv && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${RUN__SHELL} ../../oaalternative.sh a.swf "./a.out x x" && cat a.swf.log
+--- actionswf-1.orig/tests/ffdec/bench2
++++ actionswf-1/tests/ffdec/bench2
+@@ -1,4 +1,4 @@
+ eval prexx_flags flagpre_mix flagpre_write_no
+ eval xx_flags flag_titles
+ eval xx_flags flag_compress
+-"../../oaalternative.sh a.swf" flag_alt flag_pool_read_unlink flag_compress
+\ No newline at end of file
++"../../oaalternative.sh a.swf" flag_alt read_done flag_compress
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/f
++++ /dev/null
+@@ -1 +0,0 @@
+-a=2 ./ff && cat a.swf.log
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -1,5 +1,6 @@
+ 
+ #1 d will be full diff
++#a
+ 
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+@@ -11,19 +12,26 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ {
+ 	if [ -z "${prepare_and_exit}" ]; then
+ 		LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} qq ./a.out && {
+-			if [ ${a} = 0 ]; then exit; fi
++			if [ "${a}" = 0 ]; then exit; fi
+ 			if [ -n "${wait}" ]; then read; fi
+ 			LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} qq ./a.out x && {
+-				if [ ${a} = 1 ]; then exit; fi
++				if [ "${a}" = 1 ]; then exit; fi
+ 				if [ -n "${wait}" ]; then read; fi
+-				isdebug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${bashdbg} ../../oaalternative.sh a.swf "qq ./a.out x x" || {
++				is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${bashdbg} ../../oaalternative.sh a.swf "qq ./a.out x x" || {
+ 					swfdump -D${1} a.swf.orig > 1
+ 					swfdump -D${1} a.swf > 2
+ 					diff 1 2 --color
+ 					rm 1 2
+ 					exit 1
+ 				}
++				cat a.swf.log
+ 			}
+ 		}
+ 	fi
+ }
++
++# ffdec=/home/bc/Desktop/ffdec/usr/bin/ffdec FFDEC_JARFILENAME=../../../../Desktop/ffdec/usr/share/java/ffdec/ffdec.jar ./ff
++
++#prepare_and_exit=x ./ff
++#LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src qq ./a.out 1 x x
++#LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src is_debug=x no_number_check=x ../../oaalternative.sh a.swf 'qq ./a.out 2 x x'
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -24,7 +24,10 @@
+ 	table td {
+ 		border: 1px solid #0088FF;
+ 	}
+-	#ffdec_diff td {
++	.ffdec_ok {
++		color:#0088FF
++	}
++	#ffdec_diff td, .ffdec_yes_partial {
+ 		border: 1px solid #FF8800;
+ 	}
+ 	/*.ffdec_yes_partial {
+@@ -35,7 +38,7 @@
+ <h3>X Syntax</h3>
+ 
+ <p>Black = 4 bytes. <span class="blue">Pointer = 4/8 bytes.</span> <span class="green">Green = replacement.</span> <span class="red">Red.</span></p>
+-<p><span style="color:#0088FF">Border = ffdec ok.</span> <span style="color:#FF8800">Border = ffdec ok, but with differences.</span></p>
++<p><span class="ffdec_ok">Border = ffdec ok.</span> <span style="color:#FF8800">Border = ffdec ok, but with differences, </span><span class="ffdec_ok">for Table R, use flag_noDuplicate to be same.</span></p>
+ 
+ <table>
+ 	<tr><td class="green">1</td></tr>
+@@ -138,7 +141,7 @@
+ 	<tr><td class="green">RI</td></tr>
+ 	<tr id="ffdec_diff"><td>ActionIncrement</td></tr>
+ 	<tr id="ffdec_diff"><td>ActionDecrement</td></tr>
+-	<tr id="ffdec_diff"><td>mixt_equal</td><td class="green">O</td><td class="green">RI</td></tr>
++	<tr><td class="ffdec_yes_partial">mixt_equal</td><td class="green">O</td><td class="green">RI</td></tr>
+ </table>
+ 
+ <br>Table RI: <!-- action_parse_right<>action_code_right -->

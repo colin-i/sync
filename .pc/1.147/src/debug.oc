@@ -1,0 +1,611 @@
+
+format elfobj64
+
+include "../include/prog.oh"
+
+function debug_mark()
+	valuex row#1
+	return #row
+endfunction
+function debug_mark_start()
+	sv a;setcall a debug_mark()
+	set a# 0
+endfunction
+function debug_mark_add()
+	sv a;setcall a debug_mark()
+	add a# :
+endfunction
+function debug_mark_get()
+	value offsets=NULL
+
+	sv a;setcall a debug_mark()
+	sv b;set b a#
+	add b offsets
+	return b
+endfunction
+
+function debug_target()
+	valuex a#1
+	return #a
+endfunction
+
+function debug_end()
+	valuex a#1
+	return #a
+endfunction
+
+import "mem_free" mem_free
+import "f_close" f_close
+
+function debug_data()
+	value file=NULL
+	value file2=NULL
+
+	#now is a string #datax a#1  #65535
+	value mem=NULL
+	#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
+	#but all_size is growing +0x1000 from that limit, and the error is catched there, valuex?
+	#there is a limit on actions and on constant pool, so don't worry here
+	datax size#1
+	datax all_size#1
+	datax rows#1
+
+	import "x_data" x_data
+	call x_data()
+
+	if file!=(NULL)
+		call f_close(#file)
+		if file2!=(NULL)
+			call f_close(#file2)
+		end
+		if debug_mark_get.offsets!=(NULL)
+			call mem_free(#debug_mark_get.offsets)
+			if mem!=(NULL)
+				call mem_free(#mem)
+			end
+		end
+	endif
+	import "alt_free" alt_free
+	call alt_free()
+endfunction
+
+function debug_phase_init(ss pointer)
+	if debug_mark_get.offsets!=(NULL)
+		sv a;setcall a debug_mark_get()
+		set a# pointer
+		call debug_mark_add()
+	endif
+endfunction
+function debug_phase_parse(ss pointer)
+	if debug_mark_get.offsets!=(NULL)
+		sv a
+		sv start;setcall start debug_mark_get()
+		sv target;setcall target debug_target()
+		if target#=(NULL)
+		#need to know empty rows
+			set a start
+			while pointer>a#
+				incst a
+			endwhile
+			set target# a
+		else
+			set a target#
+		endelse
+		#if pointer>=^a#  # and > ? it's not with spaces at end, therefore ";   \nabc" can go wrong
+		if pointer<^a#
+			ret
+		endif
+		import "action_code_get" action_code_get   #the pointer is not reallocated, can use offset but will be slower
+		sd x;setcall x action_code_get()
+		while start#<^pointer   #or a
+			set start# x
+			call debug_mark_add()
+			setcall start debug_mark_get()
+		endwhile
+		set start# x      ##also,set for this row, can be the only set
+		call debug_mark_add()
+		set target# (NULL)
+	endif
+endfunction
+function debug_phase_parse_end() #for the case when last rows are blank
+	if debug_mark_get.offsets!=(NULL)
+		sd x;setcall x action_code_get()
+		sv start
+		set start debug_mark_get()
+		sv end;setcall end debug_end()
+		while start<^end#
+			set start# x
+			call debug_mark_add()
+			setcall start debug_mark_get()
+		endwhile
+	end
+end
+
+function debug_action_phase()
+	if debug_mark_get.offsets!=(NULL)
+		call debug_mark_start()  #second and third iteration
+	endif
+endfunction
+
+importx "sprintf" sprintf
+importx "memcpy" memcpy
+
+function md_printf(sd c,sd format,sd val) #to not write null on unknown
+	char mem#5
+	sd n;set n sprintf(#mem,format,val)
+	call memcpy(c,#mem,n)
+	return n
+end
+
+import "string_nl_print" string_nl_print
+
+function deprecation_init(sd flags)
+	charx bool#1
+	charx full#1
+	and flags (flag_deprecation_no|flag_deprecation_yes)
+	if flags=(flag_none)
+		set bool (TRUE)
+		set full (FALSE)
+	elseif flags=(flag_deprecation_yes)
+		set bool (TRUE)
+		set full (TRUE)
+	else #flag_deprecation_no
+		set bool (FALSE)
+	end
+end
+
+importx "getenv" getenv
+importx "strlen" strlen
+importx "malloc" malloc
+importx "fopen" fopen
+importx "fscanf" fscanf
+importx "fclose" fclose
+
+const EOF=-1
+function user_flags(sw pflags)
+	ss h
+include "../include/linhome.oh" "../include/winhome.oh"
+	set h getenv(homefolder)
+	if h!=(NULL)
+		ss sz;set sz strlen(h)
+		char prefs=".actionswf"^
+		sd len=1+\.prefs+1
+		add len sz
+		sd m;set m malloc(len)
+		if m!=(NULL)
+			call memcpy(m,h,sz)
+			add sz m
+			set sz# (path_separator)
+			inc sz
+			call memcpy(sz,#prefs,\.prefs)
+			add sz \.prefs
+			set sz# (Nullchar)
+			sd f;set f fopen(m,"rb")
+			if f!=(NULL)
+				data flags#1   ;#protocol %x is unsigned int
+				sd ret;set ret fscanf(f,"%x",#flags)
+				if ret!=(EOF)
+					or pflags# flags
+				end
+				call fclose(f)
+			end
+			call free(m)
+		end
+	end
+end
+
+import "row_termination" row_termination
+import "brace_blocks_get_memblock" brace_blocks_get_memblock
+import "block_get_size" block_get_size
+import "block_get_psize" block_get_psize
+import "block_get_mem" block_get_mem
+import "word_arg_to_stack" word_arg_to_stack
+import "for_in" for_in
+import "frames_as_shows" frames_as_shows
+import "ainit" ainit
+import "pool_init" pool_init
+
+importx "fseek" fseek
+importx "fread" fread
+importx "fprintf" fprintf
+importx "free" free
+
+
+#aftercallimport ebool
+
+import "memalloc" memalloc
+import "alt_init" alt_init
+import "dtitles_init" dtitles_init
+import "x_init" x_init
+import "f_open_mem_ex" f_open_mem_ex
+import "strlen_of" strlen_of
+
+function flags_init(sd flags,sd path)
+	set flags pool_init(flags)
+	set flags x_init(flags,path)
+	set flags log_init(flags,path)
+	call alt_init(flags,path)
+	call dtitles_init(flags)
+
+	call frames_as_shows(flags)
+	call for_in(flags)
+	call deprecation_init(flags)
+endfunction
+
+function log_init(sd flags,sd path)
+	if debug_data.file!=(NULL)
+		call error("swf started, log not closed")
+	end
+	datax prexx#1
+	set prexx flags
+	and prexx (prexx_flags)
+	sd test=flagpre_log
+	and test flags
+	if test=(flagpre_log)
+		sd size=4;addcall size strlen_of(path,4+1)
+		sd b;setcall b memalloc(size)
+		vstr lg="%s.log"
+		call sprintf(b,lg,path)
+		setcall debug_data.file f_open_mem_ex(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character
+
+		if prexx=(prexx_flags)
+			set test (flagpre_mix) #first log is with prexx, second log is for alt
+			and test flags
+			if test!=0
+				call sprintf(b,lg,b)
+				set debug_data.file2 f_open_mem_ex(b,"wb")
+			end
+			call free(b)
+
+			setcall debug_mark_get.offsets memalloc(1)  #0 on some systems can be NULL return
+			#
+			setcall debug_data.mem memalloc(1)
+			#this is later #set debug_data.size 0
+			set debug_data.all_size 1
+
+			and flags (~antixx_write)
+		else
+			call free(b)
+		end
+	end
+	return flags
+end
+
+import "f_printf" f_printf
+import "f_write" f_write
+import "f_tell" f_tell
+
+function debug_action_init(ss ac)
+	if debug_data.file!=(NULL)
+		set debug_data.rows 0 #for fast check
+		if log_init.prexx=(prexx_flags)
+			sd start;set start ac
+
+			sd row=1     #at least one row, example: row 1,3 actions
+			while ac#!=0
+				call row_termination(#ac,#row)
+				inc ac
+			endwhile
+
+			#out rows\nac\n
+			char f={Percent,l,u,xlog_nl,Percent,s,xlog_nl,Nullchar}
+			call f_printf((fprintf_min+2),debug_data.file,#f,row,start)
+
+			mult row :
+			import "memrealloc" memrealloc
+			setcall debug_mark_get.offsets memrealloc(debug_mark_get.offsets,row)
+
+			call debug_mark_start()  #prepare for first iteration
+
+			#set target to 0, for recognizing blank rows at second iteration
+			sv target;setcall target debug_target()
+			set target# (NULL)
+
+			add row debug_mark_get.offsets
+			sv end;setcall end debug_end()   #at third iteration
+			decst row   ##must be last entry not after
+			set end# row
+
+			set debug_data.size 0
+		end
+	endif
+endfunction
+
+function debug_phase_code(sd codepointer)
+	if log_init.prexx=(prexx_flags)
+		sv a;setcall a debug_mark_get()
+		sv end;setcall end debug_end()
+		if a<=^end# #else can't point  ("function a(){}") , flush_end will catch }
+			if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+				if debug_data.size!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+					sv rows;set rows a
+					while codepointer>=^rows#   # > ? same as above
+						call debug_mark_add()
+						setcall rows debug_mark_get()
+						if rows>=end#   ;# > ? example when last row is b=1 }" then rows now will point at one row after last row
+						# > also in ("function a(){}")
+							break
+						endif
+					endwhile
+					sub rows a
+					div rows :
+					#do not write now, can be break;} or Not Not If  and need to truncate that
+					datax size#1;set size debug_data.size
+					set debug_data.size 0
+					add debug_data.rows rows  ## add? is the case with break+ret and remove them and will be an empty row and that flush was skipped, below example
+					#example, add var q , at while break below example (at debug_phase_code_flush)
+				end
+			endif
+		endif
+	endif
+endfunction
+function debug_phase_code_flush_part(sd sz)
+	call f_write(debug_data.file,debug_data.mem,sz)
+	char a=xlog_nl
+	callg f_write(debug_data.file,#a,1)
+end
+function debug_phase_code_flush()
+	if debug_data.rows!=0
+		if debug_phase_code.size!=0
+		# while(q){\nbreak;\n}  and with this example showing that previous ifs are ok also at last flush call
+		#there are rows with only one action_one, example in tests/ffdec
+			#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+			#will not bother concludefunction where is asking with ftell
+			char format=xlog_actions;char *="%lu"
+			call f_printf((fprintf_min+1),debug_data.file,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
+			call debug_phase_code_flush_part(debug_phase_code.size)
+			set debug_data.rows 0
+		end
+	end
+end
+function debug_phase_code_flush_end()
+	call debug_phase_code_flush()
+	if debug_data.size!=0 #cases: function a(){}\n\n , function a(){}
+		call fseek(debug_data.file,-1,(SEEK_CUR))
+		callg debug_phase_code_flush_part(debug_data.size) # if(1==1){}else{} is size 3
+	end
+end
+
+function debug_printf(sd ix)
+	vstr u="%u\n"
+	call f_printf((fprintf_min+1),debug_data.file,u,ix)
+	if debug_data.file2!=(NULL)
+		callg f_printf((fprintf_min+1),debug_data.file2,u,ix)
+	end
+end
+function debug_base_core(sd id)
+	callg debug_printf(id) #swf_button is calling action_sprite
+end
+function debug_base(sd id)
+	if debug_data.file!=(NULL)
+		call debug_base_core(id)
+		sd ai;set ai ainit()
+		callg debug_printf(ai)
+	end
+end
+function debug_show(sd id)
+	if debug_data.file!=(NULL)
+		call debug_base_core(id)
+		char a={xlog_nl,xlog_nl}
+		callg debug_write(#a,2)
+	end
+end
+function debug_write(ss s,sd d)
+	call f_write(debug_data.file,s,d)
+	if debug_data.file2!=(NULL)
+		callg f_write(debug_data.file2,s,d)
+	end
+end
+function debug_spritedone(sd p,sd i)
+	if debug_data.file!=(NULL)
+		call debug_base_core(p)
+		char a=xlog_nl
+		call debug_write(#a,1)
+		callg debug_base_core(i)
+	end
+end
+
+function debug_phase_code_add(sd is_long,ss arg2,sd delim)
+	call debug_phase_code_flush()  #since Slash, function c(){\n} , will also add empty row but with one .
+	sd sz;set sz debug_data.size
+	if is_long=(TRUE)
+		add sz (action_debug_comma+2+2)
+	else
+		add sz (action_debug_comma)
+	end
+	if sz>^debug_data.all_size
+		set debug_data.all_size sz
+		add debug_data.all_size 0x1000
+		set debug_data.mem memrealloc(debug_data.mem,debug_data.all_size)
+	end
+	ss m;set m debug_data.mem
+	add m debug_data.size
+	if is_long=(TRUE)
+		set m# delim
+		inc m
+		sd here_sz
+		ss second=1
+		add second arg2
+		if second#!=0
+			set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
+			add m here_sz
+			sub here_sz 2
+			call md_printf(m,"%02X",arg2#)
+		else
+			set here_sz md_printf(m,"%X",arg2#)  #only 0 is also printed
+			sub here_sz 2+2
+		end
+		add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
+	else
+		set m# arg2 ##even if is only 1 action is lines,a1,a2...an
+	end
+	set debug_data.size sz
+end
+function debug_phase_code_add_long(ss arg2,sd delim)
+	callg debug_phase_code_add((TRUE),arg2,delim)
+end
+function debug_phase_code_add_jump_if(ss arg2,sd xlog_j)
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_long(arg2,xlog_j)
+	end
+end
+function debug_phase_code_add_jumpback_if(ss arg2)
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_long(arg2,(xlog_jumpback))
+	end
+end
+function debug_phase_code_add_one(ss arg2)
+	callg debug_phase_code_add((FALSE),arg2,(xlog_act))
+endfunction
+function debug_phase_code_add_if(sd is_long,ss arg2)
+	if log_init.prexx=(prexx_flags) #at oalt no action sizes
+		callg debug_phase_code_add(is_long,arg2,(xlog_act))
+	endif
+endfunction
+function debug_phase_code_remove(sd swflength,sd length)
+	sd memblock;set memblock brace_blocks_get_memblock()
+	sd p;set p block_get_psize(memblock)
+	sub p# swflength
+
+	if log_init.prexx=(prexx_flags)
+		if debug_data.size=0 #was last command on previous row
+			sub debug_phase_code.size length
+			#and let the empty row if is the case, then still can break there
+			ret
+		end
+		sub debug_data.size length
+	end
+end
+
+function debug_definefunction(sv pointers)
+	if log_init.prexx=(prexx_flags) #at oalt no action sizes
+		set pointers# f_tell(debug_data.file)
+		incst pointers
+
+		sd memblock;setcall memblock brace_blocks_get_memblock()
+		set pointers#d^ block_get_size(memblock)
+		incst pointers
+
+		sd offset
+		set offset debug_data.size
+		char dummy={0xff,0xff} #0,0 is not ok inside
+		call debug_phase_code_add_long(#dummy,(xlog_function))
+		#inc offset ##to skip Comma  #but at fseek is not needed because fread is already skipping that
+		set pointers#d^ offset
+	endif
+end
+import "error" error
+function debug_concludefunction(sv pointers)
+	if log_init.prexx=(prexx_flags) #at oalt no action sizes
+		sd prev_fileoffset;set prev_fileoffset pointers#
+		sd now;set now f_tell(debug_data.file)
+		incst pointers
+
+		sd block;setcall block brace_blocks_get_memblock()
+		sd blockmem;set blockmem block_get_mem(block)
+		add blockmem pointers#d^
+		sd size;set size word_arg_to_stack(blockmem)
+		incst pointers
+
+		sd offset;set offset pointers#d^
+		vstr format="%04X"
+		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
+			add prev_fileoffset 2 # * from the start of the row and first digit
+			call fseek(debug_data.file,prev_fileoffset,(SEEK_SET))
+			#now need to skip first number that is the number of rows
+			whiletrue
+				char a#1
+				sd ret
+				set ret fread(#a,1,1,debug_data.file)
+				if a<(_0)  #there is a delimiter from here
+					break
+				endif
+				if a>(_9) #many are starting with string delim
+					break
+				end
+				if ret!=1
+					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
+				end
+			end
+			call fseek(debug_data.file,offset,(SEEK_CUR))
+			call fprintf(debug_data.file,format,size)    #overwrite the dummy write
+			call fseek(debug_data.file,0,(SEEK_END))
+		else #on mem
+			sd c;set c debug_data.mem
+			inc offset ##to skip delimiter
+			add c offset
+			call md_printf(c,format,size)
+		end
+	endif
+end
+
+import "x_log" x_log
+function debug_xlog_ex(sd codepointer,sd type)
+	if log_init.prexx=(prexx_flags)
+		call debug_phase_code_add_one(type)
+	else
+		callg x_log(codepointer)
+	end
+end
+function debug_xlog(sd codepointer) #/
+# forin{[ if/loop{[  [else :[  loop}[ if}[ else}[
+#not all &jump will start a new branch, example continue and break
+	callg debug_xlog_ex(codepointer,(xlog_branch))
+end
+function debug_xlog_stepin(sd codepointer) #{
+#for;;[ ?[ func{[
+	callg debug_xlog_ex(codepointer,(xlog_innerbranch))
+end
+function debug_xlog_stepout(sd codepointer) #}
+# for;;[ func}[ :}[
+	callg debug_xlog_ex(codepointer,(xlog_innerbranchend))
+end
+function debug_xlog_pool(sd nr) #pool_flag is already tested
+	if log_init.prexx=(prexx_flags)
+		if nr<256  #at oad when is reading the log, it has constant8/constant16, after pool substitutions in the second swf, it is another lookup with string/c8/c16, must recalculate
+		#at write to xx, new can compare ssize and id has the word nr < or >= 256
+			wordu a=xlog_const8_log-_0  #Constant8 lookup has 1 byte
+			call debug_phase_code_add_long(#a,(xlog_string))
+		else #const16
+			wordu b=xlog_const16_log-_0  #Constant16 lookup has 2 bytes
+			callg debug_phase_code_add_long(#b,(xlog_string))
+		end
+	end
+end
+
+function debug_xlog_loop()
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_loop))
+	end
+end
+function debug_xlog_break()
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_break))
+	end
+end
+function debug_xlog_forin(wordxu type)
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_long(#type,(xlog_forin))
+	end
+end
+function debug_xlog_return()
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_return))
+	end
+end
+function debug_xlog_call()
+	if log_init.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_call))
+	end
+end
+
+function deprecation()
+	if deprecation_init.bool=(TRUE)
+		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG functions, flag_deprecation_no"
+		if deprecation_init.full=(TRUE)
+			call error(e)
+		else
+			call string_nl_print(e)
+		end
+	end
+end
