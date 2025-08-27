@@ -1,0 +1,407 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-148) bionic; urgency=medium
+ .
+   * changes
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-08-27
+
+--- actionswf-1.orig/dev/Makefile
++++ actionswf-1/dev/Makefile
+@@ -10,17 +10,24 @@ ifndef prefix
+ prefix=/usr
+ endif
+ 
+-all: flags.h flagss.h actionswf.oh
++all: flags.h flagss.h flagss.oh actionswf.oh
+ 
+ %.h: %.ohi
+ 	${OCOMP} $< x_file 2 logfile 0
+ 	${OCONV} $<.x
+-%.ohi: %.oh
++flags.ohi: flags.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	cat $< >> $@
++flagss.ohi: flags_s.oh
+ 	echo "format elfobj64" > $@
+ 	echo "orphan off" >> $@
+ 	echo "override include_sec 1" >> $@
++	echo include \"flags.h\" \"flags.oh\" >> $@
++	cat $< >> $@
++flagss.oh: flags_s.oh
++	echo include \"flags.oh\" > $@
+ 	cat $< >> $@
+-
+ actionswf.oh: action_swf.oh
+ 	echo "include \"import.oh\"" > $@
+ 	sed "s/^#//g" $< >> $@
+@@ -28,19 +35,21 @@ actionswf.oh: action_swf.oh
+ test:
+ 	echo dev
+ clean:
+-	-rm -f flags.ohi.x flagss.ohi.x flags.ohi flagss.ohi flags.h flagss.h actionswf.oh
++	-rm -f flags.ohi.x flagss.ohi.x flags.ohi flagss.ohi flags.h flagss.h  flagss.oh actionswf.oh
+ distclean: clean
+ 
+ install:
+ 	if [ -e ../include_dev ]; then \
+ 		install -D flags.h $(DESTDIR)$(prefix)/include/actionswf/flags.h && \
+-		install -D flags.h $(DESTDIR)$(prefix)/include/actionswf/flagss.h && \
++		install -D flagss.h $(DESTDIR)$(prefix)/include/actionswf/flagss.h && \
++		install -D flagss.oh $(DESTDIR)$(prefix)/include/actionswf/flagss.oh && \
+ 		install -D actionswf.oh $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
+ 	fi
+ uninstall:
+ 	-if [ -e ../include_dev ]; then \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/flags.h; \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/flagss.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/flagss.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
+ 	fi
+ 
+--- /dev/null
++++ actionswf-1/dev/flags_s.oh
+@@ -0,0 +1,6 @@
++
++const x_flags=flag_x|flag_pool_read
++const xu_flags=x_flags|flag_pool_read_unlink
++const xx_flags=x_flags|flag_xx
++const xxu_flags=xu_flags|flag_xx
++const read_done=flag_pool_read|flag_pool_read_unlink
+--- actionswf-1.orig/dev/flagss.oh
++++ /dev/null
+@@ -1,7 +0,0 @@
+-
+-include "flags.oh"
+-const x_flags=flag_x|flag_pool_read
+-const xu_flags=x_flags|flag_pool_read_unlink
+-const xx_flags=x_flags|flag_xx
+-const xxu_flags=xu_flags|flag_xx
+-const read_done=flag_pool_read|flag_pool_read_unlink
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -155,7 +155,7 @@ if [ -z "${skip_alternative}" ]; then
+ 							ainits_counter=$((ainits_counter+1))
+ 						fi
+ 					fi
+-					doaction ${s} `find -name DoAction.as | grep DefineSprite_"${p}"_.*/`  #else is empty
++					doaction ${s} `find -name DoAction.as | grep DefineSprite_"${p}".*/`  #else is empty #note that only exported sprites are ...${p}_name/
+ 				fi
+ 				s=
+ 			else
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -115,10 +115,10 @@ ${libname}: ${name}
+ endif
+ 
+ endif
+-
+-${name}: ${obs} ${eobs}
++${exte}: ${obs} ${eobs} #eobs here for ounused
+ 	${OLINK} ${logs}
+ 	$(AR) cr ${exte} ${obs}
++${name}: ${exte}
+ 	${ATLDCOM} > 1
+ # > 1 for ostrip
+ endif
+@@ -166,7 +166,6 @@ install-lib:
+ 	install -D ${libname} $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 	if [ -e ../include_dev ]; then \
+ 		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flags.oh && \
+-		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flagss.oh && \
+ 		install -D ../dev/importf.oh $(DESTDIR)$(prefix)/include/${projname}/importf.oh && \
+ 		install -D ../dev/import.oh $(DESTDIR)$(prefix)/include/${projname}/import.oh && \
+ 		install -D ../dev/actionswf.h $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+@@ -178,7 +177,6 @@ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 	-if [ -e ../include_dev ]; then \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/flagss.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/importf.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/import.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -184,7 +184,7 @@ function forin(sd pointer)
+ 	else
+ 		#enum can take ActionEnumerate(x.x[z]), x.x ... is a pattern that ActionEnumerate will recognize
+ 		call action_code_set((ActionEnumerate))
+-		call action_code_set_pointer(pointer)
++		callg action_code_set_pointer(pointer)
+ 	end
+ end
+ 
+@@ -509,7 +509,7 @@ function action_parse_left_holder(ss poi
+         call action_code_set_pointer(pointer)
+     else
+         call action_code_set(ac2)
+-        call action_code_member(pointer)
++	callg action_code_member(pointer,-1)
+     endelse
+ endfunction
+ #0/action
+@@ -579,7 +579,7 @@ function action_code_row_parse_tool_util
+     ss pointer
+     setcall pointer str_expression_at_start(ac,"new")
+     if pointer!=ac
+-        setcall ac action_code_parse_new_or_call(pointer,(new_action))
++		setcall ac action_code_parse_new_or_call(pointer,(new_action),pointer)
+         sd bool;setcall bool action_parse_utilEndTypes(ac#,p_op,endtype1,endtype2)
+         if bool=(TRUE);inc ac;endif
+         return ac
+@@ -674,7 +674,7 @@ function action_parse_take_action(sd op,
+ 		if ac#!=(sar_shr);set x (ActionBitRShift)
+ 		else;set x (ActionBitURShift);endelse
+ 	else
+-		#at "qwer"x can be x
++		#at "asd"x can be x
+ 		call error("unrecognized actionscript operation")
+ 	endelse
+ 	return x
+@@ -725,23 +725,28 @@ function action_code_take_main(ss ac,sv
+ 	#a string
+ 	ss pointer
+ 	setcall pointer action_code_str(ac)
+-	if pointer!=0
++	if pointer!=(NULL)
+ 		set pointer spaces(pointer) ;#ffdec _text.message = \"Angle: \" +b
+ 		set p_op# pointer#;set pointer# 0
+ 		return pointer
+ 	endif
++
++	set pointer ac
++	char neg="-"
++	if pointer#=neg
++		inc pointer
++		set pointer spaces(pointer) #=- Math(8)
++	endif
++
+ 	#a function
+-	setcall pointer action_code_parse_new_or_call(ac,(call_action_right))
+-	if pointer!=ac
++	ss cursor;set cursor pointer
++	setcall pointer action_code_parse_new_or_call(cursor,(call_action_right),ac)
++	if pointer!=cursor
+ 		set pointer spaces(pointer) #ffdec
+ 		set p_op# pointer#;set pointer# 0
+ 		return pointer
+ 	endif
+ 	#a variable(a.b.c[1+d])
+-	char neg="-"
+-	if pointer#=neg
+-		inc pointer
+-	endif
+ 	sd pos
+ 	setcall pos strcspn(pointer,delims)
+ 
+@@ -814,7 +819,7 @@ function action_code_take(ss ac)
+ 	if b=(TRUE)
+ 		ret
+ 	endif
+-	call action_code_take_pointer(ac)
++	callg action_code_take_pointer(ac)
+ endfunction
+ function action_code_take_pointer(sd ac)
+     ss test
+@@ -824,9 +829,14 @@ function action_code_take_pointer(sd ac)
+         call action_code_set_pointer(ac)
+     else
+         call action_code_set((ActionGetMember))
+-        call action_code_member(ac)
++		callg action_code_member(ac,-1)
+     endelse
+ endfunction
++function pointer_prefix()
++	call action_code_set((ap_Integer))
++	call action_code_set(0)
++	call action_code_set((ActionSubtract))
++end
+ #bool
+ function numeric_code_orConstruction(ss ac)
+ 	ss pointer;set pointer ac
+@@ -847,9 +857,8 @@ function numeric_code_orConstruction(ss
+ 					return (FALSE)
+ 				end
+ 				#here is -pointer
+-				call action_code_set((ap_Integer))
+-				call action_code_set(0)
+-				call action_code_set((ActionSubtract))
++				call pointer_prefix()
++				set pointer spaces(pointer)
+ 				call action_code_take_pointer(pointer)
+ 				return (TRUE)
+ 			end
+@@ -896,35 +905,44 @@ function numeric_code_orConstruction(ss
+ 	call action_code_set(value_low)
+ 	return (TRUE)
+ endfunction
+-function action_code_member(ss ac)
+-    vstr delims=".["
+-    char dot=".";char sqbrace_start="["
+-    char sqbrace_end="]"
+-    while ac#!=0
+-        sd pos
+-        setcall pos strcspn(ac,delims)
+-        ss pointer
+-        set pointer ac
+-        if pos!=0
+-        #0 is at second+ multi-dimensional arrays levels
+-            add pointer pos
+-            call action_code_set_pointer(ac)
+-        endif
+-        if pointer#=sqbrace_start
+-		set pointer# 0
+-		inc pointer
+-		call action_code_set_pointer((no_pointer)) #to compare square brackets on same field with pointers
+-		call action_code_set((square_bracket_start))
+-		setcall pointer action_code_row_parse_tool(pointer,sqbrace_end)
+-        endif
+-        if pointer#=dot
+-            set pointer# 0
+-            inc pointer
+-        endif
+-        set ac pointer
+-    endwhile
+-    call action_code_set_pointer((no_pointer))
+-    call action_code_set((member_end)) #to compare square brackets on same field with pointers
++function action_code_member(ss pointer,sd full)
++	vstr delims=".["
++	char sqbrace_start="["
++	char sqbrace_end="]"
++	call action_code_set_pointer(pointer) #owner?
++	sd pos
++	setcall pos strcspn(pointer,delims)
++	add pointer pos
++	if full!=0
++		sd p_currentnr
++		setcall p_currentnr action_code_values_index()
++		set full p_currentnr#
++	end
++	while pointer#!=0
++		if pointer#=sqbrace_start
++			set pointer# 0
++			inc pointer
++			call action_code_set_pointer((no_pointer)) #to compare square brackets on same field with pointers
++			call action_code_set((square_bracket_start))
++			setcall pointer action_code_row_parse_tool(pointer,sqbrace_end)
++		else
++			set pointer# 0
++			inc pointer
++		end
++		setcall pos strcspn(pointer,delims)
++		if pos!=0
++		#0 is at second+ multi-dimensional arrays levels ]. or when simply want to end
++			call action_code_set_pointer(pointer)
++			add pointer pos
++		endif
++	endwhile
++	if full!=0
++		if p_currentnr#=full
++			call error("full member required")
++		end
++	end
++	call action_code_set_pointer((no_pointer))
++	callg action_code_set((member_end)) #to compare square brackets on same field with pointers
+ endfunction
+ 
+ 
+@@ -1063,7 +1081,7 @@ function brace_blocks_remove_parse_else(
+             endelse
+         endwhile
+         call action_code_set((block_else_end))
+-        call action_code_set(else_number)
++		callg action_code_set(else_number)
+     endif
+ endfunction
+ function brace_blocks_remove_parse() #else is at brace_blocks_remove_parse_else
+@@ -1099,10 +1117,10 @@ function brace_blocks_end()
+ endfunction
+ #
+ function brace_blocks_add_write()
+-    call brace_blocks_add_write_offset((smallbackjump),(no_flag))
++	callg brace_blocks_add_write_offset((smallbackjump),(no_flag))
+ endfunction
+ function brace_blocks_add_write_current()
+-    call brace_blocks_add_write_offset(0,(no_flag))
++	callg brace_blocks_add_write_offset(0,(no_flag))
+ endfunction
+ function brace_blocks_add_write_offset(sd offset,sd flag)
+ 	sd block
+@@ -1245,7 +1263,7 @@ function add_dummy_jump()
+     call actionrecordheader((ActionJump),(actionjump_contentsize))
+     import "swf_actionblock_add" swf_actionblock_add
+     sd dummy_size=0
+-    call swf_actionblock_add(#dummy_size,(actionjump_contentsize))
++	callg swf_actionblock_add(#dummy_size,(actionjump_contentsize))
+ endfunction
+ function resolve_back_jump(sd jumpoffset)  #also at continue
+ 	sd memblock
+@@ -1281,7 +1299,7 @@ function action_code_parse_leftfunction(
+         return pointer
+     endif
+     #a call
+-    setcall ac action_code_parse_new_or_call(ac,(call_action_left))
++	setcall ac action_code_parse_new_or_call(ac,(call_action_left),ac)
+     char end=";"
+     if ac#=end
+         inc ac
+@@ -1289,7 +1307,7 @@ function action_code_parse_leftfunction(
+     return ac
+ endfunction
+ #pointer
+-function action_code_parse_new_or_call(ss ac,sd type)
++function action_code_parse_new_or_call(ss ac,sd type,ss cursor)
+     ss pointer
+     set pointer ac
+     import "part_of_variable" part_of_variable
+@@ -1307,6 +1325,9 @@ function action_code_parse_new_or_call(s
+                 set last_dot pointer
+                 set bool (TRUE)
+             elseif pointer#=(Openparenthesis)
++				if ac!=cursor ##example: negative
++					call pointer_prefix()
++				end
+ 				callret action_code_parse_function_detected(ac,last_dot,pointer,type)
+             endelseif
+         endif
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -238,7 +238,7 @@ function action_caller(ss member,sv pfna
+ 		sv values
+ 		setcall values action_code_get()
+ 
+-		call action_code_member(member)
++		call action_code_member(member,0)
+ 		call action_member_loop_right(values)
+ 
+ 		import "debug_x_expand" debug_x_expand
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -88,7 +88,7 @@ endfunction
+ 
+ #file
+ function file_open(ss filepath,sd flags)
+-    sd file
++	sdu file  ;#will int compare, sd will -1 on rax
+     sd permission
+     sd creat_test;set creat_test flags;and creat_test (flag_O_CREAT);if creat_test!=0
+         set permission (flag_pmode);endif
