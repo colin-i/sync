@@ -1,0 +1,620 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-150) bionic; urgency=medium
+ .
+   * 1.150
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-09-08
+
+--- actionswf-1.orig/dev/Makefile
++++ actionswf-1/dev/Makefile
+@@ -42,14 +42,22 @@ install:
+ 	if [ -e ../include_dev ]; then \
+ 		install -D flags.h $(DESTDIR)$(prefix)/include/actionswf/flags.h && \
+ 		install -D flagss.h $(DESTDIR)$(prefix)/include/actionswf/flagss.h && \
++		install -D actionswf.h $(DESTDIR)$(prefix)/include/actionswf/actionswf.h && \
++		install -D flags.oh $(DESTDIR)$(prefix)/include/actionswf/flags.oh && \
+ 		install -D flagss.oh $(DESTDIR)$(prefix)/include/actionswf/flagss.oh && \
++		install -D importf.oh $(DESTDIR)$(prefix)/include/actionswf/importf.oh && \
++		install -D import.oh $(DESTDIR)$(prefix)/include/actionswf/import.oh && \
+ 		install -D actionswf.oh $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
+ 	fi
+ uninstall:
+ 	-if [ -e ../include_dev ]; then \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/flags.h; \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/flagss.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/actionswf.h; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/flags.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/flagss.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/importf.oh; \
++		rm -f $(DESTDIR)$(prefix)/include/actionswf/import.oh; \
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
+ 	fi
+ 
+--- actionswf-1.orig/include/ascii.oh
++++ actionswf-1/include/ascii.oh
+@@ -127,3 +127,12 @@ Const Verticalbar=0x7C
+ Const Closingbrace=0x7D
+ #Const Equivalencysign=0x7E
+ #Const Delete=0x7F
++
++Const continuing_start=0x80
++Const control2_start=0xC2
++Const continuing_end=0xBF
++Const control2_end=0xDF
++#Const control3_start=0xE0
++#Const control3_end=0xEF
++#Const control4_start=0xF0
++#Const control4_end=0xFF
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -116,6 +116,10 @@ if [ -z "${skip_alternative}" ]; then
+ 		move scripts/"$2.as" ../"${out}"/$1 "$2"_$3
+ 	}
+ 
++	expo_name () {
++		echo "$1" | grep -oP '(?<=_).*' | grep -oP '(?<=_).*' #must take also a_b_c, [^_]*$ is only one _
++	}
++
+ 	s= #id
+ 	while read p; do
+ 		if [ -z "${s}" ]; then
+@@ -148,7 +152,7 @@ if [ -z "${skip_alternative}" ]; then
+ 
+ 					fn=`echo scripts/DefineSprite_${p}_*`
+ 					if [ -e "${fn}" ]; then
+-						doaction ${s} DefineSprite_${p}_ '/frame_*/DoAction.as' ${p} "$(echo "${fn}" | grep -o [^_]*$)" #exported sprite
++						doaction ${s} DefineSprite_${p}_ '/frame_*/DoAction.as' ${p} "$(expo_name "${fn}")" #exported sprite
+ 						sprite_type=0
+ 					elif [ -e scripts/DefineSprite_${p} ]; then
+ 						doaction ${s} DefineSprite_${p}/frame_ /DoAction.as ${p} # "" anonymous sprite
+@@ -170,7 +174,7 @@ if [ -z "${skip_alternative}" ]; then
+ 								fi
+ 							else
+ 								expo=`echo $f`
+-								expo="$(echo "${expo}" | grep -o [^_]*$)"
++								expo=$(expo_name "${expo}")
+ 							fi
+ 							if [ -n "${f}" ]; then #is a button
+ 								f=`echo ${f}`/BUTTONCONDACTION' 'on'('release')'.as
+@@ -182,7 +186,7 @@ if [ -z "${skip_alternative}" ]; then
+ 						if [ -z "${f}" ]; then #DoInitAction sprite
+ 							if [ ${sprite_type} = 0 ]; then #exported sprite with action_init
+ 								f=`echo scripts/DefineSprite_${p}_*`
+-								f="$(echo "${f}" | grep -o [^_]*$)"
++								f=`expo_name "$f"`
+ 								ainit_exported $s "$f" $p
+ 							elif [ ${sprite_type} = 1 ]; then #anonymous sprite init
+ 								ainit_anonymous $s $p
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -164,23 +164,11 @@ test:
+ 
+ install-lib:
+ 	install -D ${libname} $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+-	if [ -e ../include_dev ]; then \
+-		install -D ../dev/flags.oh $(DESTDIR)$(prefix)/include/${projname}/flags.oh && \
+-		install -D ../dev/importf.oh $(DESTDIR)$(prefix)/include/${projname}/importf.oh && \
+-		install -D ../dev/import.oh $(DESTDIR)$(prefix)/include/${projname}/import.oh && \
+-		install -D ../dev/actionswf.h $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+-	fi
+ 
+ install: all install-lib
+ 
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+-	-if [ -e ../include_dev ]; then \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/flags.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/importf.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/import.oh; \
+-		rm -f $(DESTDIR)$(prefix)/include/${projname}/actionswf.h; \
+-	fi
+ 
+ .PHONY: all compile ounused def install install-lib clean distclean uninstall test
+ 
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -72,7 +72,7 @@ endfunction
+ function action_code_write_builtin_names(sv codepointer,sv p_action) #action is value only because is working with stack
+ 	sd name
+ 	set name x_pointer(codepointer)
+-	sd compare
++	datax compare#1
+ 	vstr int="int"
+ 	setcall compare strcmp(name,int)
+ 	if compare=0
+@@ -173,7 +173,7 @@ function infinite_loop_check(sd codepoin
+ 		add codepointer (DWORD)
+ 		sd name
+ 		set name action_code_get_pointer_touchless(#codepointer)
+-		sd compare
++		dataxu compare#1
+ 		set compare action_true_compare(name)
+ 		if compare=0
+ 			if codepointer#=(math_end)
+@@ -187,10 +187,87 @@ function infinite_loop_check(sd codepoin
+ 	return test
+ end
+ function action_true_compare(ss command)
+-	sd compare
++	datax compare#1
+ 	set compare strcmp("true",command) #int
+ 	return compare
+ end
++import "is_x" is_x
++function forinbreak_check(sd codepointer)
++	sd start;set start codepointer
++	if codepointer#=(call_action_right)
++		add codepointer (DWORD)
++		sd name
++		sd x;set x is_x()
++		if x=(FALSE)
++			if codepointer#v!=(NULL)
++				return start
++			end
++			sv rules;set rules codepointer
++			incst codepointer
++			sv pname;set pname codepointer
++			set name codepointer#v
++			incst codepointer
++			if codepointer#!=(args_end)
++				return start
++			end
++			add codepointer (DWORD)
++		else
++			set name action_code_get_pointer_touchless(#codepointer)
++			if codepointer#!=(args_end)
++				return start
++			end
++			add codepointer (DWORD)
++			if codepointer#v!=(NULL)
++				return start
++			end
++			incst codepointer
++		end
++		datax compare#1
++		set compare strcmp("§§pop",name) #is memcmp unsafe? comparing from last to first?
++		if compare=0
++			if codepointer#=(compare_action)
++				add codepointer (DWORD)
++				if codepointer#=(ActionEquals2)
++					add codepointer (DWORD)
++					if codepointer#=(ActionNot)
++						add codepointer (DWORD)
++						if codepointer#=(ActionGetVariable)
++							add codepointer (DWORD)
++							sv nl;set nl codepointer
++							set name action_code_get_pointer_touchless(#codepointer)
++							set compare action_null_compare(name)
++							if compare=0
++								if codepointer#=(math_end)
++									add codepointer (DWORD)
++									if codepointer#=(whileblock_end)
++										add codepointer (DWORD)
++										if x=(FALSE) #is this hacky?
++											call x_pointer(nl)
++											if nl#!=name ##fast way to see if is prex
++												call x_pointer(pname)
++												set rules# pname#
++												set pname# (args_end)
++												add pname (DWORD)
++												set pname# (NULL)
++											end
++										end
++										return codepointer
++									end
++								end
++							end
++						end
++					end
++				end
++			end
++		end
++	end
++	return start
++end
++function action_null_compare(ss command)
++	datax compare#1
++	set compare strcmp("null",command) #int
++	return compare
++end
+ 
+ import "ret_cont_break" ret_cont_break
+ import "brace_blocks_counter_inc" brace_blocks_counter_inc
+@@ -551,11 +628,17 @@ function action_code_write_conditions(sd
+ 		add codepointer (DWORD)
+ 		set infinite_guard codepointer
+ 		set codepointer infinite_loop_check(codepointer)
+-		if infinite_guard=codepointer  ##here must set marker for xlog to know if is & or +
++		if infinite_guard=codepointer
++			sd forinbreak_guard;set forinbreak_guard codepointer
++			setcall codepointer forinbreak_check(codepointer)
++			if codepointer!=forinbreak_guard
++				return codepointer   ##skip this obfuscation from ffdec
++			end
+ 			call add_while_top_off((while_marker))
+ 		else
+ 			call add_while_top_off((forwhiletrue_marker))
+ 		end
++		#here must set marker for xlog to know if is & or +
+ 	elseif cond=(ActionIf)
+ 		add codepointer (DWORD)
+ 		set infinite_guard codepointer
+@@ -967,9 +1050,9 @@ function action_code_right_number(sd cod
+     return codepointer
+ endfunction
+ function action_one_command(ss command)
+-	sd compare
++	datax compare#1
+ 	#
+-	setcall compare strcmp("null",command)
++	setcall compare action_null_compare(command)
+ 	if compare=0
+ 		callg action_push((ap_Null))
+ 		ret
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -1308,31 +1308,31 @@ function action_code_parse_leftfunction(
+ endfunction
+ #pointer
+ function action_code_parse_new_or_call(ss ac,sd type,ss cursor)
+-    ss pointer
+-    set pointer ac
+-    import "part_of_variable" part_of_variable
+-    ss last_dot=0
+-    sd bool
+-    setcall bool part_of_variable(pointer#)
+-    while bool=(TRUE)
+-        inc pointer
+-        setcall bool part_of_variable(pointer#)
+-        if bool=(FALSE)
+-            if pointer#=(Openingbracket)
+-                setcall pointer brackets_test(pointer)
+-            endif
+-            if pointer#=(Period)
+-                set last_dot pointer
+-                set bool (TRUE)
+-            elseif pointer#=(Openparenthesis)
++	ss pointer
++	set pointer ac
++	import "part_of_variable" part_of_variable
++	ss last_dot=0
++	sd sz
++	setcall sz part_of_variable(pointer)
++	while sz!=0
++		add pointer sz
++		setcall sz part_of_variable(pointer)
++		if sz=0
++			if pointer#=(Openingbracket)
++				setcall pointer brackets_test(pointer)
++			endif
++			if pointer#=(Period)
++				set last_dot pointer
++				set sz 1
++			elseif pointer#=(Openparenthesis)
+ 				if ac!=cursor ##example: negative
+ 					call pointer_prefix()
+ 				end
+ 				callret action_code_parse_function_detected(ac,last_dot,pointer,type)
+-            endelseif
+-        endif
+-    endwhile
+-    return ac
++			endelseif
++		endif
++	endwhile
++	return ac
+ endfunction
+ #pointer
+ function action_code_parse_function_detected(ss start,ss last_dot,ss pointer,sd type)
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -264,7 +264,7 @@ function actionpool_getvalue_ex(ss value
+ 				sd len
+ 				setcall len strlen(mem)
+ 				if len=newlen
+-					sd comp
++					datax comp#1
+ 					setcall comp memcmp(mem,value,len)
+ 					if comp=0
+ 						sub nr count
+--- actionswf-1.orig/src/actionpush.oc
++++ actionswf-1/src/actionpush.oc
+@@ -9,8 +9,8 @@ import "mem_free" mem_free
+ 
+ function push()
+ 	value mem=NULL
+-	datax size#1    #same as debug_data, and here is from x values
+-	datax allsize#1
++	dataxu size#1    #same as debug_data, and here is from x values, keeping a maxuint16 action code
++	dataxu allsize#1
+ 	if mem!=(NULL)
+ 		call mem_free(#mem)
+ 	end
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -46,9 +46,9 @@ function debug_data()
+ 	#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
+ 	#but all_size is growing +0x1000 from that limit, and the error is catched there, valuex?
+ 	#there is a limit on actions and on constant pool, so don't worry here
+-	datax size#1
+-	datax all_size#1
+-	datax rows#1
++	dataxu size#1
++	dataxu all_size#1
++	dataxu rows#1
+ 
+ 	import "x_data" x_data
+ 	call x_data()
+@@ -332,7 +332,7 @@ function debug_phase_code(sd codepointer
+ 					sub rows a
+ 					div rows :
+ 					#do not write now, can be break;} or Not Not If  and need to truncate that
+-					datax size#1;set size debug_data.size
++					dataxu size#1;set size debug_data.size
+ 					set debug_data.size 0
+ 					add debug_data.rows rows  ## add? is the case with break+ret and remove them and will be an empty row and that flush was skipped, below example
+ 					#example, add var q , at while break below example (at debug_phase_code_flush)
+--- actionswf-1.orig/src/img.oc
++++ actionswf-1/src/img.oc
+@@ -41,8 +41,8 @@ function imgx(ss dbl,sd p_wh,sd is_image
+ 				char j="jpg"
+ 				char ms=Period
+ 				char m="msk"
+-				sd cmp;set cmp memcmp(cr,#j,3)
+-				sd cmp2;set cmp2 memcmp(cr,#m,3)
++				datax cmp#1;set cmp memcmp(cr,#j,3)
++				datax cmp2#1;set cmp2 memcmp(cr,#m,3)
+ 				whiletrue
+ 					if cmp!=0
+ 						if cmp2!=0
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -595,10 +595,10 @@ endfunction
+ function swf_placeobject_local(sd refid,sd depth)
+ #sd refid    the id
+ #sd depth    depth value
+-     call swf_placeobject_coords_local(refid,depth,0,0)
++     callg swf_placeobject_coords_local(refid,depth,0,0)
+ endfunction
+ #                                                  if not data here, then will conflict at c language where we talk about int
+-function swf_placeobject_coords_local(sd refid,sd depth,datax x,datax y)
++function swf_placeobject_coords_local(sd refid,sd depth,datax x,datax y) #datax x/y they can be negative
+ #sd refid
+ #sd depth
+ #sd x         x coordinate
+@@ -613,7 +613,7 @@ const PlaceFlagHasCharacter=0x2
+ #const PlaceFlagMove=0x1
+     sd flags=PlaceFlagHasMatrix|PlaceFlagHasCharacter
+     sd matrix
+-    datax matrixsz#1
++    dataxu matrixsz#1
+     call matrix_translate(#matrix,#matrixsz,x,y)
+ 
+     sd size=5
+@@ -624,13 +624,13 @@ const PlaceFlagHasCharacter=0x2
+     #character id
+     call swf_mem_add(#refid,2)
+     #matrix
+-    call swf_mem_add(matrix,matrixsz)
++    callg swf_mem_add(matrix,matrixsz)
+ endfunction
+ function swf_removeobject_local(sd depth)
+ #sd depth        depth for the removeobject2 tag
+     call swf_tag_recordheader_entry((RemoveObject2),2)
+     #depth
+-    call swf_mem_add(#depth,2)
++    callg swf_mem_add(#depth,2)
+ endfunction
+ 
+ function swf_exports_done_local()
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -117,7 +117,7 @@ vstr actions#1
+ 
+     sd noText=FALSE;sd text_id
+     data t_null={0,0}
+-    sd b;setcall b memcmp(#t_null,#text,:)
++	datax b#1;setcall b memcmp(#t_null,#text,:)
+     if b=0
+         set noText (TRUE)
+         set bmem# noText
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -158,8 +158,8 @@ endfunction
+ 
+ #bool
+ function is_numeric(sd char)
+-    char min="0"
+-    char max="9"
++    char min="0"^
++    char max="9"^
+ 	if char<min
+         return (FALSE)
+ 	endif
+@@ -168,33 +168,45 @@ function is_numeric(sd char)
+ 	endif
+     return (FALSE)
+ endfunction
+-#bool
+-function part_of_variable(sd value)
+-    sd bool
+-    setcall bool is_numeric(value)
+-    if bool=(TRUE)
+-        return (TRUE)
+-    endif
++#0 1/2
++function part_of_variable(ss value)
++	sd bool
++	setcall bool is_numeric(value#)
++	if bool=(TRUE)
++		return 1
++	endif
+ 	callret is_letter(value)
+ endfunction
+-#bool
+-function is_letter(sd value)
++#0 1/2
++function is_letter(ss str)
++	sd value;set value str#
+ 	if value<(A)
+-        return (FALSE)
++		return 0
+ 	endif
+ 	if value<=(Z)
+-        return (TRUE)
++		return 1
+ 	endif
+ 	if value=(_)
+-        return (TRUE)
++		return 1
+ 	endif
+ 	if value<(a)
+-        return (FALSE)
++		return 0
+ 	endif
+ 	if value<=(z)
+-        return (TRUE)
++		return 1
+ 	endif
+-    return (FALSE)
++	if value>=(control2_start) #https://www.fileformat.info/info/unicode/utf8.htm  more at ascii.oh
++		if value<=(control2_end)
++			inc str
++			set value str#
++			if value>=(continuing_start)
++				if value<=(continuing_end)
++					return 2
++				end
++			end
++		end
++	end
++	return 0
+ endfunction
+ 
+ #strings
+@@ -232,28 +244,29 @@ function str_at_str_start(ss s1,ss s2)
+     if l1<l2
+         return (FALSE)
+     endif
+-    sd comp
+-    setcall comp memcmp(s1,s2,l2)
+-    if comp=0
+-        return (TRUE)
+-    endif
+-    return (FALSE)
++	datax comp#1
++	setcall comp memcmp(s1,s2,l2)
++	if comp=0
++		return (TRUE)
++	endif
++	return (FALSE)
+ endfunction
+ 
+ #next/same
+ function str_expression_at_start(ss string,ss expression)
+-    sd bool
+-    setcall bool str_at_str_start(string,expression)
+-    if bool=(FALSE)
+-        return string
+-    endif
+-    ss next
+-    set next string
+-    addcall next strlen(expression)
+-    setcall bool part_of_variable(next#)
+-    if bool=(TRUE)
+-        return string
+-    endif
++	sd bool
++	setcall bool str_at_str_start(string,expression)
++	if bool=(FALSE)
++		return string
++	endif
++	ss next
++	set next string
++	addcall next strlen(expression)
++	sd sz
++	setcall sz part_of_variable(next)
++	if sz!=0
++		return string
++	endif
+ 	callret spaces(next)
+ endfunction
+ #next/same
+@@ -290,7 +303,7 @@ function compat(ss pointer,sd max,ss aga
+ 	sd start;set start pointer
+ 	sub max s
+ 	while pointer<^max  ## = ? will not be logical to end like "abc and"
+-		sd c;set c memcmp(pointer,against,s)
++		datax c#1;set c memcmp(pointer,against,s)
+ 		if c=0
+ 			inc pointer
+ 
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -8,7 +8,7 @@ import "mem_free" mem_free
+ 
+ function x_data()
+ 	value f=NULL
+-	datax size#1   #there was a debate on this
++	dataxu size#1   #there was a debate on this
+ 	#size here is on small mem xcode. but there are 2 sizes(at xx and at xstart) that are on large xcode. doaction is ui32
+ 	#anyway, totalvalues is ui16*4. expands? 32...left 32...right, right 0x8000*4=0x20000,left at i386 0x8000/4 parts, sum 0x40...., still a quarter of ui32
+ 	value mem=NULL
+@@ -22,6 +22,12 @@ function x_data()
+ 		end
+ 	end
+ end
++function is_x()
++	if x_data.mem=(NULL)
++		return (FALSE)
++	end
++	return (TRUE)
++end
+ 
+ function x_pointer(sv pointer)
+ 	sd value
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -96,7 +96,10 @@ for(i=0;i<2;i=1+i){
+ 	a=2+a;
+ }
+ 
+-for(a in b){c=1+c;}
++for(a in b){
++	if(a==2)break;
++	c=1+c;
++}
+ ")
+ #call actiond("for(a in b){c=1+c;}") will be ""b"" and here straight "b"
+ call action("return 1")
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -17,7 +17,8 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 			LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} qq ./a.out x && {
+ 				if [ "${a}" = 1 ]; then exit; fi
+ 				if [ -n "${wait}" ]; then read; fi
+-				is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${bashdbg} ../../oaalternative.sh a.swf "qq ./a.out x x" || {
++				~/games/ffdec /home/bc/a/a/s/actionswf-1/tests/ffdec/a.swf && \
++				is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "qq ./a.out x x" || {
+ 					swfdump -D${1} a.swf.orig > 1
+ 					swfdump -D${1} a.swf > 2
+ 					diff 1 2 --color

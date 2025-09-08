@@ -1,0 +1,160 @@
+
+format elfobj64
+
+include "../include/prog.oh"
+
+function verbose(datax flag)
+	and flag (flag_verbose)
+end
+
+importx "strlen" strlen
+importx "memcmp" memcmp
+importx "memcpy" memcpy
+importx "malloc" malloc
+importx "access" access
+importx "free" free
+importx "printf" printf
+
+import "ebase" ebase
+
+#aftercalli
+
+import "f_size" f_size
+import "f_size_errors" f_size_errors
+import "error" error
+import "memalloc" memalloc
+
+function imgx(ss dbl,sd p_wh,sd is_image) #,sd is_clipped
+	sd len;set len strlen(dbl)
+	ss cr;set cr dbl
+	add cr len
+	sd sz;set sz cr
+	sd size;set size cr
+	while dbl!=cr
+		dec cr
+		if cr#=(Period)
+			set size cr
+			inc cr
+			sub sz cr
+			if sz=3
+				char jp=Period
+				char j="jpg"
+				char ms=Period
+				char m="msk"
+				sd cmp;set cmp memcmp(cr,#j,3)
+				sd cmp2;set cmp2 memcmp(cr,#m,3)
+				whiletrue
+					if cmp!=0
+						if cmp2!=0
+							break
+						end
+					end
+					call error("img is pairing with jpg/msk error") #will leave at bp
+					break #to silence the jump
+				end
+			end
+			break
+		end
+	end
+
+	sd dblsize;set dblsize f_size(dbl)
+	sub dblsize 4+4  #is unsigned compared to stay in ui32 tags, if short overflow will fail at dbl checks anyway
+
+	sub size dbl
+	set sz size
+	add size 5
+
+	sd f1;set f1 memalloc(size)
+	call memcpy(f1,dbl,sz)
+	set cr f1
+	add cr sz
+	call memcpy(cr,#ms,5)
+
+	sd id; sd jpgsize
+	sd acs;set acs access(f1,(F_OK))
+	if acs!=0 #opac
+		call memcpy(cr,#jp,5)
+		set jpgsize f_size_errors(f1)
+		set id imgx_decision(dblsize,jpgsize,dbl,f1,(NULL),p_wh,is_image)
+	else #transparent
+		set jpgsize f_size_errors(f1) #is msk size
+		sd jpg;set jpg malloc(size)
+		if jpg!=(NULL)
+			call memcpy(jpg,dbl,sz)
+			set cr jpg
+			add cr sz
+			call memcpy(cr,#jp,5)
+
+			add jpgsize f_size_errors(jpg)
+			#if jpgsize>0 #overflow can't make in swf, ui32tags
+			add jpgsize 4
+			#if jpgsize>0 #same
+			set id imgx_decision(dblsize,jpgsize,dbl,jpg,f1,p_wh,is_image)
+			#end
+			#end
+			call free(jpg)
+		end
+	end
+	call free(f1)
+	if verbose.flag!=(flag_none)
+		add dblsize 2 #again, ui32 tags
+		add jpgsize 2
+		sd c
+		if dblsize<^jpgsize
+			set c (Lessthan)
+		else
+			set c (Greaterthan)
+		end
+		ss plus
+		if acs!=0
+			set plus ""
+		else
+			set plus "+msk"
+		end
+		call printf("dbl 0x%lx %c jpg%s 0x%lx",dblsize,c,plus,jpgsize)
+		if p_wh!=(NULL)
+			sd w;set w p_wh#
+			add p_wh (DWORD)
+			call printf(" %hux%hu",w,p_wh#)
+		end
+		call printf(" %s\n",dbl)
+	end
+	return id
+end
+
+import "swf_dbl_ex_local" swf_dbl_ex_local
+import "swf_image_ex_local" swf_image_ex_local
+import "swf_jpeg_local" swf_jpeg_local
+import "dbl_dim" dbl_dim
+import "swf_shape_bitmap_local_clipped" swf_shape_bitmap_local_clipped
+
+function imgx_decision(sd dblsize,sd jpgsize,ss dbl,ss jpg,ss msk,sd p_wh,sd is_image) #,sd is_clipped
+	valuex bp#1;base bp;call ebase(bp)
+	if dblsize<^jpgsize
+		if is_image=(FALSE)
+			callret swf_dbl_ex_local(dbl,p_wh,(TRUE))
+		end
+		if p_wh=(NULL)
+			datax width#1;datax height#1
+			callret swf_image_ex_local(dbl,#width,(TRUE))
+		end
+		callret swf_image_ex_local(dbl,p_wh,(TRUE))
+	end
+	sd id
+	if msk=(NULL)
+		set id swf_jpeg_local(jpg,(DefineBitsJPEG2))
+	else
+		set id swf_jpeg_local(jpg,(DefineBitsJPEG3),msk)
+	end
+	set width dbl_dim(dbl,0)
+	set height dbl_dim(dbl,(WORD))
+	if p_wh!=(NULL)
+		set p_wh# width
+		add p_wh (DWORD)
+		set p_wh# height
+	end
+	if is_image=(FALSE)
+		return id
+	end
+	callret swf_shape_bitmap_local_clipped(id,width,height)
+end
