@@ -1,0 +1,283 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x79) focal; urgency=medium
+ .
+   * 1.79
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-09-24
+
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -1,8 +1,7 @@
+ # EDitOR
+ 
+ ## Install
+-On Ubuntu from PPA.\
+-Architecture: amd64 arm64 armhf
++On Ubuntu(amd64 arm64/armhf)(focal jammy noble) from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+@@ -12,19 +11,21 @@ Install:
+ sudo apt-get install edor
+ ```
+ \
+-On Arch Linux, <i>.zst</i> or <i>.xz</i> file from [releases](https://github.com/colin-i/edor/releases), depending on architecture. Or:
++On Arch Linux:
+ ```sh
+ yay -Sy edor
+ ```
++Or <i>.zst</i>(x86_64) or <i>.xz</i>(aarch64) file from [releases](https://github.com/colin-i/edor/releases).
+ \
+-On Fedora:
++\
++On Fedora 42(x86_64 aarch64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install edor
+ ```
+ \
+ On openSUSE, run the following as __root__:\
+-For openSUSE Tumbleweed:
++For openSUSE Tumbleweed(x86_64/i586 aarch64):
+ ```sh
+ zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Tumbleweed/home:costin.repo
+ ```
+@@ -32,7 +33,7 @@ For openSUSE Leap:
+ ```sh
+ zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
+ ```
+-Replace *16.0* with *15.6* if needed.\
++Replace *16.0*(x86_64 aarch64) with *15.6*(x86_64/i586 aarch64) if needed.\
+ And:
+ ```sh
+ zypper refresh
+@@ -42,7 +43,7 @@ zypper install edor
+ On Windows, there is this **edor-\*-msys-\*.zst** pkg at [releases](https://github.com/colin-i/edor/releases) which is using [msys2](https://msys2.github.io).
+ \
+ \
+-On linux distributions, <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
++On linux distributions(x86_64), <i>.AppImage</i> file from [releases](https://github.com/colin-i/edor/releases).
+ 
+ ## From source
+ Debian example: Install autoconf automake make libncurses-dev bc g++(or gcc and --disable-cpp at configure); on armv7l(alias armhf) cpu, libunwind-dev. There is a "headless" build file as well.
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -137,6 +137,7 @@ static void __attribute__((noreturn)) si
+ #include "main.h"
+ 
+ #define no_clue (size_t)-1
++#define ignored_bool false
+ 
+ #define normalize_yes -1
+ #define normalize_err 0
+@@ -184,6 +185,7 @@ static bool indent_flag=false;
+ #define mask_ocompiler 8
+ #define mask_splits 0x10
+ #define mask_filewhites 0x20
++#define mask_indopt 0x40
+ static char prefs_file[max_path_0]={'\0'};//only the first byte is set
+ static char*ocode_extension_new=nullptr;
+ 
+@@ -213,6 +215,7 @@ static char*filewhites_extension_new=nul
+ #define tab_protocol char
+ tab_protocol tab_sz=6;
+ static int user_return=EXIT_SUCCESS;
++static bool indopt_flag=false;
+ 
+ #define splits_activated 'S'
+ #define splits_activated_mixless 'h'
+@@ -491,7 +494,7 @@ void orig_key_show(show_key_struct*s){
+ static void helpshowlastrow(int rw){
+ 	int i=3;//with respect to helpposition
+ 	move(rw,i);
+-	char stats=5+1+2;
++	char stats=6+1+2;
+ 	int max=getmaxx(stdscr)-stats;
+ 	while(i<max){
+ 		addch(' ');
+@@ -503,6 +506,7 @@ static void helpshowlastrow(int rw){
+ 	addch(ocompiler_flag/*true*/?orig_upkey(key_ocomp):orig_lowkey(key_ocomp));//i'm using otoc with gdb for new code
+ 	addch(splits_flag/*true*/?orig_upkey(key_actswf):orig_lowkey(key_actswf));
+ 	addch(filewhites_flag/*true*/?orig_upkey(key_whites):orig_lowkey(key_whites));
++	addch(indopt_flag/*true*/?orig_upkey(key_indopt):orig_lowkey(key_indopt));
+ 	addch(' ');
+ 	addch(split_reminder_c>=split_yes_mixless?(split_reminder_c==split_yes_mix?splits_activated:splits_activated_mixless):splits_deactivated);
+ 	//1@: else at my compilers, and also gcc, is faster: if is with new asm jump instruction. but still not counting on that and aspire to fast first
+@@ -1845,7 +1849,7 @@ static void type(int cr,WINDOW*w){
+ 	wmove(w,rw,cl);
+ 	mod_set_off_wrap();
+ }
+-static void indent(bool b,size_t ybsel,size_t*xbsel,size_t yesel,size_t*xesel,WINDOW*w){
++static void indent(bool b,size_t ybsel,size_t*xbsel,size_t yesel,size_t*xesel,WINDOW*w,bool v_l){
+ 	if(ybsel>=rows_tot)return;
+ 	size_t ye;
+ 	if(yesel>=rows_tot)ye=rows_tot;
+@@ -1886,25 +1890,31 @@ static void indent(bool b,size_t ybsel,s
+ 	if(re>max)re=max;
+ 	if(b/*true*/){
+ 		if(xbsel!=nullptr){
+-			xbsel[0]++;xesel[0]++;
+-			if(xtext==0){//add at left markers for content
+-				for(int i=rb;i<re;i++)mvwaddch(leftcontent,i,0,at_left_mark);
+-				wnoutrefresh(leftcontent);
++			if(v_l==false)xbsel[0]++;
++			if(indopt_flag/*true*/){
++				xesel[0]++;
++				if(xtext==0){//add at left markers for content
++					for(int i=rb;i<re;i++)mvwaddch(leftcontent,i,0,at_left_mark);
++					wnoutrefresh(leftcontent);
++				}
++				xtext++;
++				if(rb!=0)refreshrowsbot(w,0,rb);
++				if(re<max)refreshrowsbot(w,re,max);
++			}else{
++				xesel[0]++;
++				refreshrowsbot(w,rb,re);
++				printsel(w,ybsel,xbsel[0],yesel,xesel[0],true);
+ 			}
+-			xtext++;
+-			if(rb!=0)refreshrowsbot(w,0,rb);
+-			if(re<max)refreshrowsbot(w,re,max);
+ 		}else refreshrowsbot(w,rb,re);
+ 	}else{
+ 		if(xbsel!=nullptr){
+ 			if(xtext!=0){
+-				xbsel[0]--;xesel[0]--;
++				if(xbsel[0]!=0)xbsel[0]--;
++				xesel[0]--;
+ 				xtext--;
+-				if(xtext==0){
+-					if(xtext==0){//add at left markers for content
+-						for(int i=rb;i<re;i++)mvwaddch(leftcontent,i,0,at_content_nomark);
+-						wnoutrefresh(leftcontent);
+-					}
++				if(xtext==0){//remove at left content markers
++					for(int i=rb;i<re;i++)mvwaddch(leftcontent,i,0,at_content_nomark);
++					wnoutrefresh(leftcontent);
+ 				}
+ 				if(rb!=0)refreshrowsbot(w,0,rb);
+ 				if(re<max)refreshrowsbot(w,re,max);
+@@ -1916,8 +1926,9 @@ static void indent(bool b,size_t ybsel,s
+ 		}else refreshrowsbot(w,rb,re);
+ 	}
+ }
++#define indent_a(a,b,c,d,e,f) indent(a,b,c,d,e,f,ignored_bool)
+ //true resize
+-static bool visual_mode(WINDOW*w,bool v_l){
++static bool visual_mode(WINDOW*w,bool v_l){//v_l true is line mode
+ 	visual(orig_upkey(key_visual));
+ 	int rw=getcury(w);int cl=getcurx(w);
+ 	size_t ybsel=ytext+(size_t)rw;
+@@ -1957,11 +1968,15 @@ static bool visual_mode(WINDOW*w,bool v_
+ 		else{
+ 			int r=getcury(w);int c=getcurx(w);
+ 			if(z==movement_diffkey){
+-				if(b=='I'){z=-1;indent(true,ybsel,&xbsel,yesel,&xesel,w);}
++				if(b=='I'){
++					z=-1;
++					indent(true,ybsel,&xbsel,yesel,&xesel,w,v_l);
++					if(indopt_flag==false){amove(w,r,c);continue;}
++				}
+ 				else if(b=='U'){
+ 					z=-1;
+ 					bool edge=xtext==0;
+-					indent(false,ybsel,&xbsel,yesel,&xesel,w);
++					indent_a(false,ybsel,&xbsel,yesel,&xesel,w);
+ 					if(edge/*true*/){amove(w,r,c);continue;}
+ 				}
+ 				else{
+@@ -1980,11 +1995,11 @@ static bool visual_mode(WINDOW*w,bool v_
+ 						}
+ 					}else{
+ 						if(b=='i'){
+-							indent(true,ybsel,nullptr,yesel,nullptr,w);
++							indent_a(true,ybsel,nullptr,yesel,nullptr,w);
+ 							amove(w,r,c);
+ 							c=getcurx(w);
+ 						}else if(b=='u'){
+-							indent(false,ybsel,nullptr,yesel,nullptr,w);
++							indent_a(false,ybsel,nullptr,yesel,nullptr,w);
+ 							amove(w,r,c);
+ 							c=getcurx(w);
+ 						}
+@@ -2309,6 +2324,12 @@ static bool loopin(WINDOW*w){
+ 					quick_pack(com_nr_tab,change_tab_size)
+ 					if(command((char*)args,(show_key_struct){key_tab,0})==command_false)wmove(w,getcury(w),getcurx(w));
+ 					else return true;
++				}else if(chr==key_indopt){
++					char c;
++					if(indopt_flag/*true*/){indopt_flag=false;c=orig_lowkey(key_indopt);}
++					else{indopt_flag=true;c=orig_upkey(key_indopt);}
++					setprefs(mask_indopt,indopt_flag);
++					vis(c,w);
+ 				}else type(c,w);//enter, tab, ^, unknown ctrls
+ 			}else{
+ 				if(strcmp(s,"KEY_F(1)")==0){
+@@ -2576,6 +2597,7 @@ static void getprefs(){
+ 			if((mask&mask_ocompiler)!=0)ocompiler_flag=true;
+ 			if((mask&mask_splits)!=0)splits_flag=true;
+ 			if((mask&mask_filewhites)!=0)filewhites_flag=true;
++			if((mask&mask_indopt)!=0)indopt_flag=true;
+ 			bar_byte len;
+ 			if(read(f,&len,extlen_size)==extlen_size){
+ 				ocode_extension_new=(char*)malloc(len+1);
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -67,6 +67,7 @@ text="\ncommand mode: left,right,home,en
+ \nCtrl+j = enable/disable OA split syntax; Alt+j = change delimiter; Alt+J = change view delimiter\
+ \n    Alt+p = change splits folder (blank is mixless); Alt+P = change rule extension name for splits (blank is all)\
+ \nCtrl+y = enable/disable spaces->tabs indents at read, tabs->spaces at write; Alt+y = change rule extension name (blank is all)\
++\nCtrl+d = enable/disable indent follower\
+ \nCtrl+b = change tab size\
+ \nCtrl+z = switch keys, applies to Ctrl and lower/upper Alt (example: az , +a becomes +z and +z becomes +a)\
+ \nCtrl+q = quit; Alt+q = quit and return EXIT_FAILURE\
+@@ -77,9 +78,9 @@ if [ ${level} -eq ${level_help} ]; then
+ 	exit 0
+ fi
+ 
+-#QWERTYU O    ip
+-#AS FG J L dk h
+-# Z CVBN   x  m
++#QWERTYU O   ip
++#ASDFG J L k h
++# Z CVBN   x m
+ # ^M is 13 that comes also at Enter, ^I is 9 that comes also at Tab
+ # ^H at termux is 263 backspace
+ # ^P at docker, something is not ok with the redraw
+@@ -138,6 +139,7 @@ while [ $i -lt 123 ]; do
+ 	case $i in
+ 		98) find_pos tab                 $i 1;;     #b
+ 		99) find_pos findword            $i 1 1;;   #c
++		100) find_pos indopt             $i 1;;     #d
+ 		101) find_pos mouse              $i 1;;     #e
+ 		102) find_pos find               $i 1 1;;   #f
+ 		103) find_pos goto               $i 1 1;;   #g
+--- edor-1.orig/win
++++ edor-1/win
+@@ -5,5 +5,7 @@ n=$((n-1))
+ x=`cat 1 | jq ".assets[${n}].browser_download_url"`
+ x=${x:1:-1}
+ wget $x
++x=`cat 1 | jq ".assets[${n}].name"`
++x=${x:1:-1}
+ pacman -U $x
+ rm 1 $x
