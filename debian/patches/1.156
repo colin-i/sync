@@ -1,0 +1,5502 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-156) bionic; urgency=medium
+ .
+   * fix elsif error, img check, and more
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-10-19
+
+--- /dev/null
++++ actionswf-1/csrc/Makefile
+@@ -0,0 +1,63 @@
++
++ifndef platform
++platform=lin
++endif
++ifndef OCOMP
++OCOMP=o
++endif
++ifndef OCONV
++OCONV=otoc
++endif
++ifndef linkerflags
++linkerflags=-O3 -s
++endif
++ifndef compilerflags
++compilerflags=${linkerflags}
++endif
++ifndef EXTRA_CFLAGS
++include ../oad/cflags
++endif
++
++items_prefix=../src/
++include ../src/items
++
++$(eval xfiles = )
++$(foreach var,$(expitems),$(eval xfiles += ${items_prefix}${var}.e.oc.x))
++$(foreach var,$(items),$(eval xfiles += ${items_prefix}${var}.oc.x))
++$(eval cfiles = )
++$(foreach var,$(expitems),$(eval cfiles += ${items_prefix}${var}.e.c))
++$(foreach var,$(items),$(eval cfiles += ${items_prefix}${var}.c))
++
++ifeq (${conv_64},1) #to cross compile
++	ifneq ($(CC),arm-linux-gnueabihf-gcc)
++		model=-m32
++	endif
++else
++	ifeq (${platform},win) #to long long
++		OCONVFLAGS=-
++	endif
++endif
++
++OFLAGS=x_file 2
++
++all: libactionswf.so
++
++libactionswf.so: headers ${obs} ${eobs}
++
++headers:
++	$(MAKE) -C ../include
++	$(MAKE) -C ../dev flags.h action_swf.h
++
++%.o: %.oc
++	${OCOMP} $< ${OFLAGS} include_sec 1
++	${OCONV} ${OCONVFLAGS} $<.x import
++	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c -o $@
++
++clean:
++	$(MAKE) -C ../include clean
++	$(MAKE) -C ../dev clean-csrc
++	-rm -f ${obs} ${eobs} ${logs}
++	-rm -f ${xfiles} ${cfiles}
++distclean: clean
++
++.PHONY: all headers clean distclean
+--- /dev/null
++++ actionswf-1/csrc/md
+@@ -0,0 +1,2 @@
++
++linkerflags=-g make $@
+--- /dev/null
++++ actionswf-1/csrc/mdl
+@@ -0,0 +1,2 @@
++
++OCOMP="q ~/o/ocompiler-2/src/o" OCONV="qq ~/o/ocompiler-2/otoc/otoc" ./md $@
+--- actionswf-1.orig/dev/Makefile
++++ actionswf-1/dev/Makefile
+@@ -10,12 +10,13 @@ ifndef prefix
+ prefix=/usr
+ endif
+ 
+-all: flags.h flagss.h flagss.oh actionswf.oh
++all: flags.h flagss.h  flagss.oh actionswf.oh
++# action_swf.h
+ 
+ %.h: %.ohi
+ 	${OCOMP} $< x_file 2 logfile 0
+ 	${OCONV} $<.x
+-flags.ohi: flags.oh
++%.ohi: %.oh
+ 	echo "format elfobj64" > $@
+ 	echo "orphan off" >> $@
+ 	cat $< >> $@
+@@ -34,8 +35,12 @@ actionswf.oh: action_swf.oh
+ 
+ test:
+ 	echo dev
+-clean:
+-	-rm -f flags.ohi.x flagss.ohi.x flags.ohi flagss.ohi flags.h flagss.h  flagss.oh actionswf.oh
++clean: clean-com
++	-rm -f flagss.ohi.x flagss.ohi flagss.h  flagss.oh actionswf.oh
++clean-com:
++	-rm -f flags.ohi.x flags.ohi flags.h
++clean-csrc: clean-com
++	-rm -f action_swf.ohi.x action_swf.ohi action_swf.h
+ distclean: clean
+ 
+ install:
+@@ -61,4 +66,4 @@ uninstall:
+ 		rm -f $(DESTDIR)$(prefix)/include/actionswf/actionswf.oh; \
+ 	fi
+ 
+-.PHONY: all install clean distclean uninstall test
++.PHONY: all install clean clean-com clean-csrc distclean uninstall test
+--- /dev/null
++++ actionswf-1/include/Makefile
+@@ -0,0 +1,51 @@
++
++ifndef platform
++platform=lin
++endif
++ifndef OCOMP
++OCOMP=o
++endif
++ifndef OCONV
++OCONV=otoc
++endif
++
++items=action ascii ${platform}home ${platform} prog program xlog
++$(foreach var,$(items),$(eval headers += ${var}.h))
++$(foreach var,$(items),$(eval xfiles += ${var}.ohi.x))
++
++include ../src/items
++include ../src/hitems
++$(foreach var,$(hreqs),$(eval chreqs += ../include/${var}.h))
++
++all: ${ohreqs} ${chreqs} ${headers} throw.h
++
++include ../src/rules
++
++%.h: %.ohi
++	${OCOMP} $< x_file 2 logfile 0 include_sec 1
++	${OCONV} $<.x
++%.ohi: %.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	cat $< >> $@
++lin.ohi: lin.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	cat $< >> $@
++	sed -i "s/^const path_separator=Slash/const path_separator=`cat ascii.oh | grep -Po '(?<=Const Slash=).*'`/" $@
++${chreqs}:
++	ln -s `echo $* | sed s/platform/${platform}/`.h $@
++
++throw.h:
++	a='int main(){printf("%lu",sizeof(jmp_buf));return 0;}'; \
++	printf '#include <setjmp.h>\n#include <stdio.h>\n%s' "$${a}" | gcc -x c -
++	echo -n 'char jmp_data[' > $@
++	./a.out >> $@
++	echo -n '];' >> $@
++	rm a.out
++
++clean:
++	-rm -f ${xfiles} lin.ohi ${headers} ${ohreqs} ${chreqs} throw.h
++distclean: clean
++
++.PHONY: all clean distclean
+--- actionswf-1.orig/include/ascii.oh
++++ actionswf-1/include/ascii.oh
+@@ -1,138 +1,138 @@
+-
+-Const Nullchar=0x00
+-#Const StartofHeading=0x01
+-#Const StartofText=0x02
+-#Const EndofText=0x03
+-#Const EndofTransmission=0x04
+-#Const Enquiry=0x05
+-#Const Acknowledgment=0x06
+-#Const Bell=0x07
+-#Const BackSpace=0x08
+-Const HorizontalTab=0x09
+-#Const LineFeed=0x0A
+-#Const VerticalTab=0x0B
+-#Const FormFeed=0x0C
+-#Const CarriageReturn=0x0D
+-#Const ShiftOut=0x0E
+-#Const ShiftIn=0x0F
+-#Const DataLineEscape=0x10
+-#Const DeviceControl1=0x11
+-#Const DeviceControl2=0x12
+-#Const DeviceControl3=0x13
+-#Const DeviceControl4=0x14
+-#Const NegativeAcknowledgement=0x15
+-#Const SynchronousIdle=0x16
+-#Const EndofTransmitBlock=0x17
+-#Const Cancel=0x18
+-#Const EndofMedium=0x19
+-#Const Substitute=0x1A
+-#Const Escape=0x1B
+-#Const FileSeparator=0x1C
+-#Const GroupSeparator=0x1D
+-#Const RecordSeparator=0x1E
+-#Const UnitSeparator=0x1F
+-Const Space=0x20
+-Const Exclamationmark=0x21
+-#Const Doublequotes=0x22
+-#Const Number=0x23
+-#Const Dollar=0x24
+-Const Percent=0x25
+-Const Ampersand=0x26
+-#Const Singlequote=0x27
+-Const Openparenthesis=0x28
+-Const Closeparenthesis=0x29
+-Const Asterisk=0x2A
+-Const Plus=0x2B
+-#Const Comma=0x2C
+-Const Hyphen=0x2D
+-Const Period=0x2E
+-Const Slash=0x2F
+-Const _0=0x30
+-#Const _1=0x31
+-#Const _2=0x32
+-#Const _3=0x33
+-#Const _4=0x34
+-#Const _5=0x35
+-#Const _6=0x36
+-#Const _7=0x37
+-#Const _8=0x38
+-Const _9=0x39
+-Const Colon=0x3A
+-Const Semicolon=0x3B
+-Const Lessthan=0x3C
+-Const Equals=0x3D
+-Const Greaterthan=0x3E
+-Const Questionmark=0x3F
+-#Const Atsymbol=0x40
+-Const A=0x41
+-Const B=0x42
+-Const C=0x43
+-Const D=0x44
+-#Const E=0x45
+-Const F=0x46
+-#Const G=0x47
+-#Const H=0x48
+-#Const I=0x49
+-#Const J=0x4A
+-#Const K=0x4B
+-Const L=0x4C
+-#Const M=0x4D
+-#Const N=0x4E
+-#Const O=0x4F
+-#Const P=0x50
+-#Const Q=0x51
+-#Const R=0x52
+-Const S=0x53
+-#Const T=0x54
+-#Const U=0x55
+-#Const V=0x56
+-Const W=0x57
+-#Const X=0x58
+-#Const Y=0x59
+-Const Z=0x5A
+-Const Openingbracket=0x5B
+-#Const Backslash=0x5C
+-Const Closingbracket=0x5D
+-Const Caret=0x5E
+-Const _=0x5F
+-#Const Graveaccent=0x60
+-Const a=0x61
+-#Const b=0x62
+-#Const c=0x63
+-#Const d=0x64
+-#Const e=0x65
+-#Const f=0x66
+-#Const g=0x67
+-#Const h=0x68
+-#Const i=0x69
+-#Const j=0x6A
+-#Const k=0x6B
+-Const l=0x6C
+-#Const m=0x6D
+-#Const n=0x6E
+-#Const o=0x6F
+-#Const p=0x70
+-#Const q=0x71
+-#Const r=0x72
+-Const s=0x73
+-#Const t=0x74
+-Const u=0x75
+-#Const v=0x76
+-#Const w=0x77
+-#Const x=0x78
+-#Const y=0x79
+-Const z=0x7A
+-Const Openingbrace=0x7B
+-Const Verticalbar=0x7C
+-Const Closingbrace=0x7D
+-#Const Equivalencysign=0x7E
+-#Const Delete=0x7F
+-
+-Const continuing_start=0x80
+-Const control2_start=0xC2
+-Const continuing_end=0xBF
+-Const control2_end=0xDF
+-#Const control3_start=0xE0
+-#Const control3_end=0xEF
+-#Const control4_start=0xF0
+-#Const control4_end=0xFF
++
++Const Nullchar=0x00
++#Const StartofHeading=0x01
++#Const StartofText=0x02
++#Const EndofText=0x03
++#Const EndofTransmission=0x04
++#Const Enquiry=0x05
++#Const Acknowledgment=0x06
++#Const Bell=0x07
++#Const BackSpace=0x08
++Const HorizontalTab=0x09
++#Const LineFeed=0x0A
++#Const VerticalTab=0x0B
++#Const FormFeed=0x0C
++#Const CarriageReturn=0x0D
++#Const ShiftOut=0x0E
++#Const ShiftIn=0x0F
++#Const DataLineEscape=0x10
++#Const DeviceControl1=0x11
++#Const DeviceControl2=0x12
++#Const DeviceControl3=0x13
++#Const DeviceControl4=0x14
++#Const NegativeAcknowledgement=0x15
++#Const SynchronousIdle=0x16
++#Const EndofTransmitBlock=0x17
++#Const Cancel=0x18
++#Const EndofMedium=0x19
++#Const Substitute=0x1A
++#Const Escape=0x1B
++#Const FileSeparator=0x1C
++#Const GroupSeparator=0x1D
++#Const RecordSeparator=0x1E
++#Const UnitSeparator=0x1F
++Const Space=0x20
++Const Exclamationmark=0x21
++#Const Doublequotes=0x22
++#Const Number=0x23
++#Const Dollar=0x24
++Const Percent=0x25
++Const Ampersand=0x26
++#Const Singlequote=0x27
++Const Openparenthesis=0x28
++Const Closeparenthesis=0x29
++Const Asterisk=0x2A
++Const Plus=0x2B
++#Const Comma=0x2C
++Const Hyphen=0x2D
++Const Period=0x2E
++Const Slash=0x2F
++Const _0=0x30
++#Const _1=0x31
++#Const _2=0x32
++#Const _3=0x33
++#Const _4=0x34
++#Const _5=0x35
++#Const _6=0x36
++#Const _7=0x37
++#Const _8=0x38
++Const _9=0x39
++Const Colon=0x3A
++Const Semicolon=0x3B
++Const Lessthan=0x3C
++Const Equals=0x3D
++Const Greaterthan=0x3E
++Const Questionmark=0x3F
++#Const Atsymbol=0x40
++Const A=0x41
++Const B=0x42
++Const C=0x43
++Const D=0x44
++#Const E=0x45
++Const F=0x46
++#Const G=0x47
++#Const H=0x48
++#Const I=0x49
++#Const J=0x4A
++#Const K=0x4B
++Const L=0x4C
++#Const M=0x4D
++#Const N=0x4E
++#Const O=0x4F
++#Const P=0x50
++#Const Q=0x51
++#Const R=0x52
++Const S=0x53
++#Const T=0x54
++#Const U=0x55
++#Const V=0x56
++Const W=0x57
++#Const X=0x58
++#Const Y=0x59
++Const Z=0x5A
++Const Openingbracket=0x5B
++#Const Backslash=0x5C
++Const Closingbracket=0x5D
++Const Caret=0x5E
++Const _=0x5F
++#Const Graveaccent=0x60
++Const a_low=0x61
++#Const b_low=0x62
++#Const c_low=0x63
++#Const d_low=0x64
++#Const e_low=0x65
++#Const f_low=0x66
++#Const g_low=0x67
++#Const h_low=0x68
++#Const i_low=0x69
++#Const j_low=0x6A
++#Const k_low=0x6B
++Const l_low=0x6C
++#Const m_low=0x6D
++#Const n_low=0x6E
++#Const o_low=0x6F
++#Const p_low=0x70
++#Const q_low=0x71
++#Const r_low=0x72
++Const s_low=0x73
++#Const t_low=0x74
++Const u_low=0x75
++#Const v_low=0x76
++#Const w_low=0x77
++#Const x_low=0x78
++#Const y_low=0x79
++Const z_low=0x7A
++Const Openingbrace=0x7B
++Const Verticalbar=0x7C
++Const Closingbrace=0x7D
++#Const Equivalencysign=0x7E
++#Const Delete=0x7F
++
++Const continuing_start=0x80
++Const control2_start=0xC2
++Const continuing_end=0xBF
++Const control2_end=0xDF
++#Const control3_start=0xE0
++#Const control3_end=0xEF
++#Const control4_start=0xF0
++#Const control4_end=0xFF
+--- actionswf-1.orig/include/lin.oh
++++ actionswf-1/include/lin.oh
+@@ -2,9 +2,15 @@
+ Const flag_O_BINARY=0
+ Const flag_O_CREAT=0x0040
+ 
+-const S_IRUSR=0x100;const S_IWUSR=0x80
+-const S_IRGRP=0x20;const S_IWGRP=0x10
+-const S_IROTH=0x4;const S_IWOTH=0x2
++const S_IRUSR=0x100
++const S_IWUSR=0x80
++
++const S_IRGRP=0x20
++const S_IWGRP=0x10
++
++const S_IROTH=0x4
++const S_IWOTH=0x2
++
+ Const flag_pmode=S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH
+ 
+ const path_separator=Slash
+--- actionswf-1.orig/include/prog.oh
++++ actionswf-1/include/prog.oh
+@@ -1,3 +1,3 @@
+ 
+-include "../dev/flags.oh"
+-include "program.oh"
++include "../dev/flags.h" "../dev/flags.oh"
++include "program.h" "program.oh"
+--- actionswf-1.orig/include/program.oh
++++ actionswf-1/include/program.oh
+@@ -1,5 +1,5 @@
+ 
+-include "ascii.oh"
++include "ascii.h" "ascii.oh"
+ 
+ const TRUE=1
+ const FALSE=0
+@@ -28,16 +28,9 @@ const mem_struct__size_off=4
+ const mem_struct__size_size=4
+ const mem_struct_size=mem_struct__size_off+mem_struct__size_size
+ 
+-const mem_exp_init=0
+-const mem_exp_add=1
++const mem_exp_add=0
++const mem_exp_change=1
+ const mem_exp_done=2
+-const mem_exp_part_done=3
+-const mem_exp_change=4
+-const mem_exp_change_back=5
+-const mem_exp_change_pool=6
+-const mem_exp_change_back_pool=7
+-const mem_exp_get_block=8
+-const mem_exp_free=9
+ 
+ const NBits_size=5
+ 
+@@ -45,8 +38,6 @@ const ids_set=0
+ const ids_free=1
+ const ids_get=2
+ const ids_get_pointer=3
+-const ids_all_free=4
+-const ids_counter=5
+ 
+ #const negative_means_action_sprite_pool=0x80<<8<<8<<8
+ const fd_error=-1
+@@ -73,18 +64,20 @@ const DefineFont2=48
+ const ExportAssets=56
+ const DoInitAction=59
+ 
+-include "action.oh"
++include "action.h" "action.oh"
+ 
+-include "../dev/action_swf.oh"
++include "../dev/action_swf.h" "../dev/action_swf.oh"
+ 
+-include "lin.oh" "win.oh"
++include "platform.h" "platform.oh" #"lin.oh" "win.oh"
+ 
+-Const _O_RDONLY=0;Const _O_WRONLY=0x0001;Const _O_TRUNC=0x0200
++Const _O_RDONLY=0
++Const _O_WRONLY=0x0001
++Const _O_TRUNC=0x0200
+ Const _open_read=_O_RDONLY|flag_O_BINARY
+ Const _open_write_base=_O_WRONLY|flag_O_BINARY|flag_O_CREAT
+ Const _open_write=_open_write_base|_O_TRUNC
+ 
+-const fprintf_min=2  #file,format plus ...
++#const fprintf_min=2  #file,format plus ...
+ 
+ const from_show=0
+ const from_done=1
+@@ -119,7 +112,7 @@ const doubleH_sign=0x80000000
+ const F_OK=0  # 0 2 4 6 are same as windows
+ const R_OK=4
+ 
+-include "xlog.oh"
++include "xlog.h" "xlog.oh"
+ 
+ const dblsignature_major=3
+ const dblsignature=dblsignature_major+1
+--- /dev/null
++++ actionswf-1/include/throw.oh
+@@ -0,0 +1,2 @@
++
++valuexu jmp_data#1
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -17,7 +17,7 @@ On Arch Linux(x86_64), <i>.zst</i> file
+ yay -Sy actionswf
+ ```
+ \
+-On Fedora 42(x86_64):
++On Fedora 42/43(x86_64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install actionswf
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -27,25 +27,16 @@ ifndef OSTRIP
+ OSTRIP=ostrip
+ endif
+ 
+-ifndef nobits_virtual
+-nobits_virtual=1
+-endif
+-
+ ifndef strippy
+ strippy=ostriputil
+ endif
+ 
+ #if modifying OFLAGS will lose inside data (at kinetic is reversed: first that def, then this def)
+-OFLAGS=conv_64 ${conv_64} ${OFLAGSEXTRA}
+-
+-ifeq (${nobits_virtual},0)
+-OFLAGS+=nobits_virtual 0
+-endif
++OFLAGS=conv_64 ${conv_64} include_sec 1 ${OFLAGSEXTRA}
+ 
+-#this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
+-#	maybe is a 0x1000 .o size rule only from libexte.a
+-items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x local actionpush img
+-expitems = action swf tool ../shared/action_dllmain
++items_prefix=
++include ./items
++include ./hitems
+ 
+ exte=libexte.a
+ 
+@@ -54,21 +45,17 @@ restofname=lib
+ projname=actionswf${debug}
+ name = ${projname}.so
+ defname = ${projname}.def
+-items_prefix=
+ prefname=${items_prefix}${name}
+ libname=${restofname}${name}
+ 
+-$(eval obs = )
+-$(eval eobs = )
+-$(foreach var,$(expitems),$(eval eobs += ${items_prefix}${var}.e.o))
+-$(foreach var,$(items),$(eval obs += ${items_prefix}${var}.o))
+-$(eval logs = )
+-$(foreach var,$(expitems),$(eval logs += ${items_prefix}${var}.e.oc.log))
+-$(foreach var,$(items),$(eval logs += ${items_prefix}${var}.oc.log))
+-
+ ifeq (${platform},win)
+-OFLAGS += inplace_reloc 0 include_sec 1
++#+win
++OFLAGS += inplace_reloc 0 # include_sec 1
+ all: compile ounused link def
++compile: ${ohreqs} ${obs} ${eobs}
++#noleadingunderscore for exporting symbols
++ounused:
++	${OLINK} ${logs}
+ link:
+ 	if [ "${conv_64}" = "1" ]; then \
+ 		i686-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt ${L} -lzlib1 -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+@@ -76,25 +63,39 @@ link:
+ 		x86_64-w64-mingw32-ld --no-leading-underscore ${linkerflags} ${eobs} ${obs} -shared -entry=DllMain -lmsvcrt ${L} -lzlib1 -o ${projname}.dll --exclude-modules-for-implib `printf ',%s' ${obs} | cut -c2-`; \
+ 	fi
+ #on 64 is mingw-w64-x86-64-dev
++def:
++	../fix/makedef ${defname}
+ 
+ #next phony will += , tested
+-.PHONY: link
+-
++.PHONY: compile ounused link def
++#-win
+ else
++#+lin
+ OFLAGS += underscore_pref 1
+ #else ifeq (${conv_64},1)
+ 
+ all: ${libname}
+ 
+ ifeq (${conv_64},1)
++#+32
+ #this past that focal ld is not. the cc variant is linking but the result will be bad with binutils
+ #ATLDCOM=$(CC) -m32 ${linkerflags} ${linkerflagsextra} ${eobs} -shared -shared -Wl,-entry=DllMain -o ${prefname} -lc ${L} `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} -Wl,--exclude-libs=${exte}
+ #need to use LLVM lld for a solution, even then still getting relocation cannot be used against symbol, recompile with -fPIC
+ ATLDCOM = $(LD) -melf_i386 --dynamic-linker=/lib/ld-linux.so.2 ${linkerflags} ${eobs} -shared -entry DllMain -o ${prefname} ${Lc} -lc ${L} `pkg-config --libs zlib` -L${items_prefix}. -l:${exte} --exclude-libs ${exte}
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+-
++#-f if updating
++#-32
+ else
++#+64
++
++ifndef nobits_virtual
++nobits_virtual=1
++endif
++ifeq (${nobits_virtual},0)
++OFLAGS += nobits_virtual 0
++endif
++
+ #same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+ ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L. -l:${exte} --build-id --exclude-libs ${exte}
+ #and pkg-config for -lc? is not in libc6-dev. where is?
+@@ -102,7 +103,7 @@ ATLDCOM = $(LD) ${linkerflags} --dynamic
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+-#is not with ln -s because will be one file install
++#is not with ln -s because will be one file install. -f if updating
+ else
+ ${libname}: ${name}
+ 	$(eval strp = )
+@@ -113,33 +114,23 @@ ${libname}: ${name}
+ 	${strippy} ${name} ${libname} ${anotherobjcopy}
+ #if [ ! -e "./strip.py" ]; then wget https://raw.githubusercontent.com/colin-i/o/master/ostrip/strip.py; fi
+ endif
+-
++#-64
+ endif
+-${exte}: ${obs} ${eobs} #eobs here for ounused
++${exte}: ${ohreqs} ${obs} ${eobs} #eobs here for ounused
+ 	${OLINK} ${logs}
+ 	$(AR) cr ${exte} ${obs}
+ ${name}: ${exte}
+ 	${ATLDCOM} > 1
+ # > 1 for ostrip
++#-lin
+ endif
+ 
++include ./rules
++
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS}
+-%.o: %.e.oc
+-	${OCOMP} $< ${OFLAGS}
+-
+-ounused:
+-	${OLINK} ${logs}
+-
+-compile: ${obs} ${eobs}
+-
+-#noleadingunderscore for exporting symbols
+-
+-#obs =   :in case it is called after an object (make bits link)
+-#(make action link)
+-
+-def:
+-	../fix/makedef ${defname}
++#%.o: %.e.oc #is already
++#	${OCOMP} $< ${OFLAGS}
+ 
+ clean:
+ 	-rm -f ${logs}
+@@ -156,6 +147,7 @@ clean:
+ 	-rm -f .rela.dyn
+ 	-rm -f .symtab
+ 	-rm -f .symtab_offset
++	-rm -f ${ohreqs}
+ 
+ distclean: clean
+ 
+@@ -170,7 +162,7 @@ install: all install-lib
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 
+-.PHONY: all compile ounused def install install-lib clean distclean uninstall test
++.PHONY: all install install-lib clean distclean uninstall test
+ 
+ .NOTPARALLEL:
+ 
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -1,6 +1,7 @@
+ Format ElfObj64
+ 
+ include "../include/prog.oh"
++include "../include/throw.h" "../include/throw.oh"
+ 
+ import "for_in_ptr" for_in_ptr
+ import "is_ainit" is_ainit
+@@ -14,14 +15,14 @@ import "action_local" action_local
+ import "actionf_local" actionf_local
+ 
+ functionX action(ss ac)
+-valuex bp#1;base bp;call ebase(bp)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ #ss ac       actionscript string to be parsed
+ 	call is_ainit((xlog_ainit_false))
+ 	callg action_local(ac)
+ endfunction
+ #see at part_done functionX action_init(ss ac)
+ functionXv actionf(ss buffer,ss *format)
+-base action.bp;call ebase(action.bp)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ #ss buffer   the buffer where to sprintf the format and the arguments
+ #ss format   the format
+ #...         % arguments here
+@@ -42,19 +43,20 @@ end
+ import "action_sprite_base" action_sprite_base
+ 
+ functionX action_sprite(sd sprite,ss actions)
+-base action.bp;call ebase(action.bp)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ #sd sprite    sprite id
+ #ss actions   same as action
+ 	call is_ainit((xlog_ainit_false))
+ 	callg action_sprite_base(sprite,actions,(TRUE))
+ endfunction
+ functionX action_init_sprite(sd sprite,ss actions)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ 	call is_ainit((xlog_ainit_true))
+ 	callg action_sprite_base(sprite,actions,(TRUE))
+ end
+ import "actionf_sprite_local" actionf_sprite_local
+ functionXv actionf_sprite(sd sprite,ss buffer,ss *format)
+-base action.bp;call ebase(action.bp)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ #sd sprite    sprite id
+ #ss buffer    same as actionf
+ #ss format    same as actionf
+@@ -62,6 +64,9 @@ base action.bp;call ebase(action.bp)
+ 	callg actionf_sprite_local(sprite,#buffer)
+ endfunction
+ functionXv actionf_init_sprite(sd sprite,ss buffer,ss *format)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ 	call is_ainit((xlog_ainit_true))
+ 	callg actionf_sprite_local(sprite,#buffer)
+ end
++
++entryraw globala()
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -1,31 +1,28 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++
++#multithread unsafe
++dataxu nr#1
++charx rcb#1
++valuexu is_else_next_mark#1
++valueu values_container=NULL
+ 
+ #win32 with _
+ importx "strcmp" strcmp
+ importx "strlen" strlen
+ 
+-function action_code_values_container()
+-    value setofvalues=NULL
+-    return #setofvalues
+-endfunction
+ function action_code_values()
+-    sv m
+-    setcall m action_code_values_container()
+-    return m#
++	return global.values_container
+ endfunction
+ 
+ import "mem_free" mem_free
+ 
+ function action_code_values_free()
+-    sv p
+-    setcall p action_code_values_container()
+-    if p#!=(NULL);call mem_free(p);endif
++    if global.values_container!=(NULL);call mem_free(#global.values_container);endif
+ endfunction
+ function action_code_values_index()
+-    data nr#1
+-    return #nr
++	return #global.nr
+ endfunction
+ #pointer
+ function action_code_get()
+@@ -41,13 +38,12 @@ function action_code_get()
+ endfunction
+ 
+ function action_code_values_action()
+-	set action_code_values_index.nr 0
+-	valuexu is_else_next_mark#1
+-	set is_else_next_mark (NULL)
+-	return #action_code_values_index.nr
++	set global.nr 0
++	set global.is_else_next_mark (NULL)
++	return #global.nr
+ end
+ 
+-import "brace_blocks_get_memblock" brace_blocks_get_memblock
++import "swf_actionblock_get" swf_actionblock_get
+ import "block_get_size" block_get_size
+ 
+ import "brace_blocks_counter" brace_blocks_counter
+@@ -73,11 +69,11 @@ function action_code_write_builtin_names
+ 	sd name
+ 	set name x_pointer(codepointer)
+ 	datax compare#1
+-	vstr int="int"
+-	setcall compare strcmp(name,int)
++	vstr intstr="int"
++	setcall compare strcmp(name,intstr)
+ 	if compare=0
+ 		set p_action# (ActionToInteger)
+-		return int
++		return intstr
+ 	endif
+ 	vstr rnd="random"
+ 	setcall compare strcmp(name,rnd)
+@@ -128,13 +124,13 @@ function action_code_write_builtin_names
+ 		set p_action# (ActionPreviousFrame)
+ 		return pframe
+ 	endif
+-	vstr goto="gotoAndStop"
+-	setcall compare strcmp(name,goto)
++	vstr gotos="gotoAndStop"
++	setcall compare strcmp(name,gotos)
+ 	if compare=0
+ 		set p_action# (ActionGotoFrame)
+ 		incst p_action
+ 		set p_action# (ActionEndFlag)   #even if it's playing, it will stop, no ActionStop here
+-		return goto
++		return gotos
+ 	endif
+ 	vstr gotop="gotoAndPlay"
+ 	setcall compare strcmp(name,gotop)
+@@ -187,9 +183,7 @@ function infinite_loop_check(sd codepoin
+ 	return test
+ end
+ function action_true_compare(ss command)
+-	datax compare#1
+-	set compare strcmp("true",command) #int
+-	return compare
++	callret strcmp("true",command) #int datax compare#1
+ end
+ import "is_x" is_x
+ function forinbreak_check(sd codepointer)
+@@ -197,14 +191,15 @@ function forinbreak_check(sd codepointer
+ 	if codepointer#=(call_action_right)
+ 		add codepointer (DWORD)
+ 		sd name
++		sv pname;sv rules
+ 		sd x;set x is_x()
+ 		if x=(FALSE)
+ 			if codepointer#v!=(NULL)
+ 				return start
+ 			end
+-			sv rules;set rules codepointer
++			set rules codepointer
+ 			incst codepointer
+-			sv pname;set pname codepointer
++			set pname codepointer
+ 			set name codepointer#v
+ 			incst codepointer
+ 			if codepointer#!=(args_end)
+@@ -264,9 +259,7 @@ function forinbreak_check(sd codepointer
+ 	return start
+ end
+ function action_null_compare(ss command)
+-	datax compare#1
+-	set compare strcmp("null",command) #int
+-	return compare
++	callret strcmp("null",command) #int datax compare#1
+ end
+ 
+ import "ret_cont_break" ret_cont_break
+@@ -285,12 +278,11 @@ import "cond_blocks" cond_blocks
+ import "debug_phase_code" debug_phase_code
+ import "debug_definefunction" debug_definefunction
+ import "debug_concludefunction" debug_concludefunction
++import "error" error
+ 
++import "memalloc" memalloc
+ function action_code_values_init()
+-    import "memalloc" memalloc
+-    sv m
+-    setcall m action_code_values_container()
+-    setcall m# memalloc((totalvalues*action_code_values_unit))
++	setcall global.values_container memalloc((totalvalues*action_code_values_unit))
+ endfunction
+ function action_code_set(sd value)
+ 	callg action_code_set_ex(value,1)
+@@ -307,7 +299,6 @@ function action_code_set_ex(sd value,sd
+ 	mult to x
+ 	add x size
+ 	if x>=(totalvalues)
+-		import "error" error
+ 		call error("size error at values")
+ 	endif
+ 	sd pointer
+@@ -339,18 +330,19 @@ import "debug_xlog_stepout" debug_xlog_s
+ 
+ #position
+ function action__code_row(sd codepointer)
+-	charx rcb#1;set rcb (ret_cont_break_nothing)   #at definefunction is another collision with this but is not a problem now
++	set global.rcb (ret_cont_break_nothing)   #at definefunction is another collision with this but is not a problem now
+ 
+ 	setcall codepointer action__code_row_ex(codepointer)
+ 	call debug_phase_code(codepointer)
+ 
+ 	ss p;set p ret_cont_break()
+-	set p# rcb
++	set p# global.rcb
+ 	return codepointer
+ endfunction
+ import "debug_xlog_return" debug_xlog_return
++import "brace_blocks_remove_write_jump" brace_blocks_remove_write_jump
+ #position
+-function action__code_row_ex(sd codepointer)
++function action__code_row_ex(sdu codepointer)
+ 	sd pointer
+ 	set pointer codepointer
+ 	setcall pointer action_code_write_conditions(codepointer)
+@@ -361,7 +353,7 @@ function action__code_row_ex(sd codepoin
+ 	if pointer!=codepointer
+ 		return pointer
+ 	endif
+-	sd attrib
++	dataxu attrib#1
+ 	set attrib codepointer#
+ 	if attrib=(ActionReturn)
+ 		add codepointer (DWORD)
+@@ -369,7 +361,7 @@ function action__code_row_ex(sd codepoin
+ 		setcall codepointer action_code_right_util(codepointer)
+ 		call action_one((ActionReturn))
+ 		call debug_xlog_return()
+-		set action__code_row.rcb (ret_cont_break_something)
++		set global.rcb (ret_cont_break_something)
+ 		return codepointer
+ 	endif
+ 	ss p
+@@ -387,7 +379,7 @@ function action__code_row_ex(sd codepoin
+ 		else
+ 			call brace_blocks_remove_write((FALSE))
+ 			call debug_xlog(codepointer) #simple if}[ but can also be the last if from elseif
+-			set action_code_values_action.is_else_next_mark codepointer
++			set global.is_else_next_mark codepointer
+ 		endelse
+ 		return codepointer
+ 	endif
+@@ -398,7 +390,7 @@ function action__code_row_ex(sd codepoin
+ 	end
+ 	if attrib=(block_else_end)
+ 		charx test#1
+-		if codepointer=action_code_values_action.is_else_next_mark
++		if codepointer=global.is_else_next_mark
+ 			set test (FALSE)
+ 		else
+ 			set test (TRUE)
+@@ -411,7 +403,6 @@ function action__code_row_ex(sd codepoin
+ 		return codepointer
+ 	endif
+ 	if attrib=(whileblock_end)
+-		import "brace_blocks_remove_write_jump" brace_blocks_remove_write_jump
+ 		call brace_blocks_remove_write_jump()
+ 		add codepointer (DWORD)
+ 		call debug_xlog(codepointer) #what when break} ? still can't be from that branch because loop condition is breaking that
+@@ -423,14 +414,14 @@ function action__code_row_ex(sd codepoin
+ 		if p#=(ret_cont_break_nothing) #why? for(var mc_name in drivers_container)return null is ok here but at ffdec an extra break is after return
+ 			call action_code_break()
+ 		end
+-		set action__code_row.rcb (ret_cont_break_break)
++		set global.rcb (ret_cont_break_break)
+ 		add codepointer (DWORD)
+ 		return codepointer
+ 	endif
+ 	if attrib=(continue_flag)
+ 		call action_code_continue()
+ 		add codepointer (DWORD)
+-		set action__code_row.rcb (ret_cont_break_something)
++		set global.rcb (ret_cont_break_something)
+ 		return codepointer
+ 	endif
+ 	if attrib=(else_marker)
+@@ -438,8 +429,8 @@ function action__code_row_ex(sd codepoin
+ 	end
+ 	callret action_code_pack(codepointer)
+ endfunction
+-function action_code_pack(sd codepointer)
+-	sd attrib
++function action_code_pack(sdu codepointer)
++	sdu ?attrib
+ 	set attrib codepointer#
+ 	add codepointer (DWORD)
+ 	#
+@@ -459,9 +450,9 @@ function action_code_pack(sd codepointer
+ 		set need_pop (TRUE)
+ 	endelseif
+ 	#else is ActionDefineLocal/ActionSetVariable
+-	sd name
++	sd name;sdu member_codepointer_start
+ 	if is_member=(TRUE)
+-		sd member_codepointer_start;set member_codepointer_start codepointer
++		set member_codepointer_start codepointer
+ 		setcall codepointer action_member_loop_left(codepointer)
+ 	else
+ 		#definelocal or setvariable or delete2
+@@ -550,6 +541,7 @@ import "brace_blocks_add_write_current"
+ import "add_dummy_jump" add_dummy_jump
+ import "resolve_back_jump" resolve_back_jump
+ 
++import "write_forward_offset" write_forward_offset
+ #next/same
+ function action_code_write_conditions(sd codepointer)
+ 	#verify for condition tag
+@@ -602,10 +594,11 @@ function action_code_write_conditions(sd
+ 		if codepointer#!=(inter_for);setcall codepointer action_code_pack(codepointer);endif
+ 		add codepointer (DWORD)
+ 		#
++		sd sizeOff
+ 		if codepointer#!=(inter_for) #else is JUMP 0
+ 			call add_dummy_jump()
+-			sd memblock;setcall memblock brace_blocks_get_memblock()
+-			sd sizeOff;setcall sizeOff block_get_size(memblock)
++			sd memblock;setcall memblock swf_actionblock_get()
++			setcall sizeOff block_get_size(memblock)
+ 		end
+ 		#
+ 		call add_while_top_off((while_marker))
+@@ -613,7 +606,6 @@ function action_code_write_conditions(sd
+ 		if codepointer#!=(inter_for)
+ 			call debug_xlog_stepin(codepointer) #after jump here is having right part of the for
+ 			setcall codepointer action_code_pack(codepointer)
+-			import "write_forward_offset" write_forward_offset
+ 			sub sizeOff (WORD)
+ 			call write_forward_offset(sizeOff,(TRUE))
+ 			call debug_xlog_stepout(codepointer) #next is 100% from prev branch
+@@ -700,7 +692,7 @@ function action_code_break()
+ 	call debug_xlog_break()
+ 	#
+ 	sd memblock
+-	setcall memblock brace_blocks_get_memblock()
++	setcall memblock swf_actionblock_get()
+ 	setcall c_block# block_get_size(memblock);sub c_block# (WORD)
+ 	#this is a forin end, it is looping at the remaining values until NULL from ActionEnumerate/2 behaviour
+ 	if p_type#=(forin_marker)
+@@ -930,16 +922,16 @@ function action_code_write_builtin_set(s
+ 	endif
+ 	return codepointer
+ endfunction
++import "x_call" x_call
++import "debug_x_preexpand" debug_x_preexpand
++import "action_caller" action_caller
+ #codepointer
+ function action_code_new_or_call(sv codepointer,sv pmember)
+ 	sd fname
+ 	sd mathpointer;set mathpointer codepointer
+-	import "x_call" x_call
+ 	set codepointer x_call(pmember,#fname,codepointer)
+ 	if codepointer=mathpointer
+-		import "debug_x_preexpand" debug_x_preexpand
+ 		set pmember# debug_x_preexpand(#codepointer)
+-		import "action_caller" action_caller
+ 		setcall codepointer action_caller(pmember#,#fname,codepointer)
+ 	end
+ 	call action_push((ap_Constant8),fname)
+@@ -958,6 +950,7 @@ endfunction
+ function action_code_right_util(sd codepointer)
+ 	callret action_code_right_util_ex(codepointer,(NULL))
+ end
++import "actionpush" actionpush
+ function action_code_right_util_ex(sd codepointer,sd outside_compare2)
+ 	if codepointer#=(new_action)
+ 		add codepointer (DWORD)
+@@ -995,7 +988,6 @@ function action_code_right_util_ex(sd co
+ 			call action_code_else_add()
+ 			call debug_xlog(codepointer) #at start of second part and after.stepout, but if before was a return? this is a new branch
+ 			setcall codepointer action_code_right_util(codepointer)
+-			import "actionpush" actionpush
+ 			call actionpush() # must release example 2:[jump 0]3 , next will correct jump 0
+ 			call brace_blocks_remove_write((TRUE))
+ 			call debug_xlog_stepout(codepointer) #and continue after :]|
+@@ -1083,6 +1075,7 @@ function action_get_one(ss variable)
+     callg action_one((ActionGetVariable))
+ endfunction
+ 
++import "dtitles_func" dtitles_func
+ #codepointer
+ function action_definefunction(sd codepointer)
+ 	if codepointer#!=(function_action)
+@@ -1103,17 +1096,14 @@ function action_definefunction(sd codepo
+ 	#
+ 	call brace_blocks_add_write()
+ 	#
+-	sd index_atstart
++	sd ?index_atstart
+ 	setcall index_atstart brace_blocks_counter()
+-	set index_atstart index_atstart#
+-	sd index_current=0xffFFffFF
++	sd ?index_current=0xffFFffFF
+ 	#
+-	import "dtitles_func" dtitles_func
+ 	call dtitles_func()
+ 	while index_atstart<=^index_current
+ 		setcall codepointer action__code_row(codepointer)
+ 		setcall index_current brace_blocks_counter()
+-		set index_current index_current#
+ 	endwhile
+ 	#close function marker for return and for..in case
+ 	call brace_blocks_counter_dec()
+@@ -1169,3 +1159,5 @@ function action_deffunction(sv codepoint
+     #
+     return codepointer
+ endfunction
++
++entryraw global()
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -1,6 +1,19 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++const cond_block_size=DWORD
++const brace_blocks_max=100*cond_block_size
++
++#multithread unsafe
++dataxu flag#1
++charx type#1
++data compare_bool=FALSE
++datax counter#1
++datax blocks_mem#brace_blocks_max
++
++char operations_base="+-*/%&|^<>?"
++#                     + - * / % & | ^ < > ? ( ! = e1e2
++char operations_full={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} #here can go another way but for the sack of zero safe init, even is zero init also at c, and at our language with null res pref
+ 
+ #win32 with _
+ importx "strcspn" strcspn
+@@ -16,17 +29,8 @@ import "spaces" spaces
+ 
+ import "str_expression_at_start_withEndCare" str_expression_at_start_withEndCare
+ 
+-#operations str
+-function get_operations()
+-    const operations_begin=\
+-    char operations="+-*/%&|^<>?"
+-    #subtract 1 is for the string termination
+-    const operations_size=\-operations_begin-1
+-    return #operations
+-endfunction
+-
+ #bool
+-function action_parse_utilEndTypes(sd op,ss p_op,sd endtype1,sd endtype2)
++function action_parse_utilEndTypes(ss ?op,ss p_op,sd endtype1,sd endtype2)
+     #when p_op is set, is to store the multiple kind of endtypes
+     if p_op!=0
+         set p_op# op
+@@ -42,69 +46,53 @@ import "is_numeric" is_numeric
+ 
+ #strpbrk
+ function action_code_membersplit(ss ac)
+-    char delims=".["
++	char delims=".["
+ 	callret strpbrk(ac,#delims) #pointer
+ endfunction
+ 
+-#str
+-function compares_signs()
+-    return "<>=!"
+-endfunction
+-function compare_bool_pointer()
+-    data compare_bool=FALSE;return #compare_bool
+-endfunction
+-
+-const cond_block_size=DWORD
+-const brace_blocks_max=100*cond_block_size
+ function brace_blocks_counter()
+-    data counter#1
+-    return #counter
+-endfunction
++	return globalp.counter
++end
+ function brace_blocks_counter_init()
+-    sd c
+-    setcall c brace_blocks_counter()
+-    set c# 0
++	set globalp.counter 0
+ endfunction
+ function brace_blocks_counter_inc()
+-    sd c
+-    setcall c brace_blocks_counter()
+-    inc c#
++	inc globalp.counter
+ endfunction
+ function cond_blocks_noerror()
+-    sd c
+-    setcall c brace_blocks_counter()
+-	callret cond_blocks_at_index(c#)
++	callret cond_blocks_at_index(globalp.counter)
+ endfunction
+ 
+ function cond_blocks_at_index(sd i)
+-    datax blocks_mem#brace_blocks_max
+-    sd blocks^blocks_mem
+-    #
+-    mult i (cond_block_size)
+-    add blocks i
+-    return blocks
++	sd blocks;set blocks #globalp.blocks_mem
++	mult i (cond_block_size)
++	add blocks i
++	return blocks
+ endfunction
+ 
+-import "swf_actionblock" swf_actionblock
+-function brace_blocks_get_memblock()
+-	callret swf_actionblock((mem_exp_get_block))
+-endfunction
+-
+-function for_in(datax flag)
+-	and flag (flag_forin1)
++function for_in(sdu ?f)
++	set globalp.flag f
++	and globalp.flag (flag_forin1)
+ end
+ function for_in_ptr()
+-	return #for_in.flag
++	return #globalp.flag
+ end
+ 
+ function ret_cont_break()
+-	charx type#1
+-	return #type
++	return #globalp.type
+ end
+ 
+ function action_data()
+ 	call brace_blocks_counter_init()
+-	set ret_cont_break.type (ret_cont_break_nothing)
++	set globalp.type (ret_cont_break_nothing)
++end
++function action_parse_init()
++	ss a;set a #globalp.operations_full
++	sdu ?operations_base_size=\globalp.operations_base-1
++	call memcpy(a,#globalp.operations_base,operations_base_size)
++	add a operations_base_size
++	char c={Openingbracket,Exclamationmark,Equals}
++	call memcpy(a,#c,3)
+ end
+ 
+ import "action_code_get" action_code_get
+@@ -117,6 +105,7 @@ import "compat" compat
+ import "debug_phase_code_remove" debug_phase_code_remove
+ import "mem_cmp_bool" mem_cmp_bool
+ import "escape_action_endcom" escape_action_endcom
++import "swf_actionblock_get" swf_actionblock_get
+ 
+ #aftercallimport ebool
+ 
+@@ -151,6 +140,7 @@ function action_code_row_ex(ss ac,sd a_b
+ 	end
+ 	return p
+ end
++import "debug_phase_parse" debug_phase_parse
+ #pointer
+ function action_code_row_ex_wrap(ss ac,sd a_block_detected,sd else_index)
+     sv p_c
+@@ -158,7 +148,7 @@ function action_code_row_ex_wrap(ss ac,s
+     set p_c# ac
+     ss atstart=NULL
+     while atstart!=ac
+-        sd flags
++        sd ?flags
+         sd for_detected=0
+         set atstart ac
+         setcall ac action_parse_conditions(ac,#flags,#for_detected)
+@@ -184,7 +174,6 @@ function action_code_row_ex_wrap(ss ac,s
+         endif
+     endwhile
+     setcall ac action_code_row_parse(ac,a_block_detected,else_index)
+-	import "debug_phase_parse" debug_phase_parse
+ 	#around: else if(2==2){return 2;}else{return 3;}, 4 breakpoints, with \n-s,this here and not at action_code_row,1 breakpoint
+ 	call debug_phase_parse(ac)
+     return ac
+@@ -192,7 +181,7 @@ endfunction
+ 
+ function forin(sd pointer)
+ 	#getvar/member/enumerate is not overlapping for_three
+-	if for_in.flag!=(flag_forin1)
++	if globalp.flag!=(flag_forin1)
+ 		#ActionEnumerate2 will use an object
+ 		call action_code_take_pointer(pointer)
+ 	else
+@@ -324,57 +313,49 @@ function action_code_row_parse(ss ac,sd
+ endfunction
+ #pointer
+ function else_verify(ss ac,sd else_index)
+-    sd p_ind
+-    sd c_ind
+-
+-    setcall p_ind brace_blocks_counter()
+-    set c_ind p_ind#
+-    #this condition for: else >expression<
+-    if c_ind>else_index
+-        call brace_blocks_remove_parse()
+-    endif
+-    setcall p_ind brace_blocks_counter()
+-    set c_ind p_ind#
+-    #opened else index same with current index: return at else
+-    if else_index=c_ind
+-        return ac
+-    endif
++	#this condition for: else >expression<
++	if globalp.counter>else_index
++		call brace_blocks_remove_parse()
++	endif
++	#opened else index same with current index: return at else
++	if else_index=globalp.counter
++		return ac
++	endif
+ 
+-    sd bool_is_elseif
++	ss ?bool_is_elseif
+ 
+-    ss pointer
+-    setcall pointer else_elseif_expression(ac,#bool_is_elseif)
+-    if ac=pointer
+-        return ac
+-    endif
+-    while pointer!=ac
+-        call action_code_set((else_marker))
+-        call brace_blocks_add_parse((else_marker))
+-        sd ind
+-        setcall p_ind brace_blocks_counter()
+-        set ind p_ind#
+-        #c_ind is lower
+-        while ind!=c_ind
++	ss pointer
++	!xor bool_is_elseif bool_is_elseif ##same problems with recursive vars at .o
++	setcall pointer else_elseif_expression(ac,#bool_is_elseif)
++	if ac=pointer
++		return ac
++	endif
++	sd ?c_ind;set c_ind globalp.counter
++	while pointer!=ac
++		call action_code_set((else_marker))
++		call brace_blocks_add_parse((else_marker))
++		#c_ind is lower
++		sd ?ind;set ind globalp.counter
++		while c_ind!=ind
+ 			ss the_new_pointer;set the_new_pointer pointer
+ 			setcall the_new_pointer action_code_row_ex(pointer,(FALSE),ind)
+ 			if the_new_pointer=pointer;call error("Else not closed");endif
+ 			set pointer the_new_pointer
+-            #
+-            setcall p_ind brace_blocks_counter()
+-            set c_ind p_ind#
+-        endwhile
+-        set ac pointer
+-        sd prev_else_elseif;set prev_else_elseif bool_is_elseif
+-        setcall pointer else_elseif_expression(ac,#bool_is_elseif)
+-        if prev_else_elseif=(FALSE);if bool_is_elseif=(TRUE)
+-            call error("not expecting Else and then Else If")
+-        endif;endif
+-    endwhile
+-    call brace_blocks_remove_parse_else()
+-    return ac
++			#
++			set c_ind globalp.counter
++		endwhile
++		set ac pointer
++		ss ?prev_else_elseif;set prev_else_elseif bool_is_elseif
++		setcall pointer else_elseif_expression(ac,#bool_is_elseif)
++		if prev_else_elseif=(FALSE);if bool_is_elseif=(TRUE)
++			call error("not expecting Else and then Else If")
++		endif;endif
++	endwhile
++	call brace_blocks_remove_parse_else()
++	return ac
+ endfunction
+ #next/same
+-function else_elseif_expression(ss ac,sd p_elseif)
++function else_elseif_expression(ss ac,ss p_elseif)
+     set p_elseif# (FALSE)
+     ss pointer
+     setcall pointer str_expression_at_start(ac,"else")
+@@ -431,7 +412,7 @@ function action_parse_pack(ss ac,sd endC
+ 			set pointer spaces(pointer) #ffdec
+ 		endelse
+ 	endelse
+-	sd op   ;#this is recursive stack for future expands, now is simple
++	ss ?op   ;#this is recursive stack for future expands, now is simple
+ 	char set={Equals}
+ 	char secondChar#1
+ 	char *term=0
+@@ -458,7 +439,8 @@ function action_parse_pack(ss ac,sd endC
+ 			return ac
+ 		endelse
+ 	elseif isdelete=(FALSE)
+-		sd inc_dec
++		sd ?inc_dec
++		sd ?mixt_action
+ 		if op!=set
+ 			set inc_dec 0
+ 			ss test
+@@ -491,7 +473,7 @@ function action_parse_pack(ss ac,sd endC
+ 			endif
+ 		else
+ 			#test for += .. |= ..
+-			sd mixt_action;setcall mixt_action action_parse_test_mixt_equal(pointer,#marker)
++			setcall mixt_action action_parse_test_mixt_equal(pointer,#marker)
+ 			#trail pointer at marker, after mixt shift
+ 			call memtrail(marker)
+ 		endelse
+@@ -539,9 +521,8 @@ function action_parse_test_mixt_equal(ss
+ #		#0 can be set(qw['z']=x will be 00x) and at strchr will not be NULL
+ #		return 0
+ #	endif
+-	ss operations;setcall operations get_operations()
+-	sd op;set op ac#
+-	ss p_op;setcall p_op strchr(operations,op)
++	ss ?op;set op ac#
++	ss p_op;setcall p_op strchr(#globalp.operations_base,op)
+ 	if p_op=(NULL);return 0;endif
+ 
+ 	ss pointer;set pointer ac
+@@ -585,7 +566,7 @@ function action_code_row_parse_tool(ss a
+ endfunction
+ 
+ #pointer
+-function action_code_row_parse_tool_util(ss ac,sd p_op,sd endtype1,sd endtype2)
++function action_code_row_parse_tool_util(ss ac,ss p_op,sd endtype1,sd endtype2)
+     if ac#=0
+         call error("expeting a number, variables operations")
+     endif
+@@ -594,8 +575,8 @@ function action_code_row_parse_tool_util
+     setcall pointer str_expression_at_start(ac,"new")
+     if pointer!=ac
+ 		setcall ac action_code_parse_new_or_call(pointer,(new_action),pointer)
+-        sd bool;setcall bool action_parse_utilEndTypes(ac#,p_op,endtype1,endtype2)
+-        if bool=(TRUE);inc ac;endif
++        sd ?bl;setcall bl action_parse_utilEndTypes(ac#,p_op,endtype1,endtype2)
++        if bl=(TRUE);inc ac;endif
+         return ac
+     endif
+     sd ifElse_bool=FALSE
+@@ -607,26 +588,19 @@ function action_code_row_parse_tool_util
+ endfunction
+ #pointer
+ function action_parse_loop(ss ac,ss p_op,sd endtype1,sd endtype2,sd p_ifElse_bool)
+-    sd bool
+-    #can be on the stack but char is low value; ends are set again when recursivity
+-    char oprs#operations_size
+-    char *=Openingbracket
+-    char *=Exclamationmark
+-    char *=Equals
+-    char end#1
+-    char end2#1
+-    char *term=0
+-    #
+-    sd is_compare_ptr
+-    setcall is_compare_ptr compare_bool_pointer()
++	sd ?bl
++	#can be on the stack but char is low value; ends are set again when recursivity
++	ss end2
++	set end2 #globalp.operations_full
++	add end2 \globalp.operations_full-2
++	ss end=-1
++	add end end2
+     #
+-    vstr op_set^oprs
+-    ss ops;setcall ops get_operations();call memcpy(op_set,ops,(operations_size))
+     whiletrue
+ 		set ac spaces(ac) #ffdec
+-		sd op         ;#op can't be charx, is recursive stack variable, is cleared in two places, here and at sv p_op
+-        sd was_parenthesis=0
+-        if ac#=(Openparenthesis)
++		ss ?op         ;#op can't be charx, is recursive stack variable, is cleared in two places, here and at sv p_op
++		sd was_parenthesis=0
++		if ac#=(Openparenthesis)
+ 			call action_code_set((parenthesis_start))
+ 			inc ac
+ 			setcall ac action_code_row_parse_tool(ac,(Closeparenthesis))
+@@ -634,13 +608,14 @@ function action_parse_loop(ss ac,ss p_op
+ 			set ac spaces(ac) #ffdec
+ 			set op ac#;set ac# 0
+ 			set was_parenthesis 1
+-        endif
+-        #set end: is static variable and can be mod again inside previous function
+-        set end endtype1
+-        set end2 endtype2
++		endif
++		#set end: is static variable and can be mod again inside previous function
++		set end# endtype1
++		set end2# endtype2
+ 		#
+ 		if was_parenthesis=0
+-			setcall ac action_code_take_main(ac,#op,op_set)
++			!xor op op  ##or go with sv p_op to clean inside the function but then will pe problems at .c
++			setcall ac action_code_take_main(ac,#op,#globalp.operations_full)
+ 			if op=(ifElse_sign)
+ 				inc ac
+ 				call action_code_set((ifElse_start))
+@@ -651,8 +626,8 @@ function action_parse_loop(ss ac,ss p_op
+ 		endif
+ 		#
+ 		setcall ac action_code_extended_operations(ac,op)
+-		if is_compare_ptr#=(TRUE)
+-			set is_compare_ptr# (FALSE)
++		if globalp.compare_bool=(TRUE)
++			set globalp.compare_bool (FALSE)
+ 		else
+ 			if op=0
+ 				if p_op!=0
+@@ -660,15 +635,15 @@ function action_parse_loop(ss ac,ss p_op
+ 				endif
+ 				return ac
+ 			endif
+-			setcall bool action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
+-			if bool=(TRUE);return ac;endif
++			setcall bl action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
++			if bl=(TRUE);return ac;endif
+ 			sd x;setcall x action_parse_take_action(op,ac)
+ 			call action_code_set(x)
+ 		endelse
+     endwhile
+ endfunction
+ #action
+-function action_parse_take_action(sd op,ss ac)
++function action_parse_take_action(ss ?op,ss ac)
+ 	sd x
+ 	if op=(add);set x (ActionAdd2)
+ 	elseif op=(sub);set x (ActionSubtract)
+@@ -694,7 +669,7 @@ function action_parse_take_action(sd op,
+ 	return x
+ endfunction
+ #pointer
+-function action_code_extended_operations(ss pointer,sd op)
++function action_code_extended_operations(ss pointer,ss ?op)
+     #comparison
+     sd compareaction
+     setcall compareaction action_compare(op,(NULL))
+@@ -703,10 +678,10 @@ function action_code_extended_operations
+         sd oneSign_two_or_noCompare;setcall oneSign_two_or_noCompare action_compare(pointer#,compareaction)
+         dec pointer
+         if oneSign_two_or_noCompare!=2
+-            sd compare_bool_ptr;setcall compare_bool_ptr compare_bool_pointer();set compare_bool_ptr# (TRUE)
+-            add pointer oneSign_two_or_noCompare
+-            inc pointer
+-            return pointer
++		set globalp.compare_bool (TRUE)
++		add pointer oneSign_two_or_noCompare
++		inc pointer
++		return pointer
+         endif
+     endif
+ 
+@@ -735,7 +710,7 @@ function action_code_extended_operations
+     return pointer
+ endfunction
+ #pointer
+-function action_code_take_main(ss ac,sv p_op,ss delims) #ss p_op will not clean the recursive stack variable
++function action_code_take_main(ss ac,ss p_op,ss delims)
+ 	#a string
+ 	ss pointer
+ 	setcall pointer action_code_str(ac)
+@@ -858,9 +833,9 @@ function numeric_code_orConstruction(ss
+ 	if pointer#=neg
+ 		inc pointer
+ 	endif
+-	sd bool
+-	setcall bool is_numeric(pointer#)
+-	if bool!=(TRUE)
++	sd ?bl
++	setcall bl is_numeric(pointer#)
++	if bl!=(TRUE)
+ 		char i="Infinity"
+ 		sd c;set c mem_cmp_bool(pointer,#i,\.i) #versus a string
+ 		if c=(FALSE)
+@@ -927,8 +902,8 @@ function action_code_member(ss pointer,s
+ 	sd pos
+ 	setcall pos strcspn(pointer,delims)
+ 	add pointer pos
++	sd p_currentnr
+ 	if full!=0
+-		sd p_currentnr
+ 		setcall p_currentnr action_code_values_index()
+ 		set full p_currentnr#
+ 	end
+@@ -964,67 +939,61 @@ endfunction
+ 
+ 
+ #firstcompare==NULL:action code/NULL;else oneSign_two_or_noCompare 0/1/2
+-function action_compare(sd value,sd firstcompare)
+-    #
+-    ss compares
+-    setcall compares compares_signs()
+-    #<
+-    if compares#=value
++function action_compare(ss ?value,sd firstcompare)
++	#<
++	if value=(Lessthan)
+         if firstcompare!=(NULL)
+                                            #is shl
+ 		if firstcompare=(ActionLess2);return 2;endif
+ 		call error("not expeting < here")
+         endif
+         return (ActionLess2)
+-    endif
+-    #>
+-    inc compares
+-    if compares#=value
++	endif
++	#>
++	if value=(Greaterthan)
+         if firstcompare!=(NULL)
+                                              #is sar_shr
+ 		if firstcompare=(ActionGreater);return 2;endif
+ 		call error("not expeting > here")
+         endif
+         return (ActionGreater)
+-    endif
+-    #
+-    if firstcompare!=(NULL)
++	endif
++	#
++	if firstcompare!=(NULL)
+         call action_code_set((compare_action))
+-    endif
+-    #=
+-    inc compares
+-    if compares#=value
+-	if firstcompare=(ActionLess2)
+-            call action_code_set((ActionGreater))
+-            call action_code_set((ActionNot))
+-            return 1
+-	endif
+-	if firstcompare=(ActionGreater)
+-            call action_code_set((ActionLess2))
+-            call action_code_set((ActionNot))
+-            return 1
+ 	endif
+-	if firstcompare=(ActionEquals2)
+-            call action_code_set((ActionEquals2))
+-            call action_code_set(0)
+-            return 1
+-	endif
+-	if firstcompare=(ActionNot)
+-            call action_code_set((ActionEquals2))
+-            call action_code_set((ActionNot))
+-            return 1
+-	endif
+-        return (ActionEquals2)
+-    endif
+-    # !
+-    inc compares
+-    if compares#=value
++	#=
++	if value=(Equals)
++		if firstcompare=(ActionLess2)
++			call action_code_set((ActionGreater))
++			call action_code_set((ActionNot))
++			return 1
++		endif
++		if firstcompare=(ActionGreater)
++			call action_code_set((ActionLess2))
++			call action_code_set((ActionNot))
++			return 1
++		endif
++		if firstcompare=(ActionEquals2)
++			call action_code_set((ActionEquals2))
++			call action_code_set(0)
++			return 1
++		endif
++		if firstcompare=(ActionNot)
++			call action_code_set((ActionEquals2))
++			call action_code_set((ActionNot))
++			return 1
++		endif
++		return (ActionEquals2)
++	endif
++	# !
++	if value=(Exclamationmark)
+         if firstcompare!=(NULL)
+             call error("not expecting ! here")
+         endif
+         return (ActionNot)
+-    endif
+-    #another char
++	endif
++	#another char
+ 	if firstcompare=(NULL)
+         #call error("expecting a comparison")
+         return (NULL)
+@@ -1048,23 +1017,19 @@ endfunction
+ #{} blocks
+ 
+ function cond_blocks()
+-    sd c
+-    setcall c brace_blocks_counter()
+-    if c#=(brace_blocks_max)
++	if globalp.counter=(brace_blocks_max)
+         call error("too many blocks: {}")
+-    endif
+-	callret cond_blocks_at_index(c#)
++	endif
++	callret cond_blocks_at_index(globalp.counter)
+ endfunction
+ function brace_blocks_counter_dec()
+-    sd c
+-    setcall c brace_blocks_counter()
+-    if c#=0
++	if globalp.counter=0
+         call error("unexpected end block: }")
+-    endif
+-    dec c#
++	endif
++	dec globalp.counter
+ endfunction
+ #
+-function brace_blocks_add_parse(sd type)
++function brace_blocks_add_parse(sd ?type)
+     sd block
+     setcall block cond_blocks()
+     set block# type
+@@ -1074,18 +1039,16 @@ function brace_blocks_remove_parse_else(
+     sd p_type
+     sd type
+     #
+-    sd p_i
+-    setcall p_i brace_blocks_counter()
+-    sd i
+-    set i p_i#
+-    dec i
++	sd i
++	set i globalp.counter
++	dec i
+     setcall p_type cond_blocks_at_index(i)
+     set type p_type#
+     if type=(else_marker)
+         sd else_number=0
+         while type=(else_marker)
+             inc else_number
+-            dec p_i#
++            dec globalp.counter
+             if i!=0
+                 dec i
+                 setcall p_type cond_blocks_at_index(i)
+@@ -1123,11 +1086,9 @@ function type_consecutive(sd type,sd p_c
+     return type
+ endfunction
+ function brace_blocks_end()
+-    sd c
+-    setcall c brace_blocks_counter()
+-    if c#!=0
++	if globalp.counter!=0
+         call error("unclosed block(s): {}")
+-    endif
++	endif
+ endfunction
+ #
+ function brace_blocks_add_write()
+@@ -1140,7 +1101,7 @@ function brace_blocks_add_write_offset(s
+ 	sd block
+ 	setcall block cond_blocks()
+ 	sd memblock
+-	setcall memblock brace_blocks_get_memblock()
++	setcall memblock swf_actionblock_get()
+ 	setcall block# block_get_size(memblock)
+ 	add block# offset
+ 	or block# flag
+@@ -1175,11 +1136,13 @@ end
+ function write_forward_offset(sd offset,sd skip_xlog)
+ 	callg write_forward_offset_base(offset,skip_xlog,(xlog_jumpif))
+ end
++import "stack_to_word_arg" stack_to_word_arg
++import "debug_phase_code_add_jump_if" debug_phase_code_add_jump_if
+ function write_forward_offset_base(sd offset,sd skip_xlog,sd xlog_j)
+ 	sd mem
+ 	sd size
+ 	sd memblock
+-	setcall memblock brace_blocks_get_memblock()
++	setcall memblock swf_actionblock_get()
+ 	call block_get_mem_size(memblock,#mem,#size)
+ 	#
+ 	add mem offset
+@@ -1190,10 +1153,8 @@ function write_forward_offset_base(sd of
+ 		call error("offset>(signed word size) error")
+ 	endif
+ 	#
+-	import "stack_to_word_arg" stack_to_word_arg
+ 	call stack_to_word_arg(size,mem)
+ 	if skip_xlog=(FALSE)
+-		import "debug_phase_code_add_jump_if" debug_phase_code_add_jump_if
+ 		callg debug_phase_code_add_jump_if(mem,xlog_j)
+ 	end
+ endfunction
+@@ -1214,7 +1175,7 @@ function check_whilefor(sd _skip_jump,sd
+ 		if blocks#=(top_marker) #healty while/for
+ 			sub blocks (DWORD)
+ 			if blocks#!=(forin_marker)
+-				if ret_cont_break.type=(ret_cont_break_break) #jump 0 there?
++				if globalp.type=(ret_cont_break_break) #jump 0 there?
+ 					set _skip_jump# (actionrecordheader_size+actionjump_contentsize)
+ 					#also need to remove from debug
+ 					call debug_phase_code_remove(_skip_jump#,(action_debug_recordlength))
+@@ -1232,22 +1193,20 @@ function check_whilefor(sd _skip_jump,sd
+ 	callg error("x is broken")
+ end
+ function brace_blocks_remove_write_jump() #here is only from endwhile (at while and fors)
+-	if ret_cont_break.type=(ret_cont_break_nothing)  #skip dead code
++	if globalp.type=(ret_cont_break_nothing)  #skip dead code
+ 		call add_dummy_jump()
+ 	end
+ 	sd skip_jump=0 ;#look to see top_marker and if is not forin, that has a different break than for3/while
+ 	sd ifs=0
+ 	call check_whilefor(#skip_jump,#ifs)
+-	sd c
+-	set c brace_blocks_counter()
+ 	sd blocks
+ 	set blocks cond_blocks_noerror()
+-	dec c#
++	dec globalp.counter
+ 	sub blocks (DWORD)
+ 	sd offset;set offset blocks#
+ 	if offset!=(top_marker) #can be whiletrue with no breaks (a return in a branch)
+ 		whiletrue
+-			dec c#
++			dec globalp.counter
+ 			sub blocks (DWORD)
+ 			if blocks#=(top_marker)
+ 				#here is last jump (loopjump or a moved break)
+@@ -1260,8 +1219,8 @@ function brace_blocks_remove_write_jump(
+ 		#remove type,top offset
+ 	end
+ 
+-	sub c# 2
+-	if ret_cont_break.type=(ret_cont_break_nothing)  #skip dead code
++	sub globalp.counter 2
++	if globalp.type=(ret_cont_break_nothing)  #skip dead code
+ 		sub blocks (2*DWORD)
+ 		call resolve_back_jump(blocks#)  #jump back
+ 	elseif skip_jump!=0
+@@ -1272,18 +1231,19 @@ function brace_blocks_remove_write_jump(
+ 		callg write_forward_offset_cond(offset,#ifs)
+ 	end
+ endfunction
++import "actionrecordheader" actionrecordheader
++import "swf_actionblock_add" swf_actionblock_add
+ function add_dummy_jump()
+-    import "actionrecordheader" actionrecordheader
+     call actionrecordheader((ActionJump),(actionjump_contentsize))
+-    import "swf_actionblock_add" swf_actionblock_add
+     sd dummy_size=0
+ 	callg swf_actionblock_add(#dummy_size,(actionjump_contentsize))
+ endfunction
++import "debug_phase_code_add_jumpback_if" debug_phase_code_add_jumpback_if
+ function resolve_back_jump(sd jumpoffset)  #also at continue
+ 	sd memblock
+ 	ss mem
+ 	sd size
+-	setcall memblock brace_blocks_get_memblock()
++	setcall memblock swf_actionblock_get()
+ 	call block_get_mem_size(memblock,#mem,#size)
+ 	add mem size;sub mem (WORD)
+ 	#
+@@ -1292,7 +1252,6 @@ function resolve_back_jump(sd jumpoffset
+ 		call error("offset>(signed word size) error (at jump back)")
+ 	end
+ 
+-	import "debug_phase_code_add_jumpback_if" debug_phase_code_add_jumpback_if
+ 	call debug_phase_code_add_jumpback_if(#size)
+ 
+ 	mult size -1
+@@ -1320,11 +1279,11 @@ function action_code_parse_leftfunction(
+     endif
+     return ac
+ endfunction
++import "part_of_variable" part_of_variable
+ #pointer
+ function action_code_parse_new_or_call(ss ac,sd type,ss cursor)
+ 	ss pointer
+ 	set pointer ac
+-	import "part_of_variable" part_of_variable
+ 	ss last_dot=0
+ 	sd sz
+ 	setcall sz part_of_variable(pointer)
+@@ -1397,7 +1356,7 @@ function action_code_parse_function_argu
+     sd sizepointer
+     set sizepointer sizemark#
+     #
+-    sd op=0
++    ss ?op=0
+     while op!=close
+         setcall pointer action_code_row_parse_tool_util(pointer,#op,comma,close)
+         if op=0
+@@ -1452,20 +1411,14 @@ function action_code_parse_deffunction(s
+     call brace_blocks_add_parse((function_marker))
+     #loop until the function code is over
+     sd index_atstart
+-    setcall index_atstart brace_blocks_counter()
+-    set index_atstart index_atstart#
++    set index_atstart globalp.counter
+     #
+     setcall pointer action_code_row(pointer,(TRUE))
+-    sd index_current
+-    setcall index_current brace_blocks_counter()
+-    set index_current index_current#
+-    while index_atstart<=index_current
++    while index_atstart<=globalp.counter
+         if pointer#=0
+             call error("A define function was unclosed")
+         endif
+         setcall pointer action_code_row(pointer,(FALSE))
+-        setcall index_current brace_blocks_counter()
+-        set index_current index_current#
+     endwhile
+     return pointer
+ endfunction
+@@ -1504,3 +1457,5 @@ function action_code_parse_function_defa
+ 		call error("close the function arguments sign expected: )")
+ 	endwhile
+ endfunction
++
++entryraw globalp()
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -1,38 +1,36 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++
++#multithread unsafe
++datax rootid#1
++datax selid#1
++charx datawrite#1
++charx dataread#1
++valuex svpath#1
++valuex svsize#1
++wordx read_unlink#1
+ 
+ #win32 with _
+ importx "strlen" strlen
+ importx "memcmp" memcmp
+ 
+ function actionpoolid_root()
+-    data id#1
+-    return #id
++	return #globalo.rootid
+ endfunction
+ function actionpoolid()
+-    data id#1
+-    return #id
+-endfunction
+-function actionpoolid_get()
+-    sd p_id
+-    setcall p_id actionpoolid()
+-    return p_id#
++	return #globalo.selid
+ endfunction
+ 
+ import "struct_ids_actionpool" struct_ids_actionpool
+ #block
+ function actionpool_currentblock()
+-    sd poolid
+-    setcall poolid actionpoolid_get()
+-	callret struct_ids_actionpool((ids_get),poolid)
++	callret struct_ids_actionpool((ids_get),globalo.selid)
+ endfunction
+ 
+ importx "free" free
+ import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+-function pool_data(sd id)
+-	charx write#1
+-	charx read#1
++function pool_data(sd ?id)
+ 	sv block;set block struct_ids_actionpool_filter((ids_get),id)
+ 	if block!=(NULL)
+ 		call free(block) #see struct_ids set
+@@ -41,8 +39,7 @@ end
+ const constpool_unique=0x00
+ const  constpool_multi=0xff
+ function pool_realentry(sd pos)
+-	sd id;set id actionpoolid_get()
+-	sd b;set b struct_ids_actionpool_filter((ids_get),id)
++	sd b;set b struct_ids_actionpool_filter((ids_get),globalo.selid)
+ 	ss mem;set mem block_get_mem(b)
+ 	add mem pos
+ 	set mem# (constpool_multi)
+@@ -50,24 +47,24 @@ end
+ 
+ function pool_init(sd flags)
+ #when entering a frame must know what is. a frame with no savings at read will have cursor at start and later in that frame if is a pool request then will error
+-	sd test=flags_pool
++	sd ?test=flags_pool
+ 	and test flags
+ 	if test!=0
+ 		and test (flag_pool_read)
+ 		if test=0
+-			set pool_data.write (TRUE)
+-			set pool_data.read (FALSE)  #is a read alone test case
++			set globalo.datawrite (TRUE)
++			set globalo.dataread (FALSE)  #is a read alone test case
+ 		else
+-			set pool_data.write (FALSE) #most of are write else read
+-			set pool_data.read (TRUE)
+-			wordx read_unlink#1;set read_unlink (flag_pool_read_unlink)
+-			and read_unlink flags
++			set globalo.datawrite (FALSE) #most of are write else read
++			set globalo.dataread (TRUE)
++			set globalo.read_unlink (flag_pool_read_unlink)
++			and globalo.read_unlink flags
+ 			and flags (~flagpre_pool_write)
+ 		end
+ 		return flags
+ 	end
+-	set pool_data.write (FALSE)  #there is one write alone test cases
+-	set pool_data.read (FALSE)
++	set globalo.datawrite (FALSE)  #there is one write alone test cases
++	set globalo.dataread (FALSE)
+ 	return flags
+ end
+ 
+@@ -82,7 +79,8 @@ importx "ftell" ftell
+ 
+ import "stack_to_word_arg" stack_to_word_arg
+ import "word_arg_to_stack" word_arg_to_stack
+-import "swf_mem" swf_mem
++import "swf_mem_change_pool" swf_mem_change_pool
++import "swf_mem_change_back_pool" swf_mem_change_back_pool
+ import "block_get_mem" block_get_mem
+ import "block_get_size" block_get_size
+ import "block_reset_size" block_reset_size
+@@ -95,26 +93,24 @@ import "f_open_mem" f_open_mem
+ import "f_write" f_write
+ import "memalloc" memalloc
+ import "mem_block_add" mem_block_add
++import "debug_xlog_pool" debug_xlog_pool
+ 
+ function pool_entry(sd nr)
+-	sd id;set id actionpoolid_get()
+-	sd pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
++	sd pb;set pb struct_ids_actionpool_filter((ids_get_pointer),globalo.selid)
+ 	char a=constpool_unique
+ 	call mem_block_add(pb,#a,1)
+-	import "debug_xlog_pool" debug_xlog_pool
+ 	callg debug_xlog_pool(nr)
+ end
++import "x_log_string" x_log_string
+ function pool_reentry(sd offset)
+-	sd id;set id actionpoolid_get()
+-	sd b;set b struct_ids_actionpool_filter((ids_get),id)
+-	sd mem;sd size
++	sd b;set b struct_ids_actionpool_filter((ids_get),globalo.selid)
++	sd mem;sdu ?size
+ 	call block_get_mem_size(b,#mem,#size)
+-	sd cursor;set cursor mem#
++	sdu ?cursor;set cursor mem#
+ 	if cursor<^size
+ 		inc mem#
+ 		add mem cursor
+ 		if mem#s=(constpool_unique)
+-			import "x_log_string" x_log_string
+ 			callg x_log_string((xlog_unique),offset)
+ 			return (not_an_id)
+ 		end
+@@ -124,22 +120,23 @@ function pool_reentry(sd offset)
+ end
+ const pool_cursor_size=mem_struct__size_size
+ function pool_read(sd id,sd frame_nr)
+-	if pool_data.read!=(FALSE)
++	if globalo.dataread!=(FALSE)
+ 		sv pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
+ 		call block_reset_size(pb#)  #if is after a read is ok, else is useless
+ 		data cursor=pool_cursor_size
+ 		call mem_block_add(pb,#cursor,(pool_cursor_size))  #if is first and after a read is ok, else is useless
+ 
+ 		sd name;set name pool_savepath(id,frame_nr)
+-		sd a;set a access(name,(R_OK))
+-		if a=0
++		dataxu acs#1
++		set acs access(name,(R_OK))
++		if acs=0
+ 			sd f;set f fopen(name,"rb")
+ 			#call unlink(name) #"the file will remain in existence until the last file descriptor referring to it is closed"
+ 			#wine same thing. #include <unistd.h>#include <stdio.h>void main(){FILE*f=fopen("q","rb");unlink("q");fseek(f,0,SEEK_END);printf("%lu\n",ftell(f));}
+ 			#but now with java flashalizer only after fclose
++			vstr er="pool read error"
+ 			if f=(NULL)
+ 				call free(name)
+-				vstr er="pool read error"
+ 				call error(er)
+ 			end
+ 			call fseek(f,0,(SEEK_END))
+@@ -150,8 +147,8 @@ function pool_read(sd id,sd frame_nr)
+ 				call error(er)
+ 			end
+ 			call fseek(f,0,(SEEK_SET))
+-			sd bool;set bool mem_block_add_throwless(pb,(NULL),sz)
+-			if bool=(FALSE)
++			ss ?boolval;set boolval mem_block_add_throwless(pb,(NULL),sz)
++			if boolval=(FALSE)
+ 				call free(name)
+ 				call fclose(f)
+ 				call error(er)
+@@ -160,16 +157,16 @@ function pool_read(sd id,sd frame_nr)
+ 			add mem (pool_cursor_size)
+ 			call fread(mem,sz,1,f)
+ 			call fclose(f)
+-			if pool_init.read_unlink!=0
++			if globalo.read_unlink!=0
+ 				call unlink(name)
+ 			end
+ 		end
+ 		call free(name)
+ 	end
+ end
+-function pool_done_write(sd id,sd frame_nr)
++function pool_done_write(sd ?id,sd ?frame_nr)
+ 	sd b;set b struct_ids_actionpool_filter((ids_get),id)
+-	sd sz;set sz block_get_size(b)
++	sdu ?sz;set sz block_get_size(b)
+ 	if sz!=0
+ 		sd mem;set mem block_get_mem(b)
+ 		sd name;set name pool_savepath(id,frame_nr)
+@@ -180,7 +177,7 @@ function pool_done_write(sd id,sd frame_
+ 	end
+ end
+ function pool_done(sd id,sd frame_nr)
+-	if pool_data.write!=(FALSE)
++	if globalo.datawrite!=(FALSE)
+ 		callg pool_done_write(id,frame_nr)
+ 		ret
+ 	end
+@@ -188,21 +185,21 @@ function pool_done(sd id,sd frame_nr)
+ 	callg pool_read(id,frame_nr)
+ end
+ function pool_done_one(sd id)
+-	if pool_data.write!=(FALSE)
++	if globalo.datawrite!=(FALSE)
+ 		callg pool_done_write(id,-1)
+ 	end
+ end
++import "strlen_of" strlen_of
+ function pool_savepath_init(sd a)
+-	valuex path#1;set path a
+-	import "strlen_of" strlen_of
+-	valuex size#1;set size strlen_of(path,(ext_str_len)) #size_t is ulong
++	set globalo.svpath a
++	set globalo.svsize strlen_of(globalo.svpath,(ext_str_len)) #size_t is ulong
+ end
+ function pool_savepath(sd id,sd fr)
+-	sd m;set m memalloc(pool_savepath_init.size)
++	sd m;set m memalloc(globalo.svsize)
+ 	if fr!=-1
+-		call sprintf(m,"%s.%u.%u",pool_savepath_init.path,id,fr)
++		call sprintf(m,"%s.%u.%u",globalo.svpath,id,fr)
+ 	else #button initaction
+-		call sprintf(m,"%s.%u",pool_savepath_init.path,id)
++		call sprintf(m,"%s.%u",globalo.svpath,id)
+ 	end
+ 	return m
+ end
+@@ -213,39 +210,38 @@ function actionpool_value(ss value)
+ end
+ #pool id
+ function actionpool_value_ex(ss value,sd force)
+-    sd poolid
+-    setcall poolid actionpoolid_get()
+-    sd nr
+-    call swf_mem((mem_exp_change_pool),poolid)
+-    setcall nr actionpool_getvalue_ex(value,force)
+-    call swf_mem((mem_exp_change_back_pool))
+-    return nr
++	swu ?nr
++	call swf_mem_change_pool(globalo.selid)
++	setcall nr actionpool_getvalue_ex(value,force)
++	call swf_mem_change_back_pool()
++	return nr
+ endfunction
+ #pool id
+ #function actionpool_getvalue(ss value);	sd id;	set id actionpool_getvalue_ex(value,(FALSE));	return id;end
+ import "swf_mem_add" swf_mem_add
+ import "error" error
++import "x_log_const" x_log_const
++import "x_log_id" x_log_id
+ #pool id
+ function actionpool_getvalue_ex(ss value,sd force)
+ 	sd block
+ 	setcall block actionpool_currentblock()
+-	sd size
++	sdu ?size
+ 	setcall size block_get_size(block)
+-	sd nr
++	swu ?nr
+ 	sd newlen
+ 	setcall newlen strlen(value)
++	sss ?testboolid
+ 	if size=0
+ 	#is first value, add the pools header and count=1 , # before: actionpool_getvalue(the pool mem is already selected when it comes from the second  at push)
+-		sd testid
+ 		if force=(FALSE)
+-			if pool_data.write!=(FALSE)
++			if globalo.datawrite!=(FALSE)
+ 				call pool_entry(0)
+-			elseif pool_data.read!=(FALSE)
+-				set testid pool_reentry(value)
+-				if testid=(not_an_id)
++			elseif globalo.dataread!=(FALSE)
++				set testboolid pool_reentry(value)
++				if testboolid=(not_an_id)
+ 					return (not_an_id)
+ 				end
+-				import "x_log_const" x_log_const
+ 				call x_log_const(value)
+ 			end
+ 		end
+@@ -254,7 +250,7 @@ function actionpool_getvalue_ex(ss value
+ 		set nr 0
+ 	else
+ 		sd mem
+-		sd count
++		swu ?count
+ 		setcall mem block_get_mem(block)
+ 		setcall count word_arg_to_stack(mem)
+ 		set nr count
+@@ -268,11 +264,10 @@ function actionpool_getvalue_ex(ss value
+ 					setcall comp memcmp(mem,value,len)
+ 					if comp=0
+ 						sub nr count
+-						if pool_data.write!=(FALSE)
++						if globalo.datawrite!=(FALSE)
+ 							call pool_realentry(nr)
+ 							call debug_xlog_pool(nr)
+ 						else
+-							import "x_log_id" x_log_id
+ 							callg x_log_id((xlog_id),nr) #read and rest of xx flags
+ 						end
+ 						return nr
+@@ -282,11 +277,11 @@ function actionpool_getvalue_ex(ss value
+ 				add mem len
+ 				dec count
+ 			endwhile
+-			if pool_data.write!=(FALSE)
++			if globalo.datawrite!=(FALSE)
+ 				call pool_entry(nr)
+-			elseif pool_data.read!=(FALSE)
+-				set testid pool_reentry(value)
+-				if testid=(not_an_id)
++			elseif globalo.dataread!=(FALSE)
++				set testboolid pool_reentry(value)
++				if testboolid=(not_an_id)
+ 					return (not_an_id)
+ 				end
+ 				call x_log_const(value)
+@@ -304,3 +299,5 @@ function actionpool_getvalue_ex(ss value
+ 	call swf_mem_add(value,newlen)
+ 	return nr
+ endfunction
++
++entryraw globalo()
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -1,15 +1,29 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++
++#multithread unsafe
++vstrx ac#1
++vstrx pointer#1
++vstr orig=NULL
++vstr memorig=NULL
++value dcode#1
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+ importx "sprintf" sprintf
++Importx "realloc" realloc
++Importx "malloc" malloc
++Importx "free" free
+ 
+ import "spaces" spaces
+ 
+ #strings
+ 
++function debug_code()
++	return #globalu.dcode
++end
++
+ #0 yes  1 no
+ function row_termination(sv p_ac,sv p_row)
+ 	ss ac;set ac p_ac#
+@@ -35,11 +49,10 @@ function row_termination_endcom(ss ac)
+ end
+ 
+ function endcom(ss c,ss p)
+-	vstrx ac#1
+-	vstrx pointer#1
+-	set ac c;set pointer p
++	set globalu.ac c;set globalu.pointer p
+ end
+ 
++import "debug_phase_init" debug_phase_init
+ #error_row
+ function escape_action(ss ac,ss pointer,ss stop_pointer,ss line_term)
+     sd row=1
+@@ -70,7 +83,6 @@ function escape_action(ss ac,ss pointer,
+             endif
+         endif
+         #
+-	import "debug_phase_init" debug_phase_init
+         while loop2=1
+ 		setcall loop2 row_termination(#ac,#row)
+ 		if loop2=1
+@@ -95,8 +107,8 @@ function escape_action(ss ac,ss pointer,
+ 									break
+ 								end
+ 							else
+-								set endcom.ac ac
+-								set endcom.pointer pointer
++								set globalu.ac ac
++								set globalu.pointer pointer
+ 								break
+ 							end
+ 						end
+@@ -124,61 +136,29 @@ function escape_action(ss ac,ss pointer,
+ end
+ #ac
+ function escape_action_endcom(ss pointer)
+-	callret escape_action(endcom.ac,endcom.pointer,(NULL),pointer)
++	callret escape_action(globalu.ac,globalu.pointer,(NULL),pointer)
+ end
+-#nr
+-function escape_count(ss string,sd escape)
+-    sd nr=0
+-    sd escaped=0
+-    while string#!=0
+-        if string#=escape
+-            xor escaped 1
+-        elseif escaped=1
+-		inc nr
+-            set escaped 0
+-
+-		#this is not working nowadays, printf is searching for floats on xmm registers, kept as legacy
+-		char l="l"
+-		if string#=l
+-			char f="f";
+-			ss double_test=1
+-			add double_test string
+-			if double_test#=f
+-				inc nr
+-			endif
+-		endif
+-
+-        endelseif
+-        inc string
+-    endwhile
+-    return nr
+-endfunction
+ 
+ #debug
+ 
++import "mem_free" mem_free
+ function action_debug(sd type)
+-	vstr orig=NULL
+-	vstr m=NULL
+ 	if type=(action_debug_get_mem)
+-		return m
++		return globalu.memorig
+ 	endif
+ 	if type=(action_debug_get)
+-		return #orig
++		return #globalu.orig
+ 	end
+ 	# action_debug_free
+-	set orig (NULL)
+-	import "mem_free" mem_free
+-	if m!=(NULL);call mem_free(#m);endif
++	set globalu.orig (NULL)
++	if globalu.memorig!=(NULL);call mem_free(#globalu.memorig);endif
+ endfunction
+-function action_debug_free()
++function action_debug_free_macro()
+     call action_debug((action_debug_free))
+ endfunction
+ 
+-function debug_code()
+-    value code#1
+-    return #code
+-endfunction
+-
++import "printEr" printEr
++import "string_nl_print" string_nl_print
+ function action_error()
+     sv p_action_errors
+     setcall p_action_errors action_debug((action_debug_get))
+@@ -190,18 +170,14 @@ function action_error()
+     vstr mem#1
+     call memcpy(#ac,p_action_errors,(2*:))
+ 
+-    import "printEr" printEr
+     call printEr("Row: ")
+-    sv p_c
+-    setcall p_c debug_code()
+     sd row
+-    setcall row escape_action(ac,mem,p_c#,(NULL))
+-    import "string_nl_print" string_nl_print
++    setcall row escape_action(ac,mem,globalu.dcode,(NULL))
+     #a small reserve for a number like 2 000 000 000
+     char row_nr#dword_to_string_char
+     call sprintf(#row_nr,"%u",row)
+     call string_nl_print(#row_nr)
+-    call string_nl_print(p_c#)
++    call string_nl_print(globalu.dcode)
+ endfunction
+ 
+ import "block_get_size" block_get_size
+@@ -236,8 +212,7 @@ function pool_size(sd id)
+     return poolsize
+ endfunction
+ 
+-#this has throws but for mem_exp_change and back are not required
+-import "swf_actionblock" swf_actionblock
++import "swf_actionblock_change_back" swf_actionblock_change_back
+ import "file_get_content__resources_free" file_get_content__resources_free
+ 
+ import "action_code_get_pointer" action_code_get_pointer
+@@ -247,25 +222,27 @@ import "action_code_get" action_code_get
+ 
+ #aftercallimport ebool
+ 
++import "swf_actionblock_change" swf_actionblock_change
+ import "swf_actionblock_add" swf_actionblock_add
+ import "action_push" action_push
+ 
+ #tags
+ 
++import "actionpush" actionpush
++import "debug_phase_code_add_if" debug_phase_code_add_if
+ function action_one(sd tag)
+-	import "actionpush" actionpush
+ 	call actionpush()
+ 	call swf_actionblock_add(#tag,(actionrecordheader_tag_size))
+-	import "debug_phase_code_add_if" debug_phase_code_add_if
+ 	callg debug_phase_code_add_if((FALSE),(xlog_act))
+ endfunction
+ 
+ import "action_code_right_util" action_code_right_util
++import "debug_x_preexpand_inter" debug_x_preexpand_inter
++import "debug_x_expand" debug_x_expand
+ #codepointer
+ function action_caller(ss member,sv pfname,sd codepointer)
+ 	set codepointer action_caller_right(pfname,codepointer)
+ 
+-	import "debug_x_preexpand_inter" debug_x_preexpand_inter
+ 	call debug_x_preexpand_inter(codepointer)
+ 	if member!=0
+ 		sd currentnr
+@@ -278,7 +255,6 @@ function action_caller(ss member,sv pfna
+ 		call action_code_member(member,0)
+ 		call action_member_loop_right(values)
+ 
+-		import "debug_x_expand" debug_x_expand
+ 		call debug_x_expand(values)
+ 
+ 		set p_currentnr# currentnr
+@@ -393,14 +369,14 @@ function write_action_base(sd id)
+ 	data end=0
+ 	callg swf_mem_add(#end,1)
+ end
++import "pool_done" pool_done
+ function write_action(sd id,sd frame)
+ 	call write_action_base(id)
+-	import "pool_done" pool_done
+ 	callg pool_done(id,frame)
+ endfunction
++import "pool_done_one" pool_done_one
+ function write_action_one(sd id)
+ 	call write_action_base(id)
+-	import "pool_done_one" pool_done_one
+ 	callg pool_done_one(id)
+ endfunction
+ #void
+@@ -422,13 +398,12 @@ endfunction
+ import "action_base" action_base
+ 
+ function action_format(sv args)
+-    sd args_nr=2
+-    sv args_format
+-    set args_format args;incst args_format
+-    char e="%"
+-    addcall args_nr escape_count(args_format#,e)
+-    callex sprintf args args_nr
+-    call action_base(args#)
++	sv args_format=:
++	add args_format args
++	sv elements=:
++	add elements args_format
++	call sprintf_manual(args#,args_format#,elements)
++	call action_base(args#)
+ endfunction
+ 
+ import "debug_base" debug_base
+@@ -438,11 +413,70 @@ function action_sprite_base(sd sprite,ss
+ 	sd alt_ac;set alt_ac alt_action_base(actions,sprite,has_frames)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
+-		call swf_actionblock((mem_exp_change),sprite)  #alt action is not using actionblock, is using swfblock
++		call swf_actionblock_change(sprite)
+ 		call action_base(alt_ac)
+ 		if alt_ac!=actions
+ 			call file_get_content__resources_free()
+ 		end
+-		call swf_actionblock((mem_exp_change_back))
++		call swf_actionblock_change_back()
++	end
++endfunction
++
++import "error" error
++
++function sprintf_manual(ss string,ss format,sv elements)
++	ss pointer;set pointer format
++	ss cursor;set cursor string
++	sd has_element=FALSE
++	sd escaped=0
++	valueu writable_size=1
++	ss writable;set writable malloc(1)
++	vstr er="malloc error at manual sprintf"
++	if writable=(NULL)
++		call error(er)
++	end
++	while pointer#!=(Nullchar)
++		if pointer#=(Percent)
++			xor escaped 1
++		elseif escaped=1
++			set escaped 0
++			#this is not working nowadays, printf is searching for floats on xmm registers. extract floats
++			#char l="l";if pointer#=l;char f="f";ss double_test=1;add double_test pointer;if double_test#=f;inc nr;endif;endif
++
++			if has_element=(FALSE)
++				set has_element (TRUE)
++			else
++				valueu size#1;set size pointer;sub size format
++				if size>^writable_size
++					ss mem;set mem realloc(writable,size)
++					if mem=(NULL)
++						call free(writable)
++						call error(er)
++					end
++					set writable mem
++				end
++
++				dec pointer
++				#c is giving no write access to strings #set pointer# (Nullchar)
++				dec size
++				call memcpy(writable,format,size)
++				ss marker;set marker writable;add marker size;set marker# (Nullchar)
++
++				add string sprintf(string,writable,elements#)
++
++				set format pointer;incst elements
++				#set pointer# (Percent)
++				inc pointer ##not adding 2 here and continue? or let for a pointer# >= unicode start condition?
++			end
++		endelseif
++		inc pointer
++	endwhile
++	call free(writable)
++	if has_element=(TRUE)
++		call sprintf(string,format,elements#)
++	else
++		call sprintf(string,format)
+ 	end
+ endfunction
++
++entryraw globalu()
+--- actionswf-1.orig/src/bits.oc
++++ actionswf-1/src/bits.oc
+@@ -1,12 +1,16 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
+ 
+-function bits_packs(ss dest,sd packs)
+-    sd i=0
++#multithread unsafe
++charx matrix#1+4+4
++charx rect#31*4+5
++
++functionV bits_packs(ss dest,sd ?packs)
++    sd ?i=0
+     sd pos=0x80
+-    sd value
+-    sd size
++    sd ?value
++    sd ?size
+     sd src^packs
+     while i<packs
+         incst src
+@@ -91,46 +95,46 @@ function numbitsMax(sd width,sd height)
+     return NBits
+ endfunction
+ 
+-function rect_prepare(sv p_out,sv p_size,sd width,sd height)  #p_size is a stack variable
+-    sd NBits
+-    mult width 20
+-    mult height 20
+-    setcall NBits numbitsMax(width,height)
+-    char rect#31*4+5
+-    call bits_packs(#rect,5,NBits,(NBits_size),0,NBits,width,NBits,0,NBits,height,NBits)
+-    sd size=4
+-    mult size NBits
+-    add size 5
+-        #to bytes
+-        add size 7
+-        div size 8
+-    set p_out# #rect
+-    set p_size# size
++function rect_prepare(sv p_out,sd p_size,sd width,sd height)
++	sd NBits
++	mult width 20
++	mult height 20
++	setcall NBits numbitsMax(width,height)
++	call bits_packs(#globalb.rect,5,NBits,(NBits_size),0,NBits,width,NBits,0,NBits,height,NBits)
++	sd size=4
++	mult size NBits
++	add size 5
++	#to bytes
++	add size 7
++	div size 8
++	set p_out# #globalb.rect
++	set p_size# size
+ endfunction
+ function matrix_translate(sv p_dest,sd p_size,sd x,sd y)
+-    char matrix#1+4+4
+-    set p_dest# #matrix
+-    if x=0
+-        if y=0
+-            set matrix 0
+-            set p_size# 1
+-            ret
+-        endif
+-    endif
+-    sd NBits
+-    mult x 20
+-    mult y 20
+-    setcall NBits numbitsMax(x,y)
+-    call bits_packs(#matrix,(3+2),0,1,0,1,NBits,(NBits_size),x,NBits,y,NBits)
+-    sd size=2
+-    mult size NBits
+-    add size (1+1+5)
+-        #to bytes
+-        add size 7
+-        div size 8
++	ss p_matrix
++	set p_matrix #globalb.matrix
++	set p_dest# p_matrix
++	if x=0
++		if y=0
++			set p_matrix# 0
++			set p_size# 1
++			ret
++		endif
++	endif
++	sd NBits
++	mult x 20
++	mult y 20
++	setcall NBits numbitsMax(x,y)
++	call bits_packs(#globalb.matrix,(3+2),0,1,0,1,NBits,(NBits_size),x,NBits,y,NBits)
++	sd size=2
++	mult size NBits
++	add size (1+1+5)
++	#to bytes
++	add size 7
++	div size 8
+ 
+ 	#this is no more than char matrix
+-    set p_size# size
++	set p_size# size
+ endfunction
+ 
+ 
+@@ -145,3 +149,5 @@ function rect_add(sd width,sd height)
+     call rect_prepare(#mem,#sz,width,height)
+     call swf_mem_add(mem,sz)
+ endfunction
++
++entryraw globalb()
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -1,6 +1,48 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++const max_char_records=256
++const sim64pointer_size=:-DWORD
++const sim64pointer_unit=sim64pointer_size/DWORD
++
++#multithread unsafe
++dataxu NFill_NLin#1
++charx shapewithstyle_record#max_char_records
++#
++datax edittext_struct#11+sim64pointer_unit+sim64pointer_unit
++#function edittext_struct()
++#   data fontid#1
++#    data *font_height#1
++#    str *fontclassname#1;char *sim64pointer#sim64pointerSize
++#    data *rgba#1
++#    data *maxlength#1
++#    str *initialtext#1;char *sim64pointer_reserved#sim64pointerSize
++#    data *layout_align#1
++#    data *layout_leftmargin#1
++#    data *layout_rightmargin#1
++#    data *layout_indent#1
++#    data *layout_leading#1
++#    return #fontid
++#endfunction
++#
++datax button_mem_struct#10
++
++function button_mem()
++#	data up#1
++#	data *over#1
++#	data *hit#1
++
++#	data *width#1
++#	data *height#1
++
++#	data *no_text#1
++#	data *font_id#1
++#	data *font_height#1
++#	data *y#1
++#	data *font_color#1
++
++	return #globalc.button_mem_struct
++endfunction
+ 
+ import "stack_to_word_arg" stack_to_word_arg
+ 
+@@ -11,10 +53,8 @@ function args_advance(sv p_args)
+     add p_args# (DWORD)
+     return value#
+ endfunction
+-const max_char_records=256
+ function shapewithstyle_records()
+-    charx shapewithstyle_record#max_char_records
+-    return #shapewithstyle_record
++    return #globalc.shapewithstyle_record
+ endfunction
+ 
+ import "bits_bigendian" bits_bigendian
+@@ -30,50 +70,32 @@ function shape_records_NumBits(sd p_val)
+     return val
+ endfunction
+ #get:fill/lin
+-function NumFill_NumLin(sd set_get,sd fill,sd lin)
+-    data NFill_NLin#1
+-    if set_get=0
+-        set NFill_NLin lin;mult fill 0x10;or NFill_NLin fill
+-    else
+-	if fill=(FALSE);set lin NFill_NLin;and lin 0x0F;return lin;endif
+-	set fill NFill_NLin;div fill 0x10;return fill
+-    endelse
++function NumFill_NumLin(sd ?fill,sd ?lin)
++	set globalc.NFill_NLin lin;mult fill 0x10;or globalc.NFill_NLin fill
+ endfunction
++function NumFill_NumLin_get(sd ?int_data)
++	if int_data=(FALSE);set int_data globalc.NFill_NLin;and int_data 0x0F;return int_data;endif
++	set int_data globalc.NFill_NLin;div int_data 0x10;return int_data
++end
+ 
+ #edittext
+ 
+-const sim64pointerSize=:-DWORD
+-#struct
+-function edittext_struct()
+-    data fontid#1
+-    data *font_height#1
+-    str *fontclassname#1;char *sim64pointer#sim64pointerSize
+-    data *rgba#1
+-    data *maxlength#1
+-    str *initialtext#1;char *sim64pointer#sim64pointerSize
+-    data *layout_align#1
+-    data *layout_leftmargin#1
+-    data *layout_rightmargin#1
+-    data *layout_indent#1
+-    data *layout_leading#1
+-    return #fontid
+-endfunction
+ function edittext_font(sd fontid,sd fontheight)
+     sd s
+-    setcall s edittext_struct()
++    set s #globalc.edittext_struct
+     set s# fontid
+     add s (DWORD)
+     set s# fontheight
+ endfunction
+ function edittext_rgba(sd val)
+     sd ed_str
+-    setcall ed_str edittext_struct()
+-    add ed_str (3*DWORD+sim64pointerSize);set ed_str# val
++    set ed_str #globalc.edittext_struct
++    add ed_str (3*DWORD+sim64pointer_size);set ed_str# val
+ endfunction
+ function edittext_layout(sd in_args)
+     sd s
+-    setcall s edittext_struct()
+-    add s (6*DWORD+sim64pointerSize+sim64pointerSize)
++    set s #globalc.edittext_struct
++    add s (6*DWORD+sim64pointer_size+sim64pointer_size)
+     set s# in_args#
+     add s (DWORD);add in_args (DWORD);set s# in_args#
+     add s (DWORD);add in_args (DWORD);set s# in_args#
+@@ -82,28 +104,11 @@ function edittext_layout(sd in_args)
+ endfunction
+ function edittext_text(ss text)
+     sv s
+-    setcall s edittext_struct()
+-    add s (5*DWORD+sim64pointerSize)
++    set s #globalc.edittext_struct
++    add s (5*DWORD+sim64pointer_size)
+     set s# text
+ endfunction
+ 
+-function button_mem()
+-    data up#1
+-    data *over#1
+-	data *hit#1
+-
+-    data *width#1
+-    data *height#1
+-
+-    data *no_text#1
+-    data *font_id#1
+-    data *font_height#1
+-    data *y#1
+-    data *font_color#1
+-
+-    return #up
+-endfunction
+-
+ import "free_sprite_id" free_sprite_id
+ import "matrix_translate" matrix_translate
+ 
+@@ -120,22 +125,22 @@ import "action_sprite_base" action_sprit
+ 
+ import "error" error
+ function shape_records_bits(sd value,sd size,sv p_dest_pos)
+-    #why was this here? data start#1
+-    #and this, this is called through shape_records_add    if p_dest_pos==0
+-    #	set start value
+-    #	return (void)
+-    #endif
+-    sd pointer
+-    set pointer p_dest_pos#
+-    subcall pointer shapewithstyle_records()
+-    if pointer=(max_char_records)
+-    #was >=
+-        call error("too many arguments at shape")
+-    endif
+-    sd p_pos
+-    set p_pos p_dest_pos
+-    add p_pos :
+-    call bits_bigendian(value,size,p_dest_pos,p_pos)
++	#why was this here? data start#1
++	#and this, this is called through shape_records_add    if p_dest_pos==0
++	#	set start value
++	#	return (void)
++	#endif
++	sd pointer
++	set pointer p_dest_pos#
++	sub pointer #globalc.shapewithstyle_record
++	if pointer=(max_char_records)
++		#was >=
++		call error("too many arguments at shape")
++	endif
++	sd p_pos
++	set p_pos p_dest_pos
++	add p_pos :
++	call bits_bigendian(value,size,p_dest_pos,p_pos)
+ endfunction
+ function shape_records_add(sd p_dest_pos,sd p_args)
+     sd edge
+@@ -158,17 +163,17 @@ function shape_records_add(sd p_dest_pos
+         #StateFillStyle0
+         set fill flags;and fill (StateFillStyle0)
+         if fill!=0
+-            setcall f_l_bits NumFill_NumLin(1,(TRUE));call shape_records_bits(1,f_l_bits,p_dest_pos)
++            setcall f_l_bits NumFill_NumLin_get((TRUE));call shape_records_bits(1,f_l_bits,p_dest_pos)
+         endif
+         #StateFillStyle1
+         set fill flags;and fill (StateFillStyle1)
+         if fill!=0
+-            setcall f_l_bits NumFill_NumLin(1,(TRUE));call shape_records_bits(1,f_l_bits,p_dest_pos)
++            setcall f_l_bits NumFill_NumLin_get((TRUE));call shape_records_bits(1,f_l_bits,p_dest_pos)
+         endif
+         #StateLineStyle
+         and flags (StateLineStyle)
+         if flags!=0
+-            setcall f_l_bits NumFill_NumLin(1,(FALSE))
++            setcall f_l_bits NumFill_NumLin_get((FALSE))
+             call shape_records_bits(1,f_l_bits,p_dest_pos)
+         endif
+         ret
+@@ -213,11 +218,13 @@ function shape_records_add_edge_straight
+     sd GeneralLineFlag=0
+     if width!=0;if height!=0;set GeneralLineFlag 1;endif;endif
+     call shape_records_bits(GeneralLineFlag,1,p_dest_pos)
+-    #Vert(1)/Horz(0)
+-    if GeneralLineFlag=0
+-        sd vertical=1;if width!=0;set vertical 0;endif
+-        call shape_records_bits(vertical,1,p_dest_pos)
+-    endif
++	#Vert(1)/Horz(0)
++	sd ?vertical
++	if GeneralLineFlag=0
++		set vertical 1
++		if width!=0;set vertical 0;endif
++		call shape_records_bits(vertical,1,p_dest_pos)
++	endif
+     #DeltaX SB[NumBits+2]
+     sd DeltaX=TRUE;if GeneralLineFlag=0;if vertical=1;set DeltaX (FALSE);endif;endif
+     if DeltaX=(TRUE);call shape_records_bits(width,counter,p_dest_pos);endif
+@@ -275,63 +282,63 @@ function swf_shape_simple(sd width,sd he
+     sub height_variable ycurve
+ 
+     data header#4
+-    sd struct^header;if lineheight=0;add struct (DWORD);endif
+-    sd cursor;set cursor struct
++    sd strct^header;if lineheight=0;add strct (DWORD);endif
++    sd cursor;set cursor strct
+     set cursor# (solid_fill)
+     add cursor (DWORD);set cursor# fillcolor
+     add cursor (DWORD);set cursor# lineheight
+     if lineheight!=0;add cursor (DWORD);set cursor# linecolor;endif
+     #the header is connected with the part below
+-    data *=0
++    data *styles_type=0
+     data styles#1;set styles (StateFillStyle0|StateMoveTo);if lineheight!=0;or styles (StateLineStyle);endif
+         data x_move#1;set x_move lineheight_hf;add x_move xcurve
+         data y_move#1;set y_move lineheight_hf
+ 
+-    data *={1,1}
+-        data w1#1;data *=0
++    data *straight_wd={1,1}
++        data w1#1;data *s_w_d=0
+         set w1 width_variable
+-    data *={1,0}
++    data *curved_ne={1,0}
+         data xNE#1
+         set xNE xcurve
+-        data *={0,0}
++        data *ne_d={0,0}
+         data yNE#1
+         set yNE ycurve
+-    data *={1,1}
+-        data *=0;data h1#1
++    data *straight_hg={1,1}
++        data *s_h_d=0;data h1#1
+         set h1 height_variable
+-    data *={1,0}
+-        data *=0
++    data *curved_se={1,0}
++        data *se_y_d=0
+         data ySE#1
+         set ySE ycurve
+         data xSE#1
+         mult xcurve -1
+         set xSE xcurve
+-        data *=0
+-    data *={1,1}
+-        data w2#1;data *=0
++        data *se_x_d=0
++    data *straight_wd_back={1,1}
++        data w2#1;data *s_w_b_d=0
+         mult width_variable -1
+         set w2 width_variable
+-    data *={1,0}
++    data *curved_sv={1,0}
+         data xSV#1
+         set xSV xcurve
+-        data *={0,0}
++        data *sv_d={0,0}
+         mult ycurve -1
+         data ySV#1
+         set ySV ycurve
+-    data *={1,1}
+-        data *=0;data h2#1
++    data *straight_hg_back={1,1}
++        data *s_h_b_d=0;data h2#1
+         mult height_variable -1
+         set h2 height_variable
+-    data *={1,0}
+-        data *=0
++    data *curved_nv={1,0}
++        data *nv_y_d=0
+         data yNV#1
+         set yNV ycurve
+         data xNV#1
+         mult xcurve -1
+         set xNV xcurve
+-        data *=0
+-    data *=-1
+-	callret swf_shape_local(width,height,struct)
++        data *nv_x_d=0
++    data *struct_end=-1
++	callret swf_shape_local(width,height,strct)
+ endfunction
+ 
+ #id
+@@ -341,9 +348,7 @@ function swf_text_initial_font_centered(
+     data layout={layout_align_center,0,0,0,0}
+     call edittext_layout(#layout)
+     call edittext_text(text)
+-    sd e_struct
+-    setcall e_struct edittext_struct()
+-	callret swf_text_local(width,height,"",(HasFont|HasText|HasTextColor|HasLayout|ReadOnly|NoSelect),e_struct)
++	callret swf_text_local(width,height,"",(HasFont|HasText|HasTextColor|HasLayout|ReadOnly|NoSelect),#globalc.edittext_struct)
+ endfunction
+ 
+ #button
+@@ -351,35 +356,36 @@ endfunction
+ import "identifiers_get" identifiers_get
+ import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+ import "swf_mem_add" swf_mem_add
++import "new_sprite_id" new_sprite_id
++import "pool_read" pool_read
++import "dtitles_frame_one" dtitles_frame_one
++import "write_action_one" write_action_one
+ #id
+ function swf_button_base(sd state_def_id,sd state_over_id,sd state_down_id,sd noText,sd text_id,sd y,ss actions)
+     sd size=2+1+2;#ButtonId,TrackAsMenu,ActionOffset
+ 
+     sd Characters_CharacterEndFlag_size
+-    setcall Characters_CharacterEndFlag_size buttonrecord(0,0,0)
++    setcall Characters_CharacterEndFlag_size buttonrecord_size(0,0)
+     mult Characters_CharacterEndFlag_size 3
+     if noText=(FALSE)
+-        addcall Characters_CharacterEndFlag_size buttonrecord(0,0,y)
++        addcall Characters_CharacterEndFlag_size buttonrecord_size(0,y)
+     endif
+     inc Characters_CharacterEndFlag_size
+ 
+     add size Characters_CharacterEndFlag_size
+ 
+     char BUTTONCONDACTION={0,0};#CondActionSize
+-    char *={8,0};#CondOverDownToOverUp
++    char *CondOverDownToOverUp={8,0}
+     const BUTTONCONDACTION_header_size=2+2
+     #is action,pool and sprite, it's more code to get action,pool only
+-    import "new_sprite_id" new_sprite_id
+-    sd id
++    sd ?id
+     setcall id new_sprite_id()
+-	import "pool_read" pool_read
+ 	call pool_read(id,-1)
+ 
+     call action_sprite_base(id,actions,(FALSE))
+ 
+ 	sd ButtonId
+ 	setcall ButtonId identifiers_get()  #is final at buttons
+-	import "dtitles_frame_one" dtitles_frame_one
+ 	call dtitles_frame_one(id,ButtonId)
+ 
+     add size (BUTTONCONDACTION_header_size)
+@@ -392,57 +398,57 @@ function swf_button_base(sd state_def_id
+     sd ActionOffset=2;add ActionOffset Characters_CharacterEndFlag_size
+     call swf_mem_add(#ActionOffset,(WORD))
+ 
+-    call buttonrecord(1,0,0,(ButtonStateUp),state_def_id,1)
+-    call buttonrecord(1,0,0,(ButtonStateOver),state_over_id,2)
+-	call buttonrecord(1,0,0,(ButtonStateDown|ButtonStateHitTest),state_down_id,3)
+-    if noText=(FALSE)
+-        call buttonrecord(1,0,y,(ButtonStateUp|ButtonStateOver|ButtonStateDown|ButtonStateHitTest),text_id,4)
+-    endif
++	call buttonrecord(0,0,(ButtonStateUp),state_def_id,1)
++	call buttonrecord(0,0,(ButtonStateOver),state_over_id,2)
++	call buttonrecord(0,0,(ButtonStateDown|ButtonStateHitTest),state_down_id,3)
++	if noText=(FALSE)
++		call buttonrecord(0,y,(ButtonStateUp|ButtonStateOver|ButtonStateDown|ButtonStateHitTest),text_id,4)
++	endif
+     char CharacterEndFlag=0
+     call swf_mem_add(#CharacterEndFlag,1)
+     call swf_mem_add(#BUTTONCONDACTION,(BUTTONCONDACTION_header_size))
+-	import "write_action_one" write_action_one
+ 	call write_action_one(id)
+ 
+ 	call free_sprite_id(id,ButtonId)
+ 	return ButtonId
+ endfunction
+ 
+-#size/void
+-function buttonrecord(sd writeflag,sd x,sd y,sd states,sd id,sd depth)
+-    #ButtonReserved[2]=0,ButtonHasBlendMode[1]=0,ButtonHasFilterList[1]=0
+-    #states[4]
+-    char bits#1
+-    char CharacterID#2
+-    char PlaceDepth#2
+-
+-    sd size=1+2+2
+-
+-    if writeflag=1
+-        set bits states
+-        call stack_to_word_arg(id,#CharacterID)
+-        call stack_to_word_arg(depth,#PlaceDepth)
+-        call swf_mem_add(#bits,size)
+-    endif
++const buttonrecord_top_size=1+2+2
++#size
++function buttonrecord_size(sd ?x,sd ?y)
++	#ButtonReserved[2]=0,ButtonHasBlendMode[1]=0,ButtonHasFilterList[1]=0
++	#states[4]
++	sd ?size=buttonrecord_top_size
++
++	#PlaceMatrix
++	sd matrix
++	datax matrixsz#1
++	call matrix_translate(#matrix,#matrixsz,x,y)
++
++	add size matrixsz
++
++	add size (BYTE)
++
++	return size
++endfunction
++#void
++function buttonrecord(sd ?x,sd ?y,ss ?states,sd ?id,sd ?depth)
++	char bits#1
++	char CharacterID#2
++	char PlaceDepth#2
++	set bits states
++	call stack_to_word_arg(id,#CharacterID)
++	call stack_to_word_arg(depth,#PlaceDepth)
++	call swf_mem_add(#bits,(buttonrecord_top_size))
++
++	#PlaceMatrix
++	sd matrix
++	datax matrixsz#1
++	call matrix_translate(#matrix,#matrixsz,x,y)
++	call swf_mem_add(matrix,matrixsz)
+ 
+-    #PlaceMatrix
+-    sd matrix
+-    datax matrixsz#1
+-    call matrix_translate(#matrix,#matrixsz,x,y)
+-    if writeflag=1
+-        call swf_mem_add(matrix,matrixsz)
+-    else
+-        add size matrixsz
+-    endelse
+-
+-    char CXFORMWITHALPHA=0
+-    if writeflag=1
+-        call swf_mem_add(#CXFORMWITHALPHA,(BYTE))
+-    else
+-        add size (BYTE)
+-    endelse
+-
+-    if writeflag=0
+-        return size
+-    endif
++	char CXFORMWITHALPHA=0
++	callg swf_mem_add(#CXFORMWITHALPHA,(BYTE))
+ endfunction
++
++entryraw globalc()
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -1,7 +1,7 @@
+ 
+ format elfobj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
+ 
+ function debug_mark()
+ 	valuex row#1
+@@ -37,6 +37,8 @@ endfunction
+ import "mem_free" mem_free
+ import "f_close" f_close
+ 
++import "x_data" x_data
++import "alt_free" alt_free
+ function debug_data()
+ 	value file=NULL
+ 	value file2=NULL
+@@ -50,7 +52,6 @@ function debug_data()
+ 	dataxu all_size#1
+ 	dataxu rows#1
+ 
+-	import "x_data" x_data
+ 	call x_data()
+ 
+ 	if file!=(NULL)
+@@ -65,7 +66,6 @@ function debug_data()
+ 			end
+ 		end
+ 	endif
+-	import "alt_free" alt_free
+ 	call alt_free()
+ endfunction
+ 
+@@ -76,6 +76,9 @@ function debug_phase_init(ss pointer)
+ 		call debug_mark_add()
+ 	endif
+ endfunction
++
++import "action_code_get" action_code_get   #the pointer is not reallocated, can use offset but will be slower
++
+ function debug_phase_parse(ss pointer)
+ 	if debug_mark_get.offsets!=(NULL)
+ 		sv a
+@@ -95,7 +98,6 @@ function debug_phase_parse(ss pointer)
+ 		if pointer<^a#
+ 			ret
+ 		endif
+-		import "action_code_get" action_code_get   #the pointer is not reallocated, can use offset but will be slower
+ 		sd x;setcall x action_code_get()
+ 		while start#<^pointer   #or a
+ 			set start# x
+@@ -164,7 +166,7 @@ importx "fclose" fclose
+ const EOF=-1
+ function user_flags(sw pflags)
+ 	ss h
+-include "../include/linhome.oh" "../include/winhome.oh"
++include "../include/platformhome.oh" #"../include/linhome.oh" "../include/winhome.oh"
+ 	set h getenv(homefolder)
+ 	if h!=(NULL)
+ 		ss sz;set sz strlen(h)
+@@ -195,7 +197,7 @@ include "../include/linhome.oh" "../incl
+ end
+ 
+ import "row_termination" row_termination
+-import "brace_blocks_get_memblock" brace_blocks_get_memblock
++import "swf_actionblock_get" swf_actionblock_get
+ import "block_get_size" block_get_size
+ import "block_get_psize" block_get_psize
+ import "block_get_mem" block_get_mem
+@@ -273,9 +275,11 @@ function log_init(sd flags,sd path)
+ 	return flags
+ end
+ 
+-import "f_printf" f_printf
++import "f_printf1" f_printf1
++import "f_printf2" f_printf2
+ import "f_write" f_write
+ import "f_tell" f_tell
++import "memrealloc" memrealloc
+ 
+ function debug_action_init(ss ac)
+ 	if debug_data.file!=(NULL)
+@@ -290,11 +294,10 @@ function debug_action_init(ss ac)
+ 			endwhile
+ 
+ 			#out rows\nac\n
+-			char f={Percent,l,u,xlog_nl,Percent,s,xlog_nl,Nullchar}
+-			call f_printf((fprintf_min+2),debug_data.file,#f,row,start)
++			char f={Percent,l_low,u_low,xlog_nl,Percent,s_low,xlog_nl,Nullchar}
++			call f_printf2(debug_data.file,#f,row,start)
+ 
+ 			mult row :
+-			import "memrealloc" memrealloc
+ 			setcall debug_mark_get.offsets memrealloc(debug_mark_get.offsets,row)
+ 
+ 			call debug_mark_start()  #prepare for first iteration
+@@ -353,8 +356,8 @@ function debug_phase_code_flush()
+ 		#there are rows with only one action_one, example in tests/ffdec
+ 			#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+ 			#will not bother concludefunction where is asking with ftell
+-			char format=xlog_actions;char *="%lu"
+-			call f_printf((fprintf_min+1),debug_data.file,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
++			char format={xlog_actions,Percent,l_low,u_low,Nullchar}
++			call f_printf1(debug_data.file,#format,debug_data.rows) #add a * because still can be row like a preid start row, example: while break}
+ 			call debug_phase_code_flush_part(debug_phase_code.size)
+ 			set debug_data.rows 0
+ 		end
+@@ -378,8 +381,8 @@ function alt_log()
+ 	return (NULL)
+ end
+ function logs_printf(sd log,sd nr)
+-	vstr u="%u"^;char nl={xlog_nl,Nullchar}
+-	callg f_printf((fprintf_min+1),log,u,nr)
++	char u={Percent,u_low,xlog_nl,Nullchar}
++	callg f_printf1(log,#u,nr)
+ end
+ function debug_printf(sd ix)
+ 	call logs_printf(debug_data.file,ix)
+@@ -404,7 +407,7 @@ function debug_show(sd id)
+ 		call debug_write(#nls,2)
+ 		sd alt;set alt alt_log()
+ 		if alt!=(NULL)
+-			callg f_write(alt,#logs_printf.nl,1)
++			callg f_write(alt,#nls,1)
+ 		end
+ 	end
+ end
+@@ -417,7 +420,8 @@ end
+ function debug_spritedone(sd p,sd i)
+ 	if debug_data.file!=(NULL)
+ 		call debug_printf(p)
+-		call debug_write(#logs_printf.nl,1)
++		char nl=xlog_nl
++		call debug_write(#nl,1)
+ 		callg debug_printf(i)
+ 	end
+ end
+@@ -428,7 +432,8 @@ function debug_export(sd i,ss e,sd size)
+ 			call logs_printf(alt,i)
+ 			call f_write(alt,#debug_show.nls,2)
+ 			call f_write(alt,e,size)
+-			callg debug_write(#logs_printf.nl,1)
++			char nl=xlog_nl
++			callg debug_write(#nl,1)
+ 		end
+ 	end
+ end
+@@ -491,7 +496,7 @@ function debug_phase_code_add_if(sd is_l
+ 	endif
+ endfunction
+ function debug_phase_code_remove(sd swflength,sd length)
+-	sd memblock;set memblock brace_blocks_get_memblock()
++	sd memblock;set memblock swf_actionblock_get()
+ 	sd p;set p block_get_psize(memblock)
+ 	sub p# swflength
+ 
+@@ -510,7 +515,7 @@ function debug_definefunction(sv pointer
+ 		set pointers# f_tell(debug_data.file)
+ 		incst pointers
+ 
+-		sd memblock;setcall memblock brace_blocks_get_memblock()
++		sd memblock;setcall memblock swf_actionblock_get()
+ 		set pointers#d^ block_get_size(memblock)
+ 		incst pointers
+ 
+@@ -529,7 +534,7 @@ function debug_concludefunction(sv point
+ 		sd now;set now f_tell(debug_data.file)
+ 		incst pointers
+ 
+-		sd block;setcall block brace_blocks_get_memblock()
++		sd block;setcall block swf_actionblock_get()
+ 		sd blockmem;set blockmem block_get_mem(block)
+ 		add blockmem pointers#d^
+ 		sd size;set size word_arg_to_stack(blockmem)
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -73,7 +73,8 @@ function dtitles_init(sd flags)
+ 	set dtitles_conclude.bool (FALSE)
+ end
+ 
+-import "swf_actionblock" swf_actionblock
++import "swf_actionblock_change" swf_actionblock_change #is a good id because is called at done, there are id verif until that, and at button is internal not from user
++import "swf_actionblock_change_back" swf_actionblock_change_back
+ 
+ #aftercallimport ebool
+ 
+@@ -94,9 +95,9 @@ function dtitles_frame_one(sd preid,sd f
+ 		char store#5
+ 		call sprintf(#store,"%X",finalid)
+ 
+-		call swf_actionblock((mem_exp_change),preid)
++		call swf_actionblock_change(preid)
+ 		call actionpool_value_ex(#store,(TRUE))
+-		call swf_actionblock((mem_exp_change_back),preid)
++		call swf_actionblock_change_back()
+ 	end
+ end
+ 
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -7,9 +7,10 @@ import "action_data" action_data
+ import "action_code_values" action_code_values
+ import "action_code_values_action" action_code_values_action
+ import "escape_action" escape_action
+-import "action_debug_free" action_debug_free
++import "action_debug_free_macro" action_debug_free_macro
+ import "debug_phase_parse_end" debug_phase_parse_end
+ import "endcom" endcom
++import "action_parse_init" action_parse_init
+ 
+ #aftercallimport ebool
+ 
+@@ -34,6 +35,8 @@ function action_base(ss ac)
+ 	import "actionx" actionx
+ 	sd x;set x actionx()
+ 	if x=(FALSE) #if true, only action__code_row loop
++		call action_parse_init()
++
+ 		ss mem
+ 		setcall mem dupreserve_string(ac)
+ 
+@@ -72,6 +75,6 @@ function action_base(ss ac)
+ 		call debug_x(stored,nr#) #need to be after, to modify pointers inside
+ 
+ 		#free mem ok,another free is at errors
+-		call action_debug_free()
++		call action_debug_free_macro()
+ 	end
+ endfunction
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -1,6 +1,16 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++
++#multithread unsafe
++data file=fd_none;vdata mem=NULL
++
++vstr fprintf_er="fprintf error"
++vstr file_write_er="File write error"
++vstr f_open_err="fopen error"
++vstr f_tell_er="ftell error"
++vstr f_size_er="f_size error"
++vstr f_open_rb="rb"
+ 
+ importx "_open" open
+ importx "_read" read
+@@ -11,23 +21,14 @@ importx "_close" close
+ 
+ import "printEr" printEr
+ 
+-function file_get_content__resources(sd trueIsSet_falseIsFree,sd fileIn,sd memIn)
+-    data file=fd_none;vdata mem=NULL
+-    if trueIsSet_falseIsFree=(TRUE)
+-        if fileIn!=(fd_none);set file fileIn
+-        else;set mem memIn;endelse
+-    else
+-        if file!=(fd_none)
+-            call file_close(#file)
+-            if mem!=(NULL)
+-                import "mem_free" mem_free
+-                call mem_free(#mem)
+-            endif
+-        endif
+-    endelse
+-endfunction
++import "mem_free" mem_free
+ function file_get_content__resources_free()
+-    call file_get_content__resources((FALSE))
++	if globalf.file!=(fd_none)
++		call file_close(#globalf.file)
++		if globalf.mem!=(NULL)
++			call mem_free(#globalf.mem)
++		endif
++	endif
+ endfunction
+ 
+ #close
+@@ -46,10 +47,6 @@ endfunction
+ 
+ importx "fprintf" fprintf
+ 
+-function f_printf_in(sd p,sd nr)
+-	callex fprintf p nr ##callexret
+-end
+-
+ importx "fwrite" fwrite
+ importx "ftell" ftell
+ importx "fseek" fseek
+@@ -65,8 +62,7 @@ import "error" error
+ function f_open(sd path,sd format)
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
+-		vstr err="fopen error"
+-		call error(err)
++		call error(globalf.f_open_err)
+ 	end
+ 	return f
+ end
+@@ -81,7 +77,7 @@ function f_open_mem_ex(sd path,sd format
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
+ 		call free(path)
+-		call error(f_open.err)
++		call error(globalf.f_open_err)
+ 	endif
+ 	return f
+ endfunction
+@@ -113,7 +109,7 @@ function file_seek(sd file,sd off,sd met
+ endfunction
+ #offset
+ function file__seek(sd file,sd method)
+-	callg file_seek(file,0,method) #here return is what file_seek is returning
++	callret file_seek(file,0,method) #here return is what file_seek is returning
+ endfunction
+ #size
+ function filesize(sd file)
+@@ -129,7 +125,7 @@ import "memalloc" memalloc
+ function file_get_content(ss filepath,sv p_size)  #size is a stack variable
+ 	sd file
+ 	setcall file file_open(filepath,(_open_read))
+-	call file_get_content__resources((TRUE),file)
++	set globalf.file file
+ 	sd mem; ss size
+ 	set size filesize(file)
+ 	if p_size!=(NULL)
+@@ -140,7 +136,7 @@ function file_get_content(ss filepath,sv
+ 		setcall mem memalloc(size)
+ 		dec size
+ 	end
+-	call file_get_content__resources((TRUE),(fd_none),mem)
++	set globalf.mem mem
+ 	call read(file,mem,size)
+ 	if p_size=(NULL)
+ 		add size mem
+@@ -164,8 +160,7 @@ function file_write(sd file,sd buffer,sd
+ 	if len=size
+ 		ret
+ 	endif
+-	vstr er="File write error"
+-	callg error(er)
++	callg error(globalf.file_write_er)
+ endfunction
+ function file_write_mem(sd file,sd buffer,sd size)
+ 	sd len
+@@ -174,13 +169,19 @@ function file_write_mem(sd file,sd buffe
+ 	if len=size
+ 		ret
+ 	endif
+-	callg error(file_write.er)
++	callg error(globalf.file_write_er)
+ endfunction
+ 
+-function f_printf(sd nr,sd file) #,sd *format,sd a1...,sd aN
+-	sd r;set r f_printf_in(#file,nr)
++function f_printf1(sd file,ss format,svu a1)
++	sd ?r;set r fprintf(file,format,a1)
+ 	if r=-1
+-		callg error("fprintf error")
++		callg error(globalf.fprintf_er)
++	endif
++endfunction
++function f_printf2(sd file,ss format,svu a1,svu a2)
++	sd ?r;set r fprintf(file,format,a1,a2)
++	if r=-1
++		callg error(globalf.fprintf_er)
+ 	endif
+ endfunction
+ 
+@@ -194,8 +195,7 @@ endfunction
+ function f_tell(sd f)
+ 	sd r;set r ftell(f)
+ 	if r=-1
+-		vstr er="ftell error"
+-		call error(er)
++		call error(globalf.f_tell_er)
+ 	end
+ 	return r
+ endfunction
+@@ -205,12 +205,11 @@ function f_tell_errors(sd f)
+ 		return r
+ 	end
+ 	call fclose(f)
+-	callg error(f_tell.er)
++	callg error(globalf.f_tell_er)
+ endfunction
+ 
+ function f_size(sd path)
+-	vstr rb="rb"
+-	sd f;set f fopen(path,rb)
++	sd f;set f fopen(path,globalf.f_open_rb)
+ 	if f!=(NULL)
+ 		call fseek(f,0,(SEEK_END))
+ 		sd size
+@@ -220,11 +219,10 @@ function f_size(sd path)
+ 			return size
+ 		end
+ 	end
+-	vstr er="f_size error"
+-	callg error(er)
++	callg error(globalf.f_size_er)
+ end
+ function f_size_errors(sd path)
+-	sd f;set f fopen(path,f_size.rb)
++	sd f;set f fopen(path,globalf.f_open_rb)
+ 	if f!=(NULL)
+ 		call fseek(f,0,(SEEK_END))
+ 		sd size
+@@ -235,7 +233,7 @@ function f_size_errors(sd path)
+ 		end
+ 	end
+ 	call free(f)
+-	callg error(f_size.er)
++	callg error(globalf.f_size_er)
+ end
+ 
+ import "file_resources_set" file_resources_set
+@@ -291,10 +289,12 @@ function dbl_dim(ss imagepath,sd off)
+ 	#format? ming newSWFDBLBitmap_fromInput
+ 	dataxu size#1;charx t#1;#sw dim
+ 	sd file;set file dblsize_start(imagepath,#size,#t)
+-	if t=(l)
++	if t=(l_low)
+ 		add off (dblsignature+dblsize+dblformat)
+ 	else
+ 		add off (dblsignature+dblsize16+dblformat)
+ 	end
+ 	callret dblsize_end(file,size,off)
+ end
++
++entryraw globalf()
+--- /dev/null
++++ actionswf-1/src/hitems
+@@ -0,0 +1,3 @@
++
++hreqs=platform platformhome
++$(foreach var,$(hreqs),$(eval ohreqs += ../include/${var}.oh))
+--- actionswf-1.orig/src/img.oc
++++ actionswf-1/src/img.oc
+@@ -2,6 +2,7 @@
+ format elfobj64
+ 
+ include "../include/prog.oh"
++include "../include/throw.h" "../include/throw.oh"
+ 
+ function verbose(datax flag)
+ 	and flag (flag_verbose)
+@@ -19,6 +20,7 @@ importx "free" free
+ importx "printf" printf
+ 
+ import "ebase" ebase
++import "erbool" erbool
+ 
+ #aftercalli
+ 
+@@ -73,7 +75,7 @@ function imgx(ss dbl,sd p_wh,sd is_image
+ 	add cr sz
+ 	call memcpy(cr,#ms,5)
+ 
+-	sd id; sd jpgsize
++	sd ?id; sd jpgsize
+ 	sd acs;set acs access(f1,(F_OK))
+ 	if acs!=0 #opac
+ 		call memcpy(cr,#jp,5)
+@@ -99,30 +101,32 @@ function imgx(ss dbl,sd p_wh,sd is_image
+ 		end
+ 	end
+ 	call free(f1)
+-	if verbose.flag!=(flag_none)
+-		add dblsize 2 #again, ui32 tags
+-		add jpgsize 2
+-		sd c
+-		if dblsize<^jpgsize
+-			set c (Lessthan)
+-		else
+-			set c (Greaterthan)
+-		end
+-		ss plus
+-		if acs!=0
+-			set plus ""
+-		else
+-			set plus "+msk"
+-		end
+-		call printf("dbl 0x%lx %c jpg%s 0x%lx",dblsize,c,plus,jpgsize)
+-		if p_wh!=(NULL)
+-			sd w;set w p_wh#
+-			add p_wh (DWORD)
+-			call printf(" %hux%hu",w,p_wh#)
++	ss ?p;setcall p erbool();if p#=0
++		if verbose.flag!=(flag_none)
++			add dblsize 2 #again, ui32 tags
++			add jpgsize 2
++			ss ?c
++			if dblsize<^jpgsize
++				set c (Lessthan)
++			else
++				set c (Greaterthan)
++			end
++			ss plus
++			if acs!=0
++				set plus ""
++			else
++				set plus "+msk"
++			end
++			call printf("dbl 0x%lx %c jpg%s 0x%lx",dblsize,c,plus,jpgsize)
++			if p_wh!=(NULL)
++				sd w;set w p_wh#
++				add p_wh (DWORD)
++				call printf(" %hux%hu",w,p_wh#)
++			end
++			call printf(" %s\n",dbl)
+ 		end
+-		call printf(" %s\n",dbl)
++		return id
+ 	end
+-	return id
+ end
+ 
+ import "swf_dbl_ex_local" swf_dbl_ex_local
+@@ -132,7 +136,7 @@ import "dbl_dim" dbl_dim
+ import "swf_shape_bitmap_local_clipped" swf_shape_bitmap_local_clipped
+ 
+ function imgx_decision(sd dblsize,sd jpgsize,ss dbl,ss jpg,ss msk,sd p_wh,sd is_image) #,sd is_clipped
+-	valuex bp#1;base bp;call ebase(bp)
++	base globali.jmp_data;call ebase(globali.jmp_data)
+ 	if dblsize<^jpgsize
+ 		if is_image=(FALSE)
+ 			callret swf_dbl_ex_local(dbl,p_wh,(TRUE))
+@@ -143,7 +147,7 @@ function imgx_decision(sd dblsize,sd jpg
+ 		end
+ 		callret swf_image_ex_local(dbl,p_wh,(TRUE))
+ 	end
+-	sd id
++	sd ?id
+ 	if msk=(NULL)
+ 		set id swf_jpeg_local(jpg,(DefineBitsJPEG2))
+ 	else
+@@ -161,3 +165,5 @@ function imgx_decision(sd dblsize,sd jpg
+ 	end
+ 	callret swf_shape_bitmap_local_clipped(id,width,height)
+ end
++
++entryraw globali()
+--- /dev/null
++++ actionswf-1/src/items
+@@ -0,0 +1,13 @@
++
++#this is like ld is linking, reason: ostrip is not adapted for this, there is another solutin with ocompiler and NOBITS
++#	maybe is a 0x1000 .o size rule only from libexte.a
++items = actioncode actionparse actionutil bits character file storage util ${platform} actionpool debug faction alt dtitles x local actionpush img
++expitems = action swf tool ../shared/action_dllmain
++
++$(eval obs = )
++$(eval eobs = )
++$(foreach var,$(expitems),$(eval eobs += ${items_prefix}${var}.e.o))
++$(foreach var,$(items),$(eval obs += ${items_prefix}${var}.o))
++$(eval logs = )
++$(foreach var,$(expitems),$(eval logs += ${items_prefix}${var}.e.oc.log))
++$(foreach var,$(items),$(eval logs += ${items_prefix}${var}.oc.log))
+--- actionswf-1.orig/src/lin.oc
++++ actionswf-1/src/lin.oc
+@@ -1,9 +1,9 @@
+ 
+ format elfobj64
+ 
+-Importx "stderr" stderr
++^Importx "stderr" stderr
+ 
+ function platform_iob()
+-	sv a^stderr
++	svu a^stderr
+ 	return a#
+ endfunction
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -10,6 +10,7 @@ import "dword_swap" dword_swap
+ import "args_advance" args_advance
+ import "bits_packs" bits_packs
+ import "NumFill_NumLin" NumFill_NumLin
++import "NumFill_NumLin_get" NumFill_NumLin_get
+ import "shapewithstyle_records" shapewithstyle_records
+ import "printEr" printEr
+ import "word_arg_to_stack" word_arg_to_stack
+@@ -21,8 +22,7 @@ import "block_get_mem" block_get_mem
+ import "block_reset_size" block_reset_size
+ 
+ import "alt_action" alt_action
+-#this has throws but for mem_exp_change and back are not required
+-import "swf_actionblock" swf_actionblock
++import "swf_actionblock_change_back" swf_actionblock_change_back
+ 
+ import "deprecation" deprecation
+ import "user_flags" user_flags
+@@ -34,7 +34,8 @@ importx "fclose" fclose
+ 
+ #aftercalli
+ 
+-import "swf_mem" swf_mem
++import "swf_actionblock_change" swf_actionblock_change
++import "swf_mem_init" swf_mem_init
+ import "swf_mem_add" swf_mem_add
+ import "rect_add" rect_add
+ import "swf_frames_reg" swf_frames_reg
+@@ -72,7 +73,7 @@ vdata hd_pack2%hd2
+ 	import "flags_init" flags_init
+ 	call user_flags(#flags)
+ 	call flags_init(flags,path)
+-	call swf_mem((mem_exp_init),path,(file_sz_off-hd_start),flags)
++	call swf_mem_init(path,(file_sz_off-hd_start),flags)
+ 
+     #identifiers for swf
+     call identifiers_set(0);#font with id 0 isn't visible in the placements
+@@ -154,9 +155,9 @@ function swf_text_local(sd bound_width,s
+     #CharacterID
+     sd size=2
+     #RECT
+-    sd rect
+-    sd rectsz
+-    call rect_prepare(#rect,#rectsz,bound_width,bound_height)
++	sd rect
++	datax rectsz#1
++	call rect_prepare(#rect,#rectsz,bound_width,bound_height)
+     add size rectsz
+     #flags
+     add size 2
+@@ -324,11 +325,11 @@ function swf_shape_local(sd width,sd hei
+     setcall shape_id identifiers_get()
+     set shape_size (WORD)
+ 
+-    #rect
+-    sd rect
+-    sd rect_size
+-    call rect_prepare(#rect,#rect_size,width,height)
+-    add shape_size rect_size
++	#rect
++	sd rect
++	datax rect_size#1
++	call rect_prepare(#rect,#rect_size,width,height)
++	add shape_size rect_size
+ 
+ 	#SHAPEWITHSTYLE
+ 	char FillStyleCount#1
+@@ -384,8 +385,8 @@ function swf_shape_local(sd width,sd hei
+     endif
+     add shape_size linestyles_size
+     #NumFillBits/NumLineBits
+-    call NumFill_NumLin(0,FillStyleCount,LineStyleCount)
+-    sd NFill_NLin;setcall NFill_NLin NumFill_NumLin(1,(TRUE));mult NFill_NLin 0x10;orcall NFill_NLin NumFill_NumLin(1,(FALSE))
++    call NumFill_NumLin(FillStyleCount,LineStyleCount)
++    sd ?NFill_NLin;setcall NFill_NLin NumFill_NumLin_get((TRUE));mult NFill_NLin 0x10;orcall NFill_NLin NumFill_NumLin_get((FALSE))
+     inc shape_size
+     #shaperecord[n]
+     sd shapewithstyle_record_start
+@@ -483,8 +484,8 @@ function swf_dbl_ex_local(ss imagepath,s
+ 	endif
+ 	char hd_magic0={D,B,L,1};vdata magic0^hd_magic0
+ 	char hd_magic00={D,B,L,2};vdata magic00^hd_magic00
+-	char hd_magic1={D,B,l,1};vdata magic1^hd_magic1
+-	char hd_magic2={D,B,l,2};vdata magic2^hd_magic2
++	char hd_magic1={D,B,l_low,1};vdata magic1^hd_magic1
++	char hd_magic2={D,B,l_low,2};vdata magic2^hd_magic2
+ 	if mem#!=magic1#
+ 	if mem#!=magic2#
+ 	if mem#!=magic0#
+@@ -496,7 +497,7 @@ function swf_dbl_ex_local(ss imagepath,s
+ 	add cursor 2
+ 	sd header
+ 	sd image_size
+-	if cursor#s^=(l)
++	if cursor#s^=(l_low)
+ 		inc cursor
+ 		if cursor#s^=(1)
+ 			set header (DefineBitsLossless)
+@@ -683,13 +684,13 @@ function actionf_sprite_local(sd sprite,
+ 	sd alt_ac;set alt_ac alt_action(pbuffer#,sprite)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
+-		call swf_actionblock((mem_exp_change),sprite)   #alt action is not using actionblock, is using swfblock
++		call swf_actionblock_change(sprite)
+ 		if pbuffer#=alt_ac
+ 			call action_format(pbuffer)
+ 		else
+ 			call action_base(alt_ac)
+ 			call file_get_content__resources_free()
+ 		end
+-		call swf_actionblock((mem_exp_change_back))
++		call swf_actionblock_change_back()
+ 	end
+ end
+--- /dev/null
++++ actionswf-1/src/rules
+@@ -0,0 +1,6 @@
++
++#${hreqs}
++../include/platform.oh: ../include/${platform}.oh
++	ln -s $< $@
++../include/platformhome.oh: ../include/${platform}home.oh
++	ln -s $< $@
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -1,6 +1,27 @@
+ Format ElfObj64
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++
++#multithread unsafe
++datax identifiers#1
++data exports=not_an_id
++datax main_id#1
++value reg#1
++datax flag_shows#1
++charx is_compress#1
++charx is_file_write#1
++#
++datax id_sel#1
++#valuexu call_struct#1;vdata c_main^struct_ids;vdata c_pool^struct_ids_actionpool
++datax id_stack#1
++charx call_struct_bool#1
++#
++vdata path_mem=NULL
++#4-7 is 0
++charx filelength_offseted#1
++data file_out=fd_error
++#
++datax action_id#1
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+@@ -11,52 +32,39 @@ importx "compress" compress
+ importx "free" free
+ 
+ #this is throwless here
+-import "struct_ids" struct_ids
++^import "struct_ids" struct_ids 2
++import "struct_ids_free_all" struct_ids_free_all
+ import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+ 
+-#
+-function identifiers()
+-    data id#1
+-    return #id
+-endfunction
+ function identifiers_set(sd value)
+-    sd id
+-    setcall id identifiers()
+-    set id# value
+-endfunction
+-
+-#p
+-function exportsId()
+-    data exports=not_an_id
+-    return #exports
++    set globals.identifiers value
+ endfunction
+ 
+ function swf_frames_reg()
+-	data main_id#1
+ #set reg for later
+-	value reg#1
+ 	sd block
+-	set block struct_ids((ids_get),main_id)
+-	set reg block_get_size(block)
+-	sub reg (WORD)
++	set block struct_ids((ids_get),globals.main_id)
++	set globals.reg block_get_size(block)
++	sub globals.reg (WORD)
+ end
+ #p
+ function swf_sprite_frames_pointer(sd spriteid)
+ 	sd block
+-	if spriteid!=swf_frames_reg.main_id
++	if spriteid!=globals.main_id
+ 		setcall block struct_ids((ids_get),spriteid)
+ 		setcall block block_get_mem(block)
+ 		add block (WORD)
+ 	else
+-		set block struct_ids((ids_get),swf_frames_reg.main_id) #0
++		set block struct_ids((ids_get),globals.main_id) #0
+ 		set block block_get_mem(block)
+-		add block swf_frames_reg.reg
++		add block globals.reg
+ 	end
+ 	return block
+ end
+ 
+-function frames_as_shows(datax flag)
+-	and flag (flag_framesAsShows)
++function frames_as_shows(sd ?f)
++	set globals.flag_shows f
++	and globals.flag_shows (flag_framesAsShows)
+ end
+ 
+ function free_sprite_id_actions(sd id)
+@@ -65,6 +73,53 @@ function free_sprite_id_actions(sd id)
+ 	callg struct_ids_action((ids_free),id) #without g is ok here
+ end
+ 
++function swf_mem_change_back()
++	set globals.id_sel globals.main_id
++end
++function swf_mem_change_pool(sd id)    #this can be stackable, at debug titles, at normal usage is back at the main id
++	#is after action_code_values_init
++	set globals.id_stack globals.id_sel
++	set globals.id_sel id
++	set globals.call_struct_bool (TRUE)
++end
++function swf_mem_change_back_pool()
++	set globals.id_sel globals.id_stack
++	set globals.call_struct_bool (FALSE)
++end
++function swf_mem_free()
++	#0 freeing all ids(main(exports,root+sprites),acs,pools) #also new sprite on error and change here will free here
++	call struct_ids_free_all()
++	if globals.path_mem!=(NULL)
++		#1
++		call mem_free(#globals.path_mem)
++		#2 exports
++		set globals.exports (not_an_id)
++		#3 set of values
++		call action_code_values_free()
++		#4
++		call push()
++		#file
++		if globals.file_out!=(fd_error)
++			call file_close(#globals.file_out)
++		endif
++	endif
++end
++
++function swf_actionblock_get()
++	sv p_block
++	setcall p_block struct_ids_action((ids_get_pointer),globals.action_id)
++	return p_block#
++endfunction
++function swf_actionblock_change_back()
++	sd poolid
++	set globals.action_id globals.main_id
++	#
++	sd root_poolid
++	setcall root_poolid actionpoolid_root()
++	setcall poolid actionpoolid()
++	set poolid# root_poolid#
++end
++
+ import "mem_free" mem_free
+ import "action_code_values_free" action_code_values_free
+ import "file_close" file_close
+@@ -92,24 +147,22 @@ import "strlen_of" strlen_of
+ 
+ #id
+ function identifiers_get()
+-	sd id
+-	setcall id identifiers()
+-	if id#=(maxuint16) #from swf specitifactions, example, id field for a DefineSprite
++	if globals.identifiers=(maxuint16) #from swf specitifactions, example, id field for a DefineSprite
+ 		call error("max uint16 at identifiers")
+ 	end
+-	inc id#
+-	return id#
++	inc globals.identifiers
++	return globals.identifiers
+ endfunction
+ 
++import "debug_spritedone" debug_spritedone
+ function free_sprite_id(sd id,sd finalId_or_containerId) #containerId for buttons
+ 	call free_sprite_id_actions(id)
+ 	call struct_ids((ids_free),id)
+-	import "debug_spritedone" debug_spritedone
+ 	callg debug_spritedone(id,finalId_or_containerId)
+ endfunction
+ 
+ import "error" error
+-import "struct_ids_actionpool" struct_ids_actionpool
++^import "struct_ids_actionpool" struct_ids_actionpool 2
+ import "struct_ids_action" struct_ids_action
+ import "struct_ids_action_set" struct_ids_action_set
+ import "mem_block_add" mem_block_add
+@@ -117,137 +170,88 @@ import "def_mem" def_mem
+ import "debug_show" debug_show
+ import "memalloc" memalloc
+ 
+-function swf_mem(sd proc,sd arg,sd len,sd flags)
+-	vdata path_mem=NULL
+-	#4-7 is 0
+-	charx filelength_offseted#1
+-	data file_out=fd_error
+-
+-	data id#1
+-	#data main_id#1 #was moved to a throwless location
+-	value call_struct#1;vdata c_main^struct_ids;vdata c_pool^struct_ids_actionpool
+-
+-	data id_stack#1
+-
+-	if proc=(mem_exp_change_back)
+-		set id swf_frames_reg.main_id
+-		set call_struct c_main
+-		ret
++import "pool_savepath_init" pool_savepath_init
++import "action_code_values_init" action_code_values_init
++import "push_init" push_init
++import "file_open" file_open
++import "file_write" file_write
++import "file_write_mem" file_write_mem
++function swf_mem_init(ss path,sd len,sd flags)
++	#arg is file
++	#len is filelength offset
++	#flags
++	if globals.path_mem!=(NULL)
++		call error("The previous swf was not ended.")
+ 	endif
+-	if proc=(mem_exp_change_pool)  #this can be stackable, at debug titles, at normal usage is back at the main id
+-	#is after action_code_values_init
+-		set id_stack id
+-		set id arg
+-		set call_struct c_pool
+-		ret
+-	endif
+-	if proc=(mem_exp_change_back_pool)
+-		set id id_stack
+-		set call_struct c_main
+-		ret
+-	endif
+-	if proc=(mem_exp_init)
+-		#arg is file
+-		#len is filelength offset
+-		#flags
+-		if path_mem!=(NULL)
+-			call error("The previous swf was not ended.")
+-		endif
+-		#0
+-		svu path_size
+-		setcall path_size strlen_of(arg,1)
+-		setcall path_mem memalloc(path_size)
+-		call memcpy(path_mem,arg,path_size)
+-		import "pool_savepath_init" pool_savepath_init
+-		call pool_savepath_init(path_mem)
+-		#1
+-		setcall swf_frames_reg.main_id def_mem()
+-		set id swf_frames_reg.main_id
+-		call swf_actionblock((mem_exp_init),swf_frames_reg.main_id)
+-		set call_struct c_main
+-		#2
+-		call exports_init()
+-		#3
+-		import "action_code_values_init" action_code_values_init
+-		call action_code_values_init()
+-		#4
+-		import "push_init" push_init
+-		call push_init()
+-		#
+-		sd test=flagpre_write_no;and test flags
+-		charx is_file_write#1
+-		if test=0
+-			set filelength_offseted len
+-			set is_file_write (TRUE)
+-			and flags (flag_compress)
+-			charx is_compress#1
+-			if flags!=0
+-				set is_compress (TRUE)
+-			else
+-				set is_compress (FALSE)
+-			end
++	#0
++	svu path_size
++	setcall path_size strlen_of(path,1)
++	setcall globals.path_mem memalloc(path_size)
++	call memcpy(globals.path_mem,path,path_size)
++	call pool_savepath_init(globals.path_mem)
++	#1
++	setcall globals.main_id def_mem()
++	set globals.id_sel globals.main_id
++	call swf_actionblock_init()
++	set globals.call_struct_bool (FALSE)
++	#2
++	call exports_init()
++	#3
++	call action_code_values_init()
++	#4
++	call push_init()
++	#
++	sd test=flagpre_write_no;and test flags
++	if test=0
++		set globals.filelength_offseted len
++		set globals.is_file_write (TRUE)
++		and flags (flag_compress)
++		if flags!=0
++			set globals.is_compress (TRUE)
+ 		else
+-			set is_file_write (FALSE)
++			set globals.is_compress (FALSE)
+ 		end
+-		#
+-		ret
+-	endif
+-	if proc=(mem_exp_free)
+-		#0 freeing all ids(main(exports,root+sprites),acs,pools) #also new sprite on error and change here will free here
+-		call struct_ids((ids_all_free))
+-		if path_mem!=(NULL)
+-			#1
+-			call mem_free(#path_mem)
+-			#2 exports
+-			sd exports
+-			setcall exports exportsId()
+-			set exports# (not_an_id)
+-			#3 set of values
+-			call action_code_values_free()
+-			#$
+-			call push()
+-			#file
+-			if file_out!=(fd_error)
+-				call file_close(#file_out)
+-			endif
+-		endif
+-		ret
+-	endif
+-	if path_mem=(NULL)
++	else
++		set globals.is_file_write (FALSE)
++	end
++end
++function swf_mem(sd proc,sd arg,sd len)
++	if globals.path_mem=(NULL)
+ 	#swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+ 		call error("there isn't a swf started")
+ 	endif
+ 	if proc=(mem_exp_add)
+ 		#blockMain blockPool
+ 		sv p_block
+-		setcall p_block call_struct((ids_get_pointer),id)
++		if globals.call_struct_bool=(FALSE)
++			setcall p_block struct_ids((ids_get_pointer),globals.id_sel)
++		else
++			setcall p_block struct_ids_actionpool((ids_get_pointer),globals.id_sel)
++		end
+ 		call mem_block_add(p_block,arg,len)
+ 	elseif proc=(mem_exp_change)
+-		set id arg
+-		set call_struct c_main
++		set globals.id_sel arg
+ 	else
+ 	#if proc==(mem_exp_done)
+-		if is_file_write=(TRUE)
++		if globals.is_file_write=(TRUE)
+ 			call swf_tag_end()
+ 
+ 			sd block
+-			setcall block call_struct((ids_get),swf_frames_reg.main_id)
++			setcall block struct_ids((ids_get),globals.main_id)
+ 			ss mem;sd size;call block_get_mem_size(block,#mem,#size)
+ 
+ 			sd pointer
+ 			set pointer mem
+-			add pointer filelength_offseted
++			add pointer globals.filelength_offseted
+ 			set pointer# size
+ 
+-			import "file_open" file_open
+-			setcall file_out file_open(path_mem,(_open_write))
++			setcall globals.file_out file_open(globals.path_mem,(_open_write))
+ 
+-			import "file_write" file_write
+-			if is_compress=(TRUE)
++			if globals.is_compress=(TRUE)
+ 				set mem# (C)
+-				add filelength_offseted (DWORD)
+-				call file_write(file_out,mem,filelength_offseted)
+-				sub size filelength_offseted
++				add globals.filelength_offseted (DWORD)
++				call file_write(globals.file_out,mem,globals.filelength_offseted)
++				sub size globals.filelength_offseted
+ 				ss dest
+ 				sv destsize
+ 				set destsize compressBound(size)
+@@ -255,46 +259,46 @@ function swf_mem(sd proc,sd arg,sd len,s
+ 				add pointer (DWORD)
+ 				sd er;set er compress(dest,#destsize,pointer,size)
+ 				if er=(Z_OK)
+-					import "file_write_mem" file_write_mem
+-					callret file_write_mem(file_out,dest,destsize) #will compress at least a RECT,ui16,ui16 + a tag(9) with the background colors
++					call file_write_mem(globals.file_out,dest,destsize) #will compress at least a RECT,ui16,ui16 + a tag(9) with the background colors
++					ret
+ 				end
+ 				call free(dest)
+ 				call error("compress error")
+ 			else
+-				call file_write(file_out,mem,size)
++				call file_write(globals.file_out,mem,size)
+ 			end
+ 		end
+ 	endelse
+ endfunction
+-function swf_mem_add(ss dest,sd size)
+-    call swf_mem((mem_exp_add),dest,size)
++function swf_mem_add(ss dest,sd size) #this is here only to evade .c number of arguments error
++    callg swf_mem((mem_exp_add),dest,size)
+ endfunction
+ function swf_tag_end()
+-    call swf_tag_recordheader_entry((End),0)
++    callg swf_tag_recordheader_entry((End),0)
+ endfunction
+ function swf_tag_recordheader_entry(sd tag,sd size)
+     if size<(recordheader_long_mark)
+         sd tag_plus_size
+-        call swf_tag_recordheader(#tag_plus_size,tag,size)
++        callg swf_tag_recordheader(#tag_plus_size,tag,size)
+     else
+-        call swf_tag_recordheader_long_entry(tag,size)
++        callg swf_tag_recordheader_long_entry(tag,size)
+     endelse
+ endfunction
+ function swf_tag_recordheader_long_entry(sd tag,sd size)
+     sd tag_plus_size
+     call swf_tag_recordheader(#tag_plus_size,tag,(recordheader_long_mark))
+-    call swf_mem_add(#size,(DWORD))
++    callg swf_mem_add(#size,(DWORD))
+ endfunction
+ const short_header=2
+ function swf_tag_recordheader(ss dest,sd tag,sd size)
+     call bits_packs(dest,2,tag,10,size,6)
+     call word_swap_arg(dest)
+-    call swf_mem((mem_exp_add),dest,(short_header))
++    callg swf_mem_add(dest,(short_header))
+ endfunction
+ function swf_tag(ss dest,sd tag,sd size)
+     call swf_tag_recordheader(dest,tag,size)
+     add dest (short_header)
+-    call swf_mem((mem_exp_add),dest,size)
++    callg swf_mem_add(dest,size)
+ endfunction
+ 
+ function swf_frames_inc(sd frames,sw pointer)
+@@ -326,6 +330,7 @@ function done_action(sd id,sd frames)
+ 	end
+ 	return size
+ end
++import "write_action_one" write_action_one
+ function done_action_one(sd id,sd finalid)
+ 	sv p_block
+ 	setcall p_block struct_ids_action((ids_get_pointer),id)
+@@ -340,102 +345,76 @@ function done_action_one(sd id,sd finali
+ 		add tagsz (WORD)
+ 		call swf_tag_recordheader_entry((DoInitAction),tagsz)
+ 		call swf_mem_add(#finalid,(WORD))
+-		import "write_action_one" write_action_one
+ 		callg write_action_one(id)
+ 	end
+ end
+-#
+-function swf_actionblock(sd proc,sd arg,sd arg2)
+-    data id#1
+-    data id_back#1
+-    sd poolid
+-	if proc=(mem_exp_change)
+-        #must verify to be a valid user input id
+-        call struct_ids_actionpool((ids_get_pointer),id)
+-        #
+-        set id arg
+-        #
+-        setcall poolid actionpoolid()
+-        set poolid# id
+-        ret
+-	endif
+-	if proc=(mem_exp_change_back)
+-        set id id_back
+-        #
+-        sd root_poolid
+-        setcall root_poolid actionpoolid_root()
+-        setcall poolid actionpoolid()
+-        set poolid# root_poolid#
+-        ret
+-	endif
+-	if proc=(mem_exp_init)
+-		set id arg
+-		set id_back id
+-		sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# id
+-		sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# id
+-
+-		call struct_ids_action_set(id,(xlog_ainit_false)) #see at part_done call struct_ids_action_set(id,(TRUE))
+-		import "pool_read" pool_read
+-		callg pool_read(id,0)
++import "pool_read" pool_read
++function swf_actionblock_init()
++	set globals.action_id globals.main_id
++	sd p_poolid;setcall p_poolid actionpoolid();set p_poolid# globals.action_id
++	sd p_poolrootid;setcall p_poolrootid actionpoolid_root();set p_poolrootid# globals.action_id
+ 
+-		ret
+-	endif
+-	sv p_block
+-	if proc=(mem_exp_add)
+-		setcall p_block struct_ids_action((ids_get_pointer),id)
+-		call mem_block_add(p_block,arg,arg2)
+-	elseif proc=(mem_exp_part_done)
+-		sd frames;sd pframes
+-		set pframes swf_sprite_frames_pointer(id)
+-		set frames word_arg_to_stack(pframes)
+-
+-		#call is_ainit((xlog_ainit_true)) this is not similiar with DoAction, has spriteid and only once per swf, and ffdec is forgetting the sprite id
+-		# and, at ruffle, can add in multiple frames, but are executed all at once before any frames, and "this" is level0 for all
+-		#then, this at done
+-
+-		sd sz
+-		call is_ainit((xlog_ainit_false))
+-		set sz done_action(id,frames)
+-
+-		if arg=(from_show) #example: two action() and one show here
+-			call debug_show(id) #id is 0/spriteid, this is good at debugger to keep the count of frames
+-			set pframes swf_sprite_frames_pointer(id) #mem was increased, pointer (maybe) was changed
++	call struct_ids_action_set(globals.action_id,(xlog_ainit_false)) #see at part_done call struct_ids_action_set(id,(TRUE))
++	callg pool_read(globals.action_id,0)
++end
++function swf_actionblock_change(sd ?id)
++	#must verify to be a valid user input id
++	call struct_ids_actionpool((ids_get_pointer),id)
++	sd poolid
++	set globals.action_id id
++	setcall poolid actionpoolid()
++	set poolid# globals.action_id
++end
++function swf_actionblock_done(sd type)
++	sd frames;sd pframes
++	set pframes swf_sprite_frames_pointer(globals.action_id)
++	set frames word_arg_to_stack(pframes)
++
++	#call is_ainit((xlog_ainit_true)) this is not similiar with DoAction, has spriteid and only once per swf, and ffdec is forgetting the sprite id
++	# and, at ruffle, can add in multiple frames, but are executed all at once before any frames, and "this" is level0 for all
++	#then, this at done
++
++	sd sz
++	call is_ainit((xlog_ainit_false))
++	set sz done_action(globals.action_id,frames)
++
++	if type=(from_show) #example: two action() and one show here
++		call debug_show(globals.action_id) #id is 0/spriteid, this is good at debugger to keep the count of frames
++		set pframes swf_sprite_frames_pointer(globals.action_id) #mem was increased, pointer (maybe) was changed
++		call swf_frames_inc(frames,pframes)
++		if sz=0 # else is an ending from show with no size
++			inc frames
++			call pool_read(globals.action_id,frames)
++		end
++	elseif globals.flag_shows=0
++		if sz!=0
++			set pframes swf_sprite_frames_pointer(globals.action_id)
+ 			call swf_frames_inc(frames,pframes)
+-			if sz=0 # else is an ending from show with no size
+-				inc frames
+-				call pool_read(id,frames)
+-			end
+-		elseif frames_as_shows.flag=0
+-			if sz!=0
+-				set pframes swf_sprite_frames_pointer(id)
+-				call swf_frames_inc(frames,pframes)
+-			elseif frames=0 #here is an ending from done with no size and no previous show
+-				set pframes swf_sprite_frames_pointer(id)
+-				call swf_frames_inc(frames,pframes) #a default frame, how was before at root, and at sprite is ok, at normal there is at least one tag inside
+-			end
++		elseif frames=0 #here is an ending from done with no size and no previous show
++			set pframes swf_sprite_frames_pointer(globals.action_id)
++			call swf_frames_inc(frames,pframes) #a default frame, how was before at root, and at sprite is ok, at normal there is at least one tag inside
+ 		end
+-	else
+-	#if proc==(mem_exp_get_block)
+-		setcall p_block struct_ids_action((ids_get_pointer),id)
+-		return p_block#
+-	endelse
++	end
+ endfunction
+ 
+ function swf_actionblock_add(sd value,sd size)
+-    call swf_actionblock((mem_exp_add),value,size)
++	sv p_block
++	setcall p_block struct_ids_action((ids_get_pointer),globals.action_id)
++	callg mem_block_add(p_block,value,size)
+ endfunction
+-function actionrecordheader_core(sd tag,sd size)
+-	char t#actionrecordheader_tag_size
+-	char length#actionrecordheader_length_size
+-	set t tag
+-	call stack_to_word_arg(size,#length)
+-	call swf_actionblock_add(#t,(actionrecordheader_size))
+-	import "debug_phase_code_add_if" debug_phase_code_add_if
+-	callg debug_phase_code_add_if((TRUE),#length)
++import "debug_phase_code_add_if" debug_phase_code_add_if
++function actionrecordheader_core(sd ?tag,sd ?size)
++	char ar#actionrecordheader_size;ss arh^ar
++	set arh# tag
++	ss psz=actionrecordheader_tag_size
++	add psz arh
++	call stack_to_word_arg(size,psz)
++	call swf_actionblock_add(arh,(actionrecordheader_size))
++	callg debug_phase_code_add_if((TRUE),psz)
+ end
++import "actionpush" actionpush
+ function actionrecordheader(sd tag,sd size)
+ #push pool dummy_jump( },for(a;,continue ) store(mixt,enum) if(remForIns) write_jump(breakW,breakForIn) writeif_jump(_add(forin,ifwithnot),break) jump(else) goto definef
+-	import "actionpush" actionpush
+ 	call actionpush()
+ 	call actionrecordheader_core(tag,size)
+ endfunction
+@@ -457,22 +436,20 @@ endfunction
+ 
+ #
+ function exports_init()
+-    sd exports
+-    setcall exports exportsId()
+     sd id
+     setcall id def_mem()
+-    set exports# id
++    set globals.exports id
+ endfunction
+ #id
+ function exportsId_get()
+-    sd e
+-    setcall e exportsId()
+-    if e#=(not_an_id);call error("Do not call the exports at this moment.");endif
+-    return e#
++    if globals.exports=(not_an_id);call error("Do not call the exports at this moment.");endif
++    return globals.exports
+ endfunction
+ 
+ function swf_showframe_base() #sd frames_pointer
+ #showframe tag
+-	call swf_actionblock((mem_exp_part_done),(from_show)) #,frames_pointer
++	call swf_actionblock_done((from_show)) #,frames_pointer
+ 	call swf_tag_recordheader_entry((ShowFrame),0)
+ endfunction
++
++entryraw globals()
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -1,6 +1,7 @@
+ Format ElfObj64
+ 
+ include "../include/prog.oh"
++include "../include/throw.h" "../include/throw.oh"
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+@@ -22,20 +23,23 @@ import "freereset" freereset   #..x with
+ import "dtitles_conclude" dtitles_conclude
+ import "free_sprite_id_actions" free_sprite_id_actions
+ import "is_ainit" is_ainit
++import "swf_mem_change_back" swf_mem_change_back
++import "swf_actionblock_change_back" swf_actionblock_change_back
++import "swf_actionblock_change" swf_actionblock_change #here id is verify first at swf_mem
+ 
+ import "ebase" ebase
+ #aftercallimport ebool
+ 
+ import "swf_mem" swf_mem
+ import "swf_mem_add" swf_mem_add
+-import "swf_actionblock" swf_actionblock
++import "swf_actionblock_done" swf_actionblock_done
+ import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+ import "error" error
+ import "swf_shape_simple" swf_shape_simple
+ import "identifiers_get" identifiers_get
+ 
+ functionX swf_new(ss path,sd width,sd height,sd backgroundcolor,sd fps)
+-	valuex bp#1;base bp;call ebase(bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callg swf_new_ex_local(path,width,height,backgroundcolor,fps,(flag_none))
+ endfunction
+ 
+@@ -43,7 +47,7 @@ import "swf_button_base" swf_button_base
+ import "swf_text_initial_font_centered" swf_text_initial_font_centered
+ #id
+ functionX swf_button(sd width,sd height,sd ButtonData)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ data def_fill#1
+ data def_line_h#1;#no pad
+ data def_line#1
+@@ -141,7 +145,7 @@ vstr actions#1
+ endfunction
+ #id
+ functionX swf_button_last(ss newtext,ss actions)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss newtext  is the new text for a new button with the attributes from the previous swf_button call
+ #ss actions  button actions
+     data shape_up#1
+@@ -171,12 +175,12 @@ endfunction
+ #id
+ import "swf_font_local" swf_font_local
+ functionX swf_font(ss fontname,sd font_flags)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callret swf_font_local(fontname,font_flags)
+ endfunction
+ #id
+ functionX swf_font_basic(ss fontname)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss fontname    = a string with the browser font, for example "_sans"
+ 	callret swf_font_local(fontname,0)
+ endfunction
+@@ -186,20 +190,20 @@ endfunction
+ #id
+ import "swf_text_local" swf_text_local
+ functionX swf_text(sd bound_width,sd bound_height,ss variablename,sd flags,sv structure)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callret swf_text_local(bound_width,bound_height,variablename,flags,structure)
+ endfunction
+ 
+ #id
+ import "swf_shape_local" swf_shape_local
+ functionX swf_shape(sd width,sd height,sd args)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callret swf_shape_local(width,height,args)
+ endfunction
+ 
+ #id
+ functionX swf_shape_basic(sd width,sd height,sd fillcolor,sd linecolor)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd width
+ #sd height
+ #sd fillcolor       RGBA color to fill the shape
+@@ -214,17 +218,17 @@ endfunction
+ #id
+ import "swf_shape_bitmap_local_repeating" swf_shape_bitmap_local_repeating
+ functionX swf_shape_bitmap(sd bitmapId,sd width,sd height)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callret swf_shape_bitmap_local_repeating(bitmapId,width,height)
+ endfunction
+ import "swf_shape_bitmap_local_clipped" swf_shape_bitmap_local_clipped
+ functionX swf_shape_bitmap_clipped(sd bitmapId,sd width,sd height)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callret swf_shape_bitmap_local_clipped(bitmapId,width,height)
+ endfunction
+ #id
+ functionX swf_shape_border(sd width,sd height,sd linesize,sd linecolor)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd width      border width
+ #sd height     border height
+ #sd linesize  line size
+@@ -262,7 +266,7 @@ endfunction
+ 
+ #id
+ functionX swf_image(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the dbl image
+ 	data width#1;data *height#1
+ 	callret swf_image_ex_local(imagepath,#width,(FALSE))
+@@ -270,34 +274,34 @@ endfunction
+ #id
+ import "swf_image_ex_local" swf_image_ex_local
+ functionX swf_image_ex(ss imagepath,sd p_wh)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath, sd p_wh
+ 	callret swf_image_ex_local(imagepath,p_wh,(FALSE))
+ endfunction
+ 
+ #id
+ functionX swf_dbl(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the dbl image
+ 	callret swf_dbl_ex_local(imagepath,(NULL),(FALSE))
+ endfunction
+ #id
+ import "swf_dbl_ex_local" swf_dbl_ex_local
+ functionX swf_dbl_ex(ss imagepath,sd p_wh)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	callret swf_dbl_ex_local(imagepath,p_wh,(FALSE))
+ endfunction
+ 
+ import "dbl_dim" dbl_dim
+ #width
+ functionX swf_dbl_width(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the dbl image
+ 	callret dbl_dim(imagepath,0)
+ endfunction
+ #height
+ functionX swf_dbl_height(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the dbl image
+ 	callret dbl_dim(imagepath,(WORD))
+ endfunction
+@@ -307,23 +311,23 @@ endfunction
+ import "swf_jpeg_local" swf_jpeg_local
+ #id
+ functionX swf_imagej(ss imagepath,sd width,sd height)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+ 	callret swf_shape_bitmap_local_repeating(id,width,height)
+ endfunction
+ functionX swf_imagej_alpha(ss imagepath,sd width,sd height,ss alphapath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath, width, height, alpha
+ 	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+ 	callret swf_shape_bitmap_local_repeating(id,width,height)
+ endfunction
+ functionX swf_imagej_clipped(ss imagepath,sd width,sd height)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+ 	callret swf_shape_bitmap_local_clipped(id,width,height)
+ endfunction
+ functionX swf_imagej_alpha_clipped(ss imagepath,sd width,sd height,ss alphapath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	sd id;setcall id swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+ 	callret swf_shape_bitmap_local_clipped(id,width,height)
+ endfunction
+@@ -338,12 +342,12 @@ endfunction
+ #Transparent Color Flag
+ #anyway, more simple is: identify -format %A a.gif
+ functionX swf_jpeg(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the dbl image
+ 	callret swf_jpeg_local(imagepath,(DefineBitsJPEG2))
+ endfunction
+ functionX swf_jpeg_alpha(ss imagepath,ss alphapath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the dbl image
+ 	callret swf_jpeg_local(imagepath,(DefineBitsJPEG3),alphapath)
+ endfunction
+@@ -352,7 +356,7 @@ import "filepath_get_word" filepath_get_
+ const gifsignature=6 #GIF89a
+ #width
+ functionX swf_gif_width(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the gif image
+ 	vstr err="invalid gif file"
+ 	#sw dim
+@@ -360,7 +364,7 @@ functionX swf_gif_width(ss imagepath)
+ endfunction
+ #height
+ functionX swf_gif_height(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #ss imagepath = path name for the gif image
+ 	#sw dim
+ 	callret filepath_get_word(imagepath,(gifsignature+WORD),swf_gif_width.err)
+@@ -372,30 +376,30 @@ import "imgx" imgx
+ 
+ #id
+ functionX swf_imagex(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
+-	callret imgx(imagepath,(NULL),(TRUE))
++	base globalw.jmp_data;call ebase(globalw.jmp_data) #consider that:
++	callret imgx(imagepath,(NULL),(TRUE))  #imgx has another base location and util.oc is not stacking them at the moment, if this is not last must compare or stack them
+ end
+ functionX swf_imagex_ex(ss imagepath,sd p_wh)
+-	base swf_new.bp;call ebase(swf_new.bp)
+-	callret imgx(imagepath,p_wh,(TRUE))
++	base globalw.jmp_data;call ebase(globalw.jmp_data) #sane
++	callret imgx(imagepath,p_wh,(TRUE))    #same
+ end
+ functionX swf_img(ss imagepath)
+-	base swf_new.bp;call ebase(swf_new.bp)
+-	callret imgx(imagepath,(NULL),(FALSE))
++	base globalw.jmp_data;call ebase(globalw.jmp_data) #same
++	callret imgx(imagepath,(NULL),(FALSE)) #same
+ end
+ functionX swf_img_ex(ss imagepath,sd p_wh)
+-	base swf_new.bp;call ebase(swf_new.bp)
+-	callret imgx(imagepath,p_wh,(FALSE))
++	base globalw.jmp_data;call ebase(globalw.jmp_data) #same
++	callret imgx(imagepath,p_wh,(FALSE))   #same
+ end
+ 
+ ##############
+ import "exportsId_get" exportsId_get
+ functionX swf_done()
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	call swf_exports_done_local();#remaining exports?
+ 
+ #	sd p;set p swf_frames_pointer()
+-	call swf_actionblock((mem_exp_part_done),(from_done)) #,p in case there are remaining actions
++	call swf_actionblock_done((from_done)) #,p in case there are remaining actions
+ 
+ #the swf is done and the total length is wrote and the memory is freed
+ 	call swf_mem((mem_exp_done))
+@@ -404,31 +408,31 @@ endfunction
+ 
+ import "swf_new_ex_local" swf_new_ex_local
+ functionX swf_new_ex(ss path,sd width,sd height,sd backgroundcolor,sd fps,sd flags)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	call swf_new_ex_local(path,width,height,backgroundcolor,fps,flags)
+ endfunction
+ 
+ import "swf_placeobject_local" swf_placeobject_local
+ functionX swf_placeobject(sd refid,sd depth)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	call swf_placeobject_local(refid,depth)
+ endfunction
+ #                                                  if not data here, then will conflict at c language where we talk about int
+ import "swf_placeobject_coords_local" swf_placeobject_coords_local
+ functionX swf_placeobject_coords(sd refid,sd depth,datax x,datax y)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	call swf_placeobject_coords_local(refid,depth,x,y)
+ endfunction
+ import "swf_removeobject_local" swf_removeobject_local
+ functionX swf_removeobject(sd depth)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	call swf_removeobject_local(depth)
+ endfunction
+ 
+ import "swf_showframe_base" swf_showframe_base
+ 
+ functionX swf_showframe()
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #	sd p;set p swf_frames_pointer()
+ 	call swf_showframe_base() #p if on error will error at unregistered input id
+ endfunction
+@@ -439,17 +443,17 @@ endfunction
+ 
+ #id
+ functionX swf_sprite_done(sd spriteid)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd spriteid        pre-id created with swf_sprite_new
+     call swf_mem((mem_exp_change),spriteid)
+ 
+-    call swf_actionblock((mem_exp_change),spriteid)
+-	call swf_actionblock((mem_exp_part_done),(from_done)) # in case there are remaining actions
+-    call swf_actionblock((mem_exp_change_back))
++	call swf_actionblock_change(spriteid)
++	call swf_actionblock_done((from_done)) # in case there are remaining actions
++	call swf_actionblock_change_back()
+ 
+     import "swf_tag_end" swf_tag_end
+     call swf_tag_end()
+-    call swf_mem((mem_exp_change_back))
++	call swf_mem_change_back()
+ 
+ 	sd id
+ 	setcall id identifiers_get()
+@@ -484,7 +488,7 @@ endfunction
+ import "new_sprite_id" new_sprite_id
+ #pre-id
+ functionX swf_sprite_new()
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #a pre-id to be used
+     sd id
+     setcall id new_sprite_id()
+@@ -498,42 +502,42 @@ functionX swf_sprite_new()
+     call swf_mem_add(#reserve,2)
+     sd frames=0
+     call swf_mem_add(#frames,2)
+-    call swf_mem((mem_exp_change_back))
++	call swf_mem_change_back()
+     return id
+ endfunction
+ functionX swf_sprite_placeobject(sd spriteid,sd object,sd depth)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd spriteid          pre-id
+ #sd object,sd depth   same as swf_placeobject
+     call swf_mem((mem_exp_change),spriteid)
+     call swf_placeobject_local(object,depth)
+-    call swf_mem((mem_exp_change_back))
++	call swf_mem_change_back()
+ endfunction
+ functionX swf_sprite_placeobject_coords(sd spriteid,sd object,sd depth,sd x,sd y)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd spriteid                   pre-id
+ #sd object,sd depth,sd x,sd y  same as swf_placeobject_coords
+     call swf_mem((mem_exp_change),spriteid)
+     call swf_placeobject_coords_local(object,depth,x,y)
+-    call swf_mem((mem_exp_change_back))
++	call swf_mem_change_back()
+ endfunction
+ functionX swf_sprite_removeobject(sd spriteid,sd depth)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd spriteid   pre-id
+ #sd depth      same as swf_removeobject
+     call swf_mem((mem_exp_change),spriteid)
+     call swf_removeobject_local(depth)
+-    call swf_mem((mem_exp_change_back))
++	call swf_mem_change_back()
+ endfunction
+ functionX swf_sprite_showframe(sd spriteid)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd spriteid   pre-id
+     call swf_mem((mem_exp_change),spriteid)
+-    call swf_actionblock((mem_exp_change),spriteid)
++	call swf_actionblock_change(spriteid)
+ #	sd p;setcall p swf_sprite_frames_pointer(spriteid)
+ 	call swf_showframe_base() #p
+-    call swf_actionblock((mem_exp_change_back))
+-    call swf_mem((mem_exp_change_back))
++	call swf_actionblock_change_back()
++	call swf_mem_change_back()
+ endfunction
+ 
+ ######################
+@@ -541,7 +545,7 @@ endfunction
+ #exports
+ 
+ functionX swf_exports_add(sd id,ss name)
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ #sd id
+ #ss name       name to be used at the actionscript
+     sd exports
+@@ -573,10 +577,12 @@ functionX swf_exports_add(sd id,ss name)
+     inc len
+     call swf_mem_add(name,len)
+     #
+-    call swf_mem((mem_exp_change_back))
++	call swf_mem_change_back()
+ endfunction
+ import "swf_exports_done_local" swf_exports_done_local
+ functionX swf_exports_done()
+-	base swf_new.bp;call ebase(swf_new.bp)
++	base globalw.jmp_data;call ebase(globalw.jmp_data)
+ 	call swf_exports_done_local()
+ endfunction
++
++entryraw globalw()
+--- actionswf-1.orig/src/tool.e.oc
++++ actionswf-1/src/tool.e.oc
+@@ -13,14 +13,14 @@ endfunction
+ 
+ include "../include/prog.oh"
+ 
++import "swf_mem_free" swf_mem_free
+ functionx freereset()
+ #this is called by user only if want to abort after some calls
+ #               and at some frees
+ 	import "debug_data" debug_data
+ 	call debug_data()
+ 	#free and set initial null/-1.....
+-	import "swf_mem" swf_mem
+-	call swf_mem((mem_exp_free))
++	call swf_mem_free()
+ endfunction
+ 
+ functionx xlog_pad_get()
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -10,18 +10,21 @@ importx "memcmp" memcmp
+ 
+ import "platform_iob" platform_iob
+ 
+-include "../include/prog.oh"
++include "../include/prog.h" "../include/prog.oh"
++
++#multithread unsafe
++vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures    ,    pool.constants
++data counter=0
++char throwless=FALSE
++charx ainit_bool#1
++data fileRes=fd_none
++valuexu basepointer#1
+ 
+ function printEr(ss msg)
+-    sd len;setcall len strlen(msg)
+-    call printEr_func(msg,(BYTE),len)
+-endfunction
+-#p
+-function printEr_func(ss msg,sd *item_size,sd *count,sd stderr)
+-#                                                    this argument is not passed, is structure last part
+-    setcall stderr platform_iob()
+-    callex fwrite #msg 4
+-    #bytes written,error:sz!=return
++	sv ?len;setcall len strlen(msg)
++	sv ?stderr;setcall stderr platform_iob()
++	call fwrite(msg,(BYTE),len,stderr)
++	#callret
+ endfunction
+ 
+ function word_swap_arg(ss word)
+@@ -34,11 +37,11 @@ function word_swap_arg(ss word)
+     set dest# word#
+     set word# aux#
+ endfunction
+-function stack_to_word_arg(sd int,ss arg)
+-    set arg# int
++function stack_to_word_arg(sd intarg,ss arg)
++    set arg# intarg
+     inc arg
+-    divu int 0x100
+-    set arg# int
++    divu intarg 0x100
++    set arg# intarg
+ endfunction
+ function word_arg_to_stack(ss arg)
+     inc arg
+@@ -92,9 +95,9 @@ function dword_swap(sd value)
+     #
+     return res
+ endfunction
+-function struct_off(sd struct,sd off)
+-    add struct off
+-    return struct#
++function struct_off(sd struct_of_ints,sd off)
++    add struct_of_ints off
++    return struct_of_ints#
+ endfunction
+ 
+ #util
+@@ -157,22 +160,22 @@ endfunction
+ #chars
+ 
+ #bool
+-function is_numeric(sd char)
+-    char min="0"^
+-    char max="9"^
+-	if char<min
+-        return (FALSE)
++function is_numeric(ss ?charvar)
++	char min="0"^
++	char max="9"^
++	if charvar<min
++		return (FALSE)
+ 	endif
+-	if char<=max
+-        return (TRUE)
++	if charvar<=max
++		return (TRUE)
+ 	endif
+-    return (FALSE)
++	return (FALSE)
+ endfunction
+ #0 1/2
+ function part_of_variable(ss value)
+-	sd bool
+-	setcall bool is_numeric(value#)
+-	if bool=(TRUE)
++	ss ?boolval
++	setcall boolval is_numeric(value#)
++	if boolval=(TRUE)
+ 		return 1
+ 	endif
+ 	callret is_letter(value)
+@@ -189,10 +192,10 @@ function is_letter(ss str)
+ 	if value=(_)
+ 		return 1
+ 	endif
+-	if value<(a)
++	if value<(a_low)
+ 		return 0
+ 	endif
+-	if value<=(z)
++	if value<=(z_low)
+ 		return 1
+ 	endif
+ 	if value>=(control2_start) #https://www.fileformat.info/info/unicode/utf8.htm  more at ascii.oh
+@@ -254,9 +257,9 @@ endfunction
+ 
+ #next/same
+ function str_expression_at_start(ss string,ss expression)
+-	sd bool
+-	setcall bool str_at_str_start(string,expression)
+-	if bool=(FALSE)
++	ss ?boolval
++	setcall boolval str_at_str_start(string,expression)
++	if boolval=(FALSE)
+ 		return string
+ 	endif
+ 	ss next
+@@ -276,7 +279,7 @@ function str_expression_at_start_withEnd
+     if pointer=ac
+         return ac
+     endif
+-    char term=";"
++    char term=";"^
+     if pointer#=term
+         inc pointer
+     endif
+@@ -298,7 +301,7 @@ endfunction
+ #newpos
+ function compat(ss pointer,sd max,ss against,sd rep)
+ 	sd s;set s strlen(against)
+-	sd return;set return max
++	ss returnval;set returnval max
+ 	add max pointer
+ 	sd start;set start pointer
+ 	sub max s
+@@ -319,34 +322,26 @@ function compat(ss pointer,sd max,ss aga
+ 		end
+ 		inc pointer
+ 	end
+-	return return
++	return returnval
+ end
+ 
+ #closings
+ 
+-import "file_close" file_close
+-function file_resources(sd trueIsSet_falseIsFree,sd fileIn)
+-    data file=fd_none
+-    if trueIsSet_falseIsFree=(TRUE)
+-        set file fileIn
+-    else
+-        if file!=(fd_none)
+-            call file_close(#file)
+-        endif
+-    endelse
+-endfunction
+ function file_resources_set(sd file)
+-    call file_resources((TRUE),file)
++	set globalt.fileRes file
+ endfunction
++import "file_close" file_close
+ function file_resources_free()
+-    call file_resources((FALSE))
++	if globalt.fileRes!=(fd_none)
++		call file_close(#globalt.fileRes)
++	endif
+ endfunction
+ 
+ #
+ 
+ function freelater()
+     #this can be after code_values(in last_free); but normal is this at action and last_free at swf_done(without this)
+-    call action_debug_free()
++    call action_debug_free_macro()
+     #
+     call file_get_content__resources_free()
+ 
+@@ -367,13 +362,12 @@ function mem_cmp_bool(ss a,ss b,sd n)
+ end
+ 
+ function mem_block_add_throwless(sv p_block,ss newblock,sd newblock_size)
+-	char throwless=FALSE
+-	set throwless (TRUE)
++	set globalt.throwless (TRUE)
+ 	call mem_block_add(p_block,newblock,newblock_size)
+-	if throwless=(FALSE)
++	if globalt.throwless=(FALSE)
+ 		return (FALSE)
+ 	end
+-	set throwless (FALSE)
++	set globalt.throwless (FALSE)
+ 	return (TRUE)
+ end
+ 
+@@ -390,12 +384,11 @@ function struct_ids_free(sd id)
+ 	endif
+ end
+ 
+-function is_ainit(sd a)
+-	charx b#1
+-	set b a
++function is_ainit(ss ?a)
++	set globalt.ainit_bool a
+ end
+ function ainit()
+-	return is_ainit.b
++	return globalt.ainit_bool
+ end
+ 
+ importx "malloc" malloc
+@@ -403,15 +396,16 @@ importx "fclose" fclose
+ 
+ import "action_error" action_error
+ import "freereset" freereset   #..x with no args
+-import "action_debug_free" action_debug_free
++import "action_debug_free_macro" action_debug_free_macro
+ import "file_get_content__resources_free" file_get_content__resources_free
+ import "pool_data" pool_data
+ 
+-function ebase(valuex bp)
++function ebase(sv bp)
++	set globalt.basepointer bp
+ end
+ 
+ function erbool()
+-	#aftercall ebool #still needed at flashalizer at aftecall_get and _reset
++	#aftercall ebool #still needed at flashalizer at aftecall_get and _reset, and at imgx
+ 	char ebool=0
+ 	return #ebool
+ endfunction
+@@ -426,7 +420,7 @@ function error(ss msg)
+ 	call freelater()
+ 
+ 	ss p;setcall p erbool();set p# 1
+-	leave ebase.bp
++	leave globalt.basepointer
+ endfunction
+ 
+ #
+@@ -455,7 +449,7 @@ endfunction
+ 
+ #id
+ function def_mem()
+-	callret struct_ids((ids_set))
++	callret struct_ids((ids_set),globalt.counter)
+ endfunction
+ #mem
+ function def_data()
+@@ -481,8 +475,8 @@ function mem_block_add(sv p_block,ss new
+ 	add sz_test newblock_size
+ 
+ 	if sz_test>^0x7fFFffFF
+-		if mem_block_add_throwless.throwless=(TRUE)
+-			set mem_block_add_throwless.throwless (FALSE)
++		if globalt.throwless=(TRUE)
++			set globalt.throwless (FALSE)
+ 			ret
+ 		end
+ 		call error("size error") #easy to test, call multiple action(...)
+@@ -496,8 +490,8 @@ function mem_block_add(sv p_block,ss new
+ 		#set allsize sz_test
+ 		setcall block realloc(block,sz_test)  #allsize
+ 		if block=(NULL)
+-			if mem_block_add_throwless.throwless=(TRUE)
+-				set mem_block_add_throwless.throwless (FALSE)
++			if globalt.throwless=(TRUE)
++				set globalt.throwless (FALSE)
+ 				ret
+ 			end
+ 			call error("realloc error at add")
+@@ -518,46 +512,34 @@ endfunction
+ 
+ #structure ids
+ 
+-function struct_ids(sd proc,sd id)
+-	vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures    ,    pool.constants
+-	vdata strct^structures
+-	data counter=0
++function struct_ids_free_all()
+ 	sv pointer
+-	if proc=(ids_counter)
+-		return counter
+-	endif
+-	if proc=(ids_all_free)
+-		#starting with ids_all_free:
+-		#                #counter increment#, then null at ac,pools
+-		#   can have errors at any point and here all are verified
+-		set pointer :;mult pointer counter;add pointer strct
+-		while strct!=pointer
+-			dec counter
+-			sub pointer :
+-			if pointer#!=(NULL)
+-				call free(pointer#)
+-				call is_ainit((xlog_ainit_false)) #at root is the only one
+-				call struct_ids_free(counter)
+-				call is_ainit((xlog_ainit_true))  #at button is the only one
+-				call struct_ids_free(counter)
+-			endif
+-		endwhile
+-		ret
+-	endif
+-
+-	sd ident
+-	if proc!=(ids_set)
+-		set ident id
+-	else
+-		set ident counter
+-	endelse
+-	setcall pointer move_to_n_pointer(strct,ident)
++	#starting with ids_all_free:
++	#                #counter increment#, then null at ac,pools
++	#   can have errors at any point and here all are verified
++	set pointer :;mult pointer globalt.counter
++	add pointer #globalt.structures  ##is ok at .c, and globalt.structures is same as #globalt.structures at .c
++	while #globalt.structures!=pointer
++		dec globalt.counter
++		sub pointer :
++		if pointer#!=(NULL)
++			call free(pointer#)
++			call is_ainit((xlog_ainit_false)) #at root is the only one
++			call struct_ids_free(globalt.counter)
++			call is_ainit((xlog_ainit_true))  #at button is the only one
++			call struct_ids_free(globalt.counter)
++		endif
++	endwhile
++end
++function struct_ids(sd proc,sd ?ident)
++	sv pointer
++	setcall pointer move_to_n_pointer(#globalt.structures,ident)
+ 	if proc=(ids_get)
+ 		return pointer#
+ 	endif
+ 	if proc=(ids_set)
+ 	#id
+-		if counter=(max_structures)
++		if globalt.counter=(max_structures)
+ 			call error("too many objects")
+ 		endif
+ 		sd newblock
+@@ -577,14 +559,14 @@ function struct_ids(sd proc,sd id)
+ 		#	endwhile
+ 		set pointer# newblock
+ 		#counter increment#
+-		sd c;set c counter;inc counter
++		sd c;set c globalt.counter;inc globalt.counter
+ 		sv ac_ptr
+ 		setcall ac_ptr struct_ids_action((ids_get_pointer),c);set ac_ptr# (NULL)  #required for example at exports and free all
+ 		#counter increment#
+ 		return ident
+ 	endif
+ 	if proc=(ids_get_pointer)
+-		if ident>=counter;call error("Unexistent input id.");endif
++		if ident>=globalt.counter;call error("Unexistent input id.");endif
+ 		return pointer
+ 	endif
+ 	#else
+@@ -596,7 +578,7 @@ function struct_ids_action(sd proc,sd id
+ 	sd v
+ 	vdatax action_structures#max_structures
+ 	vdatax action_structures_init#max_structures
+-	if is_ainit.b=(xlog_ainit_false)
++	if globalt.ainit_bool=(xlog_ainit_false)
+ 		set v struct_ids_expand(proc,id,#action_structures)
+ 	else
+ 		set v struct_ids_expand(proc,id,#action_structures_init)
+@@ -607,7 +589,7 @@ function struct_ids_actionpool(sd proc,s
+ 	sd v
+ 	vdatax action_structures#max_structures
+ 	vdatax action_structures_init#max_structures
+-	if is_ainit.b=(xlog_ainit_false)
++	if globalt.ainit_bool=(xlog_ainit_false)
+ 		set v struct_ids_expand(proc,id,#action_structures)
+ 	else
+ 		set v struct_ids_expand(proc,id,#action_structures_init)
+@@ -618,7 +600,7 @@ function struct_ids_actionpool_filter(sd
+ 	sd v
+ 	vdatax action_structures#max_structures
+ 	vdatax action_structures_init#max_structures
+-	if is_ainit.b=(xlog_ainit_false)
++	if globalt.ainit_bool=(xlog_ainit_false)
+ 		set v struct_ids_expand(proc,id,#action_structures)
+ 	else
+ 		set v struct_ids_expand(proc,id,#action_structures_init)
+@@ -635,8 +617,7 @@ function struct_ids_expand(sd proc,sd id
+ 		setcall pointer# def_data()
+ 	elseif proc=(ids_get_pointer)
+ 		#call to verify if the user input has a wrong id
+-		sd c;setcall c struct_ids((ids_counter))
+-		if id>=c;call error("Unregistered input id.");endif
++		if id>=globalt.counter;call error("Unregistered input id.");endif
+ 		#
+ 		return pointer
+ 	else
+@@ -681,44 +662,46 @@ endfunction
+ 
+ #pointer after "abc"
+ function str_escape(ss src,ss dest,sd delim)
+-    sd loop=1
+-    sd escapes=0
+-    inc src
+-    while loop=1
+-    if src#=delim
+-        set loop 0
+-    #elseif src#==delim2
+-    #    set loop 0
+-    else
+-        char escape="\\"
+-        while src#=escape
+-            if escapes=0
+-                set escapes 1
+-            else
+-                set dest# src#
+-                inc dest
+-                set escapes 0
+-            endelse
+-            inc src
+-        endwhile
+-        if src#=0
+-            call error("end string expected")
+-        endif
+-        if escapes=1
+-            set dest# src#
+-            inc src
+-            inc dest
+-            set escapes 0
+-        elseif src#!=delim
+-            #if src#!=delim2
+-                set dest# src#
+-                inc src
+-                inc dest
+-            #endif
+-        endelseif
+-    endelse
+-    endwhile
+-    set dest# 0
+-    inc src
+-    return src
++	sd loop=1
++	sd escapes=0
++	inc src
++	while loop=1
++		if src#=delim
++			set loop 0
++		#elseif src#==delim2
++		#    set loop 0
++		else
++			char esc="\\"^
++			while src#=esc
++				if escapes=0
++					set escapes 1
++				else
++					set dest# src#
++					inc dest
++					set escapes 0
++				endelse
++				inc src
++			endwhile
++			if src#=0
++				call error("end string expected")
++			endif
++			if escapes=1
++				set dest# src#
++				inc src
++				inc dest
++				set escapes 0
++			elseif src#!=delim
++				#if src#!=delim2
++				set dest# src#
++				inc src
++				inc dest
++				#endif
++			endelseif
++		endelse
++	endwhile
++	set dest# 0
++	inc src
++	return src
+ endfunction
++
++entryraw globalt()

@@ -1,0 +1,36 @@
+Format ElfObj64
+
+import "erbool" erbool
+functionx erbool_get()
+    ss p;setcall p erbool()
+    return p#
+endfunction
+
+functionx erbool_reset()
+    ss p;setcall p erbool()
+    set p# 0
+endfunction
+
+include "../include/prog.oh"
+
+functionx freereset()
+#this is called by user only if want to abort after some calls
+#               and at some frees
+	import "debug_data" debug_data
+	call debug_data()
+	#free and set initial null/-1.....
+	import "swf_mem" swf_mem
+	call swf_mem((mem_exp_free))
+endfunction
+
+functionx xlog_pad_get()
+	char pad=xlog_pad_default
+	return pad
+endfunction
+functionx xlog_pad_set(sd new_pad)
+	if new_pad!=0
+		set xlog_pad_get.pad new_pad
+	else #it is div mult and at 1 is equal at 0 is bad
+		set xlog_pad_get.pad 1
+	end
+endfunction
