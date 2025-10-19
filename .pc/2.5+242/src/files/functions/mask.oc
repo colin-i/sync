@@ -1,0 +1,52 @@
+
+
+
+#mask bit
+function data_get_maskbit(sd pointer,sd bit)
+	add pointer (maskoffset)
+	and bit pointer#
+	return bit
+endfunction
+function importbit(sd pointer)
+	callret data_get_maskbit(pointer,(idatabitfunction))
+endfunction
+function stackbit(sd pointer)
+	callret data_get_maskbit(pointer,(stackbit))
+endfunction
+function stackrelativebit(sd pointer)
+	callret data_get_maskbit(pointer,(stackrelativebit))
+endfunction
+function datapointbit(sd pointer)
+	callret data_get_maskbit(pointer,(datapointbit))
+endfunction
+function expandbit(sd pointer)
+	callret data_get_maskbit(pointer,(expandbit))
+endfunction
+function expandbit_wrap(sd pointer)
+	vdata ptr_nobits_virtual%ptr_nobits_virtual
+	if ptr_nobits_virtual#=(Yes)
+		callret data_get_maskbit(pointer,(expandbit))
+	endif
+	return 0
+endfunction
+function pointbit(sd pointer)
+	callret data_get_maskbit(pointer,(pointbit))
+endfunction
+function suffixbit(sd pointer)
+	callret data_get_maskbit(pointer,(suffixbit))
+endfunction
+function signbit(sd pointer)
+	callret data_get_maskbit(pointer,(signbit))
+endfunction
+
+function stack_get_relative(sd location)
+	sd mask
+	set mask location
+	add mask (maskoffset)
+	set mask mask#
+	and mask (stackrelativebit)
+	if mask=0
+		return (ebxregnumber)
+	endif
+	return (ebpregnumber)
+endfunction

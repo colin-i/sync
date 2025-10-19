@@ -1,0 +1,471 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+242) xenial; urgency=medium
+ .
+   * sss fix extension at declare/operations
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-10-19
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+241
++2-5+242
+--- ocompiler-2.orig/makewin
++++ ocompiler-2/makewin
+@@ -1,4 +1,4 @@
+-
++set -e
+ #this is the new make for windows
+ 
+ OCOMP=o
+@@ -9,25 +9,26 @@ fi
+ 
+ #must also use mingw-w64-i686-dev
+ 
+-${OCOMP} ./src/windows/obj32.oc inplace_reloc 0 ${OFLAGS} && \
++${OCOMP} ./src/windows/obj32.oc inplace_reloc 0 ${OFLAGS}
+ #argc argv? more info at obj.oc. _WinMain@16
+-i686-w64-mingw32-ld -O3 -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe && \
+-ounused ./src/windows/obj32.oc.log && \
+-\
+-rm ./src/windows/obj32.o && \
+-rm ./src/windows/obj32.oc.log && \
+-\
+-mkdir ocompiler && \
+-mv o.exe ocompiler && \
+-cp ocompiler.conf ocompiler && \
++i686-w64-mingw32-ld -O3 -s -entry=main ./src/windows/obj32.o -lmsvcrt -luser32 -lkernel32 -lcomdlg32 -lshell32 -o ./o.exe
++ounused ./src/windows/obj32.oc.log
+ \
+-cd ounused && platform=win launcher=wine6 OCOMP=../ocompiler/o.exe make && \
+-mv ounused.exe ../ocompiler && make clean && cd .. && \
++rm ./src/windows/obj32.o
++rm ./src/windows/obj32.oc.log
+ \
+-cd otoc && platform=win launcher=wine6 OCOMP="wine6 ../ocompiler/o.exe" OLINK="wine6 ../ocompiler/ounused.exe" OFLAGSEXTRA="inplace_reloc 0" make && \
+-mv otoc.exe ../ocompiler && make clean && cd ../tests && OCOMP="wine6 ../ocompiler/o.exe" OCONV="wine6 ../ocompiler/otoc.exe" ./db a.out && ./c1 a.out && ./c && cd .. && \
++mkdir ocompiler
++mv o.exe ocompiler
++cp ocompiler.conf ocompiler
++echo;echo to ounused;echo
++cd ounused && platform=win launcher=wine6 OCOMP=../ocompiler/o.exe make
++mv ounused.exe ../ocompiler && make clean && cd ..
++echo;echo to otoc;echo
++cd otoc && platform=win launcher=wine6 OCOMP="wine6 ../ocompiler/o.exe" OLINK="wine6 ../ocompiler/ounused.exe" OFLAGSEXTRA="inplace_reloc 0" make
++echo;echo to tests;echo
++mv otoc.exe ../ocompiler && make clean && cd ../tests && OCOMP="wine6 ../ocompiler/o.exe" winlauncher=wine6 OCONV="../ocompiler/otoc.exe" ./db a.out && ./c1 a.out && ./c && cd ..
+ \
+-zip -r ocompiler.zip ocompiler && \
+-rm -r ./ocompiler && \
++zip -r ocompiler.zip ocompiler
++rm -r ./ocompiler
+ \
+ unzip -l ocompiler.zip
+--- ocompiler-2.orig/src/files/actions/main/index/import.oc
++++ ocompiler-2/src/files/actions/main/index/import.oc
+@@ -90,10 +90,10 @@ If errormsg=noerr
+ 											Call spaces(pcontent,pcomsize)
+ 											if comsize!=0
+ 												if content#!=(commentascii)
+-													ss cursor;set cursor content
++													ss impcursor;set impcursor content
+ 													call stepcursors(pcontent,pcomsize)
+ 													call notspaces(pcontent,pcomsize) #optional xfile number of arguments
+-													setcall errormsg xfile_add_import_nr_if(cursor,content)
++													setcall errormsg xfile_add_import_nr_if(impcursor,content)
+ 												else
+ 													setcall errormsg xfile_add_import_nr0_if()
+ 												endelse
+--- ocompiler-2.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-2/src/files/functions/actions/dataparse.oc
+@@ -110,7 +110,11 @@ Function addvarreference(sv ptrcontent,s
+ 			endelse
+ 			or mask (stackbit)
+ 			sd vbool
+-			if typenumber=(stackvaluenumber);set vbool (TRUE);else;setcall vbool sd_as_sv((sd_as_sv_bool),typenumber);endelse
++			if typenumber=(stackvaluenumber)
++				set vbool (TRUE)
++			else
++				setcall vbool sd_as_sv((sd_as_sv_bool),typenumber)
++			endelse
+ 			if vbool=(TRUE)
+ 				or mask (pointbit)
+ 			endif
+--- ocompiler-2.orig/src/files/functions/actions/declare.oc
++++ ocompiler-2/src/files/functions/actions/declare.oc
+@@ -67,7 +67,7 @@ function declare(sv pcontent,sd pcomsize
+ 		endelse
+ 	elseif declare_typenumber=(vstringnumber)
+ 		set is_stack (FALSE);set typenumber (stringnumber)
+-		if bool_64=(TRUE);set mask (datapointbit)
++		if bool_64=(TRUE);set mask (stringslongmask)
+ 			if parses=(pass_init)
+ 				set unitsize (qwsz)
+ 			else
+@@ -138,25 +138,26 @@ function declare(sv pcontent,sd pcomsize
+ 				endelse
+ 			endelse
+ 		else
++			set mask (dummy_mask)   #at pass_write, mask is used where stack is false (dataassign with stack false, descend into enumcomma and writevar again with stack false)
++			# at stack at bigstringbit
+ 			if is_stack=(TRUE)
+ 				#must be at the start
+ 				call entryscope_verify_code()
+ 
+-				#xfile part
+ 				if typenumber=(valuesinnernumber)
+ 					set xfile_decltype (Xfile_decltype_long)
+ 				elseif typenumber=(integernumber)
+ 					set xfile_decltype (Xfile_decltype_longInt)
+ 				elseif typenumber=(stringnumber)
+ 					set xfile_decltype (Xfile_decltype_longByte)
++					if bool_64=(TRUE)
++						set mask (bigstringbit)
++					endif
+ 				else
+ 				#if typenumber=(wordnumber)
+ 					set xfile_decltype (Xfile_decltype_longWord)
+ 				endelse
+ 			else
+-				set mask (dummy_mask)   #at pass_write, mask is used where stack is false (dataassign with stack false, descend into enumcomma and writevar again with stack false)
+-				#                                         at stack is beginning with dummy_mask
+-
+ 				#xfile part
+ 				if typenumber=(constantsnumber)
+ 					set xfile_decltype (Xfile_decltype_const)
+--- ocompiler-2.orig/src/files/functions/actions/enumcomma.oc
++++ ocompiler-2/src/files/functions/actions/enumcomma.oc
+@@ -7,7 +7,7 @@ function writevar(sd ptrvalue,sd unitsiz
+ 	data false=FALSE
+ 	data ptrobject%ptrobject
+ 
+-	sd for_64;sd test
++	sd for_64;sd extval
+ 
+ 	if stack=false
+ 		data ptrdatasec%%ptr_datasec
+@@ -41,21 +41,8 @@ function writevar(sd ptrvalue,sd unitsiz
+ 		endif
+ 		SetCall err addtosec(ptrvalue,unitsize,ptrdatasec);If err!=noerr;Return err;EndIf
+ 		if long_mask!=(dummy_mask)
+-			whiletrue
+-				if is_signed=(Xfile_declext_no) #signed (default) for long
+-					set test (sign_bit)
+-					and test ptrvalue#
+-					if test!=0
+-						data negative=-1
+-						SetCall err addtosec(#negative,(dwsz),ptrdatasec)
+-						break
+-					end
+-				end
+-				data null=0
+-				SetCall err addtosec(#null,(dwsz),ptrdatasec)
+-				break
+-			endwhile
+-			return err
++			setcall extval writevar_ext(is_signed,long_mask,ptrvalue#)
++			callret addtosec(#extval,(dwsz),ptrdatasec)
+ 		endif
+ 		return (noerror)
+ 	endif
+@@ -81,24 +68,30 @@ function writevar(sd ptrvalue,sd unitsiz
+ 	endif
+ 	if rightstackpointer!=(NULL)
+ 		#s^s
+-		setcall err addtocodeforstack(rightstackpointer,for_64)
+-	else
+-		#s=consts
+-		whiletrue
+-			if is_signed=(Xfile_declext_no) #signed (default) ,stack values are long
+-				set test (sign_bit)
+-				and test ptrvalue#
+-				if test!=0
+-					#keep sign, for comparations
+-					setcall err addtocodefordata(ptrvalue#,for_64,-1)
+-					break
+-				end
+-			end
+-			setcall err addtocodefordata(ptrvalue#,for_64,0)
++		callret addtocodeforstack(rightstackpointer,for_64)
++	endif
++	#s=consts
++	setcall extval writevar_ext(is_signed,long_mask,ptrvalue#)
++	callret addtocodefordata(ptrvalue#,for_64,extval)
++endfunction
++#0/-1
++function writevar_ext(sd is_signed,sd mask,sd val)
++	and mask (bigstringbit)
++	whiletrue  #same as at imm dependent
++		if is_signed=(Xfile_declext_no)
++			if mask!=0
++				break
++			endif
++		elseif mask=0
+ 			break
+-		endwhile
+-	endelse
+-	return err
++		endelseif
++		and val (sign_bit)
++		if val!=0
++			return -1
++		endif
++		break
++	endwhile
++	return 0
+ endfunction
+ 
+ const fndecandgroup=1
+--- ocompiler-2.orig/src/files/functions/actions/fndecargs.oc
++++ ocompiler-2/src/files/functions/actions/fndecargs.oc
+@@ -70,6 +70,9 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 			set xfile_decltype (Xfile_decltype_longInt)
+ 		elseif vartype=(stackstringnumber)
+ 			set xfile_decltype (Xfile_decltype_longByte)
++			if b=(TRUE)
++				or long_mask (bigstringbit) #only this OR is ignored at 32, but why to OR?
++			endif
+ 		elseif vartype=(stackvaluenumber)
+ 			set xfile_decltype (Xfile_decltype_long)
+ 		else
+@@ -88,8 +91,12 @@ Function fndecargs(sv ptrcontent,sd ptrs
+ 				set xfile_decltype (Xfile_decltype_long)
+ 			else
+ 				if b=(TRUE)
+-					or long_mask (datapointbit)
+ 					set datasize (qwsz)
++					if vartype=(stringnumber)
++						or long_mask (stringslongmask)
++					else
++						or long_mask (datapointbit)
++					endelse
+ 				endif
+ 				if vartype=(integernumber)
+ 					set xfile_decltype (Xfile_decltype_longInt)
+--- ocompiler-2.orig/src/files/functions/argument/imm.oc
++++ ocompiler-2/src/files/functions/argument/imm.oc
+@@ -101,9 +101,18 @@ endfunction
+ function write_imm_sign_dependent(sd val,sd regopcode,sd dataargdependent)
+ 	sd s
+ 	set s signbit(dataargdependent)
+-	if s=0 #signed (default)
++	sd t
++	set t bstringsbit(dataargdependent)
++	whiletrue
++		if s=0 # not u/s sign (default)
++			if t!=0
++				break #ss/vstr[x]
++			endif
++		elseif t=0
++			break # sdu/svu/vdata[x]u/value[x]u
++		endelseif
+ 		callret write_imm_sign(val,regopcode)
+-	end
++	endwhile
+ 	#unsigned
+ 	callret write_imm_simple(val,regopcode)
+ endfunction
+--- ocompiler-2.orig/src/files/functions/dataassign.oc
++++ ocompiler-2/src/files/functions/dataassign.oc
+@@ -43,7 +43,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 				setcall immovable_struct_cont getstructcont(sectiontypenumber)
+ 				call getcontReg(immovable_struct_cont,#reg)
+ 				#
+-				SetCall err addvarreferenceorunref_signed(ptrcontent,ptrsize,valsize,sectiontypenumber,(dummy_mask),is_signed,0) #there is 1 more argument but is not used
++				SetCall err addvarreferenceorunref_signed(ptrcontent,ptrsize,valsize,sectiontypenumber,long_mask,is_signed,0) #there is 1 more argument but is not used
+ 			else
+ 				#
+ 				setcall immovable_struct_cont getstructcont(typenumber)
+--- ocompiler-2.orig/src/files/functions/mask.oc
++++ ocompiler-2/src/files/functions/mask.oc
+@@ -38,6 +38,9 @@ endfunction
+ function signbit(sd pointer)
+ 	callret data_get_maskbit(pointer,(signbit))
+ endfunction
++function bstringsbit(sd pointer)
++	callret data_get_maskbit(pointer,(bigstringbit))
++endfunction
+ 
+ function stack_get_relative(sd location)
+ 	sd mask
+--- ocompiler-2.orig/src/files/headers/header.oh
++++ ocompiler-2/src/files/headers/header.oh
+@@ -37,11 +37,15 @@ const signbit=0x200
+ #bit offset 10: struct like bit
+ const structbit=0x400
+ 
+-#11,12,13,14,15
++#bit offset 11: atm is used only at 64 at sss/ss,... at args2 to get imm sign/zero extended
++const bigstringbit=0x800
++
++#12,13,14,15
+ #16-31: reserve units
+ 
+ const dummy_mask=0
+ const valueslongmask=datapointbit|pointbit
++const stringslongmask=datapointbit|bigstringbit
+ const location_bits=stackbit|expandbit
+ const stack_location_bits=location_bits|stackrelativebit    #and expandbit? will be always 0 at stack, keep it clean from what we combine
+ 
+--- ocompiler-2.orig/tests/.expected/a.out.c
++++ ocompiler-2/tests/.expected/a.out.c
+@@ -60,6 +60,7 @@ void      f(int* dummy,...){//void f(...
+ 	};
+ };
+ long*     main(int* argc,...){
++	signed char* sigextstr=-1;sigextstr=(long)-2;
+ 	b=(long)b;
+ 	b=(long)b+(long)sizeof(struct st);
+ 	b=(long)b-(long)sizeof(struct st);
+--- ocompiler-2.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-2/tests/.expected/a.out.oc.x.txt
+@@ -26,30 +26,31 @@ YQEACgAAAAEAAABiAEUCAAAAAQAAAGEBUwoAAAAB
+ RQIAAAABAAAAYQFECgAAAAEAAABiAEUCAAAAAQAAAGEBVggCAQEFAAABAAAAYwEAAwEAAAAxHwgC
+ AAEHAAABAAAAZAAAAQAAAGMKAAAAAQAAAGEARQIAAQABAAAAZAEBAgAAAHN0AQAAAGEADQAAAwEA
+ AAAyH4UAAAMBAAAAMh8VFAAUARYAAQAAAGEXBAAAAHB1dHMXBgAAAHByaW50ZhcHAAAAc3ByaW50
+-ZgcDAQQAAABtYWluAQAAAAEBBgAABAAAAGFyZ2MKAAAAAQAAAGIARQIAAAABAAAAYgAKAAAAAQAA
+-AGIAKwAACAIAAABzdB8KAAAAAQAAAGIALQAACQIAAABzdB8KAAAAAQAAAGIAKgAACwIAAABzdAEA
+-AABhAB8KAAAAAQAAAGIATQAACwIAAABzdAEAAABhAB8KAAAAAgAAAGMxAC8AAAwCAAAAc3QBAAAA
+-YQAfCgAAAAIAAABjMQBEAAAKAgAAAHN0HwoAAAACAAAAYzEAJQAAAwEAAAAxHwoAAAACAAAAYzEA
+-UgAAAwEAAAAxHwoAAAACAAAAYzEAJgAAAwEAAAAxHwoAAAACAAAAYzEAfAAAAwEAAAAxHwoAAAAB
+-AAAAYgBeAAADAQAAADEfIBkDAAAAAQAfAgEfAwIrEAADAQAAADErAAQCAAAAMDErAAUDAAAAMHgy
+-KwAHBgAAAHhfZmlsZSsACAYAAABpbnRlcm4rAAkGAAAAaW50ZXJuKwALBgAAAGludGVybgEAAABh
+-ACsADAYAAABpbnRlcm4BAAAAYQAYHwsAAAYAAABpbnRlcm4EAAAAAgAAAQQAAABtYWluAQAAAGEA
+-AgABAQQAAABtYWluAQAAAGEAAAEAAABhAAEAEgAAADAKMQ0yCTMANFw1IjZ4M2cwNwAAAwEAAAAx
+-HwoAAAABAAAAYgBFAwAGAAAAcHJpbnRmAgAAAAIAAAABAAAAYgACAAAAAQAAAGIADQAAAwEAAAAx
+-H4UAAAMBAAAAMR8CCwAAAGVsc2VpZiAxISExAgoAAABlbHNlaWYgMSExFAANAAADAQAAADEfhAAA
+-AwEAAAAxHw4AAAMBAAAAMR+NAAADAQAAADEfDx0UAA0AAAMBAAAAMR+OAAADAQAAADEfHRQADQAA
+-AwEAAAAxH48AAAMBAAAAMR8dFAANAAADAQAAADEfjAAAAwEAAAAxHx0UAA0AAAMBAAAAMR+DAAAD
+-AQAAADEfHRQADQAAAwEAAAAxH4YAAAMBAAAAMR8dFAANAAADAQAAADEfhwAAAwEAAAAxHx0UAA0A
+-AAMBAAAAMR+CAAADAQAAADEfHRQAIAwAAAEAAABiAAAAAQAAAGIAAAADAQAAADEfEAAAAwEAAAAx
+-H4UAAAMBAAAAMh8TFAAREhQACAIAAAAAAAEAAAB6AgAABQQAAAAweGZmKwAEAwAAADA3NysAAwIA
+-AAAxMi0AAwEAAAAzKxAAAwEAAAA0KgADAQAAADMvAAMBAAAAMlwAAwEAAAAxJgADAQAAADF8AAMB
+-AAAAMV4AAwEAAAAxJQADAQAAADU6AAMBAAAANVsAAwEAAAAzXQADAQAAADN9AAMBAAAAMz0AAwEA
+-AAAyZQADAQAAADI8AAMBAAAAMz4AAwEAAAAzTAADAQAAADRHAAMBAAAANGEAAwEAAAA3bwADAQAA
+-ADd1AAMBAAAANlUAAwEAAAA2bAADAQAAADZnAAMBAAAANhgfHQIkAAAAY2hhciBlcj0zISEyIGNo
+-YXIgZXI9MyEyIGNoYXIgZXI9MyQyCAIAAAAAAAIAAAB6MgIAAAYCAAAAYTEfHQgCAAAAAAACAAAA
+-ejMCAAEGAgAAAGExHx0IAgAAAAAAAgAAAHo0AgACBgIAAABhMR8dCAIAAAAAAAIAAAB6NQIAAwYC
+-AAAAYTEfCAIAAAAAAAIAAABxMQIAAAAfHQgCAAAAAAACAAAAcTICAAAIAgAAAHN0Hx0IAgAAAAAA
+-AgAAAHEzAgAADAIAAABzdAEAAABhAB8dCAIAAAAAAAIAAABxNAIAAAsCAAAAc3QBAAAAYQAfGAAB
+-AwAAAHRzdBoGAAAAeF9maWxlAAMBAAAAMR8cCQEAAAMBAAAAMh8gCAIAAQcAAAsAAAB0aGVfam1w
+-X2J1ZgEAAwEAAAAxHwkIAAAACwAAAHRoZV9qbXBfYnVmAAsBAAQAAABtYWluAQAAAAAABAEAAAAw
+-Hw==
++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
++MB8=
+--- ocompiler-2.orig/tests/.expected/a.out.txt
++++ ocompiler-2/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+ f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAp5UECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAh1AAAAdQAAAAYAAAAAEAAAAQAAAHUEAAB1lAQIdZQECGIDAABiAwAABQAAAAAQ
+-AAADAAAA1wcAANeXBAjXlwQIEwAAABMAAAAEAAAAAQAAAAIAAADqBwAA6qcECOqnBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAOoHAADqpwQI6qcECOIAAADiAAAABgAAAAAQAAAIAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQAAAAMAAAACAAAAgqgECIIIAAAaAAAAAAAAAAAAAAAB
+-AAAAAAAAABEAAAAGAAAAAwAAAOqnBAjqBwAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++BAAAAIQECACEBAh1AAAAdQAAAAYAAAAAEAAAAQAAAHUEAAB1lAQIdZQECHkDAAB5AwAABQAAAAAQ
++AAADAAAA7gcAAO6XBAjulwQIEwAAABMAAAAEAAAAAQAAAAIAAAABCAAAAagECAGoBAhQAAAAUAAA
++AAQAAAABAAAAAQAAAAEIAAABqAQIAagECOIAAADiAAAABgAAAAAQAAAIAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQAAAAMAAAACAAAAmagECJkIAAAaAAAAAAAAAAAAAAAB
++AAAAAAAAABEAAAAGAAAAAwAAAAGoBAgBCAAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -23,18 +23,18 @@ CP8CujSEBAj/CroUAAAAA9WDAgS6FAAAAAPVgyoE
+ yVvDuhQAAAAD1dEiuhQAAAAD1dEquhQAAAAD1dE6uhgAAAAD1YsCyVvDU1WL7IvcyVvDU1WL7Ivc
+ uECEBAi6bYQECIkCum2EBAiLEosCukCEBAiJArpthAQIixIPtgK6QIQECIkCum2EBAiLEosCukCE
+ BAiJArpthAQIixKLArpAhAQIiQK6bYQECIsSiwK6QIQECIkCukSEBAiLEoPCBIsCum2EBAiJArgC
+-AAAAuQIAAAA5wQ+FAwAAAMlbw8lbw1NVi+yL3LorhAQIiwK6K4QECIkCuAQAAAC6K4QECAECuAQA
+-AAC6K4QECCkCuQQAAAC6K4QECIsC9+G6K4QECIkCuQQAAAC6K4QECIsC9+m6K4QECIkCsQS6AIQE
+-CIoCD7rgB3MFxsT/6wPGxAD2+YgCsQi6AIQECIoCxsQA9vGIArEBugCEBAiKAg+64AdzBcbE/+sD
+-xsQA9vmIIrEBugCEBAiKAsbEAPbxiCKwAboAhAQIIAKwAboAhAQICAK4AQAAALorhAQIMQL8t4WL
+-47oohAQID7YCULpQhAQID7YCULpIhAQIi8JQaAEAAADo2/3//4vjuiuEBAiLAlC6K4QECIsCULjE
+-qAQI/xC6K4QECIkCuAEAAAC5AQAAADnBD4UAAAAAuAEAAAC5AQAAADnBD4QFAAAA6RcAAAC4AQAA
+-ALkBAAAAOcEPjQUAAADpAAAAALgBAAAAuQEAAAA5wQ+OAAAAALgBAAAAuQEAAAA5wQ+PAAAAALgB
+-AAAAuQEAAAA5wQ+MAAAAALgBAAAAuQEAAAA5wQ+DAAAAALgBAAAAuQEAAAA5wQ+GAAAAALgBAAAA
+-uQEAAAA5wQ+HAAAAALgBAAAAuQEAAAA5wQ+CAAAAAIvjuQEAAAC6K4QECIsCgfkAAAAAdAf/yf80
+-iOvxuCuEBAj/ELgCAAAAuQEAAAA5wQ+FBQAAAOnp////zLgBAAAAx8MCAAAAzYC6ZYQECIkqi+No
+-AAAAAOjT/f//yVvDL2xpYi9sZC1saW51eC5zby4yAAEAAAAAAAAABAAAADqoBAgGAAAAUqgECAsA
+-AAAQAAAABQAAAIKoBAgKAAAAGgAAAAcAAACcqAQICAAAACQAAAAJAAAADAAAAAAAAAAAAAAAAQAA
+-AAMAAAAAAAAAAAAAAAEAAAACAAAAAgAAAAAAAAAAAAAAEgAAAAQAAAAAAAAAAAAAABIAAAAGAAAA
+-AAAAAAAAAAASAAAAYQBiAGMAZgAALmR5bnN0cgAuZHluYW1pYwDAqAQIAQAAAAAAAADEqAQIAQEA
+-AAAAAADIqAQIAQIAAAAAAAAAAAAAAAAAAAAAAAA=
++AAAAuQIAAAA5wQ+FAwAAAMlbw8lbw1NVi+yL3IHrBAAAALj/////iUMAuP7///+L04kCuiuEBAiL
++ArorhAQIiQK4BAAAALorhAQIAQK4BAAAALorhAQIKQK5BAAAALorhAQIiwL34borhAQIiQK5BAAA
++ALorhAQIiwL36borhAQIiQKxBLoAhAQIigIPuuAHcwXGxP/rA8bEAPb5iAKxCLoAhAQIigLGxAD2
++8YgCsQG6AIQECIoCD7rgB3MFxsT/6wPGxAD2+YgisQG6AIQECIoCxsQA9vGIIrABugCEBAggArAB
++ugCEBAgIArgBAAAAuiuEBAgxAvy3hYvjuiiEBAgPtgJQulCEBAgPtgJQukiEBAiLwlBoAQAAAOjE
++/f//i+O6K4QECIsCULorhAQIiwJQuNuoBAj/ELorhAQIiQK4AQAAALkBAAAAOcEPhQAAAAC4AQAA
++ALkBAAAAOcEPhAUAAADpFwAAALgBAAAAuQEAAAA5wQ+NBQAAAOkAAAAAuAEAAAC5AQAAADnBD44A
++AAAAuAEAAAC5AQAAADnBD48AAAAAuAEAAAC5AQAAADnBD4wAAAAAuAEAAAC5AQAAADnBD4MAAAAA
++uAEAAAC5AQAAADnBD4YAAAAAuAEAAAC5AQAAADnBD4cAAAAAuAEAAAC5AQAAADnBD4IAAAAAi+O5
++AQAAALorhAQIiwKB+QAAAAB0B//J/zSI6/G4K4QECP8QuAIAAAC5AQAAADnBD4UFAAAA6en////M
++uAEAAADHwwIAAADNgLplhAQIiSqL42gAAAAA6Lz9///JW8MvbGliL2xkLWxpbnV4LnNvLjIAAQAA
++AAAAAAAEAAAAUagECAYAAABpqAQICwAAABAAAAAFAAAAmagECAoAAAAaAAAABwAAALOoBAgIAAAA
++JAAAAAkAAAAMAAAAAAAAAAAAAAABAAAAAwAAAAAAAAAAAAAAAQAAAAIAAAACAAAAAAAAAAAAAAAS
++AAAABAAAAAAAAAAAAAAAEgAAAAYAAAAAAAAAAAAAABIAAABhAGIAYwBmAAAuZHluc3RyAC5keW5h
++bWljANeoBAgBAAAAAAAAANuoBAgBAQAAAAAAAN+oBAgBAgAAAAAAAAAAAAAAAAAAAAAAAA==
+--- ocompiler-2.orig/tests/a.out.oc
++++ ocompiler-2/tests/a.out.oc
+@@ -69,6 +69,7 @@ import "b" puts
+ ^import "f" sprintf 2v
+ 
+ entryv main(sd argc)
++	sss sigextstr=-1;set sigextstr -2
+ 	set b b
+ 	add b \st
+ 	sub b \\st
+--- ocompiler-2.orig/tests/db
++++ ocompiler-2/tests/db
+@@ -1,6 +1,7 @@
+-
++set -e
+ if [ -z "${OCONV}" ]; then OCONV=../otoc/otoc; fi
+ a=${1}
+ shift
+ . ./xb $a
++if [ -n "${winlauncher}" ]; then launcher=${winlauncher}; fi
+ ${launcher} ${OCONV} $a.oc.x import $@
