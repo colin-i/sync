@@ -1,0 +1,93 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x83) focal; urgency=medium
+ .
+   * display nr of rows. timeout option
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-11-03
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -464,7 +464,7 @@ static bool findingf(bar_byte cursor,siz
+ 	}
+ 	size_t b=i;
+ 	size_t e=rows_tot;
+-	findingf_for:
++	findingf_for: ; //  for ; more at main.c loopin
+ 	//for(;;){
+ 		int a=inputcmp(rows[i].data,rows[i].sz,cursor);
+ 		if(a>=0){xtext=a;ytext=i;return true;}
+@@ -515,7 +515,7 @@ static bool findingb(bar_byte cursor,siz
+ 	}
+ 	size_t b=i;
+ 	size_t e=0;
+-	findingb_for:
++	findingb_for: ;
+ 	//for(;;){
+ 		int a=inputrcmp(rows[i].data,rows[i].sz,cursor);
+ 		if(a>=0){xtext=a;ytext=i;return true;}
+@@ -617,7 +617,7 @@ static row_dword calculate_for_find_repl
+ }
+ static bool replace_text(WINDOW*w,int yb,int xb,int rstart,int rstop,bar_byte cursor,row_dword*nr_re_ct){
+ 	vis('R',w);
+-	replace_text_for:
++	replace_text_for: ;
+ 	//for(;;){
+ 		int c=wgetch(w);
+ 		if(c==Char_Return){
+@@ -1028,7 +1028,7 @@ bool undo_delk(size_t yb,row_dword xb,si
+ 	return undo_add_del(yb,xb,ye,xe);
+ }
+ void undo_loop(WINDOW*w){
+-	undo_loop_for:
++	undo_loop_for: ;
+ 	//for(;;){
+ 		int c=wgetch(w);
+ 		switch(c){//reread from mem or a special register? gcc same as if-else, from mem
+@@ -1184,7 +1184,7 @@ static command_char find_core(WINDOW*w,b
+ 	char prev_key=' ';
+ 	//bool is_for_forward=true;//last key only at next/prev/replace
+ 
+-	find_core_for:
++	find_core_for: ;
+ 	//for(;;){
+ 		int a=wgetch(w);
+ 		if(a==Char_Return){
+@@ -1382,7 +1382,7 @@ command_char command(comnrp_define comnr
+ 		command_rewrite(y,com_left+(cursor<visib?cursor:0),0,input,cursor,visib);
+ 	}
+ 	command_char r;
+-	command_for:
++	command_for: ;
+ 	//for(;;){
+ 		int a=getch();
+ 		if(a==Char_Return){
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2215,7 +2215,7 @@ static bool loopin(WINDOW*w){
+ 	//tot_x, can also be resized at right, need to remember
+ 
+ 	int c=wgetch(w);
+-	loopin_for:
++	loopin_for: ;//i'm placing this for old focal make test, at resolute is ok, and is not modifying the final executable
+ 	//for(;;){
+ 		movement_char a=movment(c,w);
+ 		if(a==movement_resize)return true;
