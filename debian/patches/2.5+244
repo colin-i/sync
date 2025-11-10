@@ -1,0 +1,243 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+244) xenial; urgency=medium
+ .
+   * backward comma errors
+Author: bc <bc@bc-desktop>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2025-11-10
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+243
++2-5+244
+--- ocompiler-2.orig/src/files/functions/actions/enumcomma.oc
++++ ocompiler-2/src/files/functions/actions/enumcomma.oc
+@@ -203,7 +203,7 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 			endif
+ 
+ 			sd size_aux
+-			sd mark
++			ss mark
+ 			if sz!=0
+ 				set argsize content
+ 				dec argsize
+@@ -214,25 +214,37 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 					sd last;set last content
+ 					sub last sz
+ 					dec argsize
+-					while argsize!=last
++					whiletrue
+ 						if argsize#=d_quot
+ 							dec argsize
+ 							if argsize#!=(asciibs)
+ 								inc argsize
+ 								set last argsize
+-							else
+-								dec argsize
+-							endelse
+-						else
+-							dec argsize
+-						endelse
++								break
++							endif
++						elseif argsize#=(asciireturn) #and mac?
++							if typenumberOrparses!=(pass_calls) ##here is a multirow string #same
++								add main.totalnewlines (BACKWARD)
++							endif
++						endelseif
++						dec argsize
+ 					endwhile
++					if argsize<^main.textlinestart ##here is a multirow string
++						if typenumberOrparses!=(pass_calls) #there is a case where args are numbered and same step has multiple passes calls
++						#pass_init is not erroring here
++							call keep_textlinestart(argsize)
++						endif
++					endif
+ 					set mark argsize
+ 					sub argsize content
+ 					neg argsize
+ 					set size_aux sz
+ 					sub size_aux argsize
+ 					setcall size_aux valinmemsens(mark,size_aux,comma,sens)
++					ss another_quotes;set another_quotes valinmemsens(mark,size_aux,d_quot,sens)
++					if size_aux>^another_quotes
++						return "comma/quotes error at quotes"
++					endif
+ 
+ 					#and this to ensure no frontal inner_text
+ 					sub mark size_aux
+@@ -242,6 +254,11 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 					add argsize last
+ 				else
+ 					SetCall argsize valinmemsens(content,sz,comma,sens)
++					set another_quotes valinmemsens(content,sz,d_quot,sens)
++					if argsize>^another_quotes
++						return "comma/quotes error at values"
++					endif
++
+ 					#and don't let ( ) at getarg, there let only something(exlcuding spaces)/nothing like in all cases
+ 					set size_aux content
+ 					sub size_aux argsize
+@@ -260,7 +277,8 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 			sub ptrcontent# argsize
+ 			sub ptrsize# argsize
+ 			vData ptrargsize^argsize
+-			if typenumberOrparses=(pass_init)
++			set main.not_this_case (TRUE)
++			if typenumberOrparses=(pass_init) #here only for string size, that is in a good condition, but size 0 will error
+ 				setcall err getarg(ptrcontent,ptrargsize,argsize,(allow_later),sens) #there are 4 more arguments but are not used
+ 				If err!=noerr
+ 					Return err
+@@ -271,6 +289,7 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 					Return err
+ 				EndIf
+ 			endelseif
++			set main.not_this_case (FALSE)
+ 			sub ptrcontent# size_aux
+ 			sub ptrsize# size_aux
+ 			add argsize size_aux
+@@ -294,3 +313,14 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 	EndIf
+ 	Return noerr
+ EndFunction
++
++function keep_textlinestart(ss pointer)
++	while main.first_textlinestart!=pointer
++		dec pointer
++		if pointer#=(asciireturn) #and mac?
++			inc pointer
++			break
++		endif
++	endwhile
++	set main.textlinestart pointer
++endfunction
+--- ocompiler-2.orig/src/files/functions/argument/arg.oc
++++ ocompiler-2/src/files/functions/argument/arg.oc
+@@ -1,5 +1,5 @@
+ 
+-function verify_syntax_end_and_restore(sv ptrcontent,sd ptrsize,sd argsize)
++function verify_syntax_end_and_restore(sv ptrcontent,sd ptrsize,sd argsize,ss er)
+ 	sd c
+ 	sd s
+ 	set c ptrcontent#
+@@ -8,7 +8,6 @@ function verify_syntax_end_and_restore(s
+ 	Call spaces(ptrcontent,ptrsize)
+ 	data z=0
+ 	if ptrsize#!=z
+-		str er="Unrecognized inner text."
+ 		return er
+ 	endif
+ 	sub c argsize
+@@ -99,10 +98,9 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 		sd q_size
+ 		sd escapes
+ 		set size ptrsize#
+-		SetCall errnr quotinmem_started_blind(#content,#size,#q_size,#escapes) #this has a stepcursors
+-		If errnr!=(noerror)
+-			return errnr
+-		endif
++		#Set errnr no error here
++		Call  quotinmem_started_blind(#content,#size,#q_size,#escapes) #this has a stepcursors
++		#If errnr!=(noerror);return errnr;endif
+ 		if allowdata!=(allow_yes)
+ 			if allowdata=(allow_later)
+ 				vdata ptrdataReg%%ptr_dataReg
+@@ -145,7 +143,10 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 				return (noerror)
+ 			endif
+ 			add q_size 2
+-			callret verify_syntax_end_and_restore(ptrcontent,ptrsize,q_size)
++			sub ptrcontent# q_size
++			add ptrsize# q_size
++			return (noerror)
++			#callret verify_syntax_end_and_restore(ptrcontent,ptrsize,q_size) #is not error since comma/quotes error at quotes, is only for restore
+ 		endelse
+ 	elseif allowdata!=(allow_later)  #exclude pass_init, but even there jump over first arg
+ 		call arg_size(content,argsize,#argsize)  #spc,tab
+@@ -192,7 +193,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 				if sens=(FORWARD)
+ 					return (noerror)
+ 				endif
+-				callret verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize)
++				callret verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize,"Unrecognized inner text at number arg.")
+ 			endif
+ 			sd imm;setcall imm getimm()
+ 			if imm=(TRUE) #if is FALSE, this is the only option for xfile. also allow(string) is no
+@@ -312,7 +313,7 @@ Function getarg(sv ptrcontent,sd ptrsize
+ 			if sens=(FORWARD)
+ 				return (noerror)
+ 			endif
+-			callret verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize)
++			callret verify_syntax_end_and_restore(ptrcontent,ptrsize,argsize,"Unrecognized inner text at variable arg.")
+ 		endif
+ 	endelseif
+ 	If sens=(FORWARD)
+--- ocompiler-2.orig/src/files/functions/commons/strcommons.oc
++++ ocompiler-2/src/files/functions/commons/strcommons.oc
+@@ -392,10 +392,10 @@ Function quotinmem_started_blind(sv ptrc
+ 	call stepcursors(ptrcontent,ptrsize)
+ 	callret quotinmem_err(ptrcontent#,pquotsz,pescapes,(TRUE))
+ EndFunction
+-Function quotinmem_started_blind_noerr(sv ptrcontent,sd ptrsize,sd pquotsz,sd pescapes)
+-	call stepcursors(ptrcontent,ptrsize)
+-	call quotinmem_err(ptrcontent#,pquotsz,pescapes,(TRUE)) #null_ok will continue there
+-EndFunction
++#Function quotinmem_started_blind_noerr(sv ptrcontent,sd ptrsize,sd pquotsz,sd pescapes) #this is same as quotinmem_started_blind
++#	call stepcursors(ptrcontent,ptrsize)
++#	call quotinmem_err(ptrcontent#,pquotsz,pescapes,(TRUE)) #null_ok will continue there
++#EndFunction
+ Function quotinmem_noerr(sv ptrcontent,sd ptrsize,sd pquotsz,sd pescapes)
+ 	call stepcursors(ptrcontent,ptrsize)
+ 	Call quotinmem_err(ptrcontent#,pquotsz,pescapes) #null_ok is irelevant, spelling was already
+@@ -417,13 +417,15 @@ function maxpathverif(str safecurrentdir
+ 
+ 	callret compareagainstmaxpath(size1)
+ endfunction
+-
++char not_this_case=FALSE
+ function quotes_new_line(ss content)
+-	if content#=(asciireturn)
+-		inc content
+-		set main.textlinestart content
+-		add main.totalnewlines main.linesadd
+-	end
++	if content#=(asciireturn) #and mac?
++		if main.not_this_case=(FALSE) #only for forward
++			inc content
++			set main.textlinestart content
++			add main.totalnewlines main.linesadd
++		endif
++	endif
+ endfunction
+ #err
+ function quotes_forward(sd p_content,ss last)#,sd p_newlines,sd p_lastlinestart)
+--- ocompiler-2.orig/src/files/functions/dataassign.oc
++++ ocompiler-2/src/files/functions/dataassign.oc
+@@ -439,7 +439,7 @@ Function dataassign(sd ptrcontent,sd ptr
+ 			endif
+ 			return err
+ 		endif
+-		call quotinmem_started_blind_noerr(ptrcontent,ptrsize,ptrvalue,#escapes)
++		call quotinmem_started_blind(ptrcontent,ptrsize,ptrvalue,#escapes) #is _noerr and is same as err
+ 		SetCall err addtosecstresc_xfile_if(ptrcontent,ptrsize,value,escapes,ptrdatasec)
+ 		if err=(noerror)
+ 			sd trim
