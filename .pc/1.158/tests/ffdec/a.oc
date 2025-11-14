@@ -1,0 +1,128 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+include "../entryraw.oc" "../entry.oc"
+
+override include_sec 1
+einclude "../../dev/import.oh"
+
+dataxu f#1
+importx "puts" puts
+if argc=1
+	call puts("prexx_flags flagpre_mix flagpre_write_no")
+	set f (prexx_flags|flagpre_mix|flagpre_write_no) #xx to test also at ffdec
+elseif argc=2
+	call puts("xx_flags flag_compress")
+	set f (xx_flags|flag_compress)
+elseif argc=3
+	call puts("flag_alt read_done flag_compress")
+	set f (flag_alt|read_done|flag_compress)
+else
+	importx "sscanf" sscanf
+	call sscanf(a1,"%x",#f)  #long is only to test
+	importx "printf" printf
+	call printf("profiler %x\n",f)  #long is only to test
+end
+
+call swf_new_ex("a.swf",0x80,0x80,0x001100,2,f)
+
+sd fo;set fo swf_font_basic("_sans")
+char ButtonData_a="Submit"
+data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 24,24}
+vstr *^ButtonData_a
+data ButtonData_c#1;set ButtonData_c fo;data *=20
+data vert_off=-5
+data *font_color=0xff
+vstr ButtonData_d#1;set ButtonData_d "var a;a=1"
+call swf_button(150,50,#ButtonData)
+
+call action("
+function c(){
+}
+function cc(a){
+}
+function ccc(a,b){
+}
+var a;//line ending comment
+delete a;
+delete a.b;
+var a=2;
+q=3;
+a.b=4;
+a=ccc(1,2);
+b.ccc(1,2);
+
+a=new c();
+
+//a+=2; will go to eval
+//a=a+2; will go to PushDuplicate that will go to eval
+a=eval('a')+2;
+
+a=1+(1+1)+a+a.b-1*1/1%1&1|1^1<<1>>1>>>1&&1||1;
+
+a[0]=1;
+a[b]=1;
+w='b';
+e=1.1;
+
+//a++; will go to eval
+//a--; will go to eval
+
+if(a==8){}
+if(a!=1){}
+if(a>1){}
+if(a<1){}
+if(a>=1){r=5;}
+else if(a<=1){t=3;}
+else{y=4;}
+
+while(a<9){a=eval('a')+1;}
+
+a=a==2?b:c;
+
+a=function(){return 2;}
+
+while(a<9){if(a==1){break;}a=2+a;}
+
+for(i=0;i<2;i=1+i){
+	if(a==1){
+		if(a==3){
+			a=4;continue;
+		}
+		a=3;
+	}
+	a=2+a;
+}
+
+for(a in b){
+	if(a==2)break;
+	c=1+c;
+}
+for(a in b){
+	return null;
+}
+
+while(true){
+	if(a)if(b){
+		z=1;
+		break;
+	}
+	z=2;
+	break
+}
+")
+#call actiond("for(a in b){c=1+c;}") will be ""b"" and here straight "b"
+call action("return 1")
+
+sd id;set id swf_sprite_new()
+call action_init_sprite(id,"var a=a")
+set id swf_sprite_done(id);call swf_exports_add(id,"exported_sprite")
+set id swf_sprite_new()
+call action_init_sprite(id,"var a=b")
+call swf_sprite_done(id) #anonymous_sprite
+
+call swf_done()
+
+call exit(0)
