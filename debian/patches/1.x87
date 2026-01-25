@@ -1,0 +1,292 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x87) focal; urgency=medium
+ .
+   * as3 at oasyntax
+Author: bc <bc@ubuntu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-01-25
+
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -228,6 +228,10 @@ extern char*split_out;
+ extern char*split_out_new;
+ extern char*split_extension;
+ extern char*split_extension_new;
++extern char*split_outext;
++extern char*split_outext_new;
++extern char*split_outformatext;
++extern char*split_outformatext_new;
+ //bar
+ #ifndef HAVE_MEMMEM
+ void *memmem(const void*,size_t,const void*,size_t);
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2246,7 +2246,7 @@ static bool loopin(WINDOW*w){
+ 			else if(z==(key_save+A_to_a)){b=savetofile(w,false);if(b/*true*/)return true;}
+ 			else if(z==(key_ocomp+A_to_a)){aftercall=aftercall_find();aftercall_draw(w);}//here will scan without asking about file extension or disable/enable but only if enable will show
+ 			else if(z==(key_actswf+A_to_a)){if(pref_change(w,&sdelimiter,&sdelimiter_new,true,key_actswf,A_to_a)/*true*/)return true;}//don't allow no size delimiters
+-			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_out,&split_out_new,false,key_actswf2,A_to_a)/*true*/)return true;}
++			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_outext,&split_outext_new,false,key_actswf2,A_to_a)/*true*/)return true;}
+ 			else if(z==key_whites+A_to_a){if(pref_change(w,&filewhites_extension,&filewhites_extension_new,false,key_whites,A_to_a)/*true*/)return true;}
+ 			else if(z==key_quit+A_to_a){
+ 				bool q;bool not_q=quit_from_key(w,&q);
+@@ -2258,7 +2258,13 @@ static bool loopin(WINDOW*w){
+ 			}
+ 			else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
+ 			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
+-			else if(z==key_actswf2){if(pref_change(w,&split_extension,&split_extension_new,false,key_actswf2,0)/*true*/)return true;}
++			else if(z==key_actswf2){if(pref_change(w,&split_outformatext,&split_outformatext_new,false,key_actswf2,0)/*true*/)return true;}
++			else{
++				const char*s=keyname(z);
++				if(*s==Char_Ctrl){
++					if(s[1]==key_actswf){if(pref_change(w,&split_extension,&split_extension_new,false,key_actswf,A_to_a)/*true*/)return true;}
++				}
++			}
+ 		}else{
+ 			const char*s=keyname(c);
+ 			if(*s==Char_Ctrl){//seems that all cases are ^ a letter \0
+@@ -2316,6 +2322,8 @@ static bool loopin(WINDOW*w){
+ 					else{splits_flag=true;c=orig_upkey(key_actswf);}
+ 					setprefs(mask_splits,splits_flag);
+ 					vis(c,w);
++				}else if(chr==key_actswf2){
++					if(pref_change(w,&split_out,&split_out_new,false,key_actswf2,A_to_a)/*true*/)return true;
+ 				}else if(chr==key_whites){
+ 					char c;
+ 					if(filewhites_flag/*true*/){filewhites_flag=false;c=orig_lowkey(key_whites);}
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -64,8 +64,8 @@ text="\ncommand mode: left,right,home,en
+ \nCtrl+n = enable/disable indentation\
+ \nCtrl+t = enable/disable insensitive search\
+ \nCtrl+a = enable/disable O language syntax; Alt+a = syntax rescan; Alt+A = change rule extension name (blank is all)\
+-\nCtrl+j = enable/disable OA split syntax; Alt+j = change delimiter; Alt+J = change view delimiter\
+-\n    Alt+p = change splits folder (blank is mixless); Alt+P = change rule extension name for splits (blank is all)\
++\nCtrl+j = enable/disable OA split syntax; Alt+j = change delimiter; Alt+J = change view delimiter; Alt+Ctrl+j = change rule extension name for splits (blank is all)\
++\n    Ctrl+k = change splits folder (blank is mixless); Alt+k = change splits out extension (blank is no extension); Alt+K = change splits out format extension (blank is no extension)\
+ \nCtrl+y = enable/disable spaces->tabs indents at read, tabs->spaces at write; Alt+y = change rule extension name (blank is all)\
+ \nCtrl+d = enable/disable indent follower\
+ \nCtrl+b = change tab size\
+@@ -79,12 +79,12 @@ if [ ${level} -eq ${level_help} ]; then
+ 	exit 0
+ fi
+ 
+-#QWERTYU O   ip
+-#ASDFG J L k h
+-# ZXCVBN     m
++#QWERTYU O ip
++#ASDFG JKL h
++# ZXCVBN   m
+ # ^M is 13 that comes also at Enter, ^I is 9 that comes also at Tab
+ # ^H at termux is 263 backspace
+-# ^P at docker, something is not ok with the redraw
++# ^P at docker(noble), needs another char to return at getchar, ^altP first is slow 1B(alt), second is slow 10(^P) 1B, same rule, another char to return at getchar
+ # ^A in termux is from Ctrl+Alt+a
+ 
+ textsed="$(echo "${text}" | sed "s/\\\n/n/g; s/\\\\\"/\"/g")"  # replace \n to n and \\\" to \"(this will go " at grep). \ at endings are 0
+@@ -108,12 +108,12 @@ _find_pos () { #name=$1 letter=$2 ctrls=
+ 	if [ -z "${is_extern}" ]; then wr "static "; fi
+ 	wr "char key_${1}=$(echo ${2}-32 | bc);"
+ 	wr2 "{&key_${1},(unsigned short[]){"
+-	e=
++#	e=
+ 	z=0
+-	if [ ${3} -ne 0 ]; then
++#	if [ ${3} -ne 0 ]; then 0 was a case but it was changed
+ 		search_pos Ctrl ${2} "" 1
+ 		e=,
+-	fi
++#	fi
+ 	if [ -n "${4}" ]; then
+ 		search_pos Alt ${2} ${e}
+ 	fi
+@@ -144,11 +144,11 @@ while [ $i -lt 123 ]; do
+ 		101) find_pos mouse              $i 1;;     #e
+ 		102) find_pos find               $i 1 1;;   #f
+ 		103) find_pos goto               $i 1 1;;   #g
+-		106) find_pos actswf             $i 1 1 1;; #j
++		106) find_pos actswf             $i 2 1 1;; #j
++		107) find_pos actswf2            $i 1 1 1;; #k
+ 		108) is_extern=x find_pos titles $i 1;;     #l
+ 		110) find_pos indents            $i 1;;     #n
+ 		111) find_pos paste              $i 1 1;;   #o
+-		112) find_pos actswf2            $i 0 1 1;; #p
+ 		113) is_extern=x find_pos quit   $i 3 1;;   #q
+ 		114) find_pos redo               $i 1;;     #r
+ 		115) is_extern=x find_pos save   $i 1 1;;   #s
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -58,6 +58,10 @@ char*split_out=(char*)"osrc";
+ char*split_out_new=nullptr;
+ char*split_extension=(char*)"oac";
+ char*split_extension_new=nullptr;
++char*split_outext=(char*)"oc";
++char*split_outext_new=nullptr;
++char*split_outformatext=(char*)"split";
++char*split_outformatext_new=nullptr;
+ 
+ //char*fulldelim;
+ //unsigned short fulldelim_size;
+@@ -74,6 +78,7 @@ static unsigned char split_out_size1;
+ static size_t split_out_size2;
+ 
+ static int split_out_file;
++static int split_out_formatfile;
+ 
+ typedef struct{
+ 	int file;
+@@ -369,7 +374,17 @@ bool split_writeprefs(int f){
+ 							sz=strlen(split_extension);
+ 							if(write(f,&sz,extlen_size)==extlen_size){
+ 								if(write(f,split_extension,sz)==sz){
+-									return true;
++									sz=strlen(split_outext);
++									if(write(f,&sz,extlen_size)==extlen_size){
++										if(write(f,split_outext,sz)==sz){
++											sz=strlen(split_outformatext);
++											if(write(f,&sz,extlen_size)==extlen_size){
++												if(write(f,split_outformatext,sz)==sz){
++													return true;
++												}
++											}
++										}
++									}
+ 								}
+ 							}
+ 						}
+@@ -406,7 +421,25 @@ bool split_readprefs(int f){
+ 												if(read(f,split_extension_new,len)==len){
+ 													split_extension_new[len]='\0';
+ 													split_extension=split_extension_new;
+-													return true;
++													if(read(f,&len,extlen_size)==extlen_size){
++														split_outext_new=(char*)malloc(len+1);
++														if(split_outext_new!=nullptr){
++															if(read(f,split_outext_new,len)==len){
++																split_outext_new[len]='\0';
++																split_outext=split_outext_new;
++																if(read(f,&len,extlen_size)==extlen_size){
++																	split_outformatext_new=(char*)malloc(len+1);
++																	if(split_outformatext_new!=nullptr){
++																		if(read(f,split_outformatext_new,len)==len){
++																			split_outformatext_new[len]='\0';
++																			split_outformatext=split_outformatext_new;
++																			return true;
++																		}
++																	}
++																}
++															}
++														}
++													}
+ 												}
+ 											}
+ 										}
+@@ -426,6 +459,8 @@ void split_freeprefs(){
+ 	if(esdelimiter_new!=nullptr)free(esdelimiter_new);
+ 	if(split_out_new!=nullptr)free(split_out_new);
+ 	if(split_extension_new!=nullptr)free(split_extension_new);
++	if(split_outext_new!=nullptr)free(split_outext_new);
++	if(split_outformatext_new!=nullptr)free(split_outformatext_new);
+ }
+ 
+ //true at ok
+@@ -449,19 +484,47 @@ bool split_write_init(char*orig_filename
+ 			split_out_path2+=sz;split_out_path4+=sz;
+ 		}while(true);
+ 		size_t size=split_out_path1-split_out_path3;// +1 will be with the existent null
+-		const char outext[]=".out";
+-		size_t sizeplusoutext=size+sizeof(outext);
++		bar_byte outext_size=strlen(split_outext)+1;//this from pref can also come 1 char size
++		bar_byte outformatext_size=strlen(split_outformatext)+1;//this from pref can also come 1 char size
++		size_t sizeplusoutext;
++		if(outformatext_size>outext_size){
++			sizeplusoutext=size+outformatext_size;
++		}else{
++			if(outformatext_size==outext_size){
++				if(memcmp(split_outext,split_outformatext,outext_size)==0){//will be same file, is also working for a="" b=""
++					free(split_out_alloc1);free(split_out_alloc2);
++					return false;
++				}
++			}
++			sizeplusoutext=size+outext_size;
++		}
++		//if(outext_size!=1) again, a="" b="" is error
++		sizeplusoutext++;
+ 		split_out_size2-=ancestors_diff;
+ 		char*a=(char*)realloc(split_out_alloc2,split_out_size2+sizeplusoutext);
+ 		if(a!=nullptr){
+ 			memcpy(a+split_out_size2,split_out_path3,size);
+-			memcpy(a+split_out_size2+size,outext,sizeof(outext));
++			char*b=a+split_out_size2+size;
++			char*c=b;
++			if(outext_size!=1){
++				*b='.';b++;
++			}
++			memcpy(b,split_outext,outext_size);//at "" is also good for null end char
+ 			free(split_out_alloc1);
+ 			split_out_file=open_or_new(a);
+-			free(a);
+ 			if(split_out_file!=-1){
+-				return true;
++				if(outformatext_size!=1){
++					*c='.';c++;
++				}
++				memcpy(c,split_outformatext,outformatext_size);//format + null end
++				split_out_formatfile=open_or_new(a);
++				if(split_out_formatfile!=-1){
++					free(a);
++					return true;
++				}
++				close(split_out_file);
+ 			}
++			free(a);
+ 			return false;
+ 		}
+ 		free(split_out_alloc1);free(split_out_alloc2);
+@@ -473,6 +536,7 @@ void split_write_free(){
+ 	//free(fulldelim);
+ 	if(split_reminder_c==split_yes_mix){
+ 		close(split_out_file);
++		close(split_out_formatfile);
+ 	}
+ }
+ 
+@@ -494,12 +558,18 @@ static swrite_char swwrite_if(int f,char
+ }
+ 
+ //true if ok
+-static bool split_write_split(char*file,size_t start,size_t end,unsigned int size,bool*majorerror){
++static bool split_write_split(char*file,size_t start,size_t end,row_dword size,bool*majorerror){
++	if(split_reminder_c==split_yes_mix){
++		row_dword sz=strlen(file)+1;
++		if((ssize_t)write(split_out_formatfile,file,sz)!=sz){
++			*majorerror=true;return false;
++		}
++	}
+ 	int f=open_or_new(file);
+ 	if(f!=-1){
+ 		for(size_t k=start;k<end;k++){
+ 			row*r=&rows[k];
+-			unsigned int sz=r->sz;
++			row_dword sz=r->sz;
+ 			if(swwrite(f,r->data,sz)==swrite_bad){close(f);*majorerror=true;return false;}
+ 			if(swrite(f,ln_term,ln_term_sz)==swrite_bad){close(f);*majorerror=true;return false;}
+ 		}
