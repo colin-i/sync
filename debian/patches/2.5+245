@@ -1,0 +1,746 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+245) xenial; urgency=medium
+ .
+   * c va_list
+Author: bc <bc@ubuntu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-02-09
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+244
++2-5+245
+--- ocompiler-2.orig/o.html
++++ ocompiler-2/o.html
+@@ -980,7 +980,10 @@ format elfobj64<br>
+ <p>Black = 1 byte. <span class="blue">Blue = 4 bytes = data.</span> <span class="red">Red = string = data[+byte(s)].</span> <span class="green">Green = replacement.</span></p>
+ <p>There are at least two options at the '*' wildcard from there. '{}' is an enumeration.</p>
+ <p>First long(4 bytes) is null or offset of entry which will be at the end.</p>
+-<p>Xfile_noignore at ocompiler is '^' sign before the command, and at otoc will noignore a tagIgnore argument. Xfile_yesignore at compiler is '!' sign before the command and at otoc will ignore the command.</p>
++<p>Xfile_noignore at ocompiler is '^' sign before the command, and at otoc will noignore a tagIgnore argument.
++Xfile_yesignore at compiler is '!' sign before the command and at otoc will ignore the command.
++Xfile_variadic at ocompiler is '%' sign at start, followed by '&lt;argument' for va_start at otoc, '|variable' for va_arg, '&gt;' for va_end.
++</p>
+ <p>Another option specific to otoc is Xfile_declvolatile_yes, to use stack variables at o for recursion but not pointers at c (example: sdu ?attr).</p>
+ <table id="selection_table">
+ 	<tr><td>Xfile_proto</td><td>Xfile_function_t_*</td><td class="red">name</td><td class="blue">nr_of_args</td><td class="green">{DA}</td><td>Xfile_proto_*</td></tr>
+@@ -1011,7 +1014,7 @@ format elfobj64<br>
+ </table>
+ <table id="selection_table">
+ 	<tr><td rowspan=2>Xfile_action</td><td>Xfile_action_a*</td><td class="green">A</td></tr>
+-	<tr>                               <td>Xfile_action_t*</td> <td class="green">VF</td></tr>
++	<tr>                               <td>Xfile_action_t*</td><td class="green">VF</td></tr>
+ </table>
+ <table id="selection_table">
+ 	<tr><td>Xfile_action2</td><td class="green">VF</td><td>Xfile_action2_*</td><td class="green">A</td></tr>
+@@ -1071,6 +1074,11 @@ format elfobj64<br>
+ <table id="selection_table">
+ 	<tr><td>Xfile_yesignore</td></tr>
+ </table>
++<table id="selection_table">
++	<tr><td rowspan=3>Xfile_variadic</td><td>Xfile_variadic_begin</td>        <td class="red" rowspan=2>var</td></tr>
++	<tr>                                 <td>Xfile_variadic_get</td></tr>
++	<tr>                                 <td colspan=2>Xfile_variadic_end</td></tr>
++</table>
+ <br>Table A:
+ <table id="selection_table">
+ 	<tr><td>Xfile_arg_number</td><td class="green">N</td></tr>
+--- ocompiler-2.orig/otoc/loop.oc
++++ ocompiler-2/otoc/loop.oc
+@@ -101,55 +101,59 @@ function loop(sd pointer,sd delim,sd out
+ 				set same_line (FALSE)
+ 			end
+ 
+-			value Xfile_proto^proto
+-			value *Xfile_import^import
+-			value *Xfile_comment^comment
+-			value *Xfile_commentmulti^commentmulti
+-			value *Xfile_commentlineend^commentlineend
+-			value *Xfile_format^format
+-			value *Xfile_include^include
+-			value *Xfile_functiondef^functiondef   #in c, this can cause implicit declaration if a{b()} b{} but is only a warning, will be resolved ok
+-			value *Xfile_declare^declare
+-			value *Xfile_action^action
+-			value *Xfile_action2^action2
+-			value *Xfile_call^call
+-			value *Xfile_callex^callex
+-			value *Xfile_if^if
+-			value *Xfile_elseif^elseif
+-			value *Xfile_else^else
+-			value *Xfile_while^while
+-			value *Xfile_whiletrue^whiletrue
+-			value *Xfile_break^break
+-			value *Xfile_continue^continue
+-			value *Xfile_end^end
+-			value *Xfile_ret^ret
+-			value *Xfile_library^library
+-			value *Xfile_import_name^import_name
+-			value *Xfile_aftercall^aftercall
+-			value *Xfile_hex^hex
+-			value *Xfile_override^override
+-			value *Xfile_orphan^orphan
+-			value *Xfile_interrupt^interrupt
+-			value *Xfile_line^line
+-			value *Xfile_iend^iend
+-			datau mults={1,2,4,8,0x10,0x20,0x40,0x80,0x100,0x200,0x400,0x800,0x1000,0x2000,0x4000,0x8000,0x10000,0x20000,0x40000,0x80000}
+-			datau     *={0x100000,0x200000,0x400000,0x800000,0x1000000,0x2000000,0x4000000,0x8000000,0x10000000,0x20000000,0x40000000} #,0x80000000}
+-
+-			datax ignored#1
+-			if nextisignored=(ignored_depending_on_tags)
+-				sd igpow=DWORD;mult igpow command
+-				sd x^mults;add x igpow
+-				set ignored x#
+-				and ignored ignores
+-			else # yes/no
+-				set ignored nextisignored
+-				set nextisignored (ignored_depending_on_tags)
+-			end
++			if command=(Xfile_variadic)
++				call variadic(#pointer,output)
++			else
++				value Xfile_proto^proto
++				value *Xfile_import^import
++				value *Xfile_comment^comment
++				value *Xfile_commentmulti^commentmulti
++				value *Xfile_commentlineend^commentlineend
++				value *Xfile_format^format
++				value *Xfile_include^include
++				value *Xfile_functiondef^functiondef   #in c, this can cause implicit declaration if a{b()} b{} but is only a warning, will be resolved ok
++				value *Xfile_declare^declare
++				value *Xfile_action^action
++				value *Xfile_action2^action2
++				value *Xfile_call^call
++				value *Xfile_callex^callex
++				value *Xfile_if^if
++				value *Xfile_elseif^elseif
++				value *Xfile_else^else
++				value *Xfile_while^while
++				value *Xfile_whiletrue^whiletrue
++				value *Xfile_break^break
++				value *Xfile_continue^continue
++				value *Xfile_end^end
++				value *Xfile_ret^ret
++				value *Xfile_library^library
++				value *Xfile_import_name^import_name
++				value *Xfile_aftercall^aftercall
++				value *Xfile_hex^hex
++				value *Xfile_override^override
++				value *Xfile_orphan^orphan
++				value *Xfile_interrupt^interrupt
++				value *Xfile_line^line
++				value *Xfile_iend^iend
++				datau mults={1,2,4,8,0x10,0x20,0x40,0x80,0x100,0x200,0x400,0x800,0x1000,0x2000,0x4000,0x8000,0x10000,0x20000,0x40000,0x80000}
++				datau     *={0x100000,0x200000,0x400000,0x800000,0x1000000,0x2000000,0x4000000,0x8000000,0x10000000,0x20000000,0x40000000} #,0x80000000}
++
++				datax ignored#1
++				if nextisignored=(ignored_depending_on_tags)
++					sd igpow=DWORD;mult igpow command
++					sd x^mults;add x igpow
++					set ignored x#
++					and ignored ignores
++				else # yes/no
++					set ignored nextisignored
++					set nextisignored (ignored_depending_on_tags)
++				end
+ 
+-			mult command :
+-			sv dest^Xfile_proto;add dest command
+-			set dest dest#
+-			call dest(output,#pointer)
++				mult command :
++				sv dest^Xfile_proto;add dest command
++				set dest dest#
++				call dest(output,#pointer)
++			end
+ 
+ 			if hotgroup>0
+ 				if dest!=line
+@@ -426,7 +430,7 @@ end
+ function action(sd outfile,sv pbuffer)
+ 	charx act#1;call get_char(pbuffer,#act)
+ 	call action1(act,pbuffer,outfile)
+-	callg writetn(outfile)
++	callg writetnl(outfile)
+ end
+ function action2(sd outfile,sv pbuffer)
+ 	sd replay;set replay pbuffer#
+@@ -453,7 +457,7 @@ function action2(sd outfile,sv pbuffer)
+ 
+ 	call write_longcast_simple(outfile) #(long)p-log    invalid operands to binary - (have long int and char *)
+ 	call arg(pbuffer,outfile)
+-	callg writetn(outfile)
++	callg writetnl(outfile)
+ end
+ function call(sd outfile,sv pbuffer)
+ 	char c#1;call get_char(pbuffer,#c)
+@@ -461,7 +465,7 @@ function call(sd outfile,sv pbuffer)
+ 		call return(outfile)
+ 	end
+ 	call cll(pbuffer,outfile)
+-	callg writetn(outfile)
++	callg writetnl(outfile)
+ end
+ function callex(sd *outfile,sv pbuffer)
+ 	call unimplemented("callex")
+@@ -501,12 +505,12 @@ end
+ function break(sd outfile)
+ 	char a="break"^
+ 	call write(outfile,#a,\.a)
+-	callg writetn(outfile)
++	callg writetnl(outfile)
+ end
+ function continue(sd outfile)
+ 	char a="continue"^
+ 	call write(outfile,#a,\.a)
+-	callg writetn(outfile)
++	callg writetnl(outfile)
+ end
+ function end(sd outfile,sv pbuffer)
+ 	charx type#1;call get_char(pbuffer,#type)
+@@ -518,7 +522,7 @@ function end(sd outfile,sv pbuffer)
+ end
+ function ret(sd outfile)
+ 	call write(outfile,#return.a,\return.a-1)
+-	callg writetn(outfile)
++	callg writetnl(outfile)
+ end
+ function library(sd *outfile,sv pbuffer)
+ 	charx multi#1;datax sz#1;valuex lib#1
+@@ -545,7 +549,7 @@ function import(sd outfile,sv pbuffer)
+ 	if va=(Xfile_function_va_yes)
+ 		call varargs(outfile)
+ 	end
+-	callg proto_close(outfile)
++	callg writertnl(outfile)
+ end
+ function import_name(sd *outfile,sv pbuffer)
+ 	datax sz#1;valuex name#1
+@@ -588,6 +592,39 @@ function interrupt(sd outfile)
+ 	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+ 	callg writen(outfile,#a,\.a)
+ end
++function variadic(sv pbuffer,sd outfile)
++	charx type#1;call get_char(pbuffer,#type)
++importx "printf" qwe
++call qwe("%u\n",type)
++	if type!=(Xfile_variadic_end)
++		datax sz#1;valuex name#1
++		call get_string(pbuffer,#sz,#name)
++		if type=(Xfile_variadic_begin)
++			char va_list="va_list "^
++			char va_list_name="the_va_list"^
++			call write(outfile,#va_list,\.va_list+\.va_list_name)
++			call writet(outfile)
++			char va_start="va_start("^
++			call write(outfile,#va_start,\.va_start)
++			call write(outfile,#va_list_name,\.va_list_name)
++			call writec(outfile)
++			call write(outfile,name,sz)
++			call writertnl(outfile)
++		else
++			call write(outfile,name,sz)
++			call writee(outfile)
++			char va_arg="va_arg("^
++			call write(outfile,#va_arg,\.va_arg)
++			call write(outfile,#va_list_name,\.va_list_name)
++			call writec(outfile)
++			call write_long(outfile)
++			call writertnl(outfile)
++		end
++	else
++		char va_end="va_end(the_va_list)"^
++		callg writetn(outfile,#va_end,\.va_end)
++	end
++end
+ function proto(sd outfile,sv pbuffer)
+ 	charx type#1;call get_char(pbuffer,#type)
+ 	ss buf;set buf pbuffer#
+@@ -608,7 +645,7 @@ function proto(sd outfile,sv pbuffer)
+ 		end
+ 		call proto_core(outfile,pbuffer)
+ 		inc pbuffer#
+-		callg proto_close(outfile)
++		callg writertnl(outfile)
+ 	else #Xfile_function_t_struct
+ 		set pbuffer# buf
+ 	end
+@@ -635,10 +672,6 @@ function proto_open(sd outfile,sv pbuffe
+ 	call write_long_pointer(outfile,name,sz)
+ 	callg writel(outfile)
+ end
+-function proto_close(sd outfile)
+-	call writer(outfile)
+-	callg writetn(outfile)
+-end
+ 
+ function else_core(sd outfile)
+ 	char a="else"^
+@@ -771,21 +804,30 @@ function writecln(sd outfile)
+ 	call writecl(outfile)
+ 	callg writenl(outfile)
+ end
+-function writen(sd outfile,ss buf,sd sz)
+-	call write(outfile,buf,sz)
+-	callg writenl(outfile)
+-end
+ function writeslsr(sd outfile)
+ 	call writesl(outfile)
+ 	callg writesr(outfile)
+ end
+-function writetn(sd outfile) #terminator newline
++function writetnl(sd outfile) #terminator newline
+ 	call writet(outfile)
+ 	callg writenl(outfile)
+ end
++function writertnl(sd outfile)
++	call writer(outfile)
++	callg writetnl(outfile)
++end
+ function writecrtn(sd outfile)
+ 	call writecr(outfile)
+-	callg writetn(outfile) #with termination only for struct
++	callg writetnl(outfile) #with termination only for struct
++end
++
++function writen(sd outfile,ss buf,sd sz)
++	call write(outfile,buf,sz)
++	callg writenl(outfile)
++end
++function writetn(sd outfile,ss buf,sd sz)
++	call write(outfile,buf,sz)
++	callg writetnl(outfile)
+ end
+ 
+ function fprintu(sd outfile,sd c)  #has an upper write_allow check
+--- ocompiler-2.orig/otoc/otoc.oc
++++ ocompiler-2/otoc/otoc.oc
+@@ -50,28 +50,6 @@ char long_long="long "^
+ char long_simple="long"^
+ char point=asciiasterisk
+ char long_long_reserve={asciispace,asciispace,asciispace,asciispace,asciispace}
+-include "loop.oc"
+-
+-#aftercalli
+-
+-function mainfn(sv s,sd ignores)
+-	#sd s;incst argv;set s argv#
+-	sd f;setcall f fopen(s,"rb")
+-	if f!=(NULL)
+-		sd out;set out out_file(s)
+-		sd exitval
+-		if out!=(NULL)
+-			set exitval preloop(f,out,ignores)
+-			call fclose(out)
+-		else
+-			set exitval (EXIT_FAILURE)
+-		end
+-		call fclose(f)
+-		return exitval
+-	end
+-	call puts("Cannot open input file")
+-	return (EXIT_FAILURE)
+-end
+ 
+ importx "strlen" strlen
+ 
+@@ -133,6 +111,29 @@ function parse_options(sd _argc,sv _argv
+ 	return (EXIT_SUCCESS)
+ end
+ 
++function mainfn(sv s,sd ignores)
++	#sd s;incst argv;set s argv#
++	sd f;setcall f fopen(s,"rb")
++	if f!=(NULL)
++		sd out;set out out_file(s)
++		sd exitval
++		if out!=(NULL)
++			set exitval preloop(f,out,ignores)
++			call fclose(out)
++		else
++			set exitval (EXIT_FAILURE)
++		end
++		call fclose(f)
++		return exitval
++	end
++	call puts("Cannot open input file")
++	return (EXIT_FAILURE)
++end
++
++include "loop.oc"
++
++#aftercalli
++
+ include "entry.oc" "entryraw.oc"
+ 	if argc>=2
+ 		sd ok;set ok parse_options(#argc,#argv)
+--- ocompiler-2.orig/src/files/actions/main/index.oc
++++ ocompiler-2/src/files/actions/main/index.oc
+@@ -226,6 +226,8 @@ if errormsg=(noerror)
+ 			ElseIf commandset=(cI3)
+ 		call entryscope_verify_code()
+ 				Include "./index/i3.oc"
++			ElseIf commandset=(last_command)
++				setcall errormsg xfile_variadic(pcontent,pcomsize,comsize)
+ 			EndElseIf
+ 			#else commandset==(Error)
+ 			If errormsg=(noerror)
+--- ocompiler-2.orig/src/files/functions/actions/enumcomma.oc
++++ ocompiler-2/src/files/functions/actions/enumcomma.oc
+@@ -231,7 +231,6 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 					endwhile
+ 					if argsize<^main.textlinestart ##here is a multirow string
+ 						if typenumberOrparses!=(pass_calls) #there is a case where args are numbered and same step has multiple passes calls
+-						#pass_init is not erroring here
+ 							call keep_textlinestart(argsize)
+ 						endif
+ 					endif
+@@ -241,11 +240,13 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 					set size_aux sz
+ 					sub size_aux argsize
+ 					setcall size_aux valinmemsens(mark,size_aux,comma,sens)
+-					ss another_quotes;set another_quotes valinmemsens(mark,size_aux,d_quot,sens)
+-					if size_aux>^another_quotes
+-						return "comma/quotes error at quotes"
++					if typenumberOrparses=(pass_init)
++						ss another_quotes;set another_quotes valinmemsens(mark,size_aux,d_quot,sens)
++						if size_aux>^another_quotes
++							set ptrcontent# mark
++							return "comma/quotes error at quotes"  #add a "dsfsdf""fsdfsd"
++						endif
+ 					endif
+-
+ 					#and this to ensure no frontal inner_text
+ 					sub mark size_aux
+ 					setcall mark mem_spaces(mark,last)
+@@ -254,9 +255,11 @@ Function enumcommas(sv ptrcontent,sd ptr
+ 					add argsize last
+ 				else
+ 					SetCall argsize valinmemsens(content,sz,comma,sens)
+-					set another_quotes valinmemsens(content,sz,d_quot,sens)
+-					if argsize>^another_quotes
+-						return "comma/quotes error at values"
++					if typenumberOrparses=(pass_init)
++						set another_quotes valinmemsens(content,sz,d_quot,sens)
++						if argsize>^another_quotes
++							return "comma/quotes error at values" #add a asfasdf""asfsfd
++						endif
+ 					endif
+ 
+ 					#and don't let ( ) at getarg, there let only something(exlcuding spaces)/nothing like in all cases
+--- ocompiler-2.orig/src/files/functions/commons/getcommand.oc
++++ ocompiler-2/src/files/functions/commons/getcommand.oc
+@@ -476,8 +476,9 @@ Const numberofcommandsvars=(\-commandsva
+ 		Data *=cI3
+ 		Data *#1
+ 		Data *=spacenotreq
+-Const numberofcommands=(\-coms_start)/com_size
+-Const Error=\-coms_start
++Const last_command=\-coms_start
++Const numberofcommands=last_command/com_size
++Const Error=last_command+com_size
+ 
+ Data pointers#numberofcommands+1
+ Const compointersloc^pointers
+@@ -534,7 +535,6 @@ Function getcommand(sv pcontent,sd psize
+ 	Data result#1
+ 	Data cursor#1
+ 	Data true=TRUE
+-
+ 	Data dsz=dwsz
+ 
+ 	set main.xfile_top (Xfile_ignore_nosigns)
+@@ -544,13 +544,16 @@ Function getcommand(sv pcontent,sd psize
+ 		inc pcontent#
+ 		dec psize#
+ 		set main.xfile_top (Xfile_noignore)
+-	endif
+-	if start#=(Xfile_yesignore_sign)
++	elseif start#=(Xfile_yesignore_sign)
+ 		inc start
+ 		inc pcontent#
+ 		dec psize#
+ 		set main.xfile_top (Xfile_yesignore)
+-	endif
++	elseif start#=(Xfile_variadic_sign)
++		inc pcontent#
++		dec psize#
++		return (last_command)
++	endelseif
+ 
+ 	Set cursor pointercommands#
+ 	While cursor!=zero
+--- ocompiler-2.orig/src/files/functions/xfile.oc
++++ ocompiler-2/src/files/functions/xfile.oc
+@@ -3,6 +3,7 @@ const Xfile_function_not_x=Xfile_functio
+ const Xfile_decltype_const=Xfile_decltype_long+1
+ const Xfile_noignore_sign=asciicirc
+ const Xfile_yesignore_sign=asciiexclamationmark
++const Xfile_variadic_sign=asciipercent
+ 
+ #err
+ function xfile_add_int(sd int)
+--- ocompiler-2.orig/src/files/functions/xfile_details.oc
++++ ocompiler-2/src/files/functions/xfile_details.oc
+@@ -591,3 +591,42 @@ function xfile_keep_cursor(sv pcontent,s
+ 	call advancecursors(pcontent,psize,psize#)
+ 	return err
+ endfunction
++
++function xfile_variadic(sv pcontent,sd psize,sd size)
++	if main.xfile!=(openno)
++		sd er
++		setcall er xfile_add_char((Xfile_variadic))
++		if er=(noerror)
++			vstr err="error at xfile variadic."
++			if size!=0
++				ss content;set content pcontent#
++				char c#1
++				set c content#
++				call stepcursors(pcontent,psize)
++				if c=(Xfile_variadic_get)
++				elseif c=(Xfile_variadic_begin)
++				elseif c=(Xfile_variadic_end)
++					callret xfile_add_char(c)
++				else
++					return err
++				endelse
++				setcall er xfile_add_char(c)
++				if er=(noerror)
++					inc content
++					sd sz;set sz psize#
++					call notspaces(pcontent,psize)
++					if sz!=psize#
++						sub sz psize#
++						callret xfile_add_string(content,sz)
++					endif
++					return err
++				endif
++				return er
++			endif
++			return err
++		endif
++		return er
++	endif
++	call advancecursors(pcontent,psize,size)
++	return (noerror)
++endfunction
+--- ocompiler-2.orig/src/files/headers/xfile.oh
++++ ocompiler-2/src/files/headers/xfile.oh
+@@ -1,8 +1,9 @@
+ 
+-include "xfilecore.oh"                 #attention that ignore mask max at otoc size is 32, now is 31, and modify also at mults at loop.oc
++include "xfilecore.oh"                 #attention that ignore mask max at otoc size is 32, now is 31(0-30), and modify also at mults at loop.oc
+ const Xfile_noignore=Xfile_iend+1      #this is 31
+ const Xfile_yesignore=Xfile_noignore+1 #this is 32
+ #const Xfile_ignore_nosigns=Xfile_yesignore+1
++const Xfile_variadic=Xfile_yesignore+1
+ #const Xfile_noignore_sign
+ #const Xfile_yesignore_sign
+ #Const ifinscribe=-1; #Const nocondnumber=-1; const elseinscribe_write=0; const elseinscribe_skip=1
+@@ -277,3 +278,7 @@ const Xfile_sz_int=4
+ 
+ const Xfile_end_cond=0
+ const Xfile_end_func=1
++
++const Xfile_variadic_begin=Xfile_numbers_operation_less
++const Xfile_variadic_get=Xfile_numbers_operation_or
++const Xfile_variadic_end=Xfile_numbers_operation_greater
+--- ocompiler-2.orig/tests/.expected/a.out.c
++++ ocompiler-2/tests/.expected/a.out.c
+@@ -7,6 +7,7 @@ long*main(int*,...);
+ multi
+ line
+ */
++#include "stdarg.h"
+ #include "stddef.h"
+ #include "the_setjmp.h"
+ static unsigned char c1=1;
+@@ -44,9 +45,12 @@ struct st{
+ 	int a;
+ };
+ void      f(int* dummy,...){//void f(...) was working with gcc13 but with 5 still is: ISO C requires a named argument before '...'
++	va_list the_va_list;va_start(the_va_list,dummy);
+ 	long* a;
+ 	long b=sizeof(c2);
++	a=va_arg(the_va_list,long);
+ 	a=(long)&b;
++	va_end(the_va_list);
+ 	b=(long)a[0];
+ 	b=(long)((char*)a)[0];
+ 	b=(long)((short*)a)[0];
+--- ocompiler-2.orig/tests/.expected/a.out.oc.log
++++ ocompiler-2/tests/.expected/a.out.oc.log
+@@ -4,5 +4,7 @@ ninclude.oh
+ q
+ ninclude.oh
+ q
++ninclude.oh
++q
+ q
+ x00000069
+--- ocompiler-2.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-2/tests/.expected/a.out.oc.x.txt
+@@ -1,56 +1,56 @@
+-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
+-ADAf
++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
+--- ocompiler-2.orig/tests/a.out.oc
++++ ocompiler-2/tests/a.out.oc
+@@ -6,6 +6,7 @@ line
+ !
+ 
+ override include_sec 1
++include "stdarg.h" "include.oh"
+ include "stddef.h" "include.oh"
+ include "the_setjmp.h" "include.oh"
+ 
+@@ -48,9 +49,12 @@ function st()
+ 	datax a#1
+ end
+ functionv f(sd dummy) #void f(...) was working with gcc13 but with 5 still is: ISO C requires a named argument before '...'
++	%<dummy
+ 	valuex a#1
+ 	value b=\main.c2
++	%|a
+ 	set a #b
++	%>
+ 	set b a#
+ 	set b a#s
+ 	set b a#w
+--- ocompiler-2.orig/tests/db
++++ ocompiler-2/tests/db
+@@ -6,7 +6,7 @@ shift
+ if [ -n "${winlauncher}" ]; then launcher=${winlauncher}; fi
+ ${launcher} ${OCONV} $a.oc.x import $@
+ ./c1 $a || {
+-	echo enter or ctrl c
++	echo enter to write, ctrl c to exit
+ 	read -t $((60*60*24))
+ 	./d $a
+ }

@@ -1,0 +1,155 @@
+
+format elfobj64
+
+include "common.oh"
+
+importx "puts" puts
+importx "fopen" fopen
+importx "fclose" fclose
+importx "strrchr" strrchr
+importx "exit" exit  #only for problems at box64
+
+function out_file(sd in)
+	ss p;set p strrchr(in,(asciidot))
+	if p!=(NULL)
+		while in!=p
+			dec p
+			if p#=(asciidot)
+				break
+			end
+		end
+		if in!=p
+			#here we know there at at least two dots and of course the term null char
+			inc p
+			charx ext#1;set ext (asciic)
+			if p#=(asciio) #if .oh then is a header
+				ss test;set test p
+				inc test
+				if test#=(asciih)
+					set ext (asciih)
+				end
+			end
+			set p# ext
+			inc p
+			set p# (asciinul)
+			sd f;set f fopen(in,"wb")
+			if f!=(NULL)
+				return f
+			end
+			call puts("Cannot open output file")
+		end
+	end
+	return (NULL)
+end
+
+vstrx long#1
+charx long_size#1
+charx long_cast_size#1
+#
+char long_long="long "^
+char long_simple="long"^
+char point=asciiasterisk
+char long_long_reserve={asciispace,asciispace,asciispace,asciispace,asciispace}
+include "loop.oc"
+
+#aftercalli
+
+function mainfn(sv s,sd ignores)
+	#sd s;incst argv;set s argv#
+	sd f;setcall f fopen(s,"rb")
+	if f!=(NULL)
+		sd out;set out out_file(s)
+		sd exitval
+		if out!=(NULL)
+			set exitval preloop(f,out,ignores)
+			call fclose(out)
+		else
+			set exitval (EXIT_FAILURE)
+		end
+		call fclose(f)
+		return exitval
+	end
+	call puts("Cannot open input file")
+	return (EXIT_FAILURE)
+end
+
+importx "strlen" strlen
+
+function ignores_init(sv endval,sv argv)
+	sub endval 2
+	mult endval :
+	add endval argv
+	datax out#1
+	set out 0
+include "tags.oh"
+	while argv!=endval
+		ss s;set s argv#
+		sd b
+		set b strlen(s)
+		ss aa^a
+		datax outwas#1;set outwas out
+		sd orval=1
+		while aa#!=0
+			charx aaa#1;set aaa aa#
+			inc aa
+			if b=aaa
+				sd c;set c memcmp(s,aa,b)
+				if c=0
+					or out orval
+				end
+			end
+			add aa aaa
+			shl1 orval
+		end
+		if outwas=out
+			return 0
+		end
+		incst argv
+	end
+	return out
+end
+
+function parse_options(sd _argc,sv _argv)
+	sv argv;set argv _argv#
+	ss s;set s argv#
+	if s#=(asciihyphen)
+		inc s
+		if s#=(asciinul)
+			if _argc#<3
+				return (EXIT_FAILURE)
+			end
+			#long long
+			dec _argc#
+			incst _argv#
+			set main.long #main.long_long
+			set main.long_size \main.long_long+\main.long_simple
+			set main.long_cast_size \main.long_long+\main.long_simple+\main.point
+			return (EXIT_SUCCESS)
+		end
+	end
+	set main.long #main.long_simple
+	set main.long_size \main.long_simple
+	set main.long_cast_size \main.long_simple+\main.point
+	return (EXIT_SUCCESS)
+end
+
+include "entry.oc" "entryraw.oc"
+	if argc>=2
+		sd ok;set ok parse_options(#argc,#argv)
+		if ok=(EXIT_SUCCESS)
+			ss s;set s argv#
+			data ignores=0
+			if argc>2
+				incst argv
+				set ignores ignores_init(argc,argv)
+				if ignores=0
+					call puts("Unrecognized tagIgnore")
+					call exit((EXIT_FAILURE))
+				end
+			end
+			sd a;set a mainfn(s,ignores)
+			call exit(a)
+		end
+	end
+	call puts("Usage: otoc [-] filePath [tagIgnore1 .. tagIgnoreN]")
+	call exit((EXIT_FAILURE))
