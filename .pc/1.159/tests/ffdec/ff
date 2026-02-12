@@ -1,0 +1,40 @@
+
+#1 d will be full diff
+#a
+
+if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+if [ -z "${q}" ]; then q=qq; fi
+l_z=`pkg-config --libs zlib`
+_L=/home/bc/x86_64_lib/cross
+
+${OCOMP} a.oc inplace_reloc 0 logfile 0 && \
+/usr/x86_64-linux-gnu/bin/ld --dynamic-linker=/lib64/ld-linux-x86-64.so.2 a.o -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+{
+	if [ "${a}" != 0 ]; then
+		LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${q} ./a.out && {
+			if [ "${a}" = 1 ]; then exit; fi
+			if [ -n "${wait}" ]; then read; fi
+			LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${q} ./a.out x && {
+				if [ "${a}" = 2 ]; then exit; fi
+				if [ -n "${wait}" ]; then read; fi
+				. ~/games/ep/ffdec #~/games/ffdec /home/bc/a/a/s/actionswf-1/tests/ffdec/a.swf
+				is_debug=x ffdec=${ffd} skip_alternative=x ../../oaalternative.sh a.swf && \
+				is_debug=x expect_obfuscation=./q no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "${q} ./a.out x x" || {
+					swfdump -D${1} a.swf.orig > 1
+					swfdump -D${1} a.swf > 2
+					diff 1 2 --color
+					rm 1 2
+					exit 1
+				}
+				cat a.swf.log
+			}
+		}
+	fi
+}
+
+# ffdec=/home/bc/a/ffdec/ffdec_24.0.1/usr/bin/ffdec FFDEC_JARFILENAME=../../share/java/ffdec/ffdec.jar ./ff
+
+# LD_LIBRARY_PATH=/home/bc/x86_64_lib ./ff
+#LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src qq ./a.out 1 x x
+#LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src is_debug=x no_number_check=x ../../oaalternative.sh a.swf 'qq ./a.out 2 x x'

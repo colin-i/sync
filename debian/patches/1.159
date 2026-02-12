@@ -1,0 +1,3641 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-159) bionic; urgency=medium
+ .
+   * python , oaas3
+Author: bc <bc@ubuntu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-02-12
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -24,17 +24,24 @@ $(ALLDIRS):
+ 	$(MAKE) -C $@ conv_64=${conv_64} $(MAKECMDGOALS)
+ 
+ test:
+-	RUN__SHELL=$(SHELL) . ./shl && cd tests && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
++	RUN__SHELL=$(SHELL) . ./shl && cd tests && \
++	conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
++	src=x $${RUN__SHELL} ./apy && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
+ 	cd ffdec && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
+-	cd ../data && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./test x && echo tests ok
++	cd ../data && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./test x && \
++	cd ../as3 && RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
++	echo tests ok
+ clean:
+-	RUN__SHELL=$(SHELL) . ./shl && cd tests && $${RUN__SHELL} ./c && cd ffdec && $${RUN__SHELL} ./c && cd ../data && $${RUN__SHELL} ./c
++	RUN__SHELL=$(SHELL) . ./shl && cd tests && \
++	$${RUN__SHELL} ./c && cd ffdec && $${RUN__SHELL} ./c && cd ../data && $${RUN__SHELL} ./c && cd ../as3 && $${RUN__SHELL} ./c
+ install:
+ 	install -D oaalternative.sh $(DESTDIR)$(prefix)/bin/oaalternative.sh
+-	install -D oaalternative.py $(DESTDIR)$(prefix)/bin/oaalternative.py
++	install -D oaalternativedeobf $(DESTDIR)$(prefix)/bin/oaalternativedeobf
++	install -D oaas3 $(DESTDIR)$(prefix)/bin/oaas3
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.sh
+-	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.py
++	-rm -f $(DESTDIR)$(prefix)/bin/oaalternativedeobf
++	-rm -f $(DESTDIR)$(prefix)/bin/oaas3
+ 
+ .PHONY: $(TOPTARGETS) $(MEDTARGETS) $(ALLDIRS)
+ .NOTPARALLEL:
+--- actionswf-1.orig/cln
++++ actionswf-1/cln
+@@ -1,2 +1,2 @@
+ 
+-cd example && make clean && cd .. && make clean && git status
++cd example && make clean && cd .. && make clean && cd csrc && make clean && cd .. && git status
+--- actionswf-1.orig/csrc/Makefile
++++ actionswf-1/csrc/Makefile
+@@ -64,3 +64,5 @@ clean:
+ distclean: clean
+ 
+ .PHONY: all headers clean distclean
++
++# global usings: abcdefghiloprstuwx jkmnqvy
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -9,19 +9,20 @@ extern "C" {
+ 
+ 
+ 
++//FILLSTYLE
+ #define no_fill -1
+ #define solid_fill 0
+ #define repeating_bitmap_fill 0x40
+ #define clipped_bitmap_fill 0x41
+ #define nonsmoothed_repeating_bitmap 0x42
+ #define nonsmoothed_clipped_bitmap 0x43
+-//
++//StyleChangeRecord
+ #define StateMoveTo 1
+ #define StateFillStyle0 2*StateMoveTo
+ #define StateFillStyle1 2*StateFillStyle0
+ #define StateLineStyle 2*StateFillStyle1
+ #define StateNewStyles 2*StateLineStyle
+-
++//Buttonrecord
+ #define ButtonStateUp 1
+ #define ButtonStateOver 2*ButtonStateUp
+ #define ButtonStateDown 2*ButtonStateOver
+@@ -49,6 +50,7 @@ typedef struct ButtonData_str{
+ }ButtonData;
+ #pragma pack(pop)
+ 
++//DefineEditText
+ #define HasText 0x80
+ #define WordWrap 0x40
+ #define Multiline 0x20
+@@ -65,7 +67,7 @@ typedef struct ButtonData_str{
+ #define WasStatic 0x400
+ #define HTML 0x200
+ #define UseOutlines 0x100
+-//
++//,HasLayout,Align
+ #define layout_align_left 0
+ #define layout_align_right 1
+ #define layout_align_center 2
+@@ -88,6 +90,7 @@ typedef struct EditText_str
+ } EditText;
+ #pragma pack(pop)
+ 
++//DefineFont2
+ #define FontFlagsHasLayout 0x80
+ #define FontFlagsShiftJIS 0x40
+ #define FontFlagsSmallText 0x20
+@@ -155,13 +158,13 @@ int swf_imagej(char* imagepath,int width
+ //id
+ int swf_imagej_alpha(char* imagepath,int width,int height,char* alphapath);
+ //id
+-int swf_jpeg(char* imagepath);
++int swf_imagej_clipped(char* imagepath,int width,int height);
+ //id
+-int swf_jpeg_alpha(char* imagepath,char* alphapath);
++int swf_imagej_alpha_clipped(char* imagepath,int width,int height,char* alphapath);
+ //id
+-int swf_jpeg_clipped(char* imagepath);
++int swf_jpeg(char* imagepath);
+ //id
+-int swf_jpeg_alpha_clipped(char* imagepath,char* alphapath);
++int swf_jpeg_alpha(char* imagepath,char* alphapath);
+ //width
+ int swf_gif_width(char* imagepath);
+ //height
+@@ -181,8 +184,8 @@ int swf_img_ex(char* imagepath,int wh[2]
+ //back at generic swf functions
+ 
+ void swf_done();
+-void swf_new(char* path,int width,int height,int backgroundcolor,char fps);
+-void swf_new_ex(char* path,int width,int height,int backgroundcolor,char fps,int flags);
++void swf_new(char* path,int width,int height,int backgroundcolor,unsigned char fps);
++void swf_new_ex(char* path,int width,int height,int backgroundcolor,unsigned char fps,int flags);
+ void swf_placeobject(int refid,int depth);
+ void swf_placeobject_coords(int refid,int depth,int x,int y);
+ void swf_removeobject(int depth);
+@@ -211,14 +214,17 @@ void swf_exports_done();
+ 
+ void action(char* ac);
+ void actionf(char* buffer,char* format,...);
++void actionsf(long unsigned int* psize,char** pbuffer,char* format,...);
+ void actiond(char* ac);
+ 
+ //action at sprite
+ 
+ void action_sprite(int sprite,char* ac);
+-void actionf_sprite(int sprite,char* buffer,char* format,...);
+ void action_init_sprite(int sprite,char* ac);
++void actionf_sprite(int sprite,char* buffer,char* format,...);
+ void actionf_init_sprite(int sprite,char* buffer,char* format,...);
++void actionsf_sprite(int sprite,long unsigned int* psize,char** pbuffer,char* format,...);
++void actionsf_init_sprite(int sprite,long unsigned int* psize,char** pbuffer,char* format,...);
+ 
+ 
+ //tool
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -24,6 +24,7 @@ const flag_deprecation_yes=0x8000
+ const flag_noDuplicate=0x10000
+ const flag_verbose=0x20000
+ const flag_xx=0x40000                           #to let .log for alt and .x for regrab
++const flag_format=0x80000                       #is not reached at .x or at alt
+ 
+ const flags_pool=flagpre_pool_write|flag_pool_read
+ const flags_x=flagpre_x|flag_x
+--- actionswf-1.orig/dev/importf.oh
++++ actionswf-1/dev/importf.oh
+@@ -46,13 +46,13 @@ importX "swf_imagej" swf_imagej
+ #id
+ importX "swf_imagej_alpha" swf_imagej_alpha
+ #id
+-importX "swf_jpeg" swf_jpeg
++importX "swf_imagej_clipped" swf_imagej_clipped
+ #id
+-importX "swf_jpeg_alpha" swf_jpeg_alpha
++importX "swf_imagej_alpha_clipped" swf_imagej_alpha_clipped
+ #id
+-importX "swf_jpeg_clipped" swf_jpeg_clipped
++importX "swf_jpeg" swf_jpeg
+ #id
+-importX "swf_jpeg_alpha_clipped" swf_jpeg_alpha_clipped
++importX "swf_jpeg_alpha" swf_jpeg_alpha
+ #width
+ importX "swf_gif_width" swf_gif_width
+ #height
+@@ -97,11 +97,16 @@ importX "swf_exports_done" swf_exports_d
+ 
+ importX "action" action
+ importX "actionf" actionf
++importX "actionsf" actionsf
+ importX "actiond" actiond
+ importX "action_sprite" action_sprite
+ importX "action_init_sprite" action_init_sprite
+ importX "actionf_sprite" actionf_sprite
+ importX "actionf_init_sprite" actionf_init_sprite
++importX "actionsf_sprite" actionsf_sprite
++importX "actionsf_init_sprite" actionsf_init_sprite
++
++importX "actions_free" actions_free
+ 
+ #tool
+ 
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -2,7 +2,6 @@ format elfobj64
+ 
+ #a simple shape moving on the stage example
+ 
+-importx "sprintf" sprintf
+ importx "_exit" exit
+ 
+ include "entry_arg.oc" "entry.oc"
+@@ -46,11 +45,9 @@ call action_init_sprite(movie_preid,"_ro
+ call swf_sprite_placeobject(movie_preid,shape,1)
+ call swf_sprite_showframe(movie_preid)
+ 
+-char data#512
+-vstr ac^data
+-vstr vars="var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move"
+-call sprintf(ac,vars,(width),(height),(shape_lat))
+-call action_sprite(movie_preid,ac)
++sdu size
++ss a_c=0
++call actionsf_sprite(movie_preid,#size,#a_c,"var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move",(width),(height),(shape_lat))
+ 
+ call action_sprite(movie_preid,"
+ if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+@@ -86,9 +83,9 @@ if(_root.tog==1){
+ sd b;set b swf_button(150,50,#ButtonData)
+ call swf_placeobject(b,0)
+ 
+-call action("
+-var x_coef=1;
+-var y_coef=1;
++call actionsf(#size,#a_c,"
++var x_coef=%u;
++var y_coef=%u;
+ function test(){
+ 	function test2(){
+ 		attachMovie('movie','_movie',1);
+@@ -126,10 +123,12 @@ while(true){
+ 	}
+ }
+ 
+-")
++",1,1)
+ 
+ call swf_showframe()
+ call swf_done()
+ 
++call actions_free(a_c)
++
+ call exit(0)
+ #return 0
+--- actionswf-1.orig/example/rtest
++++ actionswf-1/example/rtest
+@@ -1,2 +1 @@
+-. ~/games/ep/ffdec
+-ffdec=${ffd} ./mrd test
++m=r ./test
+--- /dev/null
++++ actionswf-1/example/test
+@@ -0,0 +1,2 @@
++. ~/games/ep/ffdec
++ffdec=${ffd} ./m${m}d test
+\ No newline at end of file
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -21,7 +21,8 @@ cd ../oad && \
+ ./mw clean && \
+ cd .. && \
+ cp oaalternative.sh actionswf && \
+-cp oaalternative.py actionswf && \
++cp oaalternativedeobf actionswf && \
++cp oaas3 actionswf && \
+ cp oaalternative.cmd actionswf && \
+ zip -r actionswf.zip actionswf && \
+ rm -r ./actionswf && \
+--- actionswf-1.orig/oaalternative.py
++++ /dev/null
+@@ -1,159 +0,0 @@
+-#!/usr/bin/python3
+-
+-default_tab=3
+-
+-import sys
+-if len(sys.argv)!=2: exit(1)
+-import os
+-verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
+-
+-def ind_match(indt,b):
+-	global n,ps
+-	n=pos
+-	while True:
+-		while True:
+-			n-=1
+-			if n<0: exit(1)
+-			if data[n]=='\n': break
+-		ps=n+1
+-		while data[ps]==' ': ps+=1
+-		a=ps-n
+-		if a==indt: break
+-		if b:
+-			if a<indt: exit(1)
+-		elif a>indt: exit(1)
+-
+-with open(sys.argv[1], encoding='utf-8') as f:
+-	data=f.read()  #\r\n is translated to \n also at windows msys2, else data=data.replace('\r','')
+-	if data: # := only from 3.8
+-		start=0
+-		goto='§§goto(addr'
+-		while True:
+-			pos=data.find(goto,start)
+-			if pos==-1: break
+-			start=pos
+-
+-			while True:
+-				if pos==0: exit(1)
+-				pos-=1
+-				if data[pos]!=' ':
+-					break
+-			ind=start-pos
+-			if pos<1: exit(1)
+-			if data[pos]!='\n': exit(1)
+-			pos-=1
+-
+-			start+=len(goto)
+-			if data[pos]!='}':
+-				#allow other goto constructions
+-				continue
+-				#exit(1)
+-
+-			pos-=ind
+-			if pos<0: exit(1)
+-			if data[pos]!='\n': exit(1)
+-
+-			ind_match(ind,True)
+-			if data[ps]!='{': exit(1)
+-			spos=n-1
+-			while data[spos]!='\n':
+-				spos-=1
+-				if spos<0: break                            #spos is A
+-
+-			addr='addr'+data[start:start+4]+':'
+-			if verbose:
+-				print(addr)
+-			start+=4
+-			if data[start:start+3]!=');\n': exit(1)
+-			start+=3                                          #start is D
+-
+-			bpos=data.find(addr,ps,pos)
+-			if bpos==-1: exit(1)
+-			apos=bpos-1
+-			while data[apos]!='\n': apos-=1
+-			ind2=bpos-apos
+-			ind3=ind2-default_tab
+-			ind_match(ind3,False)
+-
+-			bpos+=len(addr)
+-			if data[bpos]!='\n': exit(1)
+-			mark=bpos                                         #mark is B
+-			while True: #here is expecting a lower ind
+-				cpos=bpos+1
+-				while data[cpos]==' ': cpos+=1
+-				indt=cpos-bpos
+-				if indt==ind3: break
+-				if indt<ind3: exit(1)
+-				bpos=cpos+1
+-				while data[bpos]!='\n': bpos+=1             #bpos is BB
+-
+-			apos-=1
+-			if data[apos]!='{': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			apos-=4
+-			if data[apos:apos+4]!='else': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			apos-=1
+-			if data[apos]!='}': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			if apos<spos: exit(1)                             #apos is AA
+-
+-			if data[cpos]!='}': exit(1)
+-			cpos+=1
+-			if data[cpos]!='\n': exit(1)                      #cpos is C
+-
+-			if data[ps:ps+8]!='return;\n':
+-				while data[ps]!='\n': ps+=1
+-				n=ps                                        #n is CC
+-
+-			# before modifications, ind<ind3<ind2 , default_tab between ind3 ind2
+-			ind-=1;ind3-=1;ind2-=1
+-			inddif2=ind3-ind      #for C rows
+-			ind3=ind+default_tab  #still can fit in ind2, B rows can be truncated
+-			inddif=ind2-ind3
+-			ind2+=default_tab     #for highest break
+-			maxind=' '*ind2       #same, and can go for rest of inds
+-			text=data[0:spos+1]
+-			text+=maxind[0:ind]+'while(true){\n'
+-
+-			while spos!=apos:                                 #A-AA
+-				text+=maxind[0:default_tab]
+-				spos+=1
+-				a=spos
+-				while data[a]!='\n': a+=1
+-				text+=data[spos:a+1]
+-				spos=a
+-			text+=maxind[0:ind2]+'break;\n'
+-
+-			while ind3<ind2: #multiple of default_tab is not checked
+-				ind2-=default_tab
+-				text+=maxind[0:ind2]+'}\n'
+-
+-			while mark!=bpos:                                 #B-BB
+-				mark+=1+inddif
+-				a=mark
+-				while data[a]!='\n': a+=1
+-				text+=data[mark:a+1]
+-				mark=a
+-			text+=maxind[0:ind3]+'break;\n'
+-			text+=maxind[0:ind]+'}\n'
+-
+-			while cpos!=n:                                    #C-CC
+-				cpos+=1+inddif2
+-				a=cpos
+-				while data[a]!='\n': a+=1
+-				text+=data[cpos:a+1]
+-				cpos=a
+-
+-			a=len(text)
+-			text+=data[start:]
+-			data=text
+-			start=a
+-
+-with open(sys.argv[1],"w",encoding='utf-8') as f:
+-	f.write(data)
+-
+-exit(0)
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -46,12 +46,13 @@ if [ -z "${skip_ffdec}" ]; then
+ fi
+ if [ -z "${skip_alternative}" ]; then
+ 	if [ -z "${skip_deobfuscation}" ]; then
+-		deobfuscator=$(readlink -f "$(dirname "$0")"/oaalternative.py) #is not in start folder there
++		deobfuscator=$(readlink -f "$(dirname "$0")"/oaalternativedeobf) || exit 1
++		#is not in start folder there
+ 	fi
+ 
+-	mkdir -p "${out}"
++	mkdir -p "${out}" || exit 1
+ 
+-	cd "${folder}"
++	cd "${folder}" || exit 1
+ 
+ 	move () {
+ 		if [ -z "${no_clean}" ]; then
+--- /dev/null
++++ actionswf-1/oaalternativedeobf
+@@ -0,0 +1,159 @@
++#!/usr/bin/python3
++
++default_tab=3
++
++import sys
++if len(sys.argv)!=2: exit(1)
++import os
++verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
++
++def ind_match(indt,b):
++	global n,ps
++	n=pos
++	while True:
++		while True:
++			n-=1
++			if n<0: exit(1)
++			if data[n]=='\n': break
++		ps=n+1
++		while data[ps]==' ': ps+=1
++		a=ps-n
++		if a==indt: break
++		if b:
++			if a<indt: exit(1)
++		elif a>indt: exit(1)
++
++with open(sys.argv[1], encoding='utf-8') as f:
++	data=f.read()  #\r\n is translated to \n also at windows msys2, else data=data.replace('\r','')
++	if data: # := only from 3.8
++		start=0
++		goto='§§goto(addr'
++		while True:
++			pos=data.find(goto,start)
++			if pos==-1: break
++			start=pos
++
++			while True:
++				if pos==0: exit(1)
++				pos-=1
++				if data[pos]!=' ':
++					break
++			ind=start-pos
++			if pos<1: exit(1)
++			if data[pos]!='\n': exit(1)
++			pos-=1
++
++			start+=len(goto)
++			if data[pos]!='}':
++				#allow other goto constructions
++				continue
++				#exit(1)
++
++			pos-=ind
++			if pos<0: exit(1)
++			if data[pos]!='\n': exit(1)
++
++			ind_match(ind,True)
++			if data[ps]!='{': exit(1)
++			spos=n-1
++			while data[spos]!='\n':
++				spos-=1
++				if spos<0: break                            #spos is A
++
++			addr='addr'+data[start:start+4]+':'
++			if verbose:
++				print(addr)
++			start+=4
++			if data[start:start+3]!=');\n': exit(1)
++			start+=3                                          #start is D
++
++			bpos=data.find(addr,ps,pos)
++			if bpos==-1: exit(1)
++			apos=bpos-1
++			while data[apos]!='\n': apos-=1
++			ind2=bpos-apos
++			ind3=ind2-default_tab
++			ind_match(ind3,False)
++
++			bpos+=len(addr)
++			if data[bpos]!='\n': exit(1)
++			mark=bpos                                         #mark is B
++			while True: #here is expecting a lower ind
++				cpos=bpos+1
++				while data[cpos]==' ': cpos+=1
++				indt=cpos-bpos
++				if indt==ind3: break
++				if indt<ind3: exit(1)
++				bpos=cpos+1
++				while data[bpos]!='\n': bpos+=1             #bpos is BB
++
++			apos-=1
++			if data[apos]!='{': exit(1)
++			apos-=ind3
++			if data[apos]!='\n': exit(1)
++			apos-=4
++			if data[apos:apos+4]!='else': exit(1)
++			apos-=ind3
++			if data[apos]!='\n': exit(1)
++			apos-=1
++			if data[apos]!='}': exit(1)
++			apos-=ind3
++			if data[apos]!='\n': exit(1)
++			if apos<spos: exit(1)                             #apos is AA
++
++			if data[cpos]!='}': exit(1)
++			cpos+=1
++			if data[cpos]!='\n': exit(1)                      #cpos is C
++
++			if data[ps:ps+8]!='return;\n':
++				while data[ps]!='\n': ps+=1
++				n=ps                                        #n is CC
++
++			# before modifications, ind<ind3<ind2 , default_tab between ind3 ind2
++			ind-=1;ind3-=1;ind2-=1
++			inddif2=ind3-ind      #for C rows
++			ind3=ind+default_tab  #still can fit in ind2, B rows can be truncated
++			inddif=ind2-ind3
++			ind2+=default_tab     #for highest break
++			maxind=' '*ind2       #same, and can go for rest of inds
++			text=data[0:spos+1]
++			text+=maxind[0:ind]+'while(true){\n'
++
++			while spos!=apos:                                 #A-AA
++				text+=maxind[0:default_tab]
++				spos+=1
++				a=spos
++				while data[a]!='\n': a+=1
++				text+=data[spos:a+1]
++				spos=a
++			text+=maxind[0:ind2]+'break;\n'
++
++			while ind3<ind2: #multiple of default_tab is not checked
++				ind2-=default_tab
++				text+=maxind[0:ind2]+'}\n'
++
++			while mark!=bpos:                                 #B-BB
++				mark+=1+inddif
++				a=mark
++				while data[a]!='\n': a+=1
++				text+=data[mark:a+1]
++				mark=a
++			text+=maxind[0:ind3]+'break;\n'
++			text+=maxind[0:ind]+'}\n'
++
++			while cpos!=n:                                    #C-CC
++				cpos+=1+inddif2
++				a=cpos
++				while data[a]!='\n': a+=1
++				text+=data[cpos:a+1]
++				cpos=a
++
++			a=len(text)
++			text+=data[start:]
++			data=text
++			start=a
++
++with open(sys.argv[1],"w",encoding='utf-8') as f:
++	f.write(data)
++
++exit(0)
+--- /dev/null
++++ actionswf-1/oaas3
+@@ -0,0 +1,186 @@
++#!/usr/bin/python3
++
++import sys
++if len(sys.argv)!=3:
++	print('Usage: as3.py output_folder output_file')
++	# skip_src   a1 a2a a2b a3 b1b b2b   splits_folder rule_ext splits_format_ext splits_printf_ext
++	# skip_comp header ffdec compiler
++	exit(1)
++
++import os
++
++dest=sys.argv[1]
++def hx_ext(fl):
++	return os.path.join(dest,os.path.basename(os.path.dirname(fl))+'.hx')
++out_file_name=sys.argv[2]
++
++if os.environ.get('skip_src')==None:
++	def changeable(a,b,c): globals()[a + b] = c if os.environ.get(a + b) == None else os.environ.get(a + b)
++	changeable('a','1','/')
++	changeable('a','2a','/')
++	changeable('a','2b','*')
++	changeable('a','3','3')
++	changeable('b','1b','*')
++	changeable('b','2b','/')
++
++	def premade_formats():
++		#environ or defaults at edor
++
++		splits_folder=os.environ.get('splits_folder')
++		if splits_folder==None:
++			splits_folder='osrc'
++
++		rule_ext=os.environ.get('rule_ext')
++		if rule_ext==None:
++			rule_ext='oac'
++
++		splits_format_ext=os.environ.get('splits_format_ext')
++		if splits_format_ext==None:
++			splits_format_ext='split'
++
++		#and here at src
++		splits_printf_ext=os.environ.get('splits_printf_ext')
++		if splits_printf_ext==None:
++			splits_printf_ext='format'
++
++		def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not direct connected with my edor and src, is like a guardian?
++		a=('' if splits_folder=='' else splits_folder+os.sep)
++
++		#'a.q.swf' is a.q
++		return (a+os.path.splitext(out_file_name)[0]+ext(rule_ext)+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
++
++	splits_file, splits_mix = premade_formats()
++
++	try:
++		os.mkdir(dest)
++	except FileExistsError:
++		pass
++
++	multiline_backjump=len(b1b.encode())+len(b2b.encode())
++
++	#for filename in os.listdir(src):
++	with open(splits_file) as splits_file:
++		splits_file_data=splits_file.read()
++		with open(splits_mix) as splits_mix:
++			splits_mix_data=splits_mix.read()
++
++			files = splits_file_data.split('\x00')
++			files.pop() # Remove the last empty string
++			texts = splits_mix_data.split('\x00')
++			texts.pop()
++			i=0
++			for f in files:
++				if texts[i]:
++					text=texts[i]
++				else:
++					with open(f) as sfile:
++						text=sfile.read()
++				text=text.splitlines(keepends=True)
++				with open(hx_ext(f),'ab') as dfile: #haxe will not do for .as
++					mode=0
++					for line in text:
++						chars = bytearray(len(line.encode())) #'utf-8'
++						pos = 0
++						for c in line:
++							ch=c.encode()
++							positions=len(ch)
++							for j in range(0,positions):
++								chars[pos]=ch[j]
++								pos+=1
++							if mode==0:
++								if c==a1:
++									mode=1
++							elif mode==1:
++								if c==a2a:
++									mode=2
++								elif c==a2b:
++									mode=3
++								else:
++									mode=0
++							elif mode==2 or mode==3:
++								if c==a3:
++									mode*=2
++									pos=0    #notice: both //3 and /*3 will reset the line
++								else:
++									mode=0
++							elif mode==6:
++								if c==b1b:
++									mode=7
++							elif mode==7:
++								if c==b2b:
++									mode=0
++									pos-=multiline_backjump
++								else:
++									mode=6
++						if mode==4:
++							mode=0
++						dfile.write(chars[:pos])
++				i=i+1
++
++if os.environ.get('skip_comp')==None:
++	def error():
++		if r.returncode:
++			print('error')
++			exit(r.returncode)
++
++	import subprocess
++
++	c_dir=os.getcwd() #haxe says no to abs path
++	dest_file=os.path.realpath(out_file_name)
++	os.chdir(dest)
++	compiler=os.environ.get('compiler')
++	if compiler==None:
++		compiler='haxe'
++	hd=os.environ.get('header')
++	if hd:
++		r=subprocess.run([compiler,'--swf',dest_file,'--main','Main','--swf-header',hd])
++	else:
++		r=subprocess.run([compiler,'--swf',dest_file,'--main','Main'])
++	# --swf-header 960:640:60:f68712 --swf-version 15
++	#w:h:fps:rgb
++	error()
++
++	#done for output_folder
++	os.chdir(c_dir) #back for clean
++	for f in files:
++		os.remove(hx_ext(f))
++	os.rmdir(dest)
++
++	#confirm is as3
++
++	dest_file_tmp=dest_file+'.tmp'
++	ffdec=os.environ.get('ffdec')
++	if ffdec==None:
++		ffdec='ffdec'
++	r=subprocess.run([ffdec,'-decompress',dest_file,dest_file_tmp])
++	error()
++	with open(dest_file_tmp,'rb') as file:
++		file.seek(8)
++		#rect
++		b=file.read(1)
++		n=b[0]>>3 # 0xff >> 1 is 0x7f
++		n=5+(n*4)
++		if n%8:
++			n=int(n/8)+1
++		else:
++			n=n/8
++		file.seek(n+3,1)
++		#tag
++		tag=file.read(2)
++		tg=tag[1]<<2
++		tg_low=tag[0]>>6
++		tg|=tg_low
++		if tg!=69:
++			print('no FileAttributes tag')
++			exit(1)
++		tg=tag[0]&0x3f
++		if tg==0x3f:
++			print('malformed FileAttributes tag')
++			exit(1)
++		#tag data
++		tg=file.read(1)
++		if (tg[0]&8)==0:
++			print('ActionScript3 bit is not set')
++			exit(1)
++
++	os.remove(dest_file_tmp)
+--- /dev/null
++++ actionswf-1/python/README.md
+@@ -0,0 +1,3 @@
++# ActionSwf
++
++Library bindings.
+--- /dev/null
++++ actionswf-1/python/a
+@@ -0,0 +1,10 @@
++
++#or use PYTHONPATH=/home/bc/s/actionswf-1/python
++
++if [ ! -e setup.py ]; then ~/test/pyp/pypre; fi
++pip install --user . --break-system-packages # python3 setup.py install --user will install egg
++
++# cc a.c -L/home/bc/s/actionswf-1/csrc -lactionswf -lz
++
++# ~/test/pyp/pyver
++# ~/test/pyp/pypi
+--- /dev/null
++++ actionswf-1/python/actionswf/__init__.py
+@@ -0,0 +1,179 @@
++
++from enum import IntEnum
++
++class flag(IntEnum):
++	none=            0
++	pre_log=         0x1
++	alt=             0x2
++	titles=          0x4
++	pre_x=           0x8
++	pre_x_pad=       0x10
++	forin1=          0x20
++	framesAsShows=   0x40
++	x=               0x80
++	pre_pool_write=  0x100
++	pool_read=       0x200
++	pre_mix=         0x400
++	pool_read_unlink=0x800
++	pre_write_no=    0x1000
++	compress=        0x2000
++	deprecation_no=  0x4000
++	deprecation_yes= 0x8000
++	noDuplicate=     0x10000
++	verbose=         0x20000
++	xx=              0x40000
++class flags(IntEnum):
++	pool=        flag.pre_pool_write|flag.pool_read
++	x=           flag.pre_x|flag.x
++	prex=        flag.pre_log|flag.pre_pool_write|flag.pre_x
++	prexx=       prex|flag.xx
++	antix_read=  flag.pre_log|flag.alt|flag.pre_x
++	antixx_write=flag.titles
++	xx=          flag.pool_read|flag.xx
++class flagss(IntEnum):
++	x=        flag.x|flag.pool_read
++	xu=       x|flag.pool_read_unlink
++	xx=       x|flag.xx
++	xxu=      xu|flag.xx
++	read_done=flag.pool_read|flag.pool_read_unlink
++
++class FILLSTYLE(IntEnum):
++	no=                          -1
++	solid=                       0
++	repeating_bitmap=            0x40
++	clipped_bitmap=              0x41
++	nonsmoothed_repeating_bitmap=0x42
++	nonsmoothed_clipped_bitmap=  0x43
++class State(IntEnum):
++	MoveTo=    1
++	FillStyle0=1 << 1
++	FillStyle1=1 << 2
++	LineStyle= 1 << 3
++	NewStyles= 1 << 4
++class ButtonState(IntEnum):
++	Up=     1
++	Over=   1 << 1
++	Down=   1 << 2
++	HitTest=1 << 3
++
++class Text(IntEnum):
++	HasText=     0x80
++	WordWrap=    0x40
++	Multiline=   0x20
++	Password=    0x10
++	ReadOnly=    0x8
++	HasTextColor=0x4
++	HasMaxLength=0x2
++	HasFont=     0x1
++	HasFontClass=0x8000
++	AutoSize=    0x4000
++	HasLayout=   0x2000
++	NoSelect=    0x1000
++	Border=      0x800
++	WasStatic=   0x400
++	HTML=        0x200
++	UseOutlines= 0x100
++class LayoutAlign(IntEnum):
++	left=   0
++	right=  1
++	center= 2
++	justify=3
++
++class FontFlags(IntEnum):
++	HasLayout=           0x80
++	FontFlagsShiftJIS=   0x40
++	FontFlagsSmallText=  0x20
++	FontFlagsANSI=       0x10
++	FontFlagsWideOffsets=8
++	FontFlagsWideCodes=  4
++	FontFlagsItalic=     2
++	FontFlagsBold=       1
++
++
++import ctypes
++
++def ImageSizes():
++	return (ctypes.c_int * 2)()
++def ShapeArray(*values): # ShapeArray(1,2,3)
++	return (ctypes.c_int * (len(values) + 1))(*values, 0)  # tests started from this: (ctypes.c_int * 2)(*[1, 0])
++def ActionSize():
++	return ctypes.c_ulong()  # using the .value
++def ActionBuffer():
++	return ctypes.c_char_p()
++def Ref(a):
++	return ctypes.byref(a)
++
++#try: #in PATH
++_lib=ctypes.cdll.LoadLibrary("libactionswf.so")
++#except Exception:
++#lib=ctypes.cdll.LoadLibrary("actionswf.dll")
++
++from . import _swf
++_swf.init(_lib)
++ButtonData=_swf.ButtonData
++EditText=_swf.EditText
++button=_swf.button
++button_last=_swf.button_last
++font=_swf.font
++font_basic=_swf.font_basic
++text=_swf.text
++shape=_swf.shape
++shape_basic=_swf.shape_basic
++shape_bitmap=_swf.shape_bitmap
++shape_bitmap_clipped=_swf.shape_bitmap_clipped
++shape_border=_swf.shape_border
++image=_swf.image
++image_ex=_swf.image_ex
++dbl=_swf.dbl
++dbl_ex=_swf.dbl_ex
++dbl_width=_swf.dbl_width
++dbl_height=_swf.dbl_height
++imagej=_swf.imagej
++imagej_alpha=_swf.imagej_alpha
++imagej_clipped=_swf.imagej_clipped
++imagej_alpha_clipped=_swf.imagej_alpha_clipped
++jpeg=_swf.jpeg
++jpeg_alpha=_swf.jpeg_alpha
++gif_width=_swf.gif_width
++gif_height=_swf.gif_height
++imagex=_swf.imagex
++imagex_ex=_swf.imagex_ex
++img=_swf.img
++img_ex=_swf.img_ex
++done=_swf.done
++new=_swf.new
++new_ex=_swf.new_ex
++placeobject=_swf.placeobject
++placeobject_coords=_swf.placeobject_coords
++removeobject=_swf.removeobject
++showframe=_swf.showframe
++sprite_done=_swf.sprite_done
++sprite_new=_swf.sprite_new
++sprite_placeobject=_swf.sprite_placeobject
++sprite_placeobject_coords=_swf.sprite_placeobject_coords
++sprite_removeobject=_swf.sprite_removeobject
++sprite_showframe=_swf.sprite_showframe
++exports_add=_swf.exports_add
++exports_done=_swf.exports_done
++
++from . import _action
++_action.init(_lib)
++action=_action.action
++actionf=_action.actionf
++actionsf=_action.actionsf
++actiond=_action.actiond
++action_sprite=_action.action_sprite
++action_init_sprite=_action.action_init_sprite
++actionf_sprite=_action.actionf_sprite
++actionf_init_sprite=_action.actionf_init_sprite
++actionsf_sprite=_action.actionsf_sprite
++actionsf_init_sprite=_action.actionsf_init_sprite
++actions_free=_action.actions_free
++
++from . import _tool
++_tool.init(_lib)
++erbool_get=_tool.erbool_get
++erbool_reset=_tool.erbool_reset
++freereset=_tool.freereset
++xlog_pad_get=_tool.xlog_pad_get
++xlog_pad_set=_tool.xlog_pad_set
+--- /dev/null
++++ actionswf-1/python/actionswf/_action.py
+@@ -0,0 +1,45 @@
++
++import ctypes
++
++def init(lib):
++	lib.action.argtypes = [ ctypes.c_char_p ]
++	lib.actionf.argtypes = [ ctypes.c_char_p, ctypes.c_char_p ]
++	lib.actionsf.argtypes = [ ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p ]
++	lib.actiond.argtypes = [ ctypes.c_char_p ]
++
++	lib.action_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p ]
++	lib.action_init_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p ]
++	lib.actionf_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p ]
++	lib.actionf_init_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p ]
++	lib.actionsf_sprite.argtypes = [ ctypes.c_int, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p ]
++	lib.actionsf_init_sprite.argtypes = [ ctypes.c_int, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p ]
++
++	lib.actions_free = [ ctypes.c_char_p ]
++
++	global _lib
++	_lib=lib
++
++def action(ac):
++	_lib.action(ac.encode('utf-8'))
++def actionf(*args, buffer, format): #You must place the variadic ones first in the function definition  #call this like this: (buffer=b, format="...", *["a",1])
++	_lib.actionf(buffer, format.encode('utf-8'), *args) #buffer example: (ctypes.c_char * 10)()       #string args can go like this: b'a_string'
++def actionsf(*args, psize, pbuffer, format):
++	_lib.actionsf(psize, pbuffer, format.encode('utf-8'), *args)
++def actiond(ac):
++	_lib.actiond(ac.encode('utf-8'))
++
++def action_sprite(sprite, ac):
++	_lib.action_sprite(sprite, ac.encode('utf-8'))
++def action_init_sprite(sprite, ac):
++	_lib.action_init_sprite(sprite, ac.encode('utf-8'))
++def actionf_sprite(*args, sprite, buffer, format):
++	_lib.actionf_sprite(sprite, buffer, format.encode('utf-8'), *args)
++def actionf_init_sprite(*args, sprite, buffer, format):
++	_lib.actionf_init_sprite(sprite, buffer, format.encode('utf-8'), *args)
++def actionsf_sprite(*args, sprite, psize, pbuffer, format):
++	_lib.actionf_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
++def actionsf_init_sprite(*args, sprite, psize, pbuffer, format):
++	_lib.actionf_init_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
++
++def actions_free(buffer):
++	_lib.actions_free(buffer)
+--- /dev/null
++++ actionswf-1/python/actionswf/_swf.py
+@@ -0,0 +1,197 @@
++
++import ctypes
++
++
++class ButtonData(ctypes.Structure):
++	pass
++ButtonData._fields_ = [("def_fill", ctypes.c_uint)
++				,("def_line_sz", ctypes.c_int)
++				,("def_line", ctypes.c_uint)
++
++				,("ov_fill", ctypes.c_uint)
++				,("ov_line_sz", ctypes.c_int)
++				,("ov_line", ctypes.c_uint)
++
++				,("dn_fill", ctypes.c_uint)
++				,("dn_line_sz", ctypes.c_int)
++				,("dn_line", ctypes.c_uint)
++
++				,("xcurve", ctypes.c_int)
++				,("ycurve", ctypes.c_int)
++
++				,("text", ctypes.c_char_p)
++				,("font_id", ctypes.c_int)
++				,("font_height", ctypes.c_int)
++				,("font_vertical_offset", ctypes.c_int)
++				,("font_color", ctypes.c_int)
++
++				,("actions", ctypes.c_char_p)]
++ButtonData._pack_ = 4
++
++class EditText(ctypes.Structure):
++	pass
++EditText._fields_ = [("fontid", ctypes.c_int)
++				,("font_height", ctypes.c_int)
++				,("fontclassname", ctypes.c_char_p)
++				,("rgba", ctypes.c_int)
++				,("maxlength", ctypes.c_int)
++				,("initialtext", ctypes.c_char_p)
++				,("layout_align", ctypes.c_int)
++				,("layout_leftmargin", ctypes.c_int)
++				,("layout_rightmargin", ctypes.c_int)
++				,("layout_indent", ctypes.c_int)
++				,("layout_leading", ctypes.c_int)]
++EditText._pack_ = 4
++
++def init(lib):
++	lib.swf_button.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.POINTER(ButtonData)] #lib.swf_button.restype = c_int #https://docs.python.org/3/library/ctypes.html: By default functions are assumed to return the C int type.
++	lib.swf_button_last.argtypes = [ctypes.c_char_p,ctypes.c_char_p] #lib.swf_button_last.restype = c_int
++
++	lib.swf_font.argtypes = [ctypes.c_char_p,ctypes.c_char] #lib.swf_font.restype = c_int
++	lib.swf_font_basic.argtypes = [ctypes.c_char_p] #lib.swf_font_basic.restype = c_int
++
++	lib.swf_text.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_char_p,ctypes.c_short,ctypes.POINTER(EditText)] #lib.swf_text.restype = c_int
++
++	lib.swf_shape.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.POINTER(ctypes.c_int)] #lib.swf_shape.restype = c_int  # like at ShapeArray at __init__
++	lib.swf_shape_basic.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int] #lib.swf_shape_basic.restype = c_int
++	lib.swf_shape_bitmap.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int] #lib.swf_shape_bitmap.restype = c_int
++	lib.swf_shape_bitmap_clipped.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int] #lib.swf_shape_bitmap_clipped.restype = c_int
++	lib.swf_shape_border.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int] #lib.swf_shape_border.restype = c_int
++
++	lib.swf_image.argtypes = [ctypes.c_char_p] #lib.swf_image.restype = c_int
++	lib.swf_image_ex.argtypes = [ctypes.c_char_p,ctypes.POINTER(ctypes.c_int)] #lib.swf_image.restype = c_int  # like at ImageSizes at __init__
++	lib.swf_dbl.argtypes = [ctypes.c_char_p] #lib.swf_dbl.restype = c_int
++	lib.swf_dbl_ex.argtypes = [ctypes.c_char_p,ctypes.POINTER(ctypes.c_int)] #lib.swf_dbl_ex.restype = c_int
++	lib.swf_dbl_width.argtypes = [ctypes.c_char_p] #lib.swf_dbl_width.restype = c_int
++	lib.swf_dbl_height.argtypes = [ctypes.c_char_p] #lib.swf_dbl_height.restype = c_int
++
++	lib.swf_imagej.argtypes = [ctypes.c_char_p,ctypes.c_int,ctypes.c_int] #lib.swf_imagej.restype = c_int
++	lib.swf_imagej_alpha.argtypes = [ctypes.c_char_p,ctypes.c_int,ctypes.c_int,ctypes.c_char_p] #lib.swf_imagej_alpha.restype = c_int
++	lib.swf_imagej_clipped.argtypes = [ctypes.c_char_p,ctypes.c_int,ctypes.c_int] #lib.swf_imagej_clipped.restype = c_int
++	lib.swf_imagej_alpha_clipped.argtypes = [ctypes.c_char_p,ctypes.c_int,ctypes.c_int,ctypes.c_char_p] #lib.swf_imagej_alpha_clipped.restype = c_int
++	lib.swf_jpeg.argtypes = [ctypes.c_char_p] #lib.swf_jpeg.restype = c_int
++	lib.swf_jpeg_alpha.argtypes = [ctypes.c_char_p,ctypes.c_char_p] #lib.swf_jpeg_alpha.restype = c_int
++	lib.swf_gif_width.argtypes = [ctypes.c_char_p] #lib.swf_gif_width.restype = c_int
++	lib.swf_gif_height.argtypes = [ctypes.c_char_p] #lib.swf_gif_height.restype = c_int
++
++	lib.swf_imagex.argtypes = [ctypes.c_char_p] #lib.swf_imagex.restype = c_int
++	lib.swf_imagex_ex.argtypes = [ctypes.c_char_p,ctypes.POINTER(ctypes.c_int)] #lib.swf_imagex_ex.restype = c_int
++	lib.swf_img.argtypes = [ctypes.c_char_p] #lib.swf_img.restype = c_int
++	lib.swf_img_ex.argtypes = [ctypes.c_char_p,ctypes.POINTER(ctypes.c_int)] #lib.swf_img_ex.restype = c_int
++
++	#swf_done
++	lib.swf_new.argtypes = [ctypes.c_char_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_ubyte] #lib.swf_new.restype = None # else c_int is default , is ok, there is still a wrapper to enforce nr of args
++	lib.swf_new_ex.argtypes = [ctypes.c_char_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_ubyte,ctypes.c_int]
++	lib.swf_placeobject.argtypes = [ctypes.c_int,ctypes.c_int]
++	lib.swf_placeobject_coords.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int]
++	lib.swf_removeobject.argtypes = [ctypes.c_int]
++	#swf_showframe
++
++	lib.swf_sprite_done.argtypes = [ctypes.c_int] #lib.swf_sprite_done.restype = c_int
++	#lib.swf_sprite_new.restype = c_int
++	lib.swf_sprite_placeobject.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int]
++	lib.swf_sprite_placeobject_coords.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_int]
++	lib.swf_sprite_removeobject.argtypes = [ctypes.c_int,ctypes.c_int]
++	lib.swf_sprite_showframe.argtypes = [ctypes.c_int]
++
++	lib.swf_exports_add.argtypes = [ctypes.c_int,ctypes.c_char_p]
++	#swf_exports_done
++
++	global _lib
++	_lib=lib
++
++def button(width,height,buttondata):
++	return _lib.swf_button(width,height,buttondata)
++def button_last(actions,newtext):
++	return _lib.swf_button_last(actions.encode('utf-8'),newtext.encode('utf-8'))
++
++def font(fontname,font_flags):
++	return _lib.swf_font(fontname.encode('utf-8'),font_flags)
++def font_basic(fontname):
++	return _lib.swf_font_basic(fontname.encode('utf-8'))
++
++def text(bound_width,bound_height,variablename,flags,structure):
++	return _lib.swf_text(bound_width,bound_height,variablename.encode('utf-8'),flags,structure)
++
++def shape(width,height,args):
++	return _lib.swf_shape(width,height,args)
++def shape_basic(width,height,fillcolor,linecolor):
++	return _lib.swf_shape_basic(width,height,fillcolor,linecolor)
++def shape_bitmap(bitmapId,width,height):
++	return _lib.swf_shape_bitmap(bitmapId,width,height)
++def shape_bitmap_clipped(bitmapId,width,height):
++	return _lib.swf_shape_bitmap_clipped(bitmapId,width,height)
++def shape_border(width,height,linesize,linecolor):
++	return _lib.swf_shape_border(width,height,linesize,linecolor)
++
++def image(imagepath):
++	return _lib.swf_image(imagepath.encode('utf-8'))
++def image_ex(imagepath,wh):
++	return _lib.swf_image_ex(imagepath.encode('utf-8'),wh)
++def dbl(imagepath):
++	return _lib.swf_dbl(imagepath.encode('utf-8'))
++def dbl_ex(imagepath,wh):
++	return _lib.swf_dbl_ex(imagepath.encode('utf-8'),wh)
++def dbl_width(imagepath):
++	return _lib.swf_dbl_width(imagepath.encode('utf-8'))
++def dbl_height(imagepath):
++	return _lib.swf_dbl_height(imagepath.encode('utf-8'))
++
++def imagej(imagepath,width,height):
++	return _lib.swf_imagej(imagepath.encode('utf-8'),width,height)
++def imagej_alpha(imagepath,width,height,alphapath):
++	return _lib.swf_imagej_alpha(imagepath.encode('utf-8'),width,height,alphapath.encode('utf-8'))
++def imagej_clipped(imagepath,width,height):
++	return _lib.swf_imagej_clipped(imagepath.encode('utf-8'),width,height)
++def imagej_alpha_clipped(imagepath,width,height,alphapath):
++	return _lib.swf_imagej_alpha_clipped(imagepath.encode('utf-8'),width,height,alphapath.encode('utf-8'))
++def jpeg(imagepath):
++	return _lib.swf_jpeg(imagepath.encode('utf-8'))
++def jpeg_alpha(imagepath,alphapath):
++	return _lib.swf_jpeg_alpha(imagepath.encode('utf-8'),alphapath.encode('utf-8'))
++def gif_width(imagepath):
++	return _lib.swf_gif_width(imagepath.encode('utf-8'))
++def gif_height(imagepath):
++	return _lib.swf_gif_height(imagepath.encode('utf-8'))
++
++def imagex(imagepath):
++	return _lib.swf_imagex(imagepath.encode('utf-8'))
++def imagex_ex(imagepath,wh):
++	return _lib.swf_imagex_ex(imagepath.encode('utf-8'),wh)
++def img(imagepath):
++	return _lib.swf_img(imagepath.encode('utf-8'))
++def img_ex(imagepath,wh):
++	return _lib.swf_img_ex(imagepath.encode('utf-8'),wh)
++
++def done():
++	_lib.swf_done()
++def new(path,width,height,backgroundcolor,fps):
++	_lib.swf_new(path.encode('utf-8'),width,height,backgroundcolor,fps)
++def new_ex(path,width,height,backgroundcolor,fps,flags):
++	_lib.swf_new_ex(path.encode('utf-8'),width,height,backgroundcolor,fps,flags)
++def placeobject(refid,depth):
++	_lib.swf_placeobject(refid,depth)
++def placeobject_coords(refid,depth,x,y):
++	_lib.swf_placeobject_coords(refid,depth,x,y)
++def removeobject(depth):
++	_lib.swf_removeobject(depth)
++def showframe():
++	_lib.swf_showframe()
++
++def sprite_done(spriteid):
++	return _lib.swf_sprite_done(spriteid)
++def sprite_new():
++	return _lib.swf_sprite_new()
++def sprite_placeobject(spriteid,object,depth):
++	_lib.swf_sprite_placeobject(spriteid,object,depth)
++def sprite_placeobject_coords(spriteid,object,depth,x,y):
++	_lib.swf_sprite_placeobject_coords(spriteid,object,depth,x,y)
++def sprite_removeobject(spriteid,depth):
++	_lib.swf_sprite_removeobject(spriteid,depth)
++def sprite_showframe(spriteid):
++	_lib.swf_sprite_showframe(spriteid)
++
++def exports_add(id,name):
++	_lib.swf_exports_add(id,name.encode('utf-8'))
++def exports_done():
++	_lib.swf_exports_done()
+--- /dev/null
++++ actionswf-1/python/actionswf/_tool.py
+@@ -0,0 +1,27 @@
++
++import ctypes
++
++def init(lib):
++	lib.erbool_get.restype = ctypes.c_char # else c_int is default #lib.erbool_get.argtypes is for at least, not equal or at most
++	#erbool_reset
++
++	#freereset
++
++	lib.xlog_pad_get.restype = ctypes.c_ubyte
++	lib.xlog_pad_set.argtypes = [ctypes.c_ubyte]
++
++	global _lib
++	_lib=lib
++
++def erbool_get(): #this to enforce no arguments
++	return _lib.erbool_get()
++def erbool_reset():
++	_lib.erbool_reset()
++
++def freereset():
++	_lib.freereset()
++
++def xlog_pad_get():
++	return _lib.xlog_pad_get()
++def xlog_pad_set(new_pad):
++	_lib.xlog_pad_set(new_pad)
+--- /dev/null
++++ actionswf-1/python/c
+@@ -0,0 +1 @@
++~/test/pyp/pyin x
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/python/info.md
+@@ -0,0 +1,2 @@
++ActionSwf bindings.\
++[Git Page](https://github.com/colin-i/actionswf)
+--- /dev/null
++++ actionswf-1/python/pi
+@@ -0,0 +1,4 @@
++set -e
++cd python
++base=../ minor=x exit=0 ~/test/pyp/pypi
++cd ..
+--- /dev/null
++++ actionswf-1/python/setup.pre.py
+@@ -0,0 +1,23 @@
++
++#this file will make setup.py after using github colin-i test/pyp/pypre
++
++pkname='actionswf'
++
++from setuptools import setup
++setup(name=pkname,
++	version=ver,
++	packages=[pkname],
++	#opt
++	python_requires='>=3',
++	#install_requires=["appdirs>=1","b"],
++	#extras_require={'bin': ['a>=1'],},
++	description='ActionSwf bindings',
++	long_description=README,
++	long_description_content_type="text/markdown",
++	url='https://github.com/colin-i/actionswf',
++	author='cb',
++	author_email='costin.botescu@gmail.com',
++	license='MIT'
++)
++
++#README.md is for: python3 setup.py
+--- /dev/null
++++ actionswf-1/python/v2
+@@ -0,0 +1 @@
++1.3
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/python/ver
+@@ -0,0 +1,4 @@
++set -e
++cd python
++exit=0 ~/test/pyp/pyver
++cd ..
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -43,7 +43,13 @@ zypper install actionswf
+ An optional step is to install **actionswf-devel**(noarch).\
+ \
+ \
+-On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases).
++On Windows, <i>.windows.zip</i> file from [releases](https://github.com/colin-i/actionswf/releases).\
++\
++\
++Python library bindings at [PyPI](https://pypi.org/project/actionswf):
++```sh
++pip install actionswf
++```
+ 
+ ## From source
+ Compile with [O Compiler](https://github.com/colin-i/o).
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -6,13 +6,16 @@ include "../include/throw.h" "../include
+ import "for_in_ptr" for_in_ptr
+ import "is_ainit" is_ainit
+ 
++importx "free" free
++
+ import "ebase" ebase
+ #aftercallimport ebool
+ 
+ #this/an action
+ 
+ import "action_local" action_local
+-import "actionf_local" actionf_local
++import "actionsf_local" actionsf_local
++import "action_format" action_format
+ 
+ functionX action(ss ac)
+ 	base globala.jmp_data;call ebase(globala.jmp_data)
+@@ -26,8 +29,17 @@ functionXv actionf(ss buffer,ss *format)
+ #ss buffer   the buffer where to sprintf the format and the arguments
+ #ss format   the format
+ #...         % arguments here
++	if buffer!=(NULL)
++		call is_ainit((xlog_ainit_false))
++		call actionsf_local((NULL),#buffer)
++	else
++		callret action_format(#buffer) #this at actionf_sprite is same, sprite will be extra argument, let NULL there be guardian
++	end
++endfunction
++functionXv actionsf(sdu psize,sv pbuffer,ss *format)
++	base globala.jmp_data;call ebase(globala.jmp_data)
+ 	call is_ainit((xlog_ainit_false))
+-	callg actionf_local(#buffer)
++	callg actionsf_local(psize,#pbuffer)
+ endfunction
+ #see at part_done functionXv actionf_init(ss buffer,ss *format)
+ functionX actiond(ss ac) #deprecated
+@@ -54,19 +66,35 @@ functionX action_init_sprite(sd sprite,s
+ 	call is_ainit((xlog_ainit_true))
+ 	callg action_sprite_base(sprite,actions,(TRUE))
+ end
+-import "actionf_sprite_local" actionf_sprite_local
++import "actionsf_sprite_local" actionsf_sprite_local
+ functionXv actionf_sprite(sd sprite,ss buffer,ss *format)
+ 	base globala.jmp_data;call ebase(globala.jmp_data)
+ #sd sprite    sprite id
+ #ss buffer    same as actionf
+ #ss format    same as actionf
+ 	call is_ainit((xlog_ainit_false))
+-	callg actionf_sprite_local(sprite,#buffer)
++	callg actionsf_sprite_local(sprite,(NULL),#buffer)
+ endfunction
+ functionXv actionf_init_sprite(sd sprite,ss buffer,ss *format)
+ 	base globala.jmp_data;call ebase(globala.jmp_data)
+ 	call is_ainit((xlog_ainit_true))
+-	callg actionf_sprite_local(sprite,#buffer)
++	callg actionsf_sprite_local(sprite,(NULL),#buffer)
++end
++functionXv actionsf_sprite(sd sprite,sdu psize,sv pbuffer,ss *format)
++	base globala.jmp_data;call ebase(globala.jmp_data)
++	call is_ainit((xlog_ainit_false))
++	callg actionsf_sprite_local(sprite,psize,#pbuffer)
++endfunction
++functionXv actionsf_init_sprite(sd sprite,sdu psize,sv pbuffer,ss *format)
++	base globala.jmp_data;call ebase(globala.jmp_data)
++	call is_ainit((xlog_ainit_true))
++	callg actionsf_sprite_local(sprite,psize,#pbuffer)
++end
++
++#both
++
++functionX actions_free(ss buffer)
++	call free(buffer)
+ end
+ 
+ entryraw globala()
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -160,12 +160,12 @@ import "x_pointer_touchless" x_pointer_t
+ #import "x_pointer_x" x_pointer_x
+ function action_code_get_pointer(sv p_codepointer)
+ 	sd a;set a x_pointer(p_codepointer#)
+-	incst p_codepointer#  #to pass the pointer
++	add p_codepointer# : #incst p_codepointer#  #to pass the pointer
+ 	return a
+ end
+ function action_code_get_pointer_touchless(sv p_codepointer)
+ 	sd a;set a x_pointer_touchless(p_codepointer#)
+-	incst p_codepointer#  #to pass the pointer
++	add p_codepointer# : #incst p_codepointer#  #to pass the pointer
+ 	return a
+ end
+ 
+@@ -179,7 +179,7 @@ function infinite_loop_check(sd codepoin
+ 		set compare action_true_compare(name)
+ 		if compare=0
+ 			if codepointer#=(math_end)
+-				decst codepointer
++				sub codepointer : #decst codepointer
+ 				call action_code_get_pointer(#codepointer) #must test if debug_x to let the x file in good condition
+ 				add codepointer (DWORD)
+ 				return codepointer
+@@ -204,10 +204,10 @@ function forinbreak_check(sd codepointer
+ 				return start
+ 			end
+ 			set rules codepointer
+-			incst codepointer
++			add codepointer : #incst codepointer
+ 			set pname codepointer
+ 			set name codepointer#v
+-			incst codepointer
++			add codepointer : #incst codepointer
+ 			if codepointer#!=(args_end)
+ 				return start
+ 			end
+@@ -221,7 +221,7 @@ function forinbreak_check(sd codepointer
+ 			if codepointer#v!=(NULL)
+ 				return start
+ 			end
+-			incst codepointer
++			add codepointer : #incst codepointer
+ 		end
+ 		datax compare#1
+ 		set compare strcmp("§§pop",name) #is memcmp unsafe? comparing from last to first?
+@@ -287,7 +287,7 @@ import "debug_definefunction" debug_defi
+ import "debug_concludefunction" debug_concludefunction
+ import "error" error
+ 
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ function action_code_values_init()
+ 	setcall global.values_container memalloc((totalvalues*action_code_values_unit))
+ endfunction
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -89,9 +89,9 @@ import "block_get_mem_size" block_get_me
+ 
+ #aftercallimport ebool
+ 
+-import "f_open_mem" f_open_mem
++^import "f_open_mem" f_open_mem 2
+ import "f_write" f_write
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ import "mem_block_add" mem_block_add
+ import "debug_xlog_pool" debug_xlog_pool
+ 
+@@ -189,7 +189,7 @@ function pool_done_one(sd id)
+ 		callg pool_done_write(id,-1)
+ 	end
+ end
+-import "strlen_of" strlen_of
++^import "strlen_of" strlen_of 2
+ function pool_savepath_init(sd a)
+ 	set globalo.svpath a
+ 	set globalo.svsize strlen_of(globalo.svpath,(ext_str_len)) #size_t is ulong
+--- actionswf-1.orig/src/actionpush.oc
++++ actionswf-1/src/actionpush.oc
+@@ -38,8 +38,8 @@ end
+ 
+ import "actionpool_value" actionpool_value
+ 
+-import "memalloc" memalloc
+-import "memrealloc" memrealloc
++^import "memalloc" memalloc 1
++^import "memrealloc" memrealloc 2
+ import "error" error
+ 
+ function push_init()
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -8,13 +8,17 @@ vstrx pointer#1
+ vstr orig=NULL
+ vstr memorig=NULL
+ value dcode#1
++value format_file=NULL
+ 
+ #win32 with _
+ importx "memcpy" memcpy
+ importx "sprintf" sprintf
++importx "snprintf" snprintf
+ Importx "realloc" realloc
+ Importx "malloc" malloc
+ Importx "free" free
++importx "strlen" strlen
++importx "strcpy" strcpy
+ 
+ import "spaces" spaces
+ 
+@@ -214,6 +218,13 @@ function pool_size(sd id)
+     return poolsize
+ endfunction
+ 
++import "f_close" f_close
++function format_free()
++	if globalu.format_file!=(NULL)
++		call f_close(#globalu.format_file)
++	end
++end
++
+ import "swf_actionblock_change_back" swf_actionblock_change_back
+ import "file_get_content__resources_free" file_get_content__resources_free
+ 
+@@ -404,9 +415,42 @@ function action_format(sv args)
+ 	add args_format args
+ 	sv elements=:
+ 	add elements args_format
+-	call sprintf_manual(args#,args_format#,elements)
+-	call action_base(args#)
++	if args#!=(NULL)
++		call sprintf_manual(args#,args_format#,elements)
++	else
++		callret sprintf_manual(args#,args_format#,elements)
++	end
++	call format_store(args#)
++	callg action_base(args#)
+ endfunction
++function actions_format(sdu psize,sv args)
++	if psize=(NULL)
++		callret action_format(args)
++	end
++	sv pbuf;set pbuf args#
++	sv buf
++	set buf pbuf#
++	set args# (NULL)
++	sdu size;set size action_format(args)
++	vstr er="malloc error at actionsf"
++	if buf=(NULL)
++		set buf malloc(size)
++		if buf=(NULL)
++			call error(er)
++		end
++		set pbuf# buf
++		set psize# size
++	elseif size>^psize#
++		set buf realloc(buf,size)
++		if buf=(NULL)
++			call error(er)
++		end
++		set pbuf# buf
++		set psize# size
++	end
++	set args# buf
++	callg action_format(args)
++end
+ 
+ import "debug_base" debug_base
+ import "alt_action_base" alt_action_base
+@@ -428,15 +472,20 @@ import "error" error
+ 
+ function sprintf_manual(ss string,ss format,sv elements)
+ 	ss pointer;set pointer format
+-	ss cursor;set cursor string
+ 	sd has_element=FALSE
+ 	sd escaped=0
+ 	valueu writable_size=1
+-	ss writable;set writable malloc(1)
++	ss writable;set writable malloc(1) #this approach is not checking the format style: 0 or more flags, width, precision, modifiers, conversion
+ 	vstr er="malloc error at manual sprintf"
+ 	if writable=(NULL)
+ 		call error(er)
+ 	end
++	sd ?n ; # for snprintf int return
++	vstr err="unsafe action"
++	sdu total_size
++	if string=(NULL)
++		set total_size 0
++	end
+ 	while pointer#!=(Nullchar)
+ 		if pointer#=(Percent)
+ 			xor escaped 1
+@@ -464,7 +513,15 @@ function sprintf_manual(ss string,ss for
+ 				call memcpy(writable,format,size)
+ 				ss marker;set marker writable;add marker size;set marker# (Nullchar)
+ 
+-				add string sprintf(string,writable,elements#)
++				if string!=(NULL)
++					add string sprintf(string,writable,elements#)
++				else
++					set n snprintf((NULL),0,writable,elements#)
++					if n<0
++						call error(err)
++					end
++					add total_size n
++				end
+ 
+ 				set format pointer;incst elements
+ 				#set pointer# (Percent)
+@@ -475,10 +532,49 @@ function sprintf_manual(ss string,ss for
+ 	endwhile
+ 	call free(writable)
+ 	if has_element=(TRUE)
+-		call sprintf(string,format,elements#)
++		if string!=(NULL)
++			call sprintf(string,format,elements#)
++		else
++			set n snprintf((NULL),0,format,elements#)
++			if n<0
++				callg error(err)
++			end
++			add total_size n
++			inc total_size
++			return total_size
++		end
+ 	else
+-		call sprintf(string,format)
++		if string!=(NULL)
++			call strcpy(string,format)
++		else
++			sdu m=1;add m strlen(format)
++			return m
++		end
+ 	end
+ endfunction
+ 
++^import "strlen_of" strlen_of 2
++^import "memalloc" memalloc 1
++^import "f_open_mem" f_open_mem 2
++function format_init(sd ?flags,ss path)
++	if globalu.format_file!=(NULL)
++		call error("swf started, format file not closed")
++	end
++	and flags (flag_format)
++	if flags=(flag_format)
++		sd size;setcall size strlen_of(path,7+1) #8+not_gigantic
++		sd a;setcall a memalloc(size)
++		call sprintf(a,"%s.format",path)
++		setcall globalu.format_file f_open_mem(a,"wb")
++	end
++end
++
++import "f_write" f_write
++function format_store(ss ac)
++	if globalu.format_file!=(NULL)
++		sd sz=1;add sz strlen(ac)
++		callg f_write(globalu.format_file,ac,sz)
++	end
++end
++
+ entryraw globalu()
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -41,9 +41,9 @@ importx "strlen" strlen
+ 
+ #aftercallimport ebool
+ 
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ import "error" error
+-import "len_of" len_of
++^import "len_of" len_of 2
+ 
+ function alt_init(sd flags,sd path)
+ 	if globall.folder!=(NULL)
+@@ -74,7 +74,7 @@ end
+ import "file_get_content" file_get_content
+ 
+ function alt_action(sd orig_action,sd preid)
+-	call alt_action_base(orig_action,preid,(TRUE))
++	callret alt_action_base(orig_action,preid,(TRUE))
+ end
+ import "struct_ids_action" struct_ids_action
+ import "block_get_size" block_get_size
+--- actionswf-1.orig/src/bits.oc
++++ actionswf-1/src/bits.oc
+@@ -7,92 +7,92 @@ charx matrix#1+4+4
+ charx rect#31*4+5
+ 
+ functionV bits_packs(ss dest,sd ?packs)
+-    sd ?i=0
+-    sd pos=0x80
+-    sd ?value
+-    sd ?size
+-    sd src^packs
+-    while i<packs
+-        incst src
+-        set value src#
+-        incst src
+-        set size src#
+-        call bits_bigendian(value,size,#dest,#pos)
+-        inc i
+-    endwhile
+-endfunction
+-function bits_bigendian(sd value,sd size,sv p_dest,sd p_pos)
+-    ss dest
+-    sd pos
+-    set dest p_dest#
+-    set pos p_pos#
+-    sd iter=-1
+-    while size!=0
+-        mult iter 2
+-        dec size
+-    endwhile
+-    not iter
+-    inc iter
+-    div iter 2
+-    while iter!=0
+-        if pos=0x80
+-            set dest# 0
+-        endif
+-        sd test
+-        set test iter
+-        and test value
+-        if test!=0
+-            or dest# pos
+-        endif
+-        div pos 2
+-        if pos=0
+-            set pos 0x80
+-            inc dest
+-        endif
+-        div iter 2
+-    endwhile
+-    set p_dest# dest
+-    set p_pos# pos
+-endfunction
+-
+-
+-function num_bits(sd value)
+-    sd sign=~0x7fFFffFF
+-    and sign value
+-    sd mask=~0x7fFFffFF
+-    sd i=32
+-    while i!=0
+-        dec i
+-        div mask 2
+-        sd test
+-        set test mask
+-        and test value
+-        if sign=0
+-            if test!=0
+-                return i
+-            endif
+-        else
+-            if test!=mask
+-                return i
+-            endif
+-        endelse
+-    endwhile
+-    return i
+-endfunction
+-
+-function numbitsMax(sd width,sd height)
+-    sd value1
+-    setcall value1 num_bits(width)
+-    sd value2
+-    setcall value2 num_bits(height)
+-    sd NBits
+-    set NBits value1
+-    if value2>value1
+-        set NBits value2
+-    endif
+-    #is signed
+-    inc NBits
+-    return NBits
++	sd ?i=0
++	sd ?value
++	sd ?size
++	sd ?pos=0x80
++	sd src^packs
++	while i<packs
++		add src : #incst src
++		set value src#
++		add src : #incst src
++		set size src#
++		call bits_bigendian(value,size,#dest,#pos)
++		inc i
++	endwhile
++endfunction
++function bits_bigendian(sd ?value,sd ?size,sv p_dest,sd p_pos)
++	ss dest
++	sd ?pos
++	set dest p_dest#
++	set pos p_pos#
++	sd ?iter=-1
++	while size!=0
++		mult iter 2
++		dec size
++	endwhile
++	not iter
++	inc iter
++	div iter 2
++	while iter!=0
++		if pos=0x80
++			set dest# 0
++		endif
++		sd test
++		set test iter
++		and test value
++		if test!=0
++			or dest# pos
++		endif
++		div pos 2
++		if pos=0
++			set pos 0x80
++			inc dest
++		endif
++		div iter 2
++	endwhile
++	set p_dest# dest
++	set p_pos# pos
++endfunction
++
++
++function num_bits(sd ?value)
++	sd ?sign=~0x7fFFffFF
++	and sign value
++	sd ?mask=~0x7fFFffFF
++	sd ?i=32
++	while i!=0
++		dec i
++		div mask 2
++		sd test
++		set test mask
++		and test value
++		if sign=0
++			if test!=0
++				return i
++			endif
++		else
++			if test!=mask
++				return i
++			endif
++		endelse
++	endwhile
++	return i
++endfunction
++
++function numbitsMax(sd ?width,sd ?height)
++	sd ?value1
++	setcall value1 num_bits(width)
++	sd ?value2
++	setcall value2 num_bits(height)
++	sd ?NBits
++	set NBits value1
++	if value2>value1
++		set NBits value2
++	endif
++	#is signed
++	inc NBits
++	return NBits
+ endfunction
+ 
+ function rect_prepare(sv p_out,sd p_size,sd ?width,sd ?height)
+@@ -101,7 +101,7 @@ function rect_prepare(sv p_out,sd p_size
+ 	mult height 20
+ 	setcall NBits numbitsMax(width,height)
+ 	call bits_packs(#globalb.rect,5,NBits,(NBits_size),0,NBits,width,NBits,0,NBits,height,NBits)
+-	sd size=4
++	sd ?size=4
+ 	mult size NBits
+ 	add size 5
+ 	#to bytes
+@@ -121,12 +121,12 @@ function matrix_translate(sv p_dest,sd p
+ 			ret
+ 		endif
+ 	endif
+-	sd NBits
++	sd ?NBits
+ 	mult x 20
+ 	mult y 20
+ 	setcall NBits numbitsMax(x,y)
+ 	call bits_packs(#globalb.matrix,(3+2),0,1,0,1,NBits,(NBits_size),x,NBits,y,NBits)
+-	sd size=2
++	sd ?size=2
+ 	mult size NBits
+ 	add size (1+1+5)
+ 	#to bytes
+@@ -147,7 +147,7 @@ function rect_add(sd width,sd height)
+     sd mem
+     sd sz
+     call rect_prepare(#mem,#sz,width,height)
+-    call swf_mem_add(mem,sz)
++    callg swf_mem_add(mem,sz)
+ endfunction
+ 
+ entryraw globalb()
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -44,6 +44,7 @@ import "f_close" f_close
+ 
+ import "x_data" x_data
+ import "alt_free" alt_free
++import "format_free" format_free
+ function debug_data()
+ 	call x_data()
+ 	if globald.dfile!=(NULL)
+@@ -59,6 +60,7 @@ function debug_data()
+ 		end
+ 	endif
+ 	call alt_free()
++	call format_free()
+ endfunction
+ 
+ function debug_phase_init(ss pointer)
+@@ -144,7 +146,7 @@ function deprecation_init(sd flags)
+ 	end
+ end
+ 
+-importx "getenv" getenv
++^importx "getenv" getenv 1 #is not an int return, and unlike malloc is not known to be size_t
+ importx "strlen" strlen
+ importx "malloc" malloc
+ importx "fopen" fopen
+@@ -204,18 +206,20 @@ importx "free" free
+ 
+ #aftercallimport ebool
+ 
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ import "alt_init" alt_init
++import "format_init" format_init
+ import "dtitles_init" dtitles_init
+ import "x_init" x_init
+-import "f_open_mem_ex" f_open_mem_ex
+-import "strlen_of" strlen_of
++^import "f_open_mem_ex" f_open_mem_ex 2
++^import "strlen_of" strlen_of 2
+ 
+-function flags_init(sd flags,sd path) #this order is copied in a comment at flags.oh
++function flags_init(sd flags,ss path) #this order is copied in a comment at flags.oh
+ 	set flags pool_init(flags)
+ 	set flags x_init(flags,path)
+ 	set flags log_init(flags,path)
+ 	call alt_init(flags,path)
++	call format_init(flags,path)
+ 	call dtitles_init(flags)
+ 
+ 	call frames_as_shows(flags)
+@@ -224,7 +228,7 @@ function flags_init(sd flags,sd path) #t
+ 	call verbose(flags)
+ endfunction
+ 
+-function log_init(sd flags,sd path)
++function log_init(sd flags,ss path)
+ 	if globald.dfile!=(NULL)
+ 		call error("swf started, log not closed")
+ 	end
+@@ -265,8 +269,8 @@ end
+ import "f_printf1" f_printf1
+ import "f_printf2" f_printf2
+ import "f_write" f_write
+-import "f_tell" f_tell
+-import "memrealloc" memrealloc
++^import "f_tell" f_tell 1
++^import "memrealloc" memrealloc 2
+ 
+ function debug_action_init(ss ac)
+ 	if globald.dfile!=(NULL)
+@@ -274,7 +278,7 @@ function debug_action_init(ss ac)
+ 		if globald.prexx=(prexx_flags)
+ 			sd start;set start ac
+ 
+-			sd row=1     #at least one row, example: row 1,3 actions
++			sv row=1     #at least one row, example: row 1,3 actions
+ 			while ac#!=0
+ 				call row_termination(#ac,#row)
+ 				inc ac
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -20,7 +20,7 @@ import "label_init" label_init
+ import "action__code_row" action__code_row
+ import "action_code_set" action_code_set
+ import "action_code_row" action_code_row
+-import "dupreserve_string" dupreserve_string
++^import "dupreserve_string" dupreserve_string 1
+ import "brace_blocks_end" brace_blocks_end
+ import "error" error
+ import "actionx" actionx
+@@ -55,7 +55,9 @@ function action_base(ss ac)
+ 		sv p_action_errors
+ 		setcall p_action_errors action_debug((action_debug_get))
+ 		set p_action_errors# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
+-		sv cursor;set cursor p_action_errors;incst cursor;set cursor# mem
++		sv cursor;set cursor p_action_errors
++		incst cursor
++		set cursor# mem
+ 		call endcom(ac,mem) #also for line end term to follow
+ 		while mem#!=0
+ 			setcall mem action_code_row(mem,(FALSE))
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -59,7 +59,7 @@ importx "free" free
+ import "error" error
+ 
+ #file
+-function f_open(sd path,sd format)
++function f_open(ss path,ss format)
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
+ 		call error(globalf.f_open_err)
+@@ -67,13 +67,13 @@ function f_open(sd path,sd format)
+ 	return f
+ end
+ #file
+-function f_open_mem(sd path,sd format)
++function f_open_mem(ss path,ss format)
+ 	sd f;set f f_open_mem_ex(path,format)
+ 	call free(path)
+ 	return f
+ endfunction
+ #file
+-function f_open_mem_ex(sd path,sd format)
++function f_open_mem_ex(ss path,ss format)
+ 	sd f;setcall f fopen(path,format)
+ 	if f=(NULL)
+ 		call free(path)
+@@ -120,7 +120,7 @@ function filesize(sd file)
+ endfunction
+ 
+ #read
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ #mem
+ function file_get_content(ss filepath,sv p_size)  #size is a stack variable
+ 	sd file
+--- actionswf-1.orig/src/img.oc
++++ actionswf-1/src/img.oc
+@@ -28,10 +28,10 @@ import "erbool" erbool
+ 
+ #aftercalli
+ 
+-import "f_size" f_size
+-import "f_size_errors" f_size_errors
++^import "f_size" f_size 1
++^import "f_size_errors" f_size_errors 1
+ import "error" error
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ 
+ function imgx(ss dbl,sd p_wh,ss ?is_image) #,sd is_clipped
+ 	sd len;set len strlen(dbl)
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -572,8 +572,8 @@ function swf_dbl_ex_local(ss imagepath,s
+ 	return id
+ endfunction
+ 
+-import "f_open" f_open
+-import "f_tell_errors" f_tell_errors
++^import "f_open" f_open 2
++^import "f_tell_errors" f_tell_errors 1
+ #id
+ function swf_jpeg_local(ss imagepath,ss ?tag,ss alphapath)
+ #ss imagepath = path name for the image
+@@ -679,6 +679,7 @@ endfunction
+ 
+ import "debug_base" debug_base
+ import "action_base" action_base
++import "format_store" format_store
+ function action_local(ss ac)
+ 	sd alt_ac;set alt_ac alt_action(ac,0)
+ 	if alt_ac!=(NULL)  #can be two action() same DoAction
+@@ -686,29 +687,31 @@ function action_local(ss ac)
+ 		call action_base(alt_ac)
+ 		if alt_ac!=ac
+ 			call file_get_content__resources_free()
++		else #keep as3 format counter
++			callg format_store("")
+ 		end
+ 	end
+ end
+-import "action_format" action_format
+-function actionf_local(sv pbuffer)
++import "actions_format" actions_format
++function actionsf_local(sdu psize,sv pbuffer)
+ 	sd alt_ac;set alt_ac alt_action(pbuffer#,0)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(0)
+ 		if pbuffer#=alt_ac
+-			call action_format(pbuffer)
++			call actions_format(psize,pbuffer)
+ 		else
+ 			call action_base(alt_ac)
+ 			call file_get_content__resources_free()
+ 		end
+ 	end
+ end
+-function actionf_sprite_local(sd sprite,sv pbuffer)
++function actionsf_sprite_local(sd sprite,sdu psize,sv pbuffer)
+ 	sd alt_ac;set alt_ac alt_action(pbuffer#,sprite)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
+ 		call swf_actionblock_change(sprite)
+ 		if pbuffer#=alt_ac
+-			call action_format(pbuffer)
++			call actions_format(psize,pbuffer)
+ 		else
+ 			call action_base(alt_ac)
+ 			call file_get_content__resources_free()
+--- actionswf-1.orig/src/mr32d
++++ actionswf-1/src/mr32d
+@@ -1,6 +1,6 @@
+ 
+ #again, binutils focal for i386 multi o link, zlib1g is ok latest will also run with latest, glibc jammy for ocompiler foramt elf test
+-LD_LIBRARY_PATH=${HOME}/Desktop/binutils-arm64-i686-focal/usr/lib/aarch64-linux-gnu LD=${HOME}/Desktop/binutils-arm64-i686-focal/usr/i686-linux-gnu/bin/ld \
++LD_LIBRARY_PATH=${HOME}/Desktop/binutils-arm64-i686-focal/usr/lib/aarch64-linux-gnu LD=${HOME}/Desktop/binutils-arm64-i686-focal/usr/bin/i686-linux-gnu-ld.bfd \
+ 	L=-L${HOME}/i386_lib OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" linkerflags= ./make32
+ #is at colin-i/prezenta, can launchpad backport if important, only backport is amd64/i386 atm
+ 
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -25,11 +25,11 @@ datax action_id#1
+ 
+ #win32 with _
+ importx "memcpy" memcpy
++importx "free" free
+ 
+ const Z_OK=0
+ importx "compressBound" compressBound
+ importx "compress" compress
+-importx "free" free
+ 
+ #this is throwless here
+ ^import "struct_ids" struct_ids 2
+@@ -141,7 +141,8 @@ import "block_get_size" block_get_size
+ import "block_reset_size" block_reset_size
+ import "push" push
+ 
+-import "actionpoolid" actionpoolid;import "actionpoolid_root" actionpoolid_root
++^import "actionpoolid" actionpoolid
++^import "actionpoolid_root" actionpoolid_root
+ import "actionpool_currentblock" actionpool_currentblock
+ 
+ import "action_size" action_size
+@@ -153,7 +154,7 @@ import "is_ainit" is_ainit
+ 
+ import "dtitles_frame" dtitles_frame
+ import "dtitles_frame_one" dtitles_frame_one
+-import "strlen_of" strlen_of
++^import "strlen_of" strlen_of 2
+ 
+ #id
+ function identifiers_get()
+@@ -178,7 +179,7 @@ import "struct_ids_action_set" struct_id
+ import "mem_block_add" mem_block_add
+ import "def_mem" def_mem
+ import "debug_show" debug_show
+-import "memalloc" memalloc
++^import "memalloc" memalloc 1
+ 
+ import "pool_savepath_init" pool_savepath_init
+ import "action_code_values_init" action_code_values_init
+@@ -186,7 +187,7 @@ import "push_init" push_init
+ import "file_open" file_open
+ import "file_write" file_write
+ import "file_write_mem" file_write_mem
+-function swf_mem_init(ss path,sd len,sd flags)
++function swf_mem_init(ss path,sd len,sd ?flags)
+ 	#arg is file
+ 	#len is filelength offset
+ 	#flags
+--- actionswf-1.orig/src/tool.e.oc
++++ actionswf-1/src/tool.e.oc
+@@ -1,6 +1,6 @@
+ Format ElfObj64
+ 
+-import "erbool" erbool
++^import "erbool" erbool #without this what erbool is returning is cannot read that memory
+ functionx erbool_get()
+     ss p;setcall p erbool()
+     return p#
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -19,6 +19,7 @@ char throwless=FALSE
+ charx ainit_bool#1
+ data fileRes=fd_none
+ valuexu basepointer#1
++char ebool=0
+ 
+ function printEr(ss msg)
+ 	sv ?len;setcall len strlen(msg)
+@@ -410,8 +411,7 @@ end
+ 
+ function erbool()
+ 	#aftercall ebool #still needed at flashalizer at aftecall_get and _reset, and at imgx
+-	char ebool=0
+-	return #ebool
++	return #globalt.ebool
+ endfunction
+ 
+ 
+@@ -650,7 +650,7 @@ function len_of(sd s,sd add)
+ 	end
+ 	return s
+ end
+-function strlen_of(sd p,sd add) #of from overflow
++function strlen_of(ss p,sd add) #of from overflow
+ 	sd s;set s strlen(p)
+ 	set s len_of(s,add)
+ 	return s
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -117,7 +117,7 @@ function x_log(sd codepointer)
+ end
+ 
+ import "action__code_row" action__code_row
+-import "strlen_of" strlen_of
++^import "strlen_of" strlen_of 2
+ 
+ #is not x or x?
+ function actionx()
+@@ -127,11 +127,11 @@ function actionx()
+ 			call error("error at x") # and < ? bad content and pointer is reading past the allocated memory, hard to demonstrate but logical
+ 		end
+ 		sd size
+-		set size globalx.xpointer#v            ;#size of escaped block that was at parse + pad if flagpre_x_pad flag . xlog_strings_size
+-		incst globalx.xpointer                 ##here at parse was the escaped mem
+-		set globalx.xbase globalx.xpointer     ##for x_pointer function
+-		add globalx.xpointer size              ##and add DWORD since liboadata read size without parse
+-		add globalx.xpointer (xlog_xcode_size) ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
++		set size globalx.xpointer#v                   ;#size of escaped block that was at parse + pad if flagpre_x_pad flag . xlog_strings_size
++		add globalx.xpointer : #incst globalx.xpointer ##here at parse was the escaped mem
++		set globalx.xbase globalx.xpointer             ##for x_pointer function
++		add globalx.xpointer size                      ##and add DWORD since liboadata read size without parse
++		add globalx.xpointer (xlog_xcode_size)         ##mathpointer start equivalent, but this x has expanded caller and pointers indexes
+ 		if globalx.xflog!=(NULL)
+ 			set globalx.xlogbase globalx.xpointer
+ 		end
+@@ -146,11 +146,11 @@ end
+ 
+ 
+ import "error" error
+-import "memalloc" memalloc
+-import "f_open_mem" f_open_mem
+-import "f_tell" f_tell
+-import "f_tell_errors" f_tell_errors
+-import "memalloc_errors" memalloc_errors
++^import "memalloc" memalloc 1
++^import "f_open_mem" f_open_mem 2
++^import "f_tell" f_tell 1
++^import "f_tell_errors" f_tell_errors 1
++^import "memalloc_errors" memalloc_errors 2
+ 
+ function x_init(sd ?flags,sd path)
+ 	vstr err="swf started, x not closed"
+@@ -299,9 +299,9 @@ function debug_x_preexpand(sv p_codepoin
+ 		sd values;set values action_code_values()
+ 		sub codepointer values
+ 		call debug_x_base(values,codepointer)
+-		incst globalx.xsize  ##will skip unexpanded member string at next write
++		add globalx.xsize : #incst globalx.xsize  ##will skip unexpanded member string at next write
+ 	end
+-	incst p_codepointer#
++	add p_codepointer# : #incst p_codepointer# ##at c is long*[0]++
+ 	return value
+ end
+ function debug_x_preexpand_inter(sd codepointer)
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,6 +1,6 @@
+ 0
+ 0
+-94
++114
+ 
+ /*
+ debug_x
+@@ -95,6 +95,26 @@ var a=new Object();
+ a.value=2;
+ attachMovie('carSymbol','fastCar_mc',1,a)
+ 
++//goto up/down
++function gotos()
++{
++	if(a)
++	{
++		if(b)
++		{
++			§§goto(addr0001);
++		}
++		addr0002:
++		return 2;
++	}
++	else if(b)
++	{
++		addr0001:
++		return 1;
++	}
++	§§goto(addr0002);
++}
++
+ *5,9\0009{
+ *1,5,%
+ *1}
+@@ -157,6 +177,17 @@ attachMovie('carSymbol','fastCar_mc',1,a
+ *6^0^0,9,,
+ *1^0,2,^0,7,
+ *1^0,2,^0^0^0,10,@,
++*4,A\0040{
++*2^0,2,,,2/
++*2^0,2,,,2/
++*1~,2
++*1+5/
++*2,5,%
++*3+1A/^0,2,,,2/
++*2,5,%
++*1+9/
++*1~,2
++*1}
+ 2
+ 0
+ 1
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,7 +1,7 @@
+-RldTCFUIAABoABQAAAUAAAACAQBDAgUGB+4JAQABACYDiAgAAQAwMDAxMACWCQAAYgAAdGhpcwAc
+-lgcAAHZhbHVlAE5HJgAAAP8OeQAAAAEAiAQAAQAxAJsMAFZlaGljbGUAAAAjAJYFAAcIAAAAF5YJ
++RldTCKsIAABoABQAAAUAAAACAQBDAgUGB+4JAQABACYDiAgAAQAwMDAxMACWCQAAYgAAdGhpcwAc
++lgcAAHZhbHVlAE5HJgAAAP8OeQAAAAEAiAQAAQAxAJsMAFZlaGljbGUAAAAjAJYFAAcJAAAAF5YJ
+ AABhAAB0aGlzAByWBwAAdmFsdWUATkcmlgkAAFZlaGljbGUAHJYYAABjYXJTeW1ib2wABwIAAAAA
+-T2JqZWN0AByWDwAAcmVnaXN0ZXJDbGFzcwBSFwAODgEAAQBjYXJTeW1ib2wAPwN1BwAAiIAAGAB0
++T2JqZWN0AByWDwAAcmVnaXN0ZXJDbGFzcwBSFwAODgEAAQBjYXJTeW1ib2wAPwPLBwAAiIAAGAB0
+ aGlzAGEAQXJyYXkAYgBjAGQAZQBxAGYAZwBoAG4AT2JqZWN0AGNsYXNzMQBwcm90b3R5cGUAZnVu
+ YzEAQVNTZXRQcm9wRmxhZ3MAY2xhc3MyAF9fcHJvdG9fXwBjb25zdHJ1Y3RvcgBmdW5jMgBjbGFz
+ czMAIAAwMDAwMACbCQBmbgABAGEAEgCWBQAHAAAAABeWBQAHAgAAAD6WBwAHAAAAAAgAHJYCAAgA
+@@ -35,4 +35,5 @@ JpYLAAYAAPBHAAAAAAgWR5YFAAEAAIB/R5YCAAgW
+ AAgWR5YFAAEAAACARyaWCQAGAAAIAAAAAAAmmwoAbgACAGEAYgAdAJYFAAcHAAAAF5YCAAgBHJYC
+ AAgWR5YCAAgDHEcmlhkABv///3//////Bv//////////BwIAAAAICz0XlgkACAEHAAAAAAgMQDyW
+ AgAIARyWDAAAdmFsdWUABwIAAABPlgIACAEcli4ABwEAAAAAZmFzdENhcl9tYwAAY2FyU3ltYm9s
+-AAcEAAAAAGF0dGFjaE1vdmllAD0XAAAA
++AAcEAAAAAGF0dGFjaE1vdmllAD0XmwoAZ290b3MAAABJAJYFAAcIAAAAF5YCAAgBHBKdAgAaAJYC
++AAgDHBKdAgAFAJkCABUAlgUABwIAAAA+lgIACAMcEp0CAAkAlgUABwEAAAA+mQIA3f8AAAA=
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,4 +1,4 @@
+-CAsAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
++aAsAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+ aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
+ ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
+ AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
+@@ -47,78 +47,84 @@ MTY2NzA0MzQ5NDQ5MTU4NzUzMzkxOTQyMzQ2MzA0
+ NDU0NzcwMzA2ODIzMzc4NDM1MTE5OTMzOTE1NzY0NTM0MDQ5MjMwODYwNTQ2MjMxMjY5ODM2NDI1
+ NzgxMjUAZnVuY3Rpb24gbgBhAGIAe3RyYWNlAGEAJyAAAGIAfW4ALU5hTgBOYU4AdmFyIGEAbmV3
+ IE9iamVjdAApO2EAdmFsdWUAMgBhdHRhY2hNb3ZpZQAnY2FyU3ltYm9sAAAnZmFzdENhcl9tYwAA
+-MQBhAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0A4AADAwA/MKAAAAAAAAAA0A
+-AAAAAAAAAAAAAAAAAAA+AAAABwAAAAIAAAD/////CAgHRxAQAfEkAAAAAAAAAO7u7v4aAAAAAAAA
+-AB8AAAAAAAAAAAAAAAAAAAC7u7v7TwAAADEAAAAAAAAANgAAAAAAAAA7AAAAAAAAAAAAAAAAAAAA
+-u7u7+xwAAABAAAAAAAAAAP////8dAAAARQAAAAAAAABAQAT0SwAAAAAAAAAHAAAAAQAAAP/////u
+-7u7+AAAAAAAAAAA8AAAAWAAAAAAAAACAgAj4BwAAAP7///9HAAAABwAAAAIAAAALAAAABwAAAAIA
+-AAAMAAAABwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABgAAAABwAAAAIAAABhAAAABwAA
+-AAIAAABiAAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dnAAAAAAAAAAcAAAACAAAA
+-cHAH90kAAAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAAAHBwB/dnAAAAEgAAAAcAAAAC
+-AAAAcHAH90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAABwAAAAIAAABlAAAABwAAAAIA
+-AAAQAAAABwAAAAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/////BwAAAAMAAAD/////////
+-/zwAAACZAAAAAAAAAAYAAAAzM/M/MzMzM/////88AAAAowAAAAAAAABOAAAApQAAAAAAAAAAAAAA
+-AAAAAFBQBfUHAAAAAAAAAP////8AAAAAAAAAALu7u/v/////PAAAAK4AAAAAAAAACAAAALEAAAAA
+-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
+-/+7u7v4qAAAAAAAAAAAAAAAAAAAAu7u7+/////8=
++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
++AAAAHAAAAIwKAAAAAAAARwAAAAgAAACPCgAAAAAAAEcAAAAcAAAAkgoAAAAAAAD/////7u7u/ggI
++B0cQEAHxlQoAAAAAAAAGAAAA////f///////////BgAAAP///////////////+7u7v4AAAAAAAAA
++ADwAAACkCgAAAAAAAEBABPSqCgAAAAAAAO7u7v4AAAAAAAAAAE8AAACzCgAAAAAAALUKAAAAAAAA
++AAAAAAAAAAC7u7v7BwAAAAIAAAD/////EBAB8b0KAAAAAAAAHAAAAOQKAAAAAAAA/////wcAAAAB
++AAAA/////wgAAADWCgAAAAAAAP////8IAAAAygoAAAAAAAD/////7u7u/gAAAAAAAAAAMDAD8+8K
++AAAAAAAAAAAAAAAAAACdAAAAHAAAAPoKAAAAAAAA/////50AAAAcAAAAAAsAAAAAAAD/////EBAB
++8QAAAAAAAAAAAwsAAAAAAAAcAAAADAsAAAAAAAD/////7u7u/gQEA0Pw8A//AgAAAD4AAAAHAAAA
++AgAAAP////8EBANDDg4NTZ0AAAAcAAAAMgsAAAAAAAD/////8PAP/wEAAAA+AAAABwAAAAEAAAD/
++////BAQDQ8zMzPwBAAAAEBAB8QAAAAAAAAAASAsAAAAAAAAcAAAAUQsAAAAAAAD/////7u7u/ggI
++B0f/////KAAAAAAAAAB0cmFjZQAnYgAAdGhpcwB2YWx1ZQAAAAAAAAAAAAAAAAAAAAAAAAAAUAAA
++ABAQAfEAAAAAAAAAAAEAAAAAAAAACAAAAAgAAAAAAAAARwAAAE4AAAALAAAAAAAAABAAAAAAAAAA
++AAAAAAAAAAC7u7v7/////+7u7v7/////ZAAAAAAAAABmdW5jdGlvbiBWZWhpY2xlACl7dHJhY2UA
++J2EAAHRoaXMAdmFsdWUAfU9iamVjdAByZWdpc3RlckNsYXNzACdjYXJTeW1ib2wAAFZlaGljbGUA
++AAAAAAAAAAAAAAAAAAAAAAAArAAAADAwA/MKAAAAAAAAAAAAAAAAAAAAEBAB8QAAAAAAAAAAFAAA
++AAAAAAAIAAAAGwAAAAAAAABHAAAATgAAAB4AAAAAAAAAIwAAAAAAAAAAAAAAAAAAALu7u/v/////
++7u7u/ggIB0cQEAHxMQAAAAAAAAAcAAAASwAAAAAAAAD/////CAAAAEAAAAAAAAAA/////+7u7v4q
++AAAAAAAAAAAAAAAAAAAAu7u7+/////8=
+--- actionswf-1.orig/tests/.expected/a.swf.x32.txt
++++ actionswf-1/tests/.expected/a.swf.x32.txt
+@@ -1,4 +1,4 @@
+-DAsAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
++bAsAAGZ1bmN0aW9uIGZuAGEAe3JldHVybiAyAH10aGlzAHRoaXMAZ2V0VmVyc2lvbgApO3RoaXMA
+ dGhpcwB0aGlzAHRoaXMAYQBuZXcgQXJyYXkAMQA7dmFyIGIAKC0yADB4MgAyADIAMgAyADIAMgAy
+ ADIAMgA9MgA9MgA9MgA9MgA8MgA+MgA+PjIAJjIAfDIAMgAzAAB2YXIgYwAxLjIAdmFyIGQAYQAw
+ AAB2YXIgZQAncQAAZgAyAHZhciBnAGRlbGV0ZSBnAGRlbGV0ZSB0aGlzAGYAaABmdW5jdGlvbgAp
+@@ -47,62 +47,67 @@ MDQzNDk0NDkxNTg3NTMzOTE5NDIzNDYzMDQ2Mzg2
+ NzAzMDY4MjMzNzg0MzUxMTk5MzM5MTU3NjQ1MzQwNDkyMzA4NjA1NDYyMzEyNjk4MzY0MjU3ODEy
+ NQBmdW5jdGlvbiBuAGEAYgB7dHJhY2UAYQAnIAAAYgB9bgAtTmFOAE5hTgB2YXIgYQBuZXcgT2Jq
+ ZWN0ACk7YQB2YWx1ZQAyAGF0dGFjaE1vdmllACdjYXJTeW1ib2wAACdmYXN0Q2FyX21jAAAxAGEA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWAsAADAwA/MKAAAADQAAAAAA
+-AAA+AAAABwAAAAIAAAD/////CAgHRxAQAfEkAAAA7u7u/hoAAAAfAAAAAAAAALu7u/tPAAAAMQAA
+-ADYAAAA7AAAAAAAAALu7u/scAAAAQAAAAP////8dAAAARQAAAEBABPRLAAAABwAAAAEAAAD/////
+-7u7u/gAAAAA8AAAAWAAAAICACPgHAAAA/v///0cAAAAHAAAAAgAAAAsAAAAHAAAAAgAAAAwAAAAH
+-AAAAAgAAAA0AAAAHAAAAAgAAAD8AAAAHAAAAAgAAAGAAAAAHAAAAAgAAAGEAAAAHAAAAAgAAAGIA
+-AAAHAAAAAgAAAHBwB/dIAAAAAAAAAAcAAAACAAAAcHAH92cAAAAAAAAABwAAAAIAAABwcAf3SQAA
+-AAAAAAAHAAAAAgAAAHBwB/dJAAAAEgAAAAcAAAACAAAAcHAH92cAAAASAAAABwAAAAIAAABwcAf3
+-SAAAABIAAAAHAAAAAgAAAGMAAAAHAAAAAgAAAGQAAAAHAAAAAgAAAGUAAAAHAAAAAgAAABAAAAAH
+-AAAAAgAAABEAAAAHAAAAAgAAANDQDf0HAAAAAgAAAP////8HAAAAAwAAAP//////////PAAAAJkA
+-AAAGAAAAMzPzPzMzMzP/////PAAAAKMAAABOAAAApQAAAAAAAABQUAX1BwAAAAAAAAD/////AAAA
+-ALu7u/v/////PAAAAK4AAAAIAAAAsQAAAP////8dAAAAtAAAAAcAAAACAAAA/////0EAAAC8AAAA
+-OwAAAMUAAAA6AAAAzgAAANMAAAAAAAAAu7u7+x0AAADVAAAAMDAD898AAAAAAAAAQQAAAOYAAAAI
+-CAdHPAAAAO0AAAAgIALy7wAAAO7u7v4AAAAA/////50AAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcA
+-AAACAAAA/////0EAAAAAAQAAPgAAAAcAAAAJAAAA/////wQEA0MODg1NnQAAAAcAAAACAAAAcHAH
+-90kAAAAAAAAABwAAAAIAAAD/////QQAAAB4BAAAEBANDDg4NTUEAAAAqAQAAzMzM/AIAAACdAAAA
+-BwAAAAMAAABwcAf3SQAAAAAAAAAHAAAAAwAAAP////8EBANDBgYFRQcAAAACAAAAcHAH90kAAAAA
+-AAAABwAAAAIAAAD/////QQAAAEcBAADd3d39HQAAAEoBAABQAAAAHQAAAE4BAABRAAAAHQAAAFIB
+-AABgYAb2RwAAAAcAAAACAAAA/////+DgDv6wsAv7PAAAAF8BAAAHAAAAAgAAAP/////AwAz8HQAA
+-AGcBAABQAAAAwMAM/BwAAABjAQAAcHAH90gAAAAAAAAABwAAAAMAAAD/////kJAJ+d3d3f3g4A7+
+-HAAAAIABAAA8AAAAewEAAKCgCvrd3d394OAO/k4AAACZAQAAAAAAAFBQBfUHAAAAAAAAAP////8A
+-AAAAu7u7+08AAACRAQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAu7u7+93d3f0GBgVFHAAAAKYB
+-AAD/////kJAJ+aCgCvpBAAAAvwEAAN3d3f3g4A7+sLAL+8DADPzAwAz8HAAAAMcBAAD/////3d3d
+-/R0AAADLAQAAQEAE9NEBAADu7u7+AAAAAE8AAADaAQAA3AEAAAAAAAC7u7v7BwAAAAMAAAD/////
+-TwAAAOABAADiAQAAAAAAALu7u/tAQAT06AEAAAcAAAABAAAA/////+7u7v4AAAAATwAAAPEBAADz
+-AQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAu7u7+wcAAAAFAAAA/////08AAAD6AQAA/AEAAAAA
+-AAC7u7v7QEAE9AICAADu7u7+AAAAAE8AAAALAgAADQIAAA8CAAAAAAAAu7u7+wcAAAACAAAA////
+-/08AAAATAgAAFQIAAAAAAAC7u7v7UAAAAE8AAAAZAgAAGwIAAAAAAABQUAX1BwAAAAAAAAD/////
+-AAAAALu7u/tRAAAATwAAACICAAAkAgAAJgIAAAAAAAC7u7v7YGAG9kcAAAAHAAAAAgAAAP////8d
+-AAAAKwIAABwAAAAtAgAAcHAH90kAAAASAAAABwAAAAEAAADQ0A39HAAAADICAAD/////HAAAADQC
+-AAD/////PAAAADoCAAAwMAPzSQIAAAAAAAAQEAHxAAAAAEwCAAAIAAAAUwIAAP/////u7u7+CAgH
+-R08AAABdAgAAZAIAAG4CAAAAAAAAu7u7+zAwA/N8AgAAAAAAABAQAfEAAAAAfwIAAAgAAACGAgAA
+-/////+7u7v4ICAdHEBAB8Y8CAAAHAAAAAQAAAP////8cAAAArwIAAP////9OAAAAngIAAKUCAAAA
+-AAAAu7u7+//////u7u7+AAAAADwAAAC7AgAAMDAD88oCAAAAAAAAEBAB8QAAAADNAgAACAAAANQC
+-AAD/////7u7u/hAQAfHsAgAA7u7u/t0CAADiAgAAAAAAALu7u/sQEAHx/wIAAO7u7v76AgAAAAAA
+-ALu7u/sICAdHTwAAAAgDAAAPAwAAGQMAAAAAAAC7u7v7TgAAACMDAAAqAwAAAAAAALu7u/v/////
+-TwAAADQDAAA7AwAARQMAAAAAAAC7u7v7HAAAAFEDAAD/////TwAAAFgDAABfAwAAaQMAAAAAAAC7
+-u7v7MDAD83cDAAAAAAAAEBAB8QAAAAB6AwAACAAAAIEDAAD/////7u7u/ggIB0cQEAHxigMAAAcA
+-AAABAAAA/////xwAAACqAwAA/////04AAACZAwAAoAMAAAAAAAC7u7v7/////+7u7v4AAAAAPAAA
+-ALYDAAAwMAPzxQMAAAAAAAAQEAHxAAAAAMgDAAAIAAAAzwMAAP/////u7u7+EBAB8ecDAADu7u7+
+-2AMAAN0DAAAAAAAAu7u7+xAQAfH6AwAA7u7u/vUDAAAAAAAAu7u7+wgIB0dPAAAAAwQAAAoEAAAU
+-BAAAAAAAALu7u/tOAAAAHgQAACUEAAAAAAAAu7u7+/////9PAAAALwQAADYEAABABAAAAAAAALu7
+-u/scAAAATAQAAP////88AAAAVwQAAEBABPReBAAA7u7u/gAAAAAQEAHxAAAAAGcEAAAGAAAAAADw
+-PwAAACBHAAAACAAAAIgEAABHAAAABgAAAAAA8D8AAAAQRwAAAAgAAACoBAAARwAAAAYAAAAAABA4
+-AAAAAP/////u7u7+EBAB8QAAAAAsBQAABgAAAAAAADgAAAAARwAAAAgAAAC1BQAARwAAAAYAAAAA
+-AOBHAAAAAP/////u7u7+EBAB8QAAAADiBQAABgAAAAAA8EcAAAAARwAAAAgAAAATBgAARwAAAAYA
+-AAAAAPB/AAAAAEcAAAAIAAAAIAYAAEcAAAAGAAAAAADw/wAAAABHAAAACAAAAD0GAABHAAAABgAA
+-AAAAAAAAAAAARwAAAAgAAABSBgAARwAAAAYAAAAAAACAAAAAAP/////u7u7+EBAB8QAAAABuBgAA
+-BgAAAAAACAAAAAAA/////+7u7v4wMAPzfwoAAIEKAACDCgAAAAAAABAQAfEAAAAAhgoAABwAAACM
+-CgAARwAAAAgAAACPCgAARwAAABwAAACSCgAA/////+7u7v4ICAdHEBAB8ZUKAAAGAAAA////f///
+-////////BgAAAP///////////////+7u7v4AAAAAPAAAAKQKAABAQAT0qgoAAO7u7v4AAAAATwAA
+-ALMKAAC1CgAAAAAAALu7u/sHAAAAAgAAAP////8QEAHxvQoAABwAAADkCgAA/////wcAAAABAAAA
+-/////wgAAADWCgAA/////wgAAADKCgAA/////+7u7v4AAAAA/////0AAAAB0cmFjZQAnYgAAdGhp
+-cwB2YWx1ZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOAAAABAQ
+-AfEAAAAAAQAAAAgAAAAIAAAARwAAAE4AAAALAAAAEAAAAAAAAAC7u7v7/////+7u7v7/////gAAA
+-AGZ1bmN0aW9uIFZlaGljbGUAKXt0cmFjZQAnYQAAdGhpcwB2YWx1ZQB9T2JqZWN0AHJlZ2lzdGVy
+-Q2xhc3MAJ2NhclN5bWJvbAAAVmVoaWNsZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAeAAAADAwA/MKAAAAAAAAABAQAfEAAAAAFAAAAAgAAAAbAAAARwAAAE4A
+-AAAeAAAAIwAAAAAAAAC7u7v7/////+7u7v4ICAdHEBAB8TEAAAAcAAAASwAAAP////8IAAAAQAAA
+-AP/////u7u7+KgAAAAAAAAC7u7v7/////w==
++ZnVuY3Rpb24gZ290b3MAKXtpZihhAHtpZihiAHvCp8KnZ290bwBhZGRyMDAwMQA7fWFkZHIwMDAy
++OnJldHVybiAyAH1lbHNlIGlmKGIAe2FkZHIwMDAxOnJldHVybiAxAH3Cp8KnZ290bwBhZGRyMDAw
++MgA7fQAAAAAAAAAAAAAAAAAAAAAAGAwAADAwA/MKAAAADQAAAAAAAAA+AAAABwAAAAIAAAD/////
++CAgHRxAQAfEkAAAA7u7u/hoAAAAfAAAAAAAAALu7u/tPAAAAMQAAADYAAAA7AAAAAAAAALu7u/sc
++AAAAQAAAAP////8dAAAARQAAAEBABPRLAAAABwAAAAEAAAD/////7u7u/gAAAAA8AAAAWAAAAICA
++CPgHAAAA/v///0cAAAAHAAAAAgAAAAsAAAAHAAAAAgAAAAwAAAAHAAAAAgAAAA0AAAAHAAAAAgAA
++AD8AAAAHAAAAAgAAAGAAAAAHAAAAAgAAAGEAAAAHAAAAAgAAAGIAAAAHAAAAAgAAAHBwB/dIAAAA
++AAAAAAcAAAACAAAAcHAH92cAAAAAAAAABwAAAAIAAABwcAf3SQAAAAAAAAAHAAAAAgAAAHBwB/dJ
++AAAAEgAAAAcAAAACAAAAcHAH92cAAAASAAAABwAAAAIAAABwcAf3SAAAABIAAAAHAAAAAgAAAGMA
++AAAHAAAAAgAAAGQAAAAHAAAAAgAAAGUAAAAHAAAAAgAAABAAAAAHAAAAAgAAABEAAAAHAAAAAgAA
++ANDQDf0HAAAAAgAAAP////8HAAAAAwAAAP//////////PAAAAJkAAAAGAAAAMzPzPzMzMzP/////
++PAAAAKMAAABOAAAApQAAAAAAAABQUAX1BwAAAAAAAAD/////AAAAALu7u/v/////PAAAAK4AAAAI
++AAAAsQAAAP////8dAAAAtAAAAAcAAAACAAAA/////0EAAAC8AAAAOwAAAMUAAAA6AAAAzgAAANMA
++AAAAAAAAu7u7+x0AAADVAAAAMDAD898AAAAAAAAAQQAAAOYAAAAICAdHPAAAAO0AAAAgIALy7wAA
++AO7u7v4AAAAA/////50AAAAHAAAAAgAAAHBwB/dJAAAAAAAAAAcAAAACAAAA/////0EAAAAAAQAA
++PgAAAAcAAAAJAAAA/////wQEA0MODg1NnQAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/
++////QQAAAB4BAAAEBANDDg4NTUEAAAAqAQAAzMzM/AIAAACdAAAABwAAAAMAAABwcAf3SQAAAAAA
++AAAHAAAAAwAAAP////8EBANDBgYFRQcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIAAAD/////QQAA
++AEcBAADd3d39HQAAAEoBAABQAAAAHQAAAE4BAABRAAAAHQAAAFIBAABgYAb2RwAAAAcAAAACAAAA
++/////+DgDv6wsAv7PAAAAF8BAAAHAAAAAgAAAP/////AwAz8HQAAAGcBAABQAAAAwMAM/BwAAABj
++AQAAcHAH90gAAAAAAAAABwAAAAMAAAD/////kJAJ+d3d3f3g4A7+HAAAAIABAAA8AAAAewEAAKCg
++Cvrd3d394OAO/k4AAACZAQAAAAAAAFBQBfUHAAAAAAAAAP////8AAAAAu7u7+08AAACRAQAAAAAA
++AFBQBfUHAAAAAAAAAP////8AAAAAu7u7+93d3f0GBgVFHAAAAKYBAAD/////kJAJ+aCgCvpBAAAA
++vwEAAN3d3f3g4A7+sLAL+8DADPzAwAz8HAAAAMcBAAD/////3d3d/R0AAADLAQAAQEAE9NEBAADu
++7u7+AAAAAE8AAADaAQAA3AEAAAAAAAC7u7v7BwAAAAMAAAD/////TwAAAOABAADiAQAAAAAAALu7
++u/tAQAT06AEAAAcAAAABAAAA/////+7u7v4AAAAATwAAAPEBAADzAQAAAAAAAFBQBfUHAAAAAAAA
++AP////8AAAAAu7u7+wcAAAAFAAAA/////08AAAD6AQAA/AEAAAAAAAC7u7v7QEAE9AICAADu7u7+
++AAAAAE8AAAALAgAADQIAAA8CAAAAAAAAu7u7+wcAAAACAAAA/////08AAAATAgAAFQIAAAAAAAC7
++u7v7UAAAAE8AAAAZAgAAGwIAAAAAAABQUAX1BwAAAAAAAAD/////AAAAALu7u/tRAAAATwAAACIC
++AAAkAgAAJgIAAAAAAAC7u7v7YGAG9kcAAAAHAAAAAgAAAP////8dAAAAKwIAABwAAAAtAgAAcHAH
++90kAAAASAAAABwAAAAEAAADQ0A39HAAAADICAAD/////HAAAADQCAAD/////PAAAADoCAAAwMAPz
++SQIAAAAAAAAQEAHxAAAAAEwCAAAIAAAAUwIAAP/////u7u7+CAgHR08AAABdAgAAZAIAAG4CAAAA
++AAAAu7u7+zAwA/N8AgAAAAAAABAQAfEAAAAAfwIAAAgAAACGAgAA/////+7u7v4ICAdHEBAB8Y8C
++AAAHAAAAAQAAAP////8cAAAArwIAAP////9OAAAAngIAAKUCAAAAAAAAu7u7+//////u7u7+AAAA
++ADwAAAC7AgAAMDAD88oCAAAAAAAAEBAB8QAAAADNAgAACAAAANQCAAD/////7u7u/hAQAfHsAgAA
++7u7u/t0CAADiAgAAAAAAALu7u/sQEAHx/wIAAO7u7v76AgAAAAAAALu7u/sICAdHTwAAAAgDAAAP
++AwAAGQMAAAAAAAC7u7v7TgAAACMDAAAqAwAAAAAAALu7u/v/////TwAAADQDAAA7AwAARQMAAAAA
++AAC7u7v7HAAAAFEDAAD/////TwAAAFgDAABfAwAAaQMAAAAAAAC7u7v7MDAD83cDAAAAAAAAEBAB
++8QAAAAB6AwAACAAAAIEDAAD/////7u7u/ggIB0cQEAHxigMAAAcAAAABAAAA/////xwAAACqAwAA
++/////04AAACZAwAAoAMAAAAAAAC7u7v7/////+7u7v4AAAAAPAAAALYDAAAwMAPzxQMAAAAAAAAQ
++EAHxAAAAAMgDAAAIAAAAzwMAAP/////u7u7+EBAB8ecDAADu7u7+2AMAAN0DAAAAAAAAu7u7+xAQ
++AfH6AwAA7u7u/vUDAAAAAAAAu7u7+wgIB0dPAAAAAwQAAAoEAAAUBAAAAAAAALu7u/tOAAAAHgQA
++ACUEAAAAAAAAu7u7+/////9PAAAALwQAADYEAABABAAAAAAAALu7u/scAAAATAQAAP////88AAAA
++VwQAAEBABPReBAAA7u7u/gAAAAAQEAHxAAAAAGcEAAAGAAAAAADwPwAAACBHAAAACAAAAIgEAABH
++AAAABgAAAAAA8D8AAAAQRwAAAAgAAACoBAAARwAAAAYAAAAAABA4AAAAAP/////u7u7+EBAB8QAA
++AAAsBQAABgAAAAAAADgAAAAARwAAAAgAAAC1BQAARwAAAAYAAAAAAOBHAAAAAP/////u7u7+EBAB
++8QAAAADiBQAABgAAAAAA8EcAAAAARwAAAAgAAAATBgAARwAAAAYAAAAAAPB/AAAAAEcAAAAIAAAA
++IAYAAEcAAAAGAAAAAADw/wAAAABHAAAACAAAAD0GAABHAAAABgAAAAAAAAAAAAAARwAAAAgAAABS
++BgAARwAAAAYAAAAAAACAAAAAAP/////u7u7+EBAB8QAAAABuBgAABgAAAAAACAAAAAAA/////+7u
++7v4wMAPzfwoAAIEKAACDCgAAAAAAABAQAfEAAAAAhgoAABwAAACMCgAARwAAAAgAAACPCgAARwAA
++ABwAAACSCgAA/////+7u7v4ICAdHEBAB8ZUKAAAGAAAA////f///////////BgAAAP//////////
++/////+7u7v4AAAAAPAAAAKQKAABAQAT0qgoAAO7u7v4AAAAATwAAALMKAAC1CgAAAAAAALu7u/sH
++AAAAAgAAAP////8QEAHxvQoAABwAAADkCgAA/////wcAAAABAAAA/////wgAAADWCgAA/////wgA
++AADKCgAA/////+7u7v4AAAAAMDAD8+8KAAAAAAAAnQAAABwAAAD6CgAA/////50AAAAcAAAAAAsA
++AP////8QEAHxAAAAAAMLAAAcAAAADAsAAP/////u7u7+BAQDQ/DwD/8CAAAAPgAAAAcAAAACAAAA
++/////wQEA0MODg1NnQAAABwAAAAyCwAA//////DwD/8BAAAAPgAAAAcAAAABAAAA/////wQEA0PM
++zMz8AQAAABAQAfEAAAAASAsAABwAAABRCwAA/////+7u7v4ICAdH/////0AAAAB0cmFjZQAnYgAA
++dGhpcwB2YWx1ZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOAAA
++ABAQAfEAAAAAAQAAAAgAAAAIAAAARwAAAE4AAAALAAAAEAAAAAAAAAC7u7v7/////+7u7v7/////
++gAAAAGZ1bmN0aW9uIFZlaGljbGUAKXt0cmFjZQAnYQAAdGhpcwB2YWx1ZQB9T2JqZWN0AHJlZ2lz
++dGVyQ2xhc3MAJ2NhclN5bWJvbAAAVmVoaWNsZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAeAAAADAwA/MKAAAAAAAAABAQAfEAAAAAFAAAAAgAAAAbAAAARwAA
++AE4AAAAeAAAAIwAAAAAAAAC7u7v7/////+7u7v4ICAdHEBAB8TEAAAAcAAAASwAAAP////8IAAAA
++QAAAAP/////u7u7+KgAAAAAAAAC7u7v7/////w==
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -1,5 +1,5 @@
+ 
+-if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
++if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../${inter}src; fi
+ if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+ 
+ if [ -z "${conv_64}" ] || [ ${conv_64} = 0 ]; then
+@@ -16,8 +16,8 @@ else
+ 	launcher=q
+ fi
+ l_z=`pkg-config --libs zlib`
+-${OCOMP} a.oc ${OFLAGS} logfile 0 && \
+-${LD} ${linker} a.o -L/home/bc/before/lib -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
++${OCOMP} a${interext}.oc ${OFLAGS} logfile 0 && \
++${LD} ${linker} a${interext}.o -L/home/bc/before/lib -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out x
+--- /dev/null
++++ actionswf-1/tests/a.c
+@@ -0,0 +1,53 @@
++
++#include <stdio.h>
++#include <stdlib.h>
++#include "../dev/actionswf.h"
++
++char *text(const char *filename)
++{
++    FILE *f = fopen(filename, "rb");
++    if (!f) return NULL;
++
++    // Seek to end to get size
++    fseek(f, 0, SEEK_END);
++    long size = ftell(f);
++    rewind(f);
++
++    // Allocate +1 for null terminator
++    char *buffer = (char *)malloc(size + 1);
++    if (!buffer) {
++        fclose(f);
++        return NULL;
++    }
++
++    // Read file
++    size_t read = fread(buffer, 1, size, f);
++    fclose(f);
++
++    // Null-terminate
++    buffer[read] = '\0';
++
++    return buffer;
++}
++
++int main(int argc,char**argv){
++	xlog_pad_set(0x30);
++
++	int f;
++	if(argc==1)f=prexx_flags|flagpre_x_pad|flagpre_write_no;
++	else{
++		puts("xxu_flags flag_titles");
++		f=xxu_flags|flag_titles;
++	}
++
++	swf_new_ex("a.swf",0x80,0x80,0x050607,2,f);
++	action(text("./aoc/a"));
++	int presprite=swf_sprite_new();
++	action_sprite(presprite,"trace('b'+this.value)");
++	action_init_sprite(presprite,text("./aoc/b"));
++	int sprite=swf_sprite_done(presprite);
++	swf_exports_add(sprite,"carSymbol");
++
++	swf_done();
++	exit(erbool_get());
++}
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -1,8 +1,26 @@
+ 
+ format elfobj64
+ 
++importx "fopen" fopen
++importx "fseek" fseek
++importx "ftell" ftell
++importx "malloc" malloc
++importx "fread" fread
+ importx "_exit" exit
+ 
++function text(ss name)
++	sd file;set file fopen(name,"rb")
++	call fseek(file,0,2) #SEEK_END=2
++	ss sz;set sz ftell(file)
++	call fseek(file,0,0) #SEEK_SET=0
++	sd size=1;add size sz
++	sd m;set m malloc(size)
++	call fread(m,sz,1,file)
++	add sz m
++	set sz# 0
++	return m
++end
++
+ include "entryraw.oc" "entry.oc"
+ 
+ override include_sec 1
+@@ -15,114 +33,18 @@ if argc=1
+ 	set f (prexx_flags|flagpre_x_pad|flagpre_write_no)
+ else
+ 	importx "puts" puts
+-	call puts("flag_pool_read_unlink flag_x flag_titles")
++	call puts("xxu_flags flag_titles")
+ 	set f (xxu_flags|flag_titles)
+ end
+ call swf_new_ex("a.swf",0x80,0x80,0x050607,2,f)
+ 
+-call action("
+-/*
+-debug_x
+-*/
+-function fn(a){
+-	return 2;
+-}
+-this.this.getVersion();
+-
+-this.this.this=this;
+-
+-//note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
+-a=new Array(1);
+-var b=(-2+0x2-2*2/2%2&2|2^2<2>2==2!=2<=2>=2<<2>>2>>>2&&2||2?2:3);
+-var c=1.2;var d=a[0];var e='q';
+-f=2;var g;delete g;delete this.f;
+-h=function(){var a;}var i=h();
+-if(2==2){var j;return 9;}else if(2==2){var k;}else{var l;}if(3==3){}
+-while(2==2){var m;}
+-f++;f--;f+=2;
+-for(var n=2;n<3;n++){break;}
+-for(var o in a){continue;}
+-for(a[0] in a[0]){}
+-while(true){break;continue;var p;}
+-for(;;){}
+-
+-a=new Object();
+-a.b=3;
+-a.c=new Array(1);a.c[0]=5;
+-a.d=new Object();
+-a.d.e=2;
+-a.b++;
+-a.c[0]--;
+-a.d.e+=2;
+-
+-a=b!=1?q:w;
+-
+-//manual class extends
+-var class1=function(){
+-	trace('class1');
+-}
+-class1.prototype.func1=function(){
+-	trace('func1');
+-}
+-ASSetPropFlags(class1.prototype,null,1);
+-var class2=function(){
+-	trace('class2');
+-	this.__proto__.constructor();
+-	this.func1();
+-}
+-class2.prototype.__proto__=class1.prototype;
+-class2.prototype.constructor=class1;
+-class2.prototype.func2=function(){
+-	trace('func2');
+-}
+-ASSetPropFlags(class2.prototype,null,1);
+-var class3=function(){
+-	trace('class3');
+-	this.__proto__.constructor();
+-	this.func2();
+-}
+-class3.prototype.__proto__=class2.prototype;
+-class3.prototype.constructor=class2;
+-var o3=new class3();
+-
+-//from asm point of view, all can be done regarding interface statement:
+-//ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
+-//at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
+-//	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
+-
+-//    3FF0000020000000->3F800001     3FF0000010000000               3810000000000000->00800000
+-trace(1.00000011920928955078125+' '+ 1.000000059604644775390625+' '+0.000000000000000000000000000000000000011754943508222875079687365372222456778186655567720875215087517062784172594547271728515625)
+-//                                                                  1.17549435082228750796873653722e-38
+-//    3800000000000000                                                                                                                      47E0000000000000->7F000000
+-trace(0.0000000000000000000000000000000000000058774717541114375398436826861112283890933277838604376075437585313920862972736358642578125+' '+170141183460469231731687303715884105728.0)
+-//    5.87747175411143753984368268611e-39                                                                                                   1.70141183460469231731687303716e+38
+-//    47F0000000000000                              7FF0000000000000->7f800000  FFF0000000000000->ff800000 0000000000000000->00000000  8000000000000000->80000000
+-trace(340282366920938463463374607431768211456.0+' '+Infinity+' '+               -Infinity+' '+             0.0+' '+                    -0.0)
+-//    3.40282366920938463463374607432e+38
+-//    0008000000000000
+-trace(0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011125369292536006915451163586662020321096079902311659152766637084436022174069590979271415795062555102820336698655179055025762170807767300544280061926888594105653889967660011652398050737212918180359607825234712518671041876254033253083290794743602455899842958198242503179543850591524373998904438768749747257902258025254576999282912354093225567689679024960579905428830259962166760571761950743978498047956444458014963207555317331566968317387932565146858810236628158907428321754360614143188210224234057038069557385314008449266220550120807237108092835830752700771425423583764509515806613894483648536865616670434944915875339194234630463869889864293298274705456845477030682337843511993391576453404923086054623126983642578125)
+-//    1.11253692925360069154511635867e-308
+-//    7FFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF
+-function n(a,b){trace(a+' '+b)}
+-n(-NaN,NaN)
+-// https://www.omnicalculator.com/other/floating-point
+-// https://baseconvert.com/ieee-754-floating-point
+-//// https://www.h-schmidt.net/FloatConverter/IEEE754.html
+-
+-//example of extending clip symbols (and one time DoInitAction tag)
+-var a=new Object();
+-a.value=2;
+-attachMovie('carSymbol','fastCar_mc',1,a)
+-")
++ss buf;set buf text("./aoc/a")
++call action(buf)
+ 
+ sd presprite;set presprite swf_sprite_new()
+ call action_sprite(presprite,"trace('b'+this.value)")
+-call action_init_sprite(presprite,"
+-function Vehicle(){
+-	trace('a'+this.value)
+-}
+-Object.registerClass('carSymbol',Vehicle)
+-")
++set buf text("./aoc/b")
++call action_init_sprite(presprite,buf)
+ sd sprite;set sprite swf_sprite_done(presprite)
+ call swf_exports_add(sprite,"carSymbol")
+ 
+--- /dev/null
++++ actionswf-1/tests/a.py
+@@ -0,0 +1,29 @@
++
++import actionswf
++import os
++if os.environ.get('break'):
++	import pdb; pdb.set_trace()
++
++def text(name):
++	return open(name).read()
++
++actionswf.xlog_pad_set(0x30)
++
++import sys
++if len(sys.argv)==1:
++	f=actionswf.flags.prexx|actionswf.flag.pre_x_pad|actionswf.flag.pre_write_no
++else:
++	print("xxu|titles")
++	f=actionswf.flagss.xxu|actionswf.flag.titles
++
++actionswf.new_ex("a.swf",0x80,0x80,0x050607,2,f)
++actionswf.action(text("./aoc/a"))
++presprite=actionswf.sprite_new()
++actionswf.action_sprite(presprite,"trace('b'+this.value)")
++actionswf.action_init_sprite(presprite,text("./aoc/b"))
++sprite=actionswf.sprite_done(presprite)
++actionswf.exports_add(sprite,"carSymbol")
++
++actionswf.done()
++
++exit(0)
+--- /dev/null
++++ actionswf-1/tests/ac
+@@ -0,0 +1,18 @@
++
++if [ -z "${old}" ]; then
++	L1=../csrc
++	LD_LIBRARY_PATH=${L1}
++	CC=cc
++	shopt -s expand_aliases #for gd
++	source ~/aliases        #
++else #same as apy
++	L1=~/x86_64_lib
++	LD_LIBRARY_PATH=${L1}:~/x86_64_lib/cross
++	L2=-L/home/bc/x86_64_lib/cross
++	CC=x86_64-linux-gnu-gcc
++	launcher=qq
++fi
++${CC} -g a.c -L${L1} -lactionswf ${L2} -lz || exit 1
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out && \
++#eval is to expand gd alias
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out x
+--- /dev/null
++++ actionswf-1/tests/aoc/a
+@@ -0,0 +1,113 @@
++
++/*
++debug_x
++*/
++function fn(a){
++	return 2;
++}
++this.this.getVersion();
++
++this.this.this=this;
++
++//note that ap_Constant8/16,null,undefined,true/false is not a step here (pointers are here), also special is ap_RegisterNumber
++a=new Array(1);
++var b=(-2+0x2-2*2/2%2&2|2^2<2>2==2!=2<=2>=2<<2>>2>>>2&&2||2?2:3);
++var c=1.2;var d=a[0];var e='q';
++f=2;var g;delete g;delete this.f;
++h=function(){var a;}var i=h();
++if(2==2){var j;return 9;}else if(2==2){var k;}else{var l;}if(3==3){}
++while(2==2){var m;}
++f++;f--;f+=2;
++for(var n=2;n<3;n++){break;}
++for(var o in a){continue;}
++for(a[0] in a[0]){}
++while(true){break;continue;var p;}
++for(;;){}
++
++a=new Object();
++a.b=3;
++a.c=new Array(1);a.c[0]=5;
++a.d=new Object();
++a.d.e=2;
++a.b++;
++a.c[0]--;
++a.d.e+=2;
++
++a=b!=1?q:w;
++
++//manual class extends
++var class1=function(){
++	trace('class1');
++}
++class1.prototype.func1=function(){
++	trace('func1');
++}
++ASSetPropFlags(class1.prototype,null,1);
++var class2=function(){
++	trace('class2');
++	this.__proto__.constructor();
++	this.func1();
++}
++class2.prototype.__proto__=class1.prototype;
++class2.prototype.constructor=class1;
++class2.prototype.func2=function(){
++	trace('func2');
++}
++ASSetPropFlags(class2.prototype,null,1);
++var class3=function(){
++	trace('class3');
++	this.__proto__.constructor();
++	this.func2();
++}
++class3.prototype.__proto__=class2.prototype;
++class3.prototype.constructor=class2;
++var o3=new class3();
++
++//from asm point of view, all can be done regarding interface statement:
++//ActionImplementsOp is 'for use by ActionCastOp' or 'Additionally, with SWF 7 or later, ActionInstanceOf also supports with interfaces'
++//at ffdec: function a(){} class b implements a{} var c=new b(); trace(c instanceof a)
++//	and for cast: Push 'a' GetVariable Push 'c' GetVariable CastOp
++
++//    3FF0000020000000->3F800001     3FF0000010000000               3810000000000000->00800000
++trace(1.00000011920928955078125+' '+ 1.000000059604644775390625+' '+0.000000000000000000000000000000000000011754943508222875079687365372222456778186655567720875215087517062784172594547271728515625)
++//                                                                  1.17549435082228750796873653722e-38
++//    3800000000000000                                                                                                                      47E0000000000000->7F000000
++trace(0.0000000000000000000000000000000000000058774717541114375398436826861112283890933277838604376075437585313920862972736358642578125+' '+170141183460469231731687303715884105728.0)
++//    5.87747175411143753984368268611e-39                                                                                                   1.70141183460469231731687303716e+38
++//    47F0000000000000                              7FF0000000000000->7f800000  FFF0000000000000->ff800000 0000000000000000->00000000  8000000000000000->80000000
++trace(340282366920938463463374607431768211456.0+' '+Infinity+' '+               -Infinity+' '+             0.0+' '+                    -0.0)
++//    3.40282366920938463463374607432e+38
++//    0008000000000000
++trace(0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011125369292536006915451163586662020321096079902311659152766637084436022174069590979271415795062555102820336698655179055025762170807767300544280061926888594105653889967660011652398050737212918180359607825234712518671041876254033253083290794743602455899842958198242503179543850591524373998904438768749747257902258025254576999282912354093225567689679024960579905428830259962166760571761950743978498047956444458014963207555317331566968317387932565146858810236628158907428321754360614143188210224234057038069557385314008449266220550120807237108092835830752700771425423583764509515806613894483648536865616670434944915875339194234630463869889864293298274705456845477030682337843511993391576453404923086054623126983642578125)
++//    1.11253692925360069154511635867e-308
++//    7FFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF
++function n(a,b){trace(a+' '+b)}
++n(-NaN,NaN)
++// https://www.omnicalculator.com/other/floating-point
++// https://baseconvert.com/ieee-754-floating-point
++//// https://www.h-schmidt.net/FloatConverter/IEEE754.html
++
++//example of extending clip symbols (and one time DoInitAction tag)
++var a=new Object();
++a.value=2;
++attachMovie('carSymbol','fastCar_mc',1,a)
++
++//goto up/down
++function gotos()
++{
++	if(a)
++	{
++		if(b)
++		{
++			§§goto(addr0001);
++		}
++		addr0002:
++		return 2;
++	}
++	else if(b)
++	{
++		addr0001:
++		return 1;
++	}
++	§§goto(addr0002);
++}
+--- /dev/null
++++ actionswf-1/tests/aoc/b
+@@ -0,0 +1,5 @@
++
++function Vehicle(){
++	trace('a'+this.value)
++}
++Object.registerClass('carSymbol',Vehicle)
+--- /dev/null
++++ actionswf-1/tests/apy
+@@ -0,0 +1,19 @@
++
++if [ -n "$1" ]; then break=x; fi
++export PYTHONPATH=../python
++if [ -n "${arm}" ]; then
++#using: minimal lib stdlib libffi , problems with actionswf map? going to qemu
++#	using: zlib1g libexpat1
++#	libactionswf.so: cannot enable executable stack as shared object requires? launchpad_prelink execstack: execstack -c ./libactionswf.so
++	export LD_LIBRARY_PATH=~/x86_64_lib:~/Desktop/python3.13/usr/lib/x86_64-linux-gnu
++	p="qq /home/bc/Desktop/python3.13/usr/bin/python3.13 ${p} a.py"
++else
++	p="python ${p} a.py"
++	if [ -z "${src}" ]; then
++		export LD_LIBRARY_PATH=../csrc
++	else
++		export LD_LIBRARY_PATH=../src
++	fi
++fi
++break=${break} $p || exit 1
++break=${break} $p x
+--- actionswf-1.orig/tests/as
++++ actionswf-1/tests/as
+@@ -1,3 +1,3 @@
+ #!/bin/sh
+-if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../src; fi
+-${RUN__SHELL} ./asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
++if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../${inter}src; fi
++${RUN__SHELL} ./${inter}asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
+--- /dev/null
++++ actionswf-1/tests/as3/a
+@@ -0,0 +1,6 @@
++#!/bin/sh
++set -e
++cd osrc
++${RUN__SHELL} ./a
++cd ..
++${RUN__SHELL} ./b
+--- /dev/null
++++ actionswf-1/tests/as3/a.oac
+@@ -0,0 +1,23 @@
++
++format elfobj64
++
++importx "_exit" exit
++
++override include_sec 1
++einclude "../../../dev/import.oh"
++
++entry main()
++
++call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
++
++sd presprite;set presprite swf_sprite_new()
++char buf#3000
++call actionf_sprite(presprite,#buf,"|||src/MyClip/clip.as|||",2)
++sd sprite;set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"MyClip")
++
++call action("|||src/Main/root.as|||")
++
++call swf_done()
++
++call exit(0)
+--- /dev/null
++++ actionswf-1/tests/as3/ar
+@@ -0,0 +1 @@
++ffdec=~/ffdec/bin/ffdec ./a
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/as3/as
+@@ -0,0 +1,2 @@
++#!/bin/sh
++s=s ${RUN__SHELL} ./a
+--- /dev/null
++++ actionswf-1/tests/as3/b
+@@ -0,0 +1,5 @@
++#!/bin/sh
++if [ -z $p ]; then
++	p=python3
++fi
++header=550:400:12:ffFFff $p ../../oaas3 dest a.swf
+--- /dev/null
++++ actionswf-1/tests/as3/br
+@@ -0,0 +1 @@
++ffdec=~/ffdec/bin/ffdec ./b
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/as3/c
+@@ -0,0 +1,3 @@
++#!/bin/sh
++rm -f a.swf
++cd osrc && ${RUN__SHELL} ./c
+--- /dev/null
++++ actionswf-1/tests/as3/osrc/a
+@@ -0,0 +1,2 @@
++#!/bin/sh
++inter=../../ interext=.oac ${RUN__SHELL} ../../a${s}
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/as3/osrc/a.oac.oc
+@@ -0,0 +1,145 @@
++
++format elfobj64
++
++importx "_exit" exit
++
++override include_sec 1
++einclude "../../../dev/import.oh"
++
++entry main()
++
++call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
++
++sd presprite;set presprite swf_sprite_new()
++char buf#3000
++call actionf_sprite(presprite,#buf,"
++/*3 import flash.display.MovieClip;
++import flash.display.Shape;
++import flash.events.Event;
++import flash.text.TextField;
++import flash.text.TextFormat;
++import flash.text.TextFormatAlign;
++import flash.events.MouseEvent;
++
++class MyClip extends MovieClip {*/
++	function on_Enter_Frame(){//3 function on_Enter_Frame(e){
++		if(a){
++			_x-=c;//3 x-=c;
++			if(b){
++				_y-=c;//3 y-=c;
++				if(_y<=0){//3 if(y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;//3 y+=c;
++				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(_x<=0){//3 if(x<=0){
++				a=false;
++			}
++		}else{
++			_x+=c;//3 x+=c;
++			if(b){
++				_y-=c;//3 y-=c;
++				if(_y<=0){//3 if(y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;//3 y+=c;
++				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(_x+_width>=Stage.width){//3 if(x+width>=stage.stageWidth){
++				a=true;
++			}
++		}
++	}
++	// Handlers
++	function onClick(){//3 function onClick(e){
++		trace('Button clicked!');
++	}
++	function onOver(){//3 function onOver(e){
++		_alpha = 80;//3 alpha = 0.8;
++	}
++	function onOut(){//3 function onOut(e){
++		_alpha = 100;//3 alpha = 1;
++	}
++/*3
++	public function new() {
++		super();
++*/
++		// Simple visual so you can see it
++		//3 var shape = new Shape();
++		beginFill(0x3399FF);//3 shape.graphics.beginFill(0x3399FF);
++		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 shape.graphics.drawRect(0, 0, 120, 80);
++		endFill();//3 shape.graphics.endFill();
++		//3 addChild(shape);
++
++		// a 1/5 margin
++		createTextField('label', 1, 0, 16, 120, 48);//3 var label = new TextField();
++		/*3
++		label.y = 16;
++		label.width = 120;
++		label.height = 48;
++		*/
++		label.text = 'Click';
++		label.selectable = false;
++
++		// a 2/3 size format
++		var tf = new TextFormat();
++		tf.size = 32;
++		tf.align = 'center';//3 tf.align = TextFormatAlign.CENTER;
++		tf.color = 0xff9933;
++		label.setTextFormat(tf);
++
++		// Interactivity
++		useHandCursor = true;//3 buttonMode = true;mouseChildren = false;
++		onRollOver = onOver;//3 addEventListener(MouseEvent.MOUSE_OVER, onOver);
++		onRollOut = onOut;//3 addEventListener(MouseEvent.MOUSE_OUT, onOut);
++		onPress = onClick;//3 addEventListener(MouseEvent.CLICK, onClick);
++
++		//3 addChild(label);
++
++		onEnterFrame=on_Enter_Frame; //3 addEventListener(Event.ENTER_FRAME, on_Enter_Frame);
++/*3	}
++	static
++*/
++	var c=%u;
++	var a=false;var b=false;
++//3 }
++",2)
++sd sprite;set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"MyClip")
++
++call action("
++//3 import flash.Lib;
++
++/*3 class Main {
++	static
++	function main() {
++		var stage = Lib.current.stage;
++*/
++		attachMovie('MyClip','shape',getNextHighestDepth());//3 var shape = new MyClip();
++		shape._x = (Stage.width - 100) / 2;//3 shape.x = (stage.stageWidth - 100) / 2;
++		shape._y = (Stage.height - 100) / 2;//3 shape.y = (stage.stageHeight - 100) / 2;
++/*3
++		stage.addChild(shape);
++
++//		var img = new Bitmap( new MyBitmapData(0, 0) );
++//		Lib.current.addChild(img);
++	}
++}
++
++//import flash.display.BitmapData;
++//import flash.display.Bitmap;
++//@:bitmap('relative/path/to/myfile.png')
++//class MyBitmapData extends BitmapData { }//*
++*/
++")
++
++call swf_done()
++
++call exit(0)
+--- /dev/null
++++ actionswf-1/tests/as3/osrc/al
+@@ -0,0 +1 @@
++LD_LIBRARY_PATH=/home/bc/x86_64_lib ./a
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/as3/osrc/c
+@@ -0,0 +1,2 @@
++#!/bin/sh
++rm -f a.oac.o a.out a.swf a.swf.format
+--- /dev/null
++++ actionswf-1/tests/as3/src/Main/root.as
+@@ -0,0 +1,24 @@
++
++//3 import flash.Lib;
++
++/*3 class Main {
++	static
++	function main() {
++		var stage = Lib.current.stage;
++*/
++		attachMovie('MyClip','shape',getNextHighestDepth());//3 var shape = new MyClip();
++		shape._x = (Stage.width - 100) / 2;//3 shape.x = (stage.stageWidth - 100) / 2;
++		shape._y = (Stage.height - 100) / 2;//3 shape.y = (stage.stageHeight - 100) / 2;
++/*3
++		stage.addChild(shape);
++
++//		var img = new Bitmap( new MyBitmapData(0, 0) );
++//		Lib.current.addChild(img);
++	}
++}
++
++//import flash.display.BitmapData;
++//import flash.display.Bitmap;
++//@:bitmap('relative/path/to/myfile.png')
++//class MyBitmapData extends BitmapData { }//*
++*/
+--- /dev/null
++++ actionswf-1/tests/as3/src/MyClip/clip.as
+@@ -0,0 +1,98 @@
++
++/*3 import flash.display.MovieClip;
++import flash.display.Shape;
++import flash.events.Event;
++import flash.text.TextField;
++import flash.text.TextFormat;
++import flash.text.TextFormatAlign;
++import flash.events.MouseEvent;
++
++class MyClip extends MovieClip {*/
++	function on_Enter_Frame(){//3 function on_Enter_Frame(e){
++		if(a){
++			_x-=c;//3 x-=c;
++			if(b){
++				_y-=c;//3 y-=c;
++				if(_y<=0){//3 if(y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;//3 y+=c;
++				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(_x<=0){//3 if(x<=0){
++				a=false;
++			}
++		}else{
++			_x+=c;//3 x+=c;
++			if(b){
++				_y-=c;//3 y-=c;
++				if(_y<=0){//3 if(y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;//3 y+=c;
++				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(_x+_width>=Stage.width){//3 if(x+width>=stage.stageWidth){
++				a=true;
++			}
++		}
++	}
++	// Handlers
++	function onClick(){//3 function onClick(e){
++		trace('Button clicked!');
++	}
++	function onOver(){//3 function onOver(e){
++		_alpha = 80;//3 alpha = 0.8;
++	}
++	function onOut(){//3 function onOut(e){
++		_alpha = 100;//3 alpha = 1;
++	}
++/*3
++	public function new() {
++		super();
++*/
++		// Simple visual so you can see it
++		//3 var shape = new Shape();
++		beginFill(0x3399FF);//3 shape.graphics.beginFill(0x3399FF);
++		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 shape.graphics.drawRect(0, 0, 120, 80);
++		endFill();//3 shape.graphics.endFill();
++		//3 addChild(shape);
++
++		// a 1/5 margin
++		createTextField('label', 1, 0, 16, 120, 48);//3 var label = new TextField();
++		/*3
++		label.y = 16;
++		label.width = 120;
++		label.height = 48;
++		*/
++		label.text = 'Click';
++		label.selectable = false;
++
++		// a 2/3 size format
++		var tf = new TextFormat();
++		tf.size = 32;
++		tf.align = 'center';//3 tf.align = TextFormatAlign.CENTER;
++		tf.color = 0xff9933;
++		label.setTextFormat(tf);
++
++		// Interactivity
++		useHandCursor = true;//3 buttonMode = true;mouseChildren = false;
++		onRollOver = onOver;//3 addEventListener(MouseEvent.MOUSE_OVER, onOver);
++		onRollOut = onOut;//3 addEventListener(MouseEvent.MOUSE_OUT, onOut);
++		onPress = onClick;//3 addEventListener(MouseEvent.CLICK, onClick);
++
++		//3 addChild(label);
++
++		onEnterFrame=on_Enter_Frame; //3 addEventListener(Event.ENTER_FRAME, on_Enter_Frame);
++/*3	}
++	static
++*/
++	var c=%u;
++	var a=false;var b=false;
++//3 }
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -7,26 +7,26 @@ elif [ ${conv_64} = 1 ]; then
+ 	fi
+ fi
+ l_z=`pkg-config --libs zlib`
+-o a.oc logfile 0 conv_64 ${conv_64} ${inc} && {
++o a${interext}.oc logfile 0 conv_64 ${conv_64} ${inc} && {
+ 	if [ ${conv_64} = 1 ]; then
+ 		if [ -z "${inc}" ]; then #cross
+ 			LD_LIBRARY_PATH=/home/bc/Desktop/out/ld/usr/lib/i386-linux-gnu /home/bc/Desktop/out/ld/usr/bin/i686-linux-gnu-ld.bfd \
+ 				--dynamic-linker=/lib/ld-linux.so.2 a.o -entry main -lc ${l_z} -L${_L}../src -lactionswf
+ 		else
+-			echo cc a.o ${l_z} -L${_L}../src -lactionswf
+-			cc a.o ${l_z} -L${_L}../src -lactionswf
++			echo cc a${interext}.o ${l_z} -L${_L}../${inter}src -lactionswf
++			cc a${interext}.o ${l_z} -L${_L}../${inter}src -lactionswf
+ 		fi
+ 	else
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then
+ 			#local cc has -lz? bionic i386 cc has no -lz? who cares
+-			echo cc a.o ${l_z} -L${_L}../src -lactionswf
+-			cc a.o ${l_z} -L${_L}../src -lactionswf
++			echo cc a${interext}.o ${l_z} -L${_L}../${inter}src -lactionswf
++			cc a${interext}.o ${l_z} -L${_L}../${inter}src -lactionswf
+ 		else
+ 			echo cc a.o ${l_z} -L${LD_LIBRARY_PATH} -lactionswf
+ 			cc a.o ${l_z} -L${LD_LIBRARY_PATH} -lactionswf
+ 		fi
+ 	fi && {
+-		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../src; fi
++		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../${inter}src; fi
+ 		echo LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
+ 		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
+ 	}
+--- /dev/null
++++ actionswf-1/tests/bc
+@@ -0,0 +1 @@
++launcher='gd --args' ./ac
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/bpy
+@@ -0,0 +1 @@
++./apy x
+--- /dev/null
++++ actionswf-1/tests/cpy
+@@ -0,0 +1 @@
++sudo env LD_LIBRARY_PATH=../csrc ~/test/gdb/g -p $(pgrep -n python)
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -42,42 +42,30 @@ call swf_button(150,50,#ButtonData)
+ #call swf_button_last("var a;a=1","Qubmit")
+ 
+ call action("
+-//this is the same a&&b example plus e=1 to trick oaalternative.py
+-//the second construct is this:
+-//while(true){
+-//if(a){if(b)break;}else if(b)break;
+-//	return 2;
+-//}
+-//return 3;
++/*function f(){
++	while(true){
++		if(a){
++			if(b)break;
++		}else if(b)break;
++		return 1;
++	}
++	return 2;
++}*/
+ function f()
+ {
+    if(a)
+    {
+       if(b)
+       {
+-         c = 1;
+-      }
+-      else
+-      {
+-         addr003e:
+-         d = 1;
+-      }
+-      if(a)
+-      {
+-         if(b)
+-         {
+-            §§goto(addr0081);
+-         }
+-      }
+-      else if(b)
+-      {
+-         addr0081:
+-         return 3;
++         §§goto(addr005d);
+       }
++   }
++   else if(b)
++   {
++      addr005d:
+       return 2;
+    }
+-   e = 1;
+-   §§goto(addr003e);
++   return 1;
+ }
+ 
+ function c(){
+--- actionswf-1.orig/tests/ffdec/ff
++++ actionswf-1/tests/ffdec/ff
+@@ -18,22 +18,28 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 			LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${q} ./a.out x && {
+ 				if [ "${a}" = 2 ]; then exit; fi
+ 				if [ -n "${wait}" ]; then read; fi
+-				. ~/games/ep/ffdec #~/games/ffdec /home/bc/a/a/s/actionswf-1/tests/ffdec/a.swf
+-				is_debug=x ffdec=${ffd} skip_alternative=x ../../oaalternative.sh a.swf && \
+-				is_debug=x expect_obfuscation=./q no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "${q} ./a.out x x" || {
+-					swfdump -D${1} a.swf.orig > 1
+-					swfdump -D${1} a.swf > 2
+-					diff 1 2 --color
+-					rm 1 2
+-					exit 1
+-				}
++				if [ -z "${ffdec}" ]; then
++					. ~/games/ep/ffdec #~/games/ffdec /home/bc/a/a/s/actionswf-1/tests/ffdec/a.swf
++				else
++					ffd=${ffdec}
++				fi
++				is_debug=x ffdec=${ffd} skip_alternative=x ../../oaalternative.sh a.swf && {
++					#expect_obfuscation=./q   this is solved since ffdec_24.1.1_nightly3382
++					is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "${q} ./a.out x x" || {
++						swfdump -D${1} a.swf.orig > 1
++						swfdump -D${1} a.swf > 2
++						diff 1 2 --color
++						rm 1 2
++						exit 1
++					}
++				} || exit 1
+ 				cat a.swf.log
+ 			}
+ 		}
+ 	fi
+ }
+ 
+-# ffdec=/home/bc/a/ffdec/ffdec_24.0.1/usr/bin/ffdec FFDEC_JARFILENAME=../../share/java/ffdec/ffdec.jar ./ff
++# for (( i=`pwd | grep -o / | wc -l`; i>0 ; i-- )) do qwe="${qwe}../"; done; ffdec=/home/bc/ffdec/j13/usr/bin/ffdec FFDEC_JARFILENAME=${qwe}home/bc/ffdec/j13/usr/share/java/ffdec/ffdec.jar ./ff
+ 
+ # LD_LIBRARY_PATH=/home/bc/x86_64_lib ./ff
+ #LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src qq ./a.out 1 x x

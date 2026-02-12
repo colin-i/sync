@@ -1,0 +1,303 @@
+Format ElfObj64
+
+include "../include/prog.h" "../include/prog.oh"
+
+#multithread unsafe
+datax rootid#1
+datax selid#1
+charx datawrite#1
+charx dataread#1
+valuex svpath#1
+valuex svsize#1
+wordx read_unlink#1
+
+#win32 with _
+importx "strlen" strlen
+importx "memcmp" memcmp
+
+function actionpoolid_root()
+	return #globalo.rootid
+endfunction
+function actionpoolid()
+	return #globalo.selid
+endfunction
+
+import "struct_ids_actionpool" struct_ids_actionpool
+#block
+function actionpool_currentblock()
+	callret struct_ids_actionpool((ids_get),globalo.selid)
+endfunction
+
+importx "free" free
+import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
+function pool_data(sd ?id)
+	sv block;set block struct_ids_actionpool_filter((ids_get),id)
+	if block!=(NULL)
+		call free(block) #see struct_ids set
+	end
+end
+const constpool_unique=0x00
+const  constpool_multi=0xff
+function pool_realentry(sd pos)
+	sd b;set b struct_ids_actionpool_filter((ids_get),globalo.selid)
+	ss mem;set mem block_get_mem(b)
+	add mem pos
+	set mem# (constpool_multi)
+end
+
+function pool_init(sd flags)
+#when entering a frame must know what is. a frame with no savings at read will have cursor at start and later in that frame if is a pool request then will error
+	sd ?test=flags_pool
+	and test flags
+	if test!=0
+		and test (flag_pool_read)
+		if test=0
+			set globalo.datawrite (TRUE)
+			set globalo.dataread (FALSE)  #is a read alone test case
+		else
+			set globalo.datawrite (FALSE) #most of are write else read
+			set globalo.dataread (TRUE)
+			set globalo.read_unlink (flag_pool_read_unlink)
+			and globalo.read_unlink flags
+			and flags (~flagpre_pool_write)
+		end
+		return flags
+	end
+	set globalo.datawrite (FALSE)  #there is one write alone test cases
+	set globalo.dataread (FALSE)
+	return flags
+end
+
+importx "access" access
+importx "fseek" fseek
+importx "fread" fread
+importx "unlink" unlink
+importx "fclose" fclose
+importx "sprintf" sprintf
+importx "fopen" fopen
+importx "ftell" ftell
+
+import "stack_to_word_arg" stack_to_word_arg
+import "word_arg_to_stack" word_arg_to_stack
+import "swf_mem_change_pool" swf_mem_change_pool
+import "swf_mem_change_back_pool" swf_mem_change_back_pool
+import "block_get_mem" block_get_mem
+import "block_get_size" block_get_size
+import "block_reset_size" block_reset_size
+import "mem_block_add_throwless" mem_block_add_throwless
+import "block_get_mem_size" block_get_mem_size
+
+#aftercallimport ebool
+
+import "f_open_mem" f_open_mem
+import "f_write" f_write
+import "memalloc" memalloc
+import "mem_block_add" mem_block_add
+import "debug_xlog_pool" debug_xlog_pool
+
+function pool_entry(sd nr)
+	sd pb;set pb struct_ids_actionpool_filter((ids_get_pointer),globalo.selid)
+	char a=constpool_unique
+	call mem_block_add(pb,#a,1)
+	callg debug_xlog_pool(nr)
+end
+import "x_log_string" x_log_string
+function pool_reentry(sd offset)
+	sd b;set b struct_ids_actionpool_filter((ids_get),globalo.selid)
+	sd mem;sdu ?size
+	call block_get_mem_size(b,#mem,#size)
+	sdu ?cursor;set cursor mem#
+	if cursor<^size
+		inc mem#
+		add mem cursor
+		if mem#s=(constpool_unique)
+			callg x_log_string((xlog_unique),offset)
+			return (not_an_id)
+		end
+		return (any_id)
+	end
+	callg error("error at pool read")
+end
+const pool_cursor_size=mem_struct__size_size
+function pool_read(sd id,sd frame_nr)
+	if globalo.dataread!=(FALSE)
+		sv pb;set pb struct_ids_actionpool_filter((ids_get_pointer),id)
+		call block_reset_size(pb#)  #if is after a read is ok, else is useless
+		data cursor=pool_cursor_size
+		call mem_block_add(pb,#cursor,(pool_cursor_size))  #if is first and after a read is ok, else is useless
+
+		sd name;set name pool_savepath(id,frame_nr)
+		dataxu acs#1
+		set acs access(name,(R_OK))
+		if acs=0
+			sd f;set f fopen(name,"rb")
+			#call unlink(name) #"the file will remain in existence until the last file descriptor referring to it is closed"
+			#wine same thing. #include <unistd.h>#include <stdio.h>void main(){FILE*f=fopen("q","rb");unlink("q");fseek(f,0,SEEK_END);printf("%lu\n",ftell(f));}
+			#but now with java flashalizer only after fclose
+			vstr er="pool read error"
+			if f=(NULL)
+				call free(name)
+				call error(er)
+			end
+			call fseek(f,0,(SEEK_END))
+			sd sz;set sz ftell(f)
+			if sz=-1
+				call free(name)
+				call fclose(f)
+				call error(er)
+			end
+			call fseek(f,0,(SEEK_SET))
+			ss ?boolval;set boolval mem_block_add_throwless(pb,(NULL),sz)
+			if boolval=(FALSE)
+				call free(name)
+				call fclose(f)
+				call error(er)
+			end
+			sd mem;set mem block_get_mem(pb#)
+			add mem (pool_cursor_size)
+			call fread(mem,sz,1,f)
+			call fclose(f)
+			if globalo.read_unlink!=0
+				call unlink(name)
+			end
+		end
+		call free(name)
+	end
+end
+function pool_done_write(sd ?id,sd ?frame_nr)
+	sd b;set b struct_ids_actionpool_filter((ids_get),id)
+	sdu ?sz;set sz block_get_size(b)
+	if sz!=0
+		sd mem;set mem block_get_mem(b)
+		sd name;set name pool_savepath(id,frame_nr)
+		sd f;set f f_open_mem(name,"wb")
+		call f_write(f,mem,sz)
+		call fclose(f)
+		call block_reset_size(b)
+	end
+end
+function pool_done(sd id,sd frame_nr)
+	if globalo.datawrite!=(FALSE)
+		callg pool_done_write(id,frame_nr)
+		ret
+	end
+	inc frame_nr
+	callg pool_read(id,frame_nr)
+end
+function pool_done_one(sd id)
+	if globalo.datawrite!=(FALSE)
+		callg pool_done_write(id,-1)
+	end
+end
+import "strlen_of" strlen_of
+function pool_savepath_init(sd a)
+	set globalo.svpath a
+	set globalo.svsize strlen_of(globalo.svpath,(ext_str_len)) #size_t is ulong
+end
+function pool_savepath(sd id,sd fr)
+	sd m;set m memalloc(globalo.svsize)
+	if fr!=-1
+		call sprintf(m,"%s.%u.%u",globalo.svpath,id,fr)
+	else #button initaction
+		call sprintf(m,"%s.%u",globalo.svpath,id)
+	end
+	return m
+end
+
+#pool id (U16)
+function actionpool_value(ss value)
+	callret actionpool_value_ex(value,(FALSE))
+end
+#pool id
+function actionpool_value_ex(ss value,sd force)
+	swu ?nr
+	call swf_mem_change_pool(globalo.selid)
+	setcall nr actionpool_getvalue_ex(value,force)
+	call swf_mem_change_back_pool()
+	return nr
+endfunction
+#pool id
+#function actionpool_getvalue(ss value);	sd id;	set id actionpool_getvalue_ex(value,(FALSE));	return id;end
+import "swf_mem_add" swf_mem_add
+import "error" error
+import "x_log_const" x_log_const
+import "x_log_id" x_log_id
+#pool id
+function actionpool_getvalue_ex(ss value,sd force)
+	sd block
+	setcall block actionpool_currentblock()
+	sdu ?size
+	setcall size block_get_size(block)
+	swu ?nr
+	sd newlen
+	setcall newlen strlen(value)
+	sss ?testboolid
+	if size=0
+	#is first value, add the pools header and count=1 , # before: actionpool_getvalue(the pool mem is already selected when it comes from the second  at push)
+		if force=(FALSE)
+			if globalo.datawrite!=(FALSE)
+				call pool_entry(0)
+			elseif globalo.dataread!=(FALSE)
+				set testboolid pool_reentry(value)
+				if testboolid=(not_an_id)
+					return (not_an_id)
+				end
+				call x_log_const(value)
+			end
+		end
+		sd onevalue=1
+		call swf_mem_add(#onevalue,2)
+		set nr 0
+	else
+		sd mem
+		swu ?count
+		setcall mem block_get_mem(block)
+		setcall count word_arg_to_stack(mem)
+		set nr count
+		if force=(FALSE)
+			add mem (WORD)
+			while count!=0
+				sd len
+				setcall len strlen(mem)
+				if len=newlen
+					datax comp#1
+					setcall comp memcmp(mem,value,len)
+					if comp=0
+						sub nr count
+						if globalo.datawrite!=(FALSE)
+							call pool_realentry(nr)
+							call debug_xlog_pool(nr)
+						else
+							callg x_log_id((xlog_id),nr) #read and rest of xx flags
+						end
+						return nr
+					endif
+				endif
+				inc len
+				add mem len
+				dec count
+			endwhile
+			if globalo.datawrite!=(FALSE)
+				call pool_entry(nr)
+			elseif globalo.dataread!=(FALSE)
+				set testboolid pool_reentry(value)
+				if testboolid=(not_an_id)
+					return (not_an_id)
+				end
+				call x_log_const(value)
+			end
+			setcall mem block_get_mem(block)
+		end
+		if nr=(maxuint16)
+			call error("max uint16 at action pool") #Count  UI16  Number of constants to follow
+		end
+		set count nr
+		inc count
+		call stack_to_word_arg(count,mem)
+	endelse
+	inc newlen
+	call swf_mem_add(value,newlen)
+	return nr
+endfunction
+
+entryraw globalo()

@@ -1,0 +1,120 @@
+
+format elfobj64
+
+include "../include/prog.h" "../include/prog.oh"
+
+#multithread unsafe
+value folder=NULL
+vstrx concat_point#1
+datax flag_dup#1
+
+importx "strrchr" strrchr
+importx "strcpy" strcpy
+importx "memcpy" memcpy
+importx "sprintf" sprintf
+
+import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+import "word_arg_to_stack" word_arg_to_stack
+import "mem_free" mem_free
+
+function alt_join()
+	add globall.concat_point globall.folder
+	call strcpy(globall.concat_point,".dbg")
+	add globall.concat_point 4;set globall.concat_point# (path_separator)
+	inc globall.concat_point
+end
+function alt_free()
+	if globall.folder!=(NULL)
+		#set globall.concat_point# (Nullchar)
+		#call rmdir(globall.folder)
+		call mem_free(#globall.folder)
+	end
+end
+
+function flag_noDup_get()
+	return globall.flag_dup
+end
+
+import "ainit" ainit
+
+importx "strlen" strlen
+
+#aftercallimport ebool
+
+import "memalloc" memalloc
+import "error" error
+import "len_of" len_of
+
+function alt_init(sd flags,sd path)
+	if globall.folder!=(NULL)
+		call error("swf started, alt not closed")
+	end
+
+	set globall.flag_dup flags
+	and globall.flag_dup (flag_noDuplicate) #needed at ffdec reproducible
+
+	and flags (flag_alt)
+	if flags=(flag_alt)
+		sd size;setcall size strlen(path)
+		sd r;set r strrchr(path,(Period))
+		if r!=(NULL)
+			sub r path
+			set size r
+		end
+		sd finalsize;set finalsize len_of(size,4+ext_str_len) #ext+...
+
+		setcall globall.folder memalloc(finalsize)
+		call memcpy(globall.folder,path,size)
+		set globall.concat_point size
+		call alt_join()
+		ret
+	end
+end
+
+import "file_get_content" file_get_content
+
+function alt_action(sd orig_action,sd preid)
+	call alt_action_base(orig_action,preid,(TRUE))
+end
+import "struct_ids_action" struct_ids_action
+import "block_get_size" block_get_size
+function alt_action_base(sd orig_action,sd preid,sd has_frames)
+	if globall.folder!=(NULL)
+		if orig_action!=(NULL) #this to filter a button with no swf actions for example
+			sd block
+			setcall block struct_ids_action((ids_get),preid)
+			sd size
+			setcall size block_get_size(block)
+			if size=0 #at alt, first action from the frame is with all
+				whiletrue
+					if has_frames=(TRUE)
+						sd ai;set ai ainit()
+						if ai=(xlog_ainit_false)
+							sw p
+							#if preid!=0
+							set p swf_sprite_frames_pointer(preid)
+							#else #set p swf_frames_pointer()#end
+							sd f;set f word_arg_to_stack(p)
+							inc f  ##index 0 is frame 1 at ffdec
+							call sprintf(globall.concat_point,"%u_%u",preid,f)
+							break
+						end
+					end
+					call sprintf(globall.concat_point,"%u",preid)
+					break
+				end
+
+				#datax int#1;set int access(globall.folder,(R_OK))
+				#if int=0
+				sd mem
+				set mem file_get_content(globall.folder,(NULL))
+				#call unlink(globall.folder) #if there are two action() at one frame, the second one must not see this
+				return mem
+			end
+		end
+		return (NULL)
+	end
+	return orig_action
+end
+
+entryraw globall()
