@@ -1,0 +1,186 @@
+#!/usr/bin/python3
+
+import sys
+if len(sys.argv)!=3:
+	print('Usage: as3.py output_folder output_file')
+	# skip_src   a1 a2a a2b a3 b1b b2b   splits_folder rule_ext splits_format_ext splits_printf_ext
+	# skip_comp header ffdec compiler
+	exit(1)
+
+import os
+
+dest=sys.argv[1]
+def hx_ext(fl):
+	return os.path.join(dest,os.path.basename(os.path.dirname(fl))+'.hx')
+out_file_name=sys.argv[2]
+
+if os.environ.get('skip_src')==None:
+	def changeable(a,b,c): globals()[a + b] = c if os.environ.get(a + b) == None else os.environ.get(a + b)
+	changeable('a','1','/')
+	changeable('a','2a','/')
+	changeable('a','2b','*')
+	changeable('a','3','3')
+	changeable('b','1b','*')
+	changeable('b','2b','/')
+
+	def premade_formats():
+		#environ or defaults at edor
+
+		splits_folder=os.environ.get('splits_folder')
+		if splits_folder==None:
+			splits_folder='osrc'
+
+		rule_ext=os.environ.get('rule_ext')
+		if rule_ext==None:
+			rule_ext='oac'
+
+		splits_format_ext=os.environ.get('splits_format_ext')
+		if splits_format_ext==None:
+			splits_format_ext='split'
+
+		#and here at src
+		splits_printf_ext=os.environ.get('splits_printf_ext')
+		if splits_printf_ext==None:
+			splits_printf_ext='format'
+
+		def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not direct connected with my edor and src, is like a guardian?
+		a=('' if splits_folder=='' else splits_folder+os.sep)
+
+		#'a.q.swf' is a.q
+		return (a+os.path.splitext(out_file_name)[0]+ext(rule_ext)+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
+
+	splits_file, splits_mix = premade_formats()
+
+	try:
+		os.mkdir(dest)
+	except FileExistsError:
+		pass
+
+	multiline_backjump=len(b1b.encode())+len(b2b.encode())
+
+	#for filename in os.listdir(src):
+	with open(splits_file) as splits_file:
+		splits_file_data=splits_file.read()
+		with open(splits_mix) as splits_mix:
+			splits_mix_data=splits_mix.read()
+
+			files = splits_file_data.split('\x00')
+			files.pop() # Remove the last empty string
+			texts = splits_mix_data.split('\x00')
+			texts.pop()
+			i=0
+			for f in files:
+				if texts[i]:
+					text=texts[i]
+				else:
+					with open(f) as sfile:
+						text=sfile.read()
+				text=text.splitlines(keepends=True)
+				with open(hx_ext(f),'ab') as dfile: #haxe will not do for .as
+					mode=0
+					for line in text:
+						chars = bytearray(len(line.encode())) #'utf-8'
+						pos = 0
+						for c in line:
+							ch=c.encode()
+							positions=len(ch)
+							for j in range(0,positions):
+								chars[pos]=ch[j]
+								pos+=1
+							if mode==0:
+								if c==a1:
+									mode=1
+							elif mode==1:
+								if c==a2a:
+									mode=2
+								elif c==a2b:
+									mode=3
+								else:
+									mode=0
+							elif mode==2 or mode==3:
+								if c==a3:
+									mode*=2
+									pos=0    #notice: both //3 and /*3 will reset the line
+								else:
+									mode=0
+							elif mode==6:
+								if c==b1b:
+									mode=7
+							elif mode==7:
+								if c==b2b:
+									mode=0
+									pos-=multiline_backjump
+								else:
+									mode=6
+						if mode==4:
+							mode=0
+						dfile.write(chars[:pos])
+				i=i+1
+
+if os.environ.get('skip_comp')==None:
+	def error():
+		if r.returncode:
+			print('error')
+			exit(r.returncode)
+
+	import subprocess
+
+	c_dir=os.getcwd() #haxe says no to abs path
+	dest_file=os.path.realpath(out_file_name)
+	os.chdir(dest)
+	compiler=os.environ.get('compiler')
+	if compiler==None:
+		compiler='haxe'
+	hd=os.environ.get('header')
+	if hd:
+		r=subprocess.run([compiler,'--swf',dest_file,'--main','Main','--swf-header',hd])
+	else:
+		r=subprocess.run([compiler,'--swf',dest_file,'--main','Main'])
+	# --swf-header 960:640:60:f68712 --swf-version 15
+	#w:h:fps:rgb
+	error()
+
+	#done for output_folder
+	os.chdir(c_dir) #back for clean
+	for f in files:
+		os.remove(hx_ext(f))
+	os.rmdir(dest)
+
+	#confirm is as3
+
+	dest_file_tmp=dest_file+'.tmp'
+	ffdec=os.environ.get('ffdec')
+	if ffdec==None:
+		ffdec='ffdec'
+	r=subprocess.run([ffdec,'-decompress',dest_file,dest_file_tmp])
+	error()
+	with open(dest_file_tmp,'rb') as file:
+		file.seek(8)
+		#rect
+		b=file.read(1)
+		n=b[0]>>3 # 0xff >> 1 is 0x7f
+		n=5+(n*4)
+		if n%8:
+			n=int(n/8)+1
+		else:
+			n=n/8
+		file.seek(n+3,1)
+		#tag
+		tag=file.read(2)
+		tg=tag[1]<<2
+		tg_low=tag[0]>>6
+		tg|=tg_low
+		if tg!=69:
+			print('no FileAttributes tag')
+			exit(1)
+		tg=tag[0]&0x3f
+		if tg==0x3f:
+			print('malformed FileAttributes tag')
+			exit(1)
+		#tag data
+		tg=file.read(1)
+		if (tg[0]&8)==0:
+			print('ActionScript3 bit is not set')
+			exit(1)
+
+	os.remove(dest_file_tmp)

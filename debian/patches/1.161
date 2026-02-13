@@ -1,0 +1,417 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ actionswf (1-161) bionic; urgency=medium
+ .
+   * python bindings . external as3
+Author: bc <bc@ubuntu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-02-13
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -29,18 +29,18 @@ test:
+ 	src=x $${RUN__SHELL} ./apy && conv_64=${conv_64} $${RUN__SHELL} ./c 1 && \
+ 	cd ffdec && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
+ 	cd ../data && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./test x && \
+-	cd ../as3 && RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
++	cd ../as3 && conv_64=${conv_64} RUN__SHELL="$${RUN__SHELL}" $${RUN__SHELL} ./as && \
+ 	echo tests ok
+ clean:
+ 	RUN__SHELL=$(SHELL) . ./shl && cd tests && \
+ 	$${RUN__SHELL} ./c && cd ffdec && $${RUN__SHELL} ./c && cd ../data && $${RUN__SHELL} ./c && cd ../as3 && $${RUN__SHELL} ./c
+ install:
+ 	install -D oaalternative.sh $(DESTDIR)$(prefix)/bin/oaalternative.sh
+-	install -D oaalternativedeobf $(DESTDIR)$(prefix)/bin/oaalternativedeobf
++	install -D oaalternative.py $(DESTDIR)$(prefix)/bin/oaalternative.py
+ 	install -D oaas3 $(DESTDIR)$(prefix)/bin/oaas3
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.sh
+-	-rm -f $(DESTDIR)$(prefix)/bin/oaalternativedeobf
++	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.py
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaas3
+ 
+ .PHONY: $(TOPTARGETS) $(MEDTARGETS) $(ALLDIRS)
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -21,8 +21,8 @@ cd ../oad && \
+ ./mw clean && \
+ cd .. && \
+ cp oaalternative.sh actionswf && \
+-cp oaalternativedeobf actionswf && \
+-cp oaas3 actionswf && \
++cp oaalternative.py actionswf && \
++cp oaas3 actionswf/oaas3.py && \
+ cp oaalternative.cmd actionswf && \
+ zip -r actionswf.zip actionswf && \
+ rm -r ./actionswf && \
+--- /dev/null
++++ actionswf-1/oaalternative.py
+@@ -0,0 +1,159 @@
++#!/usr/bin/python3
++
++default_tab=3
++
++import sys
++if len(sys.argv)!=2: exit(1)
++import os
++verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
++
++def ind_match(indt,b):
++	global n,ps
++	n=pos
++	while True:
++		while True:
++			n-=1
++			if n<0: exit(1)
++			if data[n]=='\n': break
++		ps=n+1
++		while data[ps]==' ': ps+=1
++		a=ps-n
++		if a==indt: break
++		if b:
++			if a<indt: exit(1)
++		elif a>indt: exit(1)
++
++with open(sys.argv[1], encoding='utf-8') as f:
++	data=f.read()  #\r\n is translated to \n also at windows msys2, else data=data.replace('\r','')
++	if data: # := only from 3.8
++		start=0
++		goto='§§goto(addr'
++		while True:
++			pos=data.find(goto,start)
++			if pos==-1: break
++			start=pos
++
++			while True:
++				if pos==0: exit(1)
++				pos-=1
++				if data[pos]!=' ':
++					break
++			ind=start-pos
++			if pos<1: exit(1)
++			if data[pos]!='\n': exit(1)
++			pos-=1
++
++			start+=len(goto)
++			if data[pos]!='}':
++				#allow other goto constructions
++				continue
++				#exit(1)
++
++			pos-=ind
++			if pos<0: exit(1)
++			if data[pos]!='\n': exit(1)
++
++			ind_match(ind,True)
++			if data[ps]!='{': exit(1)
++			spos=n-1
++			while data[spos]!='\n':
++				spos-=1
++				if spos<0: break                            #spos is A
++
++			addr='addr'+data[start:start+4]+':'
++			if verbose:
++				print(addr)
++			start+=4
++			if data[start:start+3]!=');\n': exit(1)
++			start+=3                                          #start is D
++
++			bpos=data.find(addr,ps,pos)
++			if bpos==-1: exit(1)
++			apos=bpos-1
++			while data[apos]!='\n': apos-=1
++			ind2=bpos-apos
++			ind3=ind2-default_tab
++			ind_match(ind3,False)
++
++			bpos+=len(addr)
++			if data[bpos]!='\n': exit(1)
++			mark=bpos                                         #mark is B
++			while True: #here is expecting a lower ind
++				cpos=bpos+1
++				while data[cpos]==' ': cpos+=1
++				indt=cpos-bpos
++				if indt==ind3: break
++				if indt<ind3: exit(1)
++				bpos=cpos+1
++				while data[bpos]!='\n': bpos+=1             #bpos is BB
++
++			apos-=1
++			if data[apos]!='{': exit(1)
++			apos-=ind3
++			if data[apos]!='\n': exit(1)
++			apos-=4
++			if data[apos:apos+4]!='else': exit(1)
++			apos-=ind3
++			if data[apos]!='\n': exit(1)
++			apos-=1
++			if data[apos]!='}': exit(1)
++			apos-=ind3
++			if data[apos]!='\n': exit(1)
++			if apos<spos: exit(1)                             #apos is AA
++
++			if data[cpos]!='}': exit(1)
++			cpos+=1
++			if data[cpos]!='\n': exit(1)                      #cpos is C
++
++			if data[ps:ps+8]!='return;\n':
++				while data[ps]!='\n': ps+=1
++				n=ps                                        #n is CC
++
++			# before modifications, ind<ind3<ind2 , default_tab between ind3 ind2
++			ind-=1;ind3-=1;ind2-=1
++			inddif2=ind3-ind      #for C rows
++			ind3=ind+default_tab  #still can fit in ind2, B rows can be truncated
++			inddif=ind2-ind3
++			ind2+=default_tab     #for highest break
++			maxind=' '*ind2       #same, and can go for rest of inds
++			text=data[0:spos+1]
++			text+=maxind[0:ind]+'while(true){\n'
++
++			while spos!=apos:                                 #A-AA
++				text+=maxind[0:default_tab]
++				spos+=1
++				a=spos
++				while data[a]!='\n': a+=1
++				text+=data[spos:a+1]
++				spos=a
++			text+=maxind[0:ind2]+'break;\n'
++
++			while ind3<ind2: #multiple of default_tab is not checked
++				ind2-=default_tab
++				text+=maxind[0:ind2]+'}\n'
++
++			while mark!=bpos:                                 #B-BB
++				mark+=1+inddif
++				a=mark
++				while data[a]!='\n': a+=1
++				text+=data[mark:a+1]
++				mark=a
++			text+=maxind[0:ind3]+'break;\n'
++			text+=maxind[0:ind]+'}\n'
++
++			while cpos!=n:                                    #C-CC
++				cpos+=1+inddif2
++				a=cpos
++				while data[a]!='\n': a+=1
++				text+=data[cpos:a+1]
++				cpos=a
++
++			a=len(text)
++			text+=data[start:]
++			data=text
++			start=a
++
++with open(sys.argv[1],"w",encoding='utf-8') as f:
++	f.write(data)
++
++exit(0)
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -45,9 +45,8 @@ if [ -z "${skip_ffdec}" ]; then
+ 	fi
+ fi
+ if [ -z "${skip_alternative}" ]; then
+-	if [ -z "${skip_deobfuscation}" ]; then
+-		deobfuscator=$(readlink -f "$(dirname "$0")"/oaalternativedeobf) || exit 1
+-		#is not in start folder there
++	if [ -z "${skip_deobfuscation}" ]; then # at readlink -f, all but the last component must exist
++		deobfuscator=$(readlink -f "$(dirname "$0")"/oaalternative.py) #.py? to keep the compatibility with windows, else was oaalternativedeobf
+ 	fi
+ 
+ 	mkdir -p "${out}" || exit 1
+--- actionswf-1.orig/oaalternativedeobf
++++ /dev/null
+@@ -1,159 +0,0 @@
+-#!/usr/bin/python3
+-
+-default_tab=3
+-
+-import sys
+-if len(sys.argv)!=2: exit(1)
+-import os
+-verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
+-
+-def ind_match(indt,b):
+-	global n,ps
+-	n=pos
+-	while True:
+-		while True:
+-			n-=1
+-			if n<0: exit(1)
+-			if data[n]=='\n': break
+-		ps=n+1
+-		while data[ps]==' ': ps+=1
+-		a=ps-n
+-		if a==indt: break
+-		if b:
+-			if a<indt: exit(1)
+-		elif a>indt: exit(1)
+-
+-with open(sys.argv[1], encoding='utf-8') as f:
+-	data=f.read()  #\r\n is translated to \n also at windows msys2, else data=data.replace('\r','')
+-	if data: # := only from 3.8
+-		start=0
+-		goto='§§goto(addr'
+-		while True:
+-			pos=data.find(goto,start)
+-			if pos==-1: break
+-			start=pos
+-
+-			while True:
+-				if pos==0: exit(1)
+-				pos-=1
+-				if data[pos]!=' ':
+-					break
+-			ind=start-pos
+-			if pos<1: exit(1)
+-			if data[pos]!='\n': exit(1)
+-			pos-=1
+-
+-			start+=len(goto)
+-			if data[pos]!='}':
+-				#allow other goto constructions
+-				continue
+-				#exit(1)
+-
+-			pos-=ind
+-			if pos<0: exit(1)
+-			if data[pos]!='\n': exit(1)
+-
+-			ind_match(ind,True)
+-			if data[ps]!='{': exit(1)
+-			spos=n-1
+-			while data[spos]!='\n':
+-				spos-=1
+-				if spos<0: break                            #spos is A
+-
+-			addr='addr'+data[start:start+4]+':'
+-			if verbose:
+-				print(addr)
+-			start+=4
+-			if data[start:start+3]!=');\n': exit(1)
+-			start+=3                                          #start is D
+-
+-			bpos=data.find(addr,ps,pos)
+-			if bpos==-1: exit(1)
+-			apos=bpos-1
+-			while data[apos]!='\n': apos-=1
+-			ind2=bpos-apos
+-			ind3=ind2-default_tab
+-			ind_match(ind3,False)
+-
+-			bpos+=len(addr)
+-			if data[bpos]!='\n': exit(1)
+-			mark=bpos                                         #mark is B
+-			while True: #here is expecting a lower ind
+-				cpos=bpos+1
+-				while data[cpos]==' ': cpos+=1
+-				indt=cpos-bpos
+-				if indt==ind3: break
+-				if indt<ind3: exit(1)
+-				bpos=cpos+1
+-				while data[bpos]!='\n': bpos+=1             #bpos is BB
+-
+-			apos-=1
+-			if data[apos]!='{': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			apos-=4
+-			if data[apos:apos+4]!='else': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			apos-=1
+-			if data[apos]!='}': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			if apos<spos: exit(1)                             #apos is AA
+-
+-			if data[cpos]!='}': exit(1)
+-			cpos+=1
+-			if data[cpos]!='\n': exit(1)                      #cpos is C
+-
+-			if data[ps:ps+8]!='return;\n':
+-				while data[ps]!='\n': ps+=1
+-				n=ps                                        #n is CC
+-
+-			# before modifications, ind<ind3<ind2 , default_tab between ind3 ind2
+-			ind-=1;ind3-=1;ind2-=1
+-			inddif2=ind3-ind      #for C rows
+-			ind3=ind+default_tab  #still can fit in ind2, B rows can be truncated
+-			inddif=ind2-ind3
+-			ind2+=default_tab     #for highest break
+-			maxind=' '*ind2       #same, and can go for rest of inds
+-			text=data[0:spos+1]
+-			text+=maxind[0:ind]+'while(true){\n'
+-
+-			while spos!=apos:                                 #A-AA
+-				text+=maxind[0:default_tab]
+-				spos+=1
+-				a=spos
+-				while data[a]!='\n': a+=1
+-				text+=data[spos:a+1]
+-				spos=a
+-			text+=maxind[0:ind2]+'break;\n'
+-
+-			while ind3<ind2: #multiple of default_tab is not checked
+-				ind2-=default_tab
+-				text+=maxind[0:ind2]+'}\n'
+-
+-			while mark!=bpos:                                 #B-BB
+-				mark+=1+inddif
+-				a=mark
+-				while data[a]!='\n': a+=1
+-				text+=data[mark:a+1]
+-				mark=a
+-			text+=maxind[0:ind3]+'break;\n'
+-			text+=maxind[0:ind]+'}\n'
+-
+-			while cpos!=n:                                    #C-CC
+-				cpos+=1+inddif2
+-				a=cpos
+-				while data[a]!='\n': a+=1
+-				text+=data[cpos:a+1]
+-				cpos=a
+-
+-			a=len(text)
+-			text+=data[start:]
+-			data=text
+-			start=a
+-
+-with open(sys.argv[1],"w",encoding='utf-8') as f:
+-	f.write(data)
+-
+-exit(0)
+--- actionswf-1.orig/oaas3
++++ actionswf-1/oaas3
+@@ -133,10 +133,10 @@ if os.environ.get('skip_comp')==None:
+ 		compiler='haxe'
+ 	hd=os.environ.get('header')
+ 	if hd:
+-		r=subprocess.run([compiler,'--swf',dest_file,'--main','Main','--swf-header',hd])
++		r=subprocess.run([compiler,'-swf',dest_file,'-main','Main','-swf-header',hd])
+ 	else:
+-		r=subprocess.run([compiler,'--swf',dest_file,'--main','Main'])
+-	# --swf-header 960:640:60:f68712 --swf-version 15
++		r=subprocess.run([compiler,'-swf',dest_file,'-main','Main'])
++	# -swf-header 960:640:60:f68712 -swf-version 15
+ 	#w:h:fps:rgb
+ 	error()
+ 
