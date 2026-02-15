@@ -1,0 +1,265 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ ocompiler (2-5+246) xenial; urgency=medium
+ .
+   * fix variadic after another ignore
+Author: bc <bc@ubuntu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-02-15
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+245
++2-5+246
+--- ocompiler-2.orig/o.html
++++ ocompiler-2/o.html
+@@ -1069,15 +1069,15 @@ Xfile_variadic at ocompiler is '%' sign
+ 	<tr><td>Xfile_iend</td></tr>
+ </table>
+ <table id="selection_table">
+-	<tr><td>Xfile_noignore</td></tr>
++	<tr><td rowspan=3>Xfile_variadic</td><td>Xfile_variadic_begin</td>        <td class="red" rowspan=2>var</td></tr>
++	<tr>                                 <td>Xfile_variadic_get</td></tr>
++	<tr>                                 <td colspan=2>Xfile_variadic_end</td></tr>
+ </table>
+ <table id="selection_table">
+-	<tr><td>Xfile_yesignore</td></tr>
++	<tr><td>Xfile_noignore</td></tr>
+ </table>
+ <table id="selection_table">
+-	<tr><td rowspan=3>Xfile_variadic</td><td>Xfile_variadic_begin</td>        <td class="red" rowspan=2>var</td></tr>
+-	<tr>                                 <td>Xfile_variadic_get</td></tr>
+-	<tr>                                 <td colspan=2>Xfile_variadic_end</td></tr>
++	<tr><td>Xfile_yesignore</td></tr>
+ </table>
+ <br>Table A:
+ <table id="selection_table">
+--- ocompiler-2.orig/otoc/loop.oc
++++ ocompiler-2/otoc/loop.oc
+@@ -90,6 +90,53 @@ function loop(sd pointer,sd delim,sd out
+ 				dec indentation
+ 				break
+ 			end
++
++			value Xfile_proto^proto
++			value *Xfile_import^import
++			value *Xfile_comment^comment
++			value *Xfile_commentmulti^commentmulti
++			value *Xfile_commentlineend^commentlineend
++			value *Xfile_format^format
++			value *Xfile_include^include
++			value *Xfile_functiondef^functiondef   #in c, this can cause implicit declaration if a{b()} b{} but is only a warning, will be resolved ok
++			value *Xfile_declare^declare
++			value *Xfile_action^action
++			value *Xfile_action2^action2
++			value *Xfile_call^call
++			value *Xfile_callex^callex
++			value *Xfile_if^if
++			value *Xfile_elseif^elseif
++			value *Xfile_else^else
++			value *Xfile_while^while
++			value *Xfile_whiletrue^whiletrue
++			value *Xfile_break^break
++			value *Xfile_continue^continue
++			value *Xfile_end^end
++			value *Xfile_ret^ret
++			value *Xfile_library^library
++			value *Xfile_import_name^import_name
++			value *Xfile_aftercall^aftercall
++			value *Xfile_hex^hex
++			value *Xfile_override^override
++			value *Xfile_orphan^orphan
++			value *Xfile_interrupt^interrupt
++			value *Xfile_line^line
++			value *Xfile_iend^iend
++			value *Xfile_variadic^variadic
++			datau mults={1,2,4,8,0x10,0x20,0x40,0x80,0x100,0x200,0x400,0x800,0x1000,0x2000,0x4000,0x8000,0x10000,0x20000,0x40000,0x80000}
++			datau     *={0x100000,0x200000,0x400000,0x800000,0x1000000,0x2000000,0x4000000,0x8000000,0x10000000,0x20000000,0x40000000,0x80000000}
++
++			datax ignored#1
++			if nextisignored=(ignored_depending_on_tags)
++				sd igpow=DWORD;mult igpow command
++				sd x^mults;add x igpow
++				set ignored x#
++				and ignored ignores
++			else # yes/no
++				set ignored nextisignored
++				set nextisignored (ignored_depending_on_tags)
++			end
++
+ 			if same_line=(FALSE)
+ 				sd i;set i indentation
+ 				while i>0
+@@ -101,59 +148,10 @@ function loop(sd pointer,sd delim,sd out
+ 				set same_line (FALSE)
+ 			end
+ 
+-			if command=(Xfile_variadic)
+-				call variadic(#pointer,output)
+-			else
+-				value Xfile_proto^proto
+-				value *Xfile_import^import
+-				value *Xfile_comment^comment
+-				value *Xfile_commentmulti^commentmulti
+-				value *Xfile_commentlineend^commentlineend
+-				value *Xfile_format^format
+-				value *Xfile_include^include
+-				value *Xfile_functiondef^functiondef   #in c, this can cause implicit declaration if a{b()} b{} but is only a warning, will be resolved ok
+-				value *Xfile_declare^declare
+-				value *Xfile_action^action
+-				value *Xfile_action2^action2
+-				value *Xfile_call^call
+-				value *Xfile_callex^callex
+-				value *Xfile_if^if
+-				value *Xfile_elseif^elseif
+-				value *Xfile_else^else
+-				value *Xfile_while^while
+-				value *Xfile_whiletrue^whiletrue
+-				value *Xfile_break^break
+-				value *Xfile_continue^continue
+-				value *Xfile_end^end
+-				value *Xfile_ret^ret
+-				value *Xfile_library^library
+-				value *Xfile_import_name^import_name
+-				value *Xfile_aftercall^aftercall
+-				value *Xfile_hex^hex
+-				value *Xfile_override^override
+-				value *Xfile_orphan^orphan
+-				value *Xfile_interrupt^interrupt
+-				value *Xfile_line^line
+-				value *Xfile_iend^iend
+-				datau mults={1,2,4,8,0x10,0x20,0x40,0x80,0x100,0x200,0x400,0x800,0x1000,0x2000,0x4000,0x8000,0x10000,0x20000,0x40000,0x80000}
+-				datau     *={0x100000,0x200000,0x400000,0x800000,0x1000000,0x2000000,0x4000000,0x8000000,0x10000000,0x20000000,0x40000000} #,0x80000000}
+-
+-				datax ignored#1
+-				if nextisignored=(ignored_depending_on_tags)
+-					sd igpow=DWORD;mult igpow command
+-					sd x^mults;add x igpow
+-					set ignored x#
+-					and ignored ignores
+-				else # yes/no
+-					set ignored nextisignored
+-					set nextisignored (ignored_depending_on_tags)
+-				end
+-
+-				mult command :
+-				sv dest^Xfile_proto;add dest command
+-				set dest dest#
+-				call dest(output,#pointer)
+-			end
++			mult command :
++			sv dest^Xfile_proto;add dest command
++			set dest dest#
++			call dest(output,#pointer)
+ 
+ 			if hotgroup>0
+ 				if dest!=line
+@@ -592,10 +590,8 @@ function interrupt(sd outfile)
+ 	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
+ 	callg writen(outfile,#a,\.a)
+ end
+-function variadic(sv pbuffer,sd outfile)
++function variadic(sd outfile,sv pbuffer)
+ 	charx type#1;call get_char(pbuffer,#type)
+-importx "printf" qwe
+-call qwe("%u\n",type)
+ 	if type!=(Xfile_variadic_end)
+ 		datax sz#1;valuex name#1
+ 		call get_string(pbuffer,#sz,#name)
+--- ocompiler-2.orig/src/files/headers/xfile.oh
++++ ocompiler-2/src/files/headers/xfile.oh
+@@ -1,9 +1,8 @@
+ 
+-include "xfilecore.oh"                 #attention that ignore mask max at otoc size is 32, now is 31(0-30), and modify also at mults at loop.oc
+-const Xfile_noignore=Xfile_iend+1      #this is 31
+-const Xfile_yesignore=Xfile_noignore+1 #this is 32
++include "xfilecore.oh"                 #attention that ignore mask max at otoc size is 32, now is 32(0-31), and modify also at mults at loop.oc
++const Xfile_noignore=Xfile_variadic+1      #this is 32
++const Xfile_yesignore=Xfile_noignore+1 #this is 33
+ #const Xfile_ignore_nosigns=Xfile_yesignore+1
+-const Xfile_variadic=Xfile_yesignore+1
+ #const Xfile_noignore_sign
+ #const Xfile_yesignore_sign
+ #Const ifinscribe=-1; #Const nocondnumber=-1; const elseinscribe_write=0; const elseinscribe_skip=1
+--- ocompiler-2.orig/src/files/headers/xfilecore.oh
++++ ocompiler-2/src/files/headers/xfilecore.oh
+@@ -29,3 +29,4 @@ const Xfile_orphan=27
+ const Xfile_interrupt=28
+ const Xfile_line=29
+ const Xfile_iend=30
++const Xfile_variadic=31
+--- ocompiler-2.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-2/tests/.expected/a.out.oc.x.txt
+@@ -1,5 +1,5 @@
+ dAYAAAAABgAAAGludGVybgQAAAACAAEFAAEBBgABAQcAAQAHAAEAAQIAAABzdAAAAAAAAAABAAAA
+-ZgIAAAABAQYAAwABAAABAAAAYgQAAABwdXRzAAAAAAAfAQAAAQAAAGMGAAAAcHJpbnRmAAIAAAAf
++ZgIAAAABAQYAAwABAAABAAAAYgQAAABwdXRzAAAAAAAgAQAAAQAAAGMGAAAAcHJpbnRmAAIAAAAg
+ AQAAAQAAAGYHAAAAc3ByaW50ZgECAAAAAAAEAAAAbWFpbgIAAAABAQYAAwEFAQMMAAAACm11bHRp
+ CmxpbmUKGgsAAABpbmNsdWRlX3NlYwADAQAAADEfBgAACAAAAHN0ZGFyZy5oAQAKAAAAaW5jbHVk
+ ZS5vaB4GAAAIAAAAc3RkZGVmLmgBAAoAAABpbmNsdWRlLm9oHgYAAAwAAAB0aGVfc2V0am1wLmgB
+@@ -13,16 +13,16 @@ HwQCAAAAb2sIAgAAAAAAAQAAAGEBAAMBAAAAMx8d
+ AAAAbm9faG90Z3JvdXACAAADAQAAADEfHQgCAAEHAAAQAAAAbm9faG90Z3JvdXBfdGVzdAAACwAA
+ AG5vX2hvdGdyb3VwBwAABgAAAGludGVybgAEAAAAAgABBQAAAQAAAGEBAQYAAAEAAABiAQEHAAAB
+ AAAAYwEABwAAAQAAAGQECgAAAGNvbW1lbnRpbmcIAQEGAQAJAAAAcmVjdXJzaW9uAQADAQAAADEf
+-CAEABwAACAAAAHBvaW50aW5nAAEGAAAAaW50ZXJuIAoAAAAIAAAAcG9pbnRpbmcBAEUCAAAACAAA
++CAEABwAACAAAAHBvaW50aW5nAAEGAAAAaW50ZXJuIQoAAAAIAAAAcG9pbnRpbmcBAEUCAAAACAAA
+ AHBvaW50aW5nAAkCAAAAAQAAAGEACQQAAAABAAAAYQAJAwAAAAEAAABjAAkFAAAAAQAAAGMACQYA
+-AAABAAAAYwAJBwAAAAkAAAByZWN1cnNpb24AIAgCAAEHAAALAAAAdGhlX2ptcF9idWYBAAMBAAAA
++AAABAAAAYwAJBwAAAAkAAAByZWN1cnNpb24AIQgCAAEHAAALAAAAdGhlX2ptcF9idWYBAAMBAAAA
+ MR8JCAAAAAsAAAB0aGVfam1wX2J1ZgAJCQAAAAsAAAB0aGVfam1wX2J1ZgAJCgAAAAEAAABjAAkL
+ AAAAAQAAAGMACQwAAAABAAAAYwAJAAIAAAABAAAAZAAUAQcAAAIAAABzdAEAAAAACAIAAQUAAAEA
+ AABiAQADAQAAADEfCAIBAQUAAAEAAABhAQADAQAAADEfFAEHAAEBAAAAZgABAAAAAQEGAAAFAAAA
+ ZHVtbXkEZAAAAHZvaWQgZiguLi4pIHdhcyB3b3JraW5nIHdpdGggZ2NjMTMgYnV0IHdpdGggNSBz
+-dGlsbCBpczogSVNPIEMgcmVxdWlyZXMgYSBuYW1lZCBhcmd1bWVudCBiZWZvcmUgJy4uLichPAUA
++dGlsbCBpczogSVNPIEMgcmVxdWlyZXMgYSBuYW1lZCBhcmd1bWVudCBiZWZvcmUgJy4uLicfPAUA
+ AABkdW1teQgCAQEHAAABAAAAYQEAAwEAAAAxHwgCAAEHAAABAAAAYgIAAAsEAAAAbWFpbgIAAABj
+-MgAfIXwBAAAAYQoAAAABAAAAYQBFAgEAAAEAAABiACE+CgAAAAEAAABiAEUCAAAAAQAAAGEBAAoA
++MgAfH3wBAAAAYQoAAAABAAAAYQBFAgEAAAEAAABiAB8+CgAAAAEAAABiAEUCAAAAAQAAAGEBAAoA
+ AAABAAAAYgBFAgAAAAEAAABhAVMKAAAAAQAAAGIARQIAAAABAAAAYQFXCgAAAAEAAABiAEUCAAAA
+ AQAAAGEBRAoAAAABAAAAYgBFAgAAAAEAAABhAVYIAgEBBQAAAQAAAGMBAAMBAAAAMR8IAgABBwAA
+ AQAAAGQAAAEAAABjCgAAAAEAAABhAEUCAAEAAQAAAGQBAQIAAABzdAEAAABhAA0AAAMBAAAAMh+F
+@@ -33,7 +33,7 @@ AAAIAgAAAHN0HwoAAAABAAAAYgAtAAAJAgAAAHN0
+ HwoAAAABAAAAYgBNAAALAgAAAHN0AQAAAGEAHwoAAAACAAAAYzEALwAADAIAAABzdAEAAABhAB8K
+ AAAAAgAAAGMxAEQAAAoCAAAAc3QfCgAAAAIAAABjMQAlAAADAQAAADEfCgAAAAIAAABjMQBSAAAD
+ AQAAADEfCgAAAAIAAABjMQAmAAADAQAAADEfCgAAAAIAAABjMQB8AAADAQAAADEfCgAAAAEAAABi
+-AF4AAAMBAAAAMR8gGQMAAAABAB8CAR8DAisQAAMBAAAAMSsABAIAAAAwMSsABQMAAAAweDIrAAcG
++AF4AAAMBAAAAMR8hGQMAAAABAB8CAR8DAisQAAMBAAAAMSsABAIAAAAwMSsABQMAAAAweDIrAAcG
+ AAAAeF9maWxlKwAIBgAAAGludGVybisACQYAAABpbnRlcm4rAAsGAAAAaW50ZXJuAQAAAGEAKwAM
+ BgAAAGludGVybgEAAABhABgfCwAABgAAAGludGVybgQAAAACAAABBAAAAG1haW4BAAAAYQACAAEB
+ BAAAAG1haW4BAAAAYQAAAQAAAGEAAQASAAAAMAoxDTIJMwA0XDUiNngzZzA3AAADAQAAADEfCgAA
+@@ -42,7 +42,7 @@ AwEAAAAxHwILAAAAZWxzZWlmIDEhITECCgAAAGVs
+ ADEfDgAAAwEAAAAxH40AAAMBAAAAMR8PHRQADQAAAwEAAAAxH44AAAMBAAAAMR8dFAANAAADAQAA
+ ADEfjwAAAwEAAAAxHx0UAA0AAAMBAAAAMR+MAAADAQAAADEfHRQADQAAAwEAAAAxH4MAAAMBAAAA
+ MR8dFAANAAADAQAAADEfhgAAAwEAAAAxHx0UAA0AAAMBAAAAMR+HAAADAQAAADEfHRQADQAAAwEA
+-AAAxH4IAAAMBAAAAMR8dFAAgDAAAAQAAAGIAAAABAAAAYgAAAAMBAAAAMR8QAAADAQAAADEfhQAA
++AAAxH4IAAAMBAAAAMR8dFAAhDAAAAQAAAGIAAAABAAAAYgAAAAMBAAAAMR8QAAADAQAAADEfhQAA
+ AwEAAAAyHxMUABESFAAIAgAAAAAAAQAAAHoCAAAFBAAAADB4ZmYrAAQDAAAAMDc3KwADAgAAADEy
+ LQADAQAAADMrEAADAQAAADQqAAMBAAAAMy8AAwEAAAAyXAADAQAAADEmAAMBAAAAMXwAAwEAAAAx
+ XgADAQAAADElAAMBAAAANToAAwEAAAA1WwADAQAAADNdAAMBAAAAM30AAwEAAAAzPQADAQAAADJl
+@@ -51,6 +51,6 @@ AwEAAAA2VQADAQAAADZsAAMBAAAANmcAAwEAAAA2
+ cj0zITIgY2hhciBlcj0zJDIIAgAAAAAAAgAAAHoyAgAABgIAAABhMR8dCAIAAAAAAAIAAAB6MwIA
+ AQYCAAAAYTEfHQgCAAAAAAACAAAAejQCAAIGAgAAAGExHx0IAgAAAAAAAgAAAHo1AgADBgIAAABh
+ MR8IAgAAAAAAAgAAAHExAgAAAB8dCAIAAAAAAAIAAABxMgIAAAgCAAAAc3QfHQgCAAAAAAACAAAA
+-cTMCAAAMAgAAAHN0AQAAAGEAHx0IAgAAAAAAAgAAAHE0AgAACwIAAABzdAEAAABhAB8gGAABAwAA
+-AHRzdBoGAAAAeF9maWxlAAMBAAAAMR8cCQEAAAMBAAAAMh8gCAIAAQcAAAsAAAB0aGVfam1wX2J1
++cTMCAAAMAgAAAHN0AQAAAGEAHx0IAgAAAAAAAgAAAHE0AgAACwIAAABzdAEAAABhAB8hGAABAwAA
++AHRzdBoGAAAAeF9maWxlAAMBAAAAMR8cCQEAAAMBAAAAMh8hCAIAAQcAAAsAAAB0aGVfam1wX2J1
+ ZgEAAwEAAAAxHwkIAAAACwAAAHRoZV9qbXBfYnVmAAsBAAQAAABtYWluAQAAAAAABAEAAAAwHw==
