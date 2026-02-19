@@ -1,0 +1,199 @@
+Description: <short summary of the patch>
+ TODO: Put a short summary on the line above and replace this paragraph
+ with a longer explanation of this change. Complete the meta-information
+ with other relevant fields (see below for details). To make it easier, the
+ information below has been extracted from the changelog. Adjust it or drop
+ it.
+ .
+ edor (1-x88) focal; urgency=medium
+ .
+   * mouse mask
+Author: bc <bc@ubuntu>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-Debian: https://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+Last-Update: 2026-02-19
+
+--- edor-1.orig/s/inc/main/curses.h
++++ edor-1/s/inc/main/curses.h
+@@ -1,7 +1,7 @@
+ 
+ #include "inc/curses.h"
+ 
+-#define ALL_MOUSE_EVENTS 0xFffFFff
++//#define ALL_MOUSE_EVENTS 0xFffFFff
+ #define COLOR_BLACK 0
+ #define COLOR_GREEN 2
+ #define COLOR_YELLOW 3
+@@ -20,24 +20,24 @@ MEVENT;
+ 
+ #define NCURSES_MOUSE_MASK(b,m) ((m) << (((b) - 1) * 5))
+ #define NCURSES_BUTTON_PRESSED 002L
+-#define NCURSES_BUTTON_CLICKED 004L
+-#define NCURSES_DOUBLE_CLICKED 010L
+-#define NCURSES_TRIPLE_CLICKED 020L
++//#define NCURSES_BUTTON_CLICKED 004L
++//#define NCURSES_DOUBLE_CLICKED 010L
++//#define NCURSES_TRIPLE_CLICKED 020L
+ 
+ #define BUTTON1_PRESSED NCURSES_MOUSE_MASK(1, NCURSES_BUTTON_PRESSED)
+-#define BUTTON1_CLICKED NCURSES_MOUSE_MASK(1, NCURSES_BUTTON_CLICKED)
+-#define BUTTON1_DOUBLE_CLICKED NCURSES_MOUSE_MASK(1, NCURSES_DOUBLE_CLICKED)
+-#define BUTTON1_TRIPLE_CLICKED NCURSES_MOUSE_MASK(1, NCURSES_TRIPLE_CLICKED)
+-
+-#define BUTTON2_PRESSED NCURSES_MOUSE_MASK(2, NCURSES_BUTTON_PRESSED)
+-#define BUTTON2_CLICKED NCURSES_MOUSE_MASK(2, NCURSES_BUTTON_CLICKED)
+-#define BUTTON2_DOUBLE_CLICKED NCURSES_MOUSE_MASK(2, NCURSES_DOUBLE_CLICKED)
+-#define BUTTON2_TRIPLE_CLICKED NCURSES_MOUSE_MASK(2, NCURSES_TRIPLE_CLICKED)
+-
+-#define BUTTON3_PRESSED NCURSES_MOUSE_MASK(3, NCURSES_BUTTON_PRESSED)
+-#define BUTTON3_CLICKED NCURSES_MOUSE_MASK(3, NCURSES_BUTTON_CLICKED)
+-#define BUTTON3_DOUBLE_CLICKED NCURSES_MOUSE_MASK(3, NCURSES_DOUBLE_CLICKED)
+-#define BUTTON3_TRIPLE_CLICKED NCURSES_MOUSE_MASK(3, NCURSES_TRIPLE_CLICKED)
++//#define BUTTON1_CLICKED NCURSES_MOUSE_MASK(1, NCURSES_BUTTON_CLICKED)
++//#define BUTTON1_DOUBLE_CLICKED NCURSES_MOUSE_MASK(1, NCURSES_DOUBLE_CLICKED)
++//#define BUTTON1_TRIPLE_CLICKED NCURSES_MOUSE_MASK(1, NCURSES_TRIPLE_CLICKED)
++
++//#define BUTTON2_PRESSED NCURSES_MOUSE_MASK(2, NCURSES_BUTTON_PRESSED)
++//#define BUTTON2_CLICKED NCURSES_MOUSE_MASK(2, NCURSES_BUTTON_CLICKED)
++//#define BUTTON2_DOUBLE_CLICKED NCURSES_MOUSE_MASK(2, NCURSES_DOUBLE_CLICKED)
++//#define BUTTON2_TRIPLE_CLICKED NCURSES_MOUSE_MASK(2, NCURSES_TRIPLE_CLICKED)
++
++//#define BUTTON3_PRESSED NCURSES_MOUSE_MASK(3, NCURSES_BUTTON_PRESSED)
++//#define BUTTON3_CLICKED NCURSES_MOUSE_MASK(3, NCURSES_BUTTON_CLICKED)
++//#define BUTTON3_DOUBLE_CLICKED NCURSES_MOUSE_MASK(3, NCURSES_DOUBLE_CLICKED)
++//#define BUTTON3_TRIPLE_CLICKED NCURSES_MOUSE_MASK(3, NCURSES_TRIPLE_CLICKED)
+ 
+ #define BUTTON4_PRESSED NCURSES_MOUSE_MASK(4, NCURSES_BUTTON_PRESSED)
+ 
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -551,14 +551,15 @@ static bool helpin(WINDOW*w){
+ #else
+ 			nc_getmouse(&e);
+ #endif
+-			if((e.bstate&BUTTON4_PRESSED)!=0)hmove(-1);
+-			else
++			if((e.bstate&BUTTON4_PRESSED)==BUTTON4_PRESSED)//same
++				hmove(-1);
++			else //can remove BUTTON1_PRESSED from the mask if is important to not if compare
+ 		#ifdef BUTTON5_PRESSED
+-			if((e.bstate&BUTTON5_PRESSED)!=0)
++			if((e.bstate&BUTTON5_PRESSED)==BUTTON5_PRESSED)//same
+ 		#else
+ 			if(e.bstate==0)     // at wheel down (libncurses5 at bionic)
+ 		#endif
+-			hmove(1);
++				hmove(1);
+ 		}else if(c==KEY_DOWN){hmove(1);}
+ 		else if(c==KEY_UP){hmove(-1);}
+ 		else if(c==KEY_RESIZE){return true;}
+@@ -777,9 +778,11 @@ static void right_move(WINDOW*w,bool(*f)
+ #define alt_jump 2
+ #define ctrl_jump 3
+ 
+-#define click (BUTTON1_CLICKED|BUTTON1_PRESSED|BUTTON1_DOUBLE_CLICKED|BUTTON1_TRIPLE_CLICKED \
+-|BUTTON2_CLICKED|BUTTON2_PRESSED|BUTTON2_DOUBLE_CLICKED|BUTTON2_TRIPLE_CLICKED \
+-|BUTTON3_CLICKED|BUTTON3_PRESSED|BUTTON3_DOUBLE_CLICKED|BUTTON3_TRIPLE_CLICKED)
++#define click BUTTON1_PRESSED //bstate can be 0 when clicking multiple times and fast, but that is in all cases
++//(BUTTON1_CLICKED|BUTTON1_PRESSED|BUTTON1_DOUBLE_CLICKED|BUTTON1_TRIPLE_CLICKED \
++//|BUTTON2_CLICKED|BUTTON2_PRESSED|BUTTON2_DOUBLE_CLICKED|BUTTON2_TRIPLE_CLICKED \
++//|BUTTON3_CLICKED|BUTTON3_PRESSED|BUTTON3_DOUBLE_CLICKED|BUTTON3_TRIPLE_CLICKED)
++#define all_mouse_events click|BUTTON4_PRESSED|BUTTON5_PRESSED
+ 
+ //1resize,0diff key,-1processed
+ movement_char movment(int c,WINDOW*w){
+@@ -790,15 +793,17 @@ movement_char movment(int c,WINDOW*w){
+ #else
+ 		nc_getmouse(&e);
+ #endif
+-		if((e.bstate&BUTTON4_PRESSED)!=0)vu1move(w,getcury(w));
++		if((e.bstate&BUTTON4_PRESSED)==BUTTON4_PRESSED)//is not multi-bit, just in case
++			vu1move(w,getcury(w));
+ 		else
+ 	#ifdef BUTTON5_PRESSED
+-		if((e.bstate&BUTTON5_PRESSED)!=0)
++		if((e.bstate&BUTTON5_PRESSED)==BUTTON5_PRESSED)//same
+ 	#else
+-		if(e.bstate==0)     // at wheel down (libncurses5 at bionic)
++		if(e.bstate==0)     // at wheel down (libncurses5 at bionic), anyway this is only for test
+ 	#endif
+-		vd1move(w,getcury(w));
+-		else if((e.bstate&click)!=0)amove(w,e.y-topspace,e.x-leftspace);//return -2;}
++			vd1move(w,getcury(w));
++		else //if((e.bstate&click)!=0)//no need to compare, it is the remaining event
++			amove(w,e.y-topspace,e.x-leftspace);//return -2;}
+ 	}else if(c==KEY_LEFT)left(w,getcurx(w));
+ 	else if(c==KEY_RIGHT)right(w,getcurx(w));
+ 	else if(c==KEY_UP){
+@@ -2301,7 +2306,7 @@ static bool loopin(WINDOW*w){
+ 				}else if(chr==key_mouse){
+ 					char c;
+ 					if(stored_mouse_mask_q){stored_mouse_mask=mousemask(0,nullptr);c=orig_lowkey(key_mouse);setprefs(mask_mouse,false);}
+-					else{stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);c=orig_upkey(key_mouse);setprefs(mask_mouse,true);}
++					else{stored_mouse_mask=mousemask(all_mouse_events,nullptr);c=orig_upkey(key_mouse);setprefs(mask_mouse,true);}
+ 					vis(c,w);
+ 				}else if(chr==key_indents){
+ 					char c;
+@@ -2364,7 +2369,8 @@ static bool loopin(WINDOW*w){
+ 					}
+ 					wmove(w,cy,cx);
+ 				}
+-				//i saw these only when mousemask is ALL_MOUSE_EVENTS : focus in, focus out
++				////i saw these only when mousemask is ALL_MOUSE_EVENTS : focus in, focus out
++				//don't know why was that, focus in out are separate, enable focus reporting outside printf '\033[?1004h' then enter and test
+ 				else if(strcmp(s,"kxIN")==0||strcmp(s,"kxOUT")==0){}
+ 				else type(c,w);
+ 				//continue;
+@@ -3035,7 +3041,7 @@ static void action_go(int argc,char**arg
+ 			//the only difference with ALL_..EVENTS is that we want to speed up and process all events here (if there is a curses implementation like that)
+ 			//this was default for android, but nowadays on desktop is not a default
+ 			//stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);//for error, export TERM=vt100
+-			if(stored_mouse_mask_q)stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);//must set it after initscr to work
++			if(stored_mouse_mask_q)stored_mouse_mask=mousemask(all_mouse_events,nullptr);//must set it after initscr to work
+ 
+ 			if(ocompiler_flag/*true*/){//this is here, in loop can be set if wanted with enable/disable and rescan keys
+ 				aftercall=init_aftercall();
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -23,14 +23,15 @@ wr4 () { buf3="${buf3}$@"; }
+ printf '%s\n' "#define hel1 \"USAGE\n\"" > ${f}
+ wr "#define hel2 \""
+ d2=" [--file] [filepath [line_termination: rn/r/n]]\
+-\n      --remove-config      Remove configuration files.\
+-\n      --help               Will guide to enter here.\
++\n      --remove-config        Remove configuration files.\
++\n      --help                 Will guide to enter here.\
+ \nINPUT\
+-\nthis help: q(uit),up/down,mouse/touch V.scroll\
++\nthis help: (q)uit, up/down, mouse/touch V-scroll\
+ \nMovement:\
+-\n    [Ctrl/Alt/Shift +]arrows/home/end/del,page up,page down,backspace,enter\
+-\n    p.s.: Ctrl+ left/right/del breaks at white-spaces and (),[]{}\
+-\n    mouse/touch Click and V.scroll"
++\n    [Ctrl/Alt/Shift +] arrows/home/end/del,pageUp,pageDown,backspace,enter\
++\n    p.s.: Ctrl + left/right/del breaks at white-spaces and (),[]{}\
++\n          Alt  + left/right/del breaks after alphanumerics and _\
++\n    mouse/touch Press and V-scroll"
+ wr "${d2}"
+ d2s="$(echo -n "${d2}" | sed "s/\\\n/n/g" | wc -c)" #more at second sed of this kind, if here was \\\" was another command
+ fix_s="$(echo ${d2s}+4 | bc)"
+@@ -56,7 +57,7 @@ text="\ncommand mode: left,right,home,en
+ \n      R           = modify replace text\
+ \n    c = cancel\
+ \n    other key to return\
+-\nCtrl+u = undo; Alt+u = undo mode: left=undo,right=redo,other key to return\
++\nCtrl+u = undo; Alt+u = undo mode: left=undo, right=redo, other key to return\
+ \nCtrl+r = redo\
+ \nCtrl+l = titles (movement, Enter at done, Ctrl+q, other keys to search)\
+ \nCtrl+w = text wrapping (movement. another key to return)\
