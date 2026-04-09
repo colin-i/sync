@@ -1,0 +1,1915 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: apr, 09 2026 10:10:03 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/cln
++++ actionswf-1/cln
+@@ -1,2 +1,2 @@
+ 
+-cd example && make clean && cd .. && make clean && cd csrc && make clean && cd .. && git status
++cd example && make clean && cd .. && make clean && cd csrc && make clean && cd .. && cd oaas && make clean && git status
+--- actionswf-1.orig/include/ascii.oh
++++ actionswf-1/include/ascii.oh
+@@ -33,17 +33,17 @@ Const HorizontalTab=0x09
+ #Const UnitSeparator=0x1F
+ Const Space=0x20
+ Const Exclamationmark=0x21
+-#Const Doublequotes=0x22
++Const Doublequotes=0x22
+ #Const Number=0x23
+ #Const Dollar=0x24
+ Const Percent=0x25
+ Const Ampersand=0x26
+-#Const Singlequote=0x27
++Const Singlequote=0x27
+ Const Openparenthesis=0x28
+ Const Closeparenthesis=0x29
+ Const Asterisk=0x2A
+ Const Plus=0x2B
+-#Const Comma=0x2C
++Const Comma=0x2C
+ Const Hyphen=0x2D
+ Const Period=0x2E
+ Const Slash=0x2F
+@@ -91,7 +91,7 @@ Const W=0x57
+ #Const Y=0x59
+ Const Z=0x5A
+ Const Openingbracket=0x5B
+-#Const Backslash=0x5C
++Const Backslash=0x5C
+ Const Closingbracket=0x5D
+ Const Caret=0x5E
+ Const _=0x5F
+@@ -119,7 +119,7 @@ Const s_low=0x73
+ Const u_low=0x75
+ #Const v_low=0x76
+ #Const w_low=0x77
+-#Const x_low=0x78
++Const x_low=0x78
+ #Const y_low=0x79
+ Const z_low=0x7A
+ Const Openingbrace=0x7B
+--- /dev/null
++++ actionswf-1/oaas/Makefile
+@@ -0,0 +1,66 @@
++
++#this lib is helping oaas3 to shortcut the repeatable translation calls
++
++ifndef OCOMP
++OCOMP=o
++endif
++ifndef OLINK
++OLINK=ounused
++endif
++ifndef OCONV
++OCONV=otoc
++endif
++ifndef linkerflags
++linkerflags=-O3 -s
++endif
++ifndef compilerflags
++compilerflags=${linkerflags}
++endif
++ifndef EXTRA_CFLAGS
++include ../oad/cflags
++endif
++ifndef prefix
++prefix=/usr
++endif
++
++ifeq (${conv_64},1) #to cross compile
++	ifneq ($(CC),arm-linux-gnueabihf-gcc)
++		model=-m32
++	endif
++endif
++
++OFLAGS=x_file 2
++
++libname=liboaas.so
++
++objects=main.o
++
++all: ${libname}
++
++${libname}: ${objects}
++	${OLINK} main.oc.log
++	$(CC) ${model} ${linkerflags} -shared $< -o ${libname}
++
++%.o: %.oc
++	${OCOMP} $< ${OFLAGS}
++	${OCONV} ${OCONVFLAGS} $<.x import
++	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c
++
++clean:
++	-rm -f main.oc.log main.oc.x main.c
++	-rm -f ${objects} ${libname}
++
++distclean: clean
++
++test:
++	echo "Nothing"
++
++install-lib:
++	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
++
++install: all install-lib
++
++uninstall:
++	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++
++.PHONY: all install install-lib clean distclean uninstall test
+--- /dev/null
++++ actionswf-1/oaas/main.oc
+@@ -0,0 +1,10 @@
++
++format elfobj64
++
++functionx line(ss oa)
++	#remove "text" 'text'
++	#a . af . function a() -> function a(e) , find ()
++	#r . r_x _x -> x
++	#x next is untranslated
++	return oa
++end
+--- /dev/null
++++ actionswf-1/oaas/md
+@@ -0,0 +1,2 @@
++
++compilerflags=-g linkerflags=' ' make $@
+--- actionswf-1.orig/oaas3
++++ actionswf-1/oaas3
+@@ -1,13 +1,29 @@
+ #!/usr/bin/python3
+ 
++# break
++# skip_src   a1 a2a a2b a3 b1b b2b   splits_folder splits_format_ext splits_printf_ext
++# skip_comp header ffdec compiler no_clean
++
+ import sys
+ if len(sys.argv)!=3:
+ 	print('Usage: as3.py output_folder output_file')
+-	# skip_src   a1 a2a a2b a3 b1b b2b   splits_folder rule_ext splits_format_ext splits_printf_ext
+-	# skip_comp header ffdec compiler
+ 	exit(1)
+ 
++import ctypes
++try: #in LD_LIBRARY_PATH
++	lib=ctypes.cdll.LoadLibrary("liboaas.so")
++except Exception:
++	lib = None # at windows # print('no liboaas.so support')
++if lib:
++	try:
++		lib.line.argtypes = [ctypes.c_char_p]; lib.line.restype = ctypes.c_char_p
++	except Exception:
++		print('lib oaas error')
++		exit(1)
++
+ import os
++if os.environ.get('break'):
++	import pdb; pdb.set_trace()
+ 
+ dest=sys.argv[1]
+ def hx_ext(fl):
+@@ -24,16 +40,12 @@ if os.environ.get('skip_src')==None:
+ 	changeable('b','2b','/')
+ 
+ 	def premade_formats():
+-		#environ or defaults at edor
++		#environ or defaults at edor and src
+ 
+ 		splits_folder=os.environ.get('splits_folder')
+ 		if splits_folder==None:
+ 			splits_folder='osrc'
+ 
+-		rule_ext=os.environ.get('rule_ext')
+-		if rule_ext==None:
+-			rule_ext='oac'
+-
+ 		splits_format_ext=os.environ.get('splits_format_ext')
+ 		if splits_format_ext==None:
+ 			splits_format_ext='split'
+@@ -43,11 +55,10 @@ if os.environ.get('skip_src')==None:
+ 		if splits_printf_ext==None:
+ 			splits_printf_ext='format'
+ 
+-		def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not direct connected with my edor and src, is like a guardian?
++		def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not directly connected with my edor and src, is like a guardian?
+ 		a=('' if splits_folder=='' else splits_folder+os.sep)
+ 
+-		#'a.q.swf' is a.q
+-		return (a+os.path.splitext(out_file_name)[0]+ext(rule_ext)+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
++		return (a+os.path.splitext(out_file_name)[0]+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
+ 
+ 	splits_file, splits_mix = premade_formats()
+ 
+@@ -112,9 +123,12 @@ if os.environ.get('skip_src')==None:
+ 									pos-=multiline_backjump
+ 								else:
+ 									mode=6
++						outbuf=chars[:pos]
+ 						if mode==4:
+ 							mode=0
+-						dfile.write(chars[:pos])
++							if lib:
++								outbuf=lib.line(bytes(outbuf))
++						dfile.write(outbuf)
+ 				i=i+1
+ 
+ if os.environ.get('skip_comp')==None:
+@@ -141,10 +155,12 @@ if os.environ.get('skip_comp')==None:
+ 	error()
+ 
+ 	#done for output_folder
+-	os.chdir(c_dir) #back for clean
+-	for f in files:
+-		os.remove(hx_ext(f))
+-	os.rmdir(dest)
++	os.chdir(c_dir) #back for clean, and maybe ffdec is relative, dest_file is realpath
++
++	if os.environ.get('no_clean')==None:
++		for f in files:
++			os.remove(hx_ext(f))
++		os.rmdir(dest)
+ 
+ 	#confirm is as3
+ 
+--- /dev/null
++++ actionswf-1/oac/lib/main.oc
+@@ -0,0 +1,2 @@
++
++# liboarec.so
+--- /dev/null
++++ actionswf-1/oac/oarec
+@@ -0,0 +1,2 @@
++
++#python will handle all overalls, lib will call in details
+--- /dev/null
++++ actionswf-1/pi
+@@ -0,0 +1 @@
++./python/ver && ./python/pi
+--- actionswf-1.orig/python/actionswf/__init__.py
++++ actionswf-1/python/actionswf/__init__.py
+@@ -103,7 +103,7 @@ def ActionBuffer():
+ def Ref(a):
+ 	return ctypes.byref(a)
+ 
+-#try: #in PATH
++#try: #in LD_LIBRARY_PATH
+ _lib=ctypes.cdll.LoadLibrary("libactionswf.so")
+ #except Exception:
+ #lib=ctypes.cdll.LoadLibrary("actionswf.dll")
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -17,7 +17,7 @@ On Arch Linux(x86_64), <i>.zst</i> file
+ yay -Sy actionswf
+ ```
+ \
+-On Fedora 42/43(x86_64):
++On Fedora 42/43/44(x86_64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install actionswf
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -89,9 +89,11 @@ OFLAGS += nobits_virtual 0
+ endif
+ 
+ #same problems like ocompiler and arm #ATLDCOM = $(CC) ${linkerflags} ${eobs} -shared -e DllMain -o ${name} -lc -L. -l:${exte} -Wl,--exclude-libs ${exte}
+-ATLDCOM = $(LD) ${linkerflags} --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L. -l:${exte} --build-id --exclude-libs ${exte}
++ATLDCOM = $(LD) ${linkerflags} -z noexecstack -z notext --dynamic-linker=/lib64/ld-linux-x86-64.so.2 ${eobs} -shared -e DllMain -o ${name} -l:libc.so.6 ${L} `pkg-config --libs zlib` -L. -l:${exte} --build-id --exclude-libs ${exte}
++#noexecstack is for arch linux, and also for old apy test
+ #and pkg-config for -lc? is not in libc6-dev. where is?
+ #--build-id for rpm
++#-z notext since fedora 44 that will error: read-only segment has dynamic relocations
+ ifeq (${nobits_virtual},1)
+ ${libname}: ${name}
+ 	ln -f ${name} ${libname}
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -3,6 +3,7 @@ Format ElfObj64
+ include "../include/prog.h" "../include/prog.oh"
+ const cond_block_size=DWORD
+ const brace_blocks_max=100*cond_block_size
++const swapsdata_max=0x100
+ 
+ #multithread unsafe
+ dataxu flag#1
+@@ -10,24 +11,32 @@ charx type#1
+ data compare_bool=FALSE
+ datax counter#1
+ datax blocks_mem#brace_blocks_max
++wordu swapsdata_index=0
++valuexu swapdsdata#swapsdata_max
+ 
+ char operations_base="+-*/%&|^<>?"
+ #                     + - * / % & | ^ < > ? ( ! = e1e2
+ char operations_full={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} #here can go another way but for the sack of zero safe init, even is zero init also at c, and at our language with null res pref
++char parse_pack_chars={Equals,0,0,0} #but parse_pack_chars[0] is hardcoded this way, a tradeoff with c
++
++const swapdata_max=0x400
+ 
+ #win32 with _
++#all of these are builtin from string/stdlib
+ importx "strcspn" strcspn
+ importx "strchr" strchr
+ importx "memcpy" memcpy
+ importx "sscanf" sscanf
+ importx "strpbrk" strpbrk
++importx "malloc" malloc #builtin
++importx "free" free
+ 
+-import "str_expression_at_start" str_expression_at_start
++^import "str_expression_at_start" str_expression_at_start 2 #full
+ 
+-import "debug_code" debug_code
+-import "spaces" spaces
++^import "debug_code" debug_code #full return
++^import "spaces" spaces 1
+ 
+-import "str_expression_at_start_withEndCare" str_expression_at_start_withEndCare
++^import "str_expression_at_start_withEndCare" str_expression_at_start_withEndCare 2 #full
+ 
+ #bool
+ function action_parse_utilEndTypes(ss ?op,ss p_op,sd endtype1,sd endtype2)
+@@ -95,14 +104,27 @@ function action_parse_init()
+ 	call memcpy(a,#c,3)
+ end
+ 
++function free_a_swap()
++	dec globalp.swapsdata_index
++	sv pointer=:
++	mult pointer globalp.swapsdata_index
++	add pointer #globalp.swapdsdata
++	call free(pointer#)
++end
++function free_all_swaps()
++	while globalp.swapsdata_index!=0
++		call free_a_swap()
++	end
++end
++
+ import "action_code_get" action_code_get
+-import "action_code_values_index" action_code_values_index
++^import "action_code_values_index" action_code_values_index #full
+ import "memtrail" memtrail
+ import "memtrailstrict" memtrailstrict
+ import "compat" compat
+ import "debug_phase_code_remove" debug_phase_code_remove
+ import "mem_cmp_bool" mem_cmp_bool
+-import "escape_action_endcom" escape_action_endcom
++^import "escape_action_endcom" escape_action_endcom 1 #full return
+ import "swf_actionblock_get_size" swf_actionblock_get_size
+ import "label_add" label_add
+ import "swf_actionblock_get_mem_size" swf_actionblock_get_mem_size
+@@ -159,7 +181,7 @@ function action_code_row_ex_wrap(ss ac,s
+                 endif
+                 #using the operations function
+                 inc ac
+-                char closecompare=")"
++				char closecompare=Closeparenthesis
+                 setcall ac action_code_row_parse_tool(ac,closecompare)
+                 #if ac#!=closecompare
+                 #    call error("close parenthesis expected")
+@@ -379,7 +401,7 @@ function action_code_row_parse_instrumen
+     setcall pointer str_expression_at_start(ac,"return")
+     if pointer!=ac
+         call action_code_set((ActionReturn))
+-        char an_end=";"
++		char an_end=Semicolon
+ 		callret action_code_row_parse_tool(pointer,an_end)
+     endif
+     setcall pointer str_expression_at_start_withEndCare(ac,"break")
+@@ -397,12 +419,10 @@ function action_code_row_parse_instrumen
+ endfunction
+ #pointer
+ function action_parse_pack(ss ac,ss ?endChar)
+-	ss ?op   ;#this is recursive stack for future expands, now is simple
+-	char set={Equals}
+-	char secondChar#1
+-	char thirdChar#1
+-	char *term=0
+-	set secondChar endChar
++	ss delims=1
++	add delims #globalp.parse_pack_chars
++	set delims# endChar
++	inc delims
+ 
+ 	ss pointer
+ 	sd isnewvar=FALSE
+@@ -410,21 +430,21 @@ function action_parse_pack(ss ac,ss ?end
+ 	setcall pointer str_expression_at_start(ac,"var")
+ 	if pointer!=ac
+ 		set isnewvar (TRUE)
+-		set thirdChar (Nullchar)
++		set delims# (Nullchar)
+ 	else
+ 		set isdelete (FALSE)
+ 		setcall pointer str_expression_at_start(ac,"delete")
+ 		if pointer!=ac
+ 			set isdelete (TRUE)
+-			set thirdChar (Nullchar)
++			set delims# (Nullchar)
+ 		else
+ 			set pointer spaces(pointer) #ffdec, /tests/ffdec/ff
+-			set thirdChar (Colon)
++			set delims# (Colon)
+ 		endelse
+ 	endelse
++	set ac strcspn(pointer,#globalp.parse_pack_chars)
+ 
+-	ss delims^set
+-	set ac strcspn(pointer,delims)
++	ss ?op   ;#this is recursive stack for future expands, now is simple
+ 	add ac pointer
+ 	set op ac#
+ 	if op=(Colon) #since goto markers, this is the label
+@@ -440,7 +460,7 @@ function action_parse_pack(ss ac,ss ?end
+ 
+ 	if isnewvar=(TRUE)
+ 		call memtrail(marker)
+-		if op=set
++		if op=(Equals)
+ 			call action_code_set((ActionDefineLocal))
+ 			call action_code_set_pointer(pointer)
+ 		else
+@@ -451,7 +471,7 @@ function action_parse_pack(ss ac,ss ?end
+ 	elseif isdelete=(FALSE)
+ 		sd ?inc_dec
+ 		sd ?mixt_action
+-		if op!=set
++		if op!=(Equals)
+ 			set inc_dec 0
+ 			ss test
+ 			set test marker
+@@ -488,7 +508,7 @@ function action_parse_pack(ss ac,ss ?end
+ 			call memtrail(marker)
+ 		endelse
+ 		call action_parse_left_holder(pointer,(ActionSetVariable),(ActionSetMember))
+-		if op=set
++		if op=(Equals)
+ 			#mixt or not mixt
+ 			if mixt_action!=0
+ 				call action_code_set((mixt_equal))
+@@ -560,7 +580,7 @@ function action_parse_test_mixt_equal(ss
+ 	callret action_parse_take_action(op,pointer)
+ endfunction
+ #pointer
+-function action_parse_right(ss ac,sd endChar)
++function action_parse_right(ss ac,ss ?endChar)
+     ss pointer
+     #can be a function definition
+     setcall pointer action_code_parse_deffunction(ac)
+@@ -740,7 +760,7 @@ function action_code_take_main(ss ac,ss
+ 
+ 	set pointer ac
+ 
+-	char neg="-"^
++	char neg=Hyphen
+ 	if pointer#=neg
+ 		inc pointer
+ 		set pointer spaces(pointer) #=- Math(8)
+@@ -786,33 +806,33 @@ function action_code_take_main(ss ac,ss
+ endfunction
+ #pointer
+ function brackets_test(ss pointer)
+-    sd multidim=1
+-    while multidim=1
+-        sd openedbrackets=1
+-        while openedbrackets>0
+-            inc pointer
+-            if pointer#=(Openingbracket)
+-                inc openedbrackets
+-            elseif pointer#=(Closingbracket)
+-                dec openedbrackets
+-            elseif pointer#=0
+-                call error("unclosed bracket detected")
+-            endelseif
+-        endwhile
+-        inc pointer
+-        if pointer#!=(Openingbracket)
+-            set multidim 0
+-        endif
+-    endwhile
+-    return pointer
++	ss ?multidim=1
++	while multidim=1
++		sv ?openedbrackets=1 #it's not like is long but why to error here?
++		while openedbrackets>0
++			inc pointer
++			if pointer#=(Openingbracket)
++				inc openedbrackets
++			elseif pointer#=(Closingbracket)
++				dec openedbrackets
++			elseif pointer#=0
++				call error("unclosed bracket detected")
++			endelseif
++		endwhile
++		inc pointer
++		if pointer#!=(Openingbracket)
++			set multidim 0
++		endif
++	endwhile
++	return pointer
+ endfunction
+ 
+ import "str_escape" str_escape
+ #next/0
+ function action_code_str(ss ac)
+     sd delim
+-    char stringdelim="\""
+-    char stringdelim2="'"
++	char stringdelim=Doublequotes
++	char stringdelim2=Singlequote
+     set delim stringdelim
+     if ac#!=stringdelim
+ 	if ac#!=stringdelim2
+@@ -855,7 +875,7 @@ end
+ #bool
+ function numeric_code_orConstruction(ss ac)
+ 	ss pointer;set pointer ac
+-	char neg="-"^
++	char neg=Hyphen
+ 	if pointer#=neg
+ 		inc pointer
+ 	endif
+@@ -897,7 +917,7 @@ function numeric_code_orConstruction(ss
+ 	endif
+ 	data value_low#1;data value_high#1
+ 	ss decimal_symbol_test
+-	char dot="."
++	char dot=Period
+ 	setcall decimal_symbol_test strchr(pointer,dot)
+ 	if decimal_symbol_test!=(NULL)
+ 		call action_code_set((ap_Double))
+@@ -911,7 +931,7 @@ function numeric_code_orConstruction(ss
+ 	ss hextest
+ 	set hextest pointer
+ 	inc hextest
+-	char hex="x"
++	char hex=x_low
+ 	if hextest#=hex
+ 		call sscanf(ac,"%x",#value_low)
+ 	else
+@@ -922,8 +942,8 @@ function numeric_code_orConstruction(ss
+ endfunction
+ function action_code_member(ss pointer,sd full)
+ 	vstr delims=".["
+-	char sqbrace_start="["
+-	char sqbrace_end="]"
++	char sqbrace_start=Openingbracket
++	char sqbrace_end=Closingbracket
+ 	call action_code_set_pointer(pointer) #owner?
+ 	sd pos
+ 	setcall pos strcspn(pointer,delims)
+@@ -1165,6 +1185,7 @@ import "debug_phase_code_add_jump_if" de
+ function write_forward_offset_base(sdu ?offset,ss ?skip_xlog,ss ?xlog_j)
+ 	sd mem
+ 	sdu ?size
++	!xor size size ## c problem
+ 	call swf_actionblock_get_mem_size(#mem,#size)
+ 	#
+ 	add mem offset
+@@ -1266,6 +1287,7 @@ import "debug_phase_code_add_jumpback_if
+ function resolve_back_jump(sdu ?jumpoffset)  #also at continue
+ 	ss mem
+ 	sd ?size ;#will *-1
++	!xor size size ## c problem
+ 	call swf_actionblock_get_mem_size(#mem,#size)
+ 	add mem size;sub mem (WORD)
+ 	#
+@@ -1299,7 +1321,7 @@ function action_code_parse_leftfunction(
+     endif
+     #a call
+ 	setcall ac action_code_parse_new_or_call(ac,(call_action_left),ac)
+-    char end=";"
++	char end=Semicolon
+     if ac#=end
+         inc ac
+     endif
+@@ -1307,11 +1329,11 @@ function action_code_parse_leftfunction(
+ endfunction
+ import "part_of_variable" part_of_variable
+ #pointer
+-function action_code_parse_new_or_call(ss ac,sd type,ss cursor)
++function action_code_parse_new_or_call(ss ac,sd ?type,ss cursor)
+ 	ss pointer
+ 	set pointer ac
+ 	ss last_dot=0
+-	sd sz
++	ss ?sz
+ 	setcall sz part_of_variable(pointer)
+ 	while sz!=0
+ 		add pointer sz
+@@ -1357,58 +1379,58 @@ function action_code_parse_function_argu
+     #arguments
+     # this was for what? sd math_values
+     # setcall math_values action_code_get()
+-    char comma=","
+-    char close=")"
++	char comma=Comma
++	char close=Closeparenthesis
+     inc pointer
+     if pointer#=close
+         inc pointer
+         return pointer
+     endif
+-    #
+-        #need to swap the arguments for the call function
+-    const swapdata_max=128
+-    sd swapdata#swapdata_max
+-    sd cursor^swapdata
+-    sd all_nr=swapdata_max*:
+-    sd nr
+-    set nr all_nr
+-    add cursor nr
+-    sd start_data
+-    sd data
+-    setcall start_data action_code_get()
+-    set data start_data
+-    sd sizemark
+-    setcall sizemark action_code_values_index()
+-    sd sizepointer
+-    set sizepointer sizemark#
+-    #
+-    ss ?op=0
+-    while op!=close
++	#
++	#need to swap the arguments for the call function
++	sd cursor
++	set cursor get_a_swap()
++	sd ?all_nr=swapdata_max*:
++	sd ?nr
++	set nr all_nr
++	add cursor nr
++	sd start_data
++	sd data
++	setcall start_data action_code_get()
++	set data start_data
++	sd sizemark
++	setcall sizemark action_code_values_index()
++	sd ?sizepointer
++	set sizepointer sizemark#
++	#
++	ss ?op=0
++	while op!=close
+         setcall pointer action_code_row_parse_tool_util(pointer,#op,comma,close)
+         if op=0
+             call error("close the function arguments sign expected: )")
+         endif
+         #
+-        sd dif
++        sd ?dif
+         set dif sizemark#
+         sub dif sizepointer
+         set sizepointer sizemark#
+         mult dif (DWORD)
+-            #
++        #
+         sub nr dif
+         if nr<0
+             call error("too many function arguments")
+         endif
+         sub cursor dif
+-        call memcpy(cursor,data,dif)
++        call memcpy(cursor,data,dif) #copy at end arguments
+         add data dif
+         #
+-    endwhile
+-    #
+-    sub all_nr nr
+-    call memcpy(start_data,cursor,all_nr)
+-    #
+-    return pointer
++	endwhile
++	#
++	sub all_nr nr
++	call memcpy(start_data,cursor,all_nr) #copy swaped arguments
++	call free_a_swap()
++	#
++	return pointer
+ endfunction
+ 
+ #
+@@ -1423,7 +1445,7 @@ function action_code_parse_deffunction(s
+     call action_code_set((function_action))
+     ss name_start
+     set name_start pointer
+-    char startsign="("
++	char startsign=Openparenthesis
+     ss args
+     setcall args strchr(pointer,startsign)
+     if args=(NULL)
+@@ -1484,4 +1506,20 @@ function action_code_parse_function_defa
+ 	endwhile
+ endfunction
+ 
++function get_a_swap()
++	#will be blocked by topmost size (too many function arguments). information an a() from a(a(...)) is 0x2c(44) at .x
++	if globalp.swapsdata_index<(swapsdata_max)
++		sd a;set a malloc(:*swapdata_max)
++		if a!=(NULL)
++			sv pointer=:
++			mult pointer globalp.swapsdata_index
++			add pointer #globalp.swapdsdata
++			set pointer# a
++			inc globalp.swapsdata_index
++			return a
++		end
++	end
++	call error("error at function call arguments swap")
++end
++
+ entryraw globalp()
+--- actionswf-1.orig/src/actionpool.oc
++++ actionswf-1/src/actionpool.oc
+@@ -22,14 +22,14 @@ function actionpoolid()
+ 	return #globalo.selid
+ endfunction
+ 
+-import "struct_ids_actionpool" struct_ids_actionpool
++^import "struct_ids_actionpool" struct_ids_actionpool 2 #full
+ #block
+ function actionpool_currentblock()
+ 	callret struct_ids_actionpool((ids_get),globalo.selid)
+ endfunction
+ 
+ importx "free" free
+-import "struct_ids_actionpool_filter" struct_ids_actionpool_filter
++^import "struct_ids_actionpool_filter" struct_ids_actionpool_filter 2 #full
+ function pool_data(sd ?id)
+ 	sv block;set block struct_ids_actionpool_filter((ids_get),id)
+ 	if block!=(NULL)
+@@ -70,18 +70,18 @@ end
+ 
+ importx "access" access
+ importx "fseek" fseek
+-importx "fread" fread
++^importx "fread" fread 4
+ importx "unlink" unlink
+ importx "fclose" fclose
+ importx "sprintf" sprintf
+-importx "fopen" fopen
+-importx "ftell" ftell
++^importx "fopen" fopen 2
++^importx "ftell" ftell 1
+ 
+ import "stack_to_word_arg" stack_to_word_arg
+-import "word_arg_to_stack" word_arg_to_stack
++^import "word_arg_to_stack" word_arg_to_stack 1
+ import "swf_mem_change_pool" swf_mem_change_pool
+ import "swf_mem_change_back_pool" swf_mem_change_back_pool
+-import "block_get_mem" block_get_mem
++^import "block_get_mem" block_get_mem 1
+ import "block_get_size" block_get_size
+ import "block_reset_size" block_reset_size
+ import "mem_block_add_throwless" mem_block_add_throwless
+@@ -105,6 +105,7 @@ import "x_log_string" x_log_string
+ function pool_reentry(sd offset)
+ 	sd b;set b struct_ids_actionpool_filter((ids_get),globalo.selid)
+ 	sd mem;sdu ?size
++	!xor size size ## .c problems
+ 	call block_get_mem_size(b,#mem,#size)
+ 	sdu ?cursor;set cursor mem#
+ 	if cursor<^size
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -10,17 +10,18 @@ vstr memorig=NULL
+ value dcode#1
+ value format_file=NULL
+ 
++importx "_snprintf" snprintf
++
+ #win32 with _
+ importx "memcpy" memcpy
+ importx "sprintf" sprintf
+-importx "snprintf" snprintf
+ Importx "realloc" realloc
+ Importx "malloc" malloc
+ Importx "free" free
+ importx "strlen" strlen
+ importx "strcpy" strcpy
+ 
+-import "spaces" spaces
++^import "spaces" spaces 1 #full return
+ 
+ #strings
+ 
+@@ -64,7 +65,7 @@ function escape_action(ss ac,ss pointer,
+     sd error_row=0
+     #
+     sd comments=0
+-    char lines_com_c1="*";char lines_com_c2="/";ss test
++	char lines_com_c1=Asterisk;char lines_com_c2=Slash;ss test
+     const line_comment=1
+     const multiLine_comment=2
+     #
+@@ -166,24 +167,27 @@ endfunction
+ import "printEr" printEr
+ import "string_nl_print" string_nl_print
+ function action_error()
+-    sv p_action_errors
+-    setcall p_action_errors action_debug((action_debug_get))
+-    if p_action_errors#=(NULL)
+-        ret
+-    endif
+-
+-    vstr ac#1
+-    vstr mem#1
+-    call memcpy(#ac,p_action_errors,(2*:))
+-
+-    call printEr("Row: ")
+-    sd row
+-    setcall row escape_action(ac,mem,globalu.dcode,(NULL))
+-    #a small reserve for a number like 2 000 000 000
+-    char row_nr#dword_to_string_char
+-    call sprintf(#row_nr,"%u",row)
+-    call string_nl_print(#row_nr)
+-    call string_nl_print(globalu.dcode)
++	sv p_action_errors
++	setcall p_action_errors action_debug((action_debug_get))
++	if p_action_errors#=(NULL)
++		ret
++	endif
++
++	call printEr("Row: ")
++
++	# ac and mem is not ok at arm c code can be 16 bit aligned
++	vstr stack#2
++	sv st^stack  #can do more with only at c sign !
++	call memcpy(st,p_action_errors,(2*:))
++	sd row
++	sv mem=:;add mem st
++	setcall row escape_action(st#,mem#,globalu.dcode,(NULL))
++	#a small reserve for a number like 2 000 000 000
++	char a#dword_to_string_char
++	ss row_nr^a
++	call sprintf(row_nr,"%u",row)
++	call string_nl_print(row_nr)
++	call string_nl_print(globalu.dcode)
+ endfunction
+ 
+ import "block_get_size" block_get_size
+@@ -199,11 +203,11 @@ function action_size(sd id)
+     return size
+ endfunction
+ 
+-import "block_get_mem" block_get_mem
++^import "block_get_mem" block_get_mem 1
+ 
+ #these ids are get only, is safe at throwless
+-import "struct_ids_action" struct_ids_action
+-import "struct_ids_actionpool" struct_ids_actionpool
++^import "struct_ids_action" struct_ids_action 2 #full
++^import "struct_ids_actionpool" struct_ids_actionpool 2 #full
+ 
+ #size
+ function pool_size(sd id)
+@@ -453,9 +457,9 @@ function actions_format(sdu psize,sv arg
+ end
+ 
+ import "debug_base" debug_base
+-import "alt_action_base" alt_action_base
++^import "alt_action_base" alt_action_base 3 #full return
+ 
+-function action_sprite_base(sd sprite,ss actions,sd has_frames)
++function action_sprite_base(sd sprite,ss actions,ss ?has_frames)
+ 	sd alt_ac;set alt_ac alt_action_base(actions,sprite,has_frames)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -13,8 +13,8 @@ importx "strcpy" strcpy
+ importx "memcpy" memcpy
+ importx "sprintf" sprintf
+ 
+-import "swf_sprite_frames_pointer" swf_sprite_frames_pointer
+-import "word_arg_to_stack" word_arg_to_stack
++^import "swf_sprite_frames_pointer" swf_sprite_frames_pointer 1 #full return
++^import "word_arg_to_stack" word_arg_to_stack 1
+ import "mem_free" mem_free
+ 
+ function alt_join()
+@@ -73,12 +73,12 @@ end
+ 
+ import "file_get_content" file_get_content
+ 
+-function alt_action(sd orig_action,sd preid)
++function alt_action(ss orig_action,sd ?preid)
+ 	callret alt_action_base(orig_action,preid,(TRUE))
+ end
+-import "struct_ids_action" struct_ids_action
++^import "struct_ids_action" struct_ids_action 2 #full
+ import "block_get_size" block_get_size
+-function alt_action_base(sd orig_action,sd preid,sd has_frames)
++function alt_action_base(ss orig_action,sd ?preid,ss ?has_frames)
+ 	if globall.folder!=(NULL)
+ 		if orig_action!=(NULL) #this to filter a button with no swf actions for example
+ 			sd block
+--- actionswf-1.orig/src/bits.oc
++++ actionswf-1/src/bits.oc
+@@ -1,25 +1,30 @@
+ Format ElfObj64
+ 
+ include "../include/prog.h" "../include/prog.oh"
++include "stdarg.h" "stdarg.oh"
+ 
+ #multithread unsafe
+ charx matrix#1+4+4
+ charx rect#31*4+5
+ 
+ functionV bits_packs(ss dest,sd ?packs)
++	%<packs
++	!sd src^packs
+ 	sd ?i=0
+ 	sd ?value
+ 	sd ?size
+ 	sd ?pos=0x80
+-	sd src^packs
+ 	while i<packs
+-		add src : #incst src
+-		set value src#
+-		add src : #incst src
+-		set size src#
++		!add src : #incst src
++		!set value src#
++		%|value
++		!add src : #incst src
++		!set size src#
++		%|size
+ 		call bits_bigendian(value,size,#dest,#pos)
+ 		inc i
+ 	endwhile
++	%>
+ endfunction
+ function bits_bigendian(sd ?value,sd ?size,sv p_dest,sd p_pos)
+ 	ss dest
+@@ -143,9 +148,9 @@ endfunction
+ 
+ #
+ import "swf_mem_add" swf_mem_add
+-function rect_add(sd width,sd height)
++function rect_add(sd ?width,sd ?height)
+     sd mem
+-    sd sz
++    sd ?sz
+     call rect_prepare(#mem,#sz,width,height)
+     callg swf_mem_add(mem,sz)
+ endfunction
+--- actionswf-1.orig/src/debug.oc
++++ actionswf-1/src/debug.oc
+@@ -147,9 +147,9 @@ function deprecation_init(sd flags)
+ end
+ 
+ ^importx "getenv" getenv 1 #is not an int return, and unlike malloc is not known to be size_t
+-importx "strlen" strlen
+-importx "malloc" malloc
+-importx "fopen" fopen
++importx "strlen" strlen #is builtin
++importx "malloc" malloc #is predefined and already known to be long
++^importx "fopen" fopen 2
+ importx "fscanf" fscanf
+ importx "fclose" fclose
+ 
+@@ -187,11 +187,11 @@ include "../include/platformhome.h" "../
+ end
+ 
+ import "row_termination" row_termination
+-import "swf_actionblock_get" swf_actionblock_get
++^import "swf_actionblock_get" swf_actionblock_get #full return
+ import "swf_actionblock_get_size" swf_actionblock_get_size
+-import "block_get_psize" block_get_psize
+-import "block_get_mem" block_get_mem
+-import "word_arg_to_stack" word_arg_to_stack
++^import "block_get_psize" block_get_psize 1 #full return
++^import "block_get_mem" block_get_mem 1
++^import "word_arg_to_stack" word_arg_to_stack 1
+ import "for_in" for_in
+ import "frames_as_shows" frames_as_shows
+ import "ainit" ainit
+@@ -199,7 +199,7 @@ import "pool_init" pool_init
+ import "verbose" verbose
+ 
+ importx "fseek" fseek
+-importx "fread" fread
++^importx "fread" fread 4
+ importx "fprintf" fprintf
+ importx "free" free
+ 
+@@ -368,27 +368,27 @@ function alt_log()
+ 	end
+ 	return (NULL)
+ end
+-function logs_printf(sd log,sd nr)
++function logs_printf(sd log,sd ?nr)
+ 	char u={Percent,u_low,xlog_nl,Nullchar}
+ 	callg f_printf1(log,#u,nr)
+ end
+-function debug_printf(sd ix)
++function debug_printf(sd ?ix)
+ 	call logs_printf(globald.dfile,ix)
+ 	if globald.dfile2!=(NULL)
+ 		callg logs_printf(globald.dfile2,ix)
+ 	end
+ end
+-#function debug_base_core(sd id)
++#function debug_base_core(sd ?id)
+ #	callg debug_printf(id) #swf_button is calling action_sprite
+ #end
+-function debug_base(sd id)
++function debug_base(sd ?id)
+ 	if globald.dfile!=(NULL)
+ 		call debug_printf(id)
+ 		sd ai;set ai ainit()
+ 		callg debug_printf(ai)
+ 	end
+ end
+-function debug_show(sd id)
++function debug_show(sd ?id)
+ 	if globald.dfile!=(NULL)
+ 		call debug_printf(id)
+ 		char nls={xlog_nl,xlog_nl}
+@@ -413,7 +413,7 @@ function debug_spritedone(sd p,sd i)
+ 		callg debug_printf(i)
+ 	end
+ end
+-function debug_export(sd i,ss e,sd size)
++function debug_export(sd ?i,ss e,sd size)
+ 	if globald.dfile!=(NULL)
+ 		sd alt;set alt alt_log()
+ 		if alt!=(NULL)
+--- actionswf-1.orig/src/dtitles.oc
++++ actionswf-1/src/dtitles.oc
+@@ -10,7 +10,7 @@ dataxu func#1 #like ui32 swf size
+ importx "sprintf" sprintf
+ importx "memcpy" memcpy
+ 
+-import "word_arg_to_stack" word_arg_to_stack
++^import "word_arg_to_stack" word_arg_to_stack 1
+ 
+ #here iterates swf tags in the sprite, enters DoAction tags, first tag is the pool with the format from dtitles_frame, goes at last string, overwrites 0000 with the final id
+ function dtitles_conclude(sd finalid,sd mem)
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -2,11 +2,11 @@ Format ElfObj64
+ 
+ include "../include/prog.h" "../include/prog.oh"
+ 
+-import "action_debug" action_debug
++^import "action_debug" action_debug 1 #full return
+ import "action_data" action_data
+-import "action_code_values" action_code_values
+-import "action_code_values_action" action_code_values_action
+-import "escape_action" escape_action
++^import "action_code_values" action_code_values #full
++^import "action_code_values_action" action_code_values_action #full
++^import "escape_action" escape_action 4 #full return
+ import "action_debug_free_macro" action_debug_free_macro
+ import "debug_phase_parse_end" debug_phase_parse_end
+ import "endcom" endcom
+@@ -17,9 +17,9 @@ import "label_init" label_init
+ 
+ #this/an action
+ 
+-import "action__code_row" action__code_row
++^import "action__code_row" action__code_row 1 #full
+ import "action_code_set" action_code_set
+-import "action_code_row" action_code_row
++^import "action_code_row" action_code_row 2 #full
+ ^import "dupreserve_string" dupreserve_string 1
+ import "brace_blocks_end" brace_blocks_end
+ import "error" error
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -47,11 +47,11 @@ endfunction
+ 
+ importx "fprintf" fprintf
+ 
+-importx "fwrite" fwrite
+-importx "ftell" ftell
++importx "fwrite" fwrite # builtin
++^importx "ftell" ftell 1
+ importx "fseek" fseek
+ 
+-importx "fopen" fopen
++^importx "fopen" fopen 2
+ importx "free" free
+ 
+ #aftercallimport ebool
+@@ -122,7 +122,7 @@ endfunction
+ #read
+ ^import "memalloc" memalloc 1
+ #mem
+-function file_get_content(ss filepath,sv p_size)  #size is a stack variable
++function file_get_content(ss filepath,sv p_size)  #size is a stack variable , but here is not like the other cases, here is on full
+ 	sd file
+ 	setcall file file_open(filepath,(_open_read))
+ 	set globalf.file file
+--- actionswf-1.orig/src/label.oc
++++ actionswf-1/src/label.oc
+@@ -17,8 +17,8 @@ function label_init()
+ 	set globalg.apos 0
+ end
+ 
+-import "swf_actionblock_get" swf_actionblock_get
+-import "block_get_mem" block_get_mem
++^import "swf_actionblock_get" swf_actionblock_get
++^import "block_get_mem" block_get_mem 1
+ 
+ import "stack_to_word_arg" stack_to_word_arg
+ import "swf_actionblock_get_mem_size" swf_actionblock_get_mem_size
+@@ -60,6 +60,7 @@ function label_resolve(sdu ?lab)
+ 	add pointer #globalg.gotos
+ 	sd max;set max pointer
+ 	ss mem;sdu ?size
++	!xor size size ## c problem
+ 	call swf_actionblock_get_mem_size(#mem,#size)
+ 	while #globalg.gotos!=pointer
+ 		sub pointer (DWORD)
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -14,15 +14,15 @@ import "NumFill_NumLin" NumFill_NumLin
+ import "NumFill_NumLin_get" NumFill_NumLin_get
+ import "shapewithstyle_records" shapewithstyle_records
+ import "printEr" printEr
+-import "word_arg_to_stack" word_arg_to_stack
++^import "word_arg_to_stack" word_arg_to_stack 1
+ import "file_get_content__resources_free" file_get_content__resources_free
+ import "matrix_translate" matrix_translate
+-import "struct_ids" struct_ids
++^import "struct_ids" struct_ids 2 #full
+ import "block_get_size" block_get_size
+-import "block_get_mem" block_get_mem
++^import "block_get_mem" block_get_mem 1
+ import "block_reset_size" block_reset_size
+ 
+-import "alt_action" alt_action
++^import "alt_action" alt_action 2 # full return
+ import "swf_actionblock_change_back" swf_actionblock_change_back
+ 
+ import "deprecation" deprecation
+--- /dev/null
++++ actionswf-1/src/stdarg.oh
+@@ -0,0 +1 @@
++
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -133,7 +133,7 @@ end
+ import "mem_free" mem_free
+ import "action_code_values_free" action_code_values_free
+ import "file_close" file_close
+-import "block_get_mem" block_get_mem
++^import "block_get_mem" block_get_mem 1 #full return
+ import "block_get_mem_size" block_get_mem_size
+ import "bits_packs" bits_packs
+ import "word_swap_arg" word_swap_arg
+@@ -143,11 +143,11 @@ import "push" push
+ 
+ ^import "actionpoolid" actionpoolid
+ ^import "actionpoolid_root" actionpoolid_root
+-import "actionpool_currentblock" actionpool_currentblock
++^import "actionpool_currentblock" actionpool_currentblock #full
+ 
+ import "action_size" action_size
+ import "stack_to_word_arg" stack_to_word_arg
+-import "word_arg_to_stack" word_arg_to_stack
++^import "word_arg_to_stack" word_arg_to_stack 1 #full return
+ import "is_ainit" is_ainit
+ 
+ #aftercallimport ebool
+@@ -174,7 +174,7 @@ endfunction
+ 
+ import "error" error
+ ^import "struct_ids_actionpool" struct_ids_actionpool 2
+-import "struct_ids_action" struct_ids_action
++^import "struct_ids_action" struct_ids_action 2 #full
+ import "struct_ids_action_set" struct_ids_action_set
+ import "mem_block_add" mem_block_add
+ import "def_mem" def_mem
+@@ -226,7 +226,7 @@ function swf_mem_init(ss path,sd len,sd
+ 		set globals.is_file_write (FALSE)
+ 	end
+ end
+-function swf_mem(sd proc,sd arg,sd len)
++function swf_mem(sd ?proc,sd arg,sd ?len)
+ 	if globals.path_mem=(NULL)
+ 	#swf_(placeobject...)->mem_exp_add;swf_sprite_(placeobject...)->mem_exp_change;swf_done->mem_exp_done
+ 		call error("there isn't a swf started")
+@@ -249,7 +249,9 @@ function swf_mem(sd proc,sd arg,sd len)
+ 
+ 			sd block
+ 			setcall block struct_ids((ids_get),globals.main_id)
+-			ss mem;sd ?size;call block_get_mem_size(block,#mem,#size)
++			ss mem;sd ?size
++			!xor size size ##same .c problem and stack variables
++			call block_get_mem_size(block,#mem,#size)
+ 
+ 			sd pointer
+ 			set pointer mem
+@@ -281,13 +283,13 @@ function swf_mem(sd proc,sd arg,sd len)
+ 		end
+ 	endelse
+ endfunction
+-function swf_mem_add(ss dest,sd size) #this is here only to evade .c number of arguments error
++function swf_mem_add(ss dest,sd ?size) #this is here only to evade .c number of arguments error
+     callg swf_mem((mem_exp_add),dest,size)
+ endfunction
+ function swf_tag_end()
+     callg swf_tag_recordheader_entry((End),0)
+ endfunction
+-function swf_tag_recordheader_entry(sd tag,sd size)
++function swf_tag_recordheader_entry(sd ?tag,sd ?size)
+     if size<(recordheader_long_mark)
+         sd tag_plus_size
+         callg swf_tag_recordheader(#tag_plus_size,tag,size)
+@@ -295,24 +297,24 @@ function swf_tag_recordheader_entry(sd t
+         callg swf_tag_recordheader_long_entry(tag,size)
+     endelse
+ endfunction
+-function swf_tag_recordheader_long_entry(sd tag,sd size)
++function swf_tag_recordheader_long_entry(sd ?tag,sd ?size)
+     sd tag_plus_size
+     call swf_tag_recordheader(#tag_plus_size,tag,(recordheader_long_mark))
+     callg swf_mem_add(#size,(DWORD))
+ endfunction
+ const short_header=2
+-function swf_tag_recordheader(ss dest,sd tag,sd size)
++function swf_tag_recordheader(ss dest,sd ?tag,sd ?size)
+     call bits_packs(dest,2,tag,10,size,6)
+     call word_swap_arg(dest)
+     callg swf_mem_add(dest,(short_header))
+ endfunction
+-function swf_tag(ss dest,sd tag,sd size)
++function swf_tag(ss dest,sd ?tag,sd ?size)
+     call swf_tag_recordheader(dest,tag,size)
+     add dest (short_header)
+     callg swf_mem_add(dest,size)
+ endfunction
+ 
+-function swf_frames_inc(sd frames,sw pointer)
++function swf_frames_inc(sd ?frames,sw pointer)
+ 	if frames=(maxuint16)  #example, frame count at DefineSprite
+ 		call error("max uint16 at frames")
+ 	end
+@@ -321,15 +323,15 @@ function swf_frames_inc(sd frames,sw poi
+ end
+ import "write_action" write_action
+ #size
+-function done_action(sd id,sd frames)
++function done_action(sd ?id,sd ?frames)
+ 	sv p_block
+ 	setcall p_block struct_ids_action((ids_get_pointer),id)
+ 	sd block
+ 	set block p_block#
+-	sd size
++	sd ?size
+ 	setcall size block_get_size(block)
+ 	if size!=0  #here is an ending from show or done with size
+-		sd tagsz
++		sd ?tagsz
+ 		call dtitles_frame(frames)
+ 		setcall tagsz action_size(id)
+ 		call swf_tag_recordheader_entry((DoAction),tagsz)
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -14,10 +14,10 @@ importx "strlen" strlen
+ import "button_mem" button_mem
+ 
+ import "stack_to_word_arg" stack_to_word_arg
+-import "word_arg_to_stack" word_arg_to_stack
+-import "struct_ids" struct_ids
++^import "word_arg_to_stack" word_arg_to_stack 1
++^import "struct_ids" struct_ids 2 #full
+ import "block_get_size" block_get_size
+-import "block_get_mem" block_get_mem
++^import "block_get_mem" block_get_mem 1
+ import "free_sprite_id" free_sprite_id
+ import "freereset" freereset   #..x with no args
+ import "dtitles_conclude" dtitles_conclude
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -8,7 +8,7 @@ importx "free" free
+ importx "strlen" strlen
+ importx "memcmp" memcmp
+ 
+-import "platform_iob" platform_iob
++^import "platform_iob" platform_iob #full
+ 
+ include "../include/prog.h" "../include/prog.oh"
+ 
+@@ -20,16 +20,22 @@ charx ainit_bool#1
+ data fileRes=fd_none
+ valuexu basepointer#1
+ char ebool=0
++vdatax action_structures#max_structures
++vdatax action_structures_init#max_structures
++vdatax actionpool_structures#max_structures
++vdatax actionpool_structures_init#max_structures
++vdatax actionpool_filter_structures#max_structures
++vdatax actionpool_filter_structures_init#max_structures
+ 
+ function printEr(ss msg)
+ 	sv ?len;setcall len strlen(msg)
+-	sv ?stderr;setcall stderr platform_iob()
+-	call fwrite(msg,(BYTE),len,stderr)
++	sv ?stder;setcall stder platform_iob()
++	call fwrite(msg,(BYTE),len,stder)
+ 	#callret
+ endfunction
+ 
+ function word_swap_arg(ss word)
+-    sd a
++    sd ?a
+     ss aux^a
+     set aux# word#
+     ss dest
+@@ -100,7 +106,7 @@ function dword_swap(sd value)
+     #
+     return res
+ endfunction
+-function struct_off(sd struct_of_ints,sd off)
++function struct_off(sd struct_of_ints,sd ?off)
+     add struct_of_ints off
+     return struct_of_ints#
+ endfunction
+@@ -121,7 +127,7 @@ function block_reset_size(sd block)
+ endfunction
+ #size
+ function block_get_size(sd block)
+-    sd size
++    sd ?size
+     setcall size struct_off(block,(mem_struct__size_off))
+     sub size (mem_struct_size)
+     return size
+@@ -140,7 +146,7 @@ function block_get_mem(sd block)
+     add block (mem_struct_size)
+     return block
+ endfunction
+-function block_get_mem_size(sd block,sv p_mem,sv p_size)  #size is a stack variable
++function block_get_mem_size(sd block,sv p_mem,sd p_size)  #size is a stack variable , but since .c it is !xor-ed
+     setcall p_mem# block_get_mem(block)
+     setcall p_size# block_get_size(block)
+ endfunction
+@@ -166,8 +172,8 @@ endfunction
+ 
+ #bool
+ function is_numeric(ss ?charvar)
+-	char min="0"^
+-	char max="9"^
++	char min=_0
++	char max=_9
+ 	if charvar<min
+ 		return (FALSE)
+ 	endif
+@@ -270,7 +276,7 @@ function str_expression_at_start(ss stri
+ 	ss next
+ 	set next string
+ 	addcall next strlen(expression)
+-	sd sz
++	ss ?sz
+ 	setcall sz part_of_variable(next)
+ 	if sz!=0
+ 		return string
+@@ -284,7 +290,7 @@ function str_expression_at_start_withEnd
+     if pointer=ac
+         return ac
+     endif
+-    char term=";"^
++	char term=Semicolon
+     if pointer#=term
+         inc pointer
+     endif
+@@ -344,13 +350,17 @@ endfunction
+ 
+ #
+ 
+-function freelater()
+-    #this can be after code_values(in last_free); but normal is this at action and last_free at swf_done(without this)
+-    call action_debug_free_macro()
+-    #
+-    call file_get_content__resources_free()
++import "free_all_swaps" free_all_swaps
++function freelater() #forced free
++	#this can be after code_values(in last_free); but normal is this at action and last_free at swf_done(without this)
++	call action_debug_free_macro()
++	#
++	call file_get_content__resources_free()
++
++	call file_resources_free()
+ 
+-    call file_resources_free()
++	#swaps
++	call free_all_swaps()
+ endfunction
+ 
+ #bool
+@@ -580,34 +590,28 @@ function struct_ids(sd proc,sd ?ident)
+ endfunction
+ function struct_ids_action(sd proc,sd id)
+ 	sd v
+-	vdatax action_structures#max_structures
+-	vdatax action_structures_init#max_structures
+ 	if globalt.ainit_bool=(xlog_ainit_false)
+-		set v struct_ids_expand(proc,id,#action_structures)
++		set v struct_ids_expand(proc,id,#globalt.action_structures)
+ 	else
+-		set v struct_ids_expand(proc,id,#action_structures_init)
++		set v struct_ids_expand(proc,id,#globalt.action_structures_init)
+ 	end
+ 	return v
+ endfunction
+ function struct_ids_actionpool(sd proc,sd id)
+ 	sd v
+-	vdatax action_structures#max_structures
+-	vdatax action_structures_init#max_structures
+ 	if globalt.ainit_bool=(xlog_ainit_false)
+-		set v struct_ids_expand(proc,id,#action_structures)
++		set v struct_ids_expand(proc,id,#globalt.actionpool_structures)
+ 	else
+-		set v struct_ids_expand(proc,id,#action_structures_init)
++		set v struct_ids_expand(proc,id,#globalt.actionpool_structures_init)
+ 	end
+ 	return v
+ endfunction
+ function struct_ids_actionpool_filter(sd proc,sd id)
+ 	sd v
+-	vdatax action_structures#max_structures
+-	vdatax action_structures_init#max_structures
+ 	if globalt.ainit_bool=(xlog_ainit_false)
+-		set v struct_ids_expand(proc,id,#action_structures)
++		set v struct_ids_expand(proc,id,#globalt.actionpool_filter_structures)
+ 	else
+-		set v struct_ids_expand(proc,id,#action_structures_init)
++		set v struct_ids_expand(proc,id,#globalt.actionpool_filter_structures_init)
+ 	end
+ 	return v
+ endfunction
+@@ -675,7 +679,7 @@ function str_escape(ss src,ss dest,sd de
+ 		#elseif src#==delim2
+ 		#    set loop 0
+ 		else
+-			char esc="\\"^
++			char esc=Backslash
+ 			while src#=esc
+ 				if escapes=0
+ 					set escapes 1
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -47,7 +47,7 @@ function is_x()
+ 	return (TRUE)
+ end
+ 
+-import "action_debug" action_debug
++^import "action_debug" action_debug 1 #full return
+ function x_pointer(sv pointer)
+ 	sd value
+ 	set value pointer#
+@@ -88,7 +88,7 @@ end
+ #	end
+ #end
+ 
+-import "action_code_values" action_code_values
++^import "action_code_values" action_code_values
+ import "action_code_get" action_code_get
+ 
+ import "verbose_get" verbose_get
+@@ -96,7 +96,7 @@ import "verbose_get" verbose_get
+ importx "fwrite" fwrite
+ importx "sprintf" sprintf
+ importx "fseek" fseek
+-importx "fread" fread
++^importx "fread" fread 4
+ importx "fclose" fclose
+ 
+ importx "printf" printf
+@@ -116,7 +116,7 @@ function x_log(sd codepointer)
+ 	end
+ end
+ 
+-import "action__code_row" action__code_row
++^import "action__code_row" action__code_row 1
+ ^import "strlen_of" strlen_of 2
+ 
+ #is not x or x?
+--- actionswf-1.orig/tests/apy
++++ actionswf-1/tests/apy
+@@ -4,7 +4,7 @@ export PYTHONPATH=../python
+ if [ -n "${arm}" ]; then
+ #using: minimal lib stdlib libffi , problems with actionswf map? going to qemu
+ #	using: zlib1g libexpat1
+-#	libactionswf.so: cannot enable executable stack as shared object requires? launchpad_prelink execstack: execstack -c ./libactionswf.so
++#	libactionswf.so: cannot enable executable stack as shared object requires? launchpad_prelink execstack: execstack -c ./libactionswf.so # or as it is now at Makefile with -z noexecstack
+ 	export LD_LIBRARY_PATH=~/x86_64_lib:~/Desktop/python3.13/usr/lib/x86_64-linux-gnu
+ 	p="qq /home/bc/Desktop/python3.13/usr/bin/python3.13 ${p} a.py"
+ else
+--- actionswf-1.orig/tests/as3/a.oac
++++ /dev/null
+@@ -1,23 +0,0 @@
+-
+-format elfobj64
+-
+-importx "_exit" exit
+-
+-override include_sec 1
+-einclude "../../../dev/import.oh"
+-
+-entry main()
+-
+-call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
+-
+-sd presprite;set presprite swf_sprite_new()
+-char buf#3000
+-call actionf_sprite(presprite,#buf,"|||src/MyClip/clip.as|||",2)
+-sd sprite;set sprite swf_sprite_done(presprite)
+-call swf_exports_add(sprite,"MyClip")
+-
+-call action("|||src/Main/root.as|||")
+-
+-call swf_done()
+-
+-call exit(0)
+--- /dev/null
++++ actionswf-1/tests/as3/a.oc.oac
+@@ -0,0 +1,23 @@
++
++format elfobj64
++
++importx "_exit" exit
++
++override include_sec 1
++einclude "../../../dev/import.oh"
++
++entry main()
++
++call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
++
++sd presprite;set presprite swf_sprite_new()
++char buf#3000
++call actionf_sprite(presprite,#buf,"|||src/MyClip/clip.as|||",2)
++sd sprite;set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"MyClip")
++
++call action("|||src/Main/root.as|||")
++
++call swf_done()
++
++call exit(0)
+--- actionswf-1.orig/tests/as3/b
++++ actionswf-1/tests/as3/b
+@@ -2,4 +2,4 @@
+ if [ -z $p ]; then
+ 	p=python3
+ fi
+-header=550:400:12:ffFFff $p ../../oaas3 dest a.swf
++LD_LIBRARY_PATH=../../oaas header=550:400:12:ffFFff $p ../../oaas3 dest a.swf
+--- /dev/null
++++ actionswf-1/tests/as3/brd
+@@ -0,0 +1 @@
++break=x ./br
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/as3/d
+@@ -0,0 +1,3 @@
++
++pid=`ps -C python3 -o pid,cmd | grep oaas3 | tr -s ' ' | cut -d' ' -f2`
++sudo gdb -p ${pid}
+--- actionswf-1.orig/tests/as3/osrc/a
++++ actionswf-1/tests/as3/osrc/a
+@@ -1,2 +1,2 @@
+ #!/bin/sh
+-inter=../../ interext=.oac ${RUN__SHELL} ../../a${s}
+\ No newline at end of file
++inter=../../ ${RUN__SHELL} ../../a${s} # interext=.oac
+\ No newline at end of file
+--- actionswf-1.orig/tests/as3/osrc/a.oac.oc
++++ /dev/null
+@@ -1,145 +0,0 @@
+-
+-format elfobj64
+-
+-importx "_exit" exit
+-
+-override include_sec 1
+-einclude "../../../dev/import.oh"
+-
+-entry main()
+-
+-call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
+-
+-sd presprite;set presprite swf_sprite_new()
+-char buf#3000
+-call actionf_sprite(presprite,#buf,"
+-/*3 import flash.display.MovieClip;
+-import flash.display.Shape;
+-import flash.events.Event;
+-import flash.text.TextField;
+-import flash.text.TextFormat;
+-import flash.text.TextFormatAlign;
+-import flash.events.MouseEvent;
+-
+-class MyClip extends MovieClip {*/
+-	function on_Enter_Frame(){//3 function on_Enter_Frame(e){
+-		if(a){
+-			_x-=c;//3 x-=c;
+-			if(b){
+-				_y-=c;//3 y-=c;
+-				if(_y<=0){//3 if(y<=0){
+-					b=false;
+-				}
+-			}else{
+-				_y+=c;//3 y+=c;
+-				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
+-					b=true;
+-				}
+-			}
+-			if(_x<=0){//3 if(x<=0){
+-				a=false;
+-			}
+-		}else{
+-			_x+=c;//3 x+=c;
+-			if(b){
+-				_y-=c;//3 y-=c;
+-				if(_y<=0){//3 if(y<=0){
+-					b=false;
+-				}
+-			}else{
+-				_y+=c;//3 y+=c;
+-				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
+-					b=true;
+-				}
+-			}
+-			if(_x+_width>=Stage.width){//3 if(x+width>=stage.stageWidth){
+-				a=true;
+-			}
+-		}
+-	}
+-	// Handlers
+-	function onClick(){//3 function onClick(e){
+-		trace('Button clicked!');
+-	}
+-	function onOver(){//3 function onOver(e){
+-		_alpha = 80;//3 alpha = 0.8;
+-	}
+-	function onOut(){//3 function onOut(e){
+-		_alpha = 100;//3 alpha = 1;
+-	}
+-/*3
+-	public function new() {
+-		super();
+-*/
+-		// Simple visual so you can see it
+-		//3 var shape = new Shape();
+-		beginFill(0x3399FF);//3 shape.graphics.beginFill(0x3399FF);
+-		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 shape.graphics.drawRect(0, 0, 120, 80);
+-		endFill();//3 shape.graphics.endFill();
+-		//3 addChild(shape);
+-
+-		// a 1/5 margin
+-		createTextField('label', 1, 0, 16, 120, 48);//3 var label = new TextField();
+-		/*3
+-		label.y = 16;
+-		label.width = 120;
+-		label.height = 48;
+-		*/
+-		label.text = 'Click';
+-		label.selectable = false;
+-
+-		// a 2/3 size format
+-		var tf = new TextFormat();
+-		tf.size = 32;
+-		tf.align = 'center';//3 tf.align = TextFormatAlign.CENTER;
+-		tf.color = 0xff9933;
+-		label.setTextFormat(tf);
+-
+-		// Interactivity
+-		useHandCursor = true;//3 buttonMode = true;mouseChildren = false;
+-		onRollOver = onOver;//3 addEventListener(MouseEvent.MOUSE_OVER, onOver);
+-		onRollOut = onOut;//3 addEventListener(MouseEvent.MOUSE_OUT, onOut);
+-		onPress = onClick;//3 addEventListener(MouseEvent.CLICK, onClick);
+-
+-		//3 addChild(label);
+-
+-		onEnterFrame=on_Enter_Frame; //3 addEventListener(Event.ENTER_FRAME, on_Enter_Frame);
+-/*3	}
+-	static
+-*/
+-	var c=%u;
+-	var a=false;var b=false;
+-//3 }
+-",2)
+-sd sprite;set sprite swf_sprite_done(presprite)
+-call swf_exports_add(sprite,"MyClip")
+-
+-call action("
+-//3 import flash.Lib;
+-
+-/*3 class Main {
+-	static
+-	function main() {
+-		var stage = Lib.current.stage;
+-*/
+-		attachMovie('MyClip','shape',getNextHighestDepth());//3 var shape = new MyClip();
+-		shape._x = (Stage.width - 100) / 2;//3 shape.x = (stage.stageWidth - 100) / 2;
+-		shape._y = (Stage.height - 100) / 2;//3 shape.y = (stage.stageHeight - 100) / 2;
+-/*3
+-		stage.addChild(shape);
+-
+-//		var img = new Bitmap( new MyBitmapData(0, 0) );
+-//		Lib.current.addChild(img);
+-	}
+-}
+-
+-//import flash.display.BitmapData;
+-//import flash.display.Bitmap;
+-//@:bitmap('relative/path/to/myfile.png')
+-//class MyBitmapData extends BitmapData { }//*
+-*/
+-")
+-
+-call swf_done()
+-
+-call exit(0)
+--- /dev/null
++++ actionswf-1/tests/as3/osrc/a.oc
+@@ -0,0 +1,145 @@
++
++format elfobj64
++
++importx "_exit" exit
++
++override include_sec 1
++einclude "../../../dev/import.oh"
++
++entry main()
++
++call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
++
++sd presprite;set presprite swf_sprite_new()
++char buf#3000
++call actionf_sprite(presprite,#buf,"
++/*3 import flash.display.MovieClip;
++import flash.display.Shape;
++import flash.events.Event;
++import flash.text.TextField;
++import flash.text.TextFormat;
++import flash.text.TextFormatAlign;
++import flash.events.MouseEvent;
++
++class MyClip extends MovieClip {*/
++	function on_Enter_Frame(){//3 function on_Enter_Frame(e){
++		if(a){
++			_x-=c;//3 x-=c;
++			if(b){
++				_y-=c;//3 y-=c;
++				if(_y<=0){//3 if(y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;//3 y+=c;
++				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(_x<=0){//3 if(x<=0){
++				a=false;
++			}
++		}else{
++			_x+=c;//3 x+=c;
++			if(b){
++				_y-=c;//3 y-=c;
++				if(_y<=0){//3 if(y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;//3 y+=c;
++				if(_y+_height>=Stage.height){//3 if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(_x+_width>=Stage.width){//3 if(x+width>=stage.stageWidth){
++				a=true;
++			}
++		}
++	}
++	// Handlers
++	function onClick(){//3 function onClick(e){
++		trace('Button clicked!');
++	}
++	function onOver(){//3 function onOver(e){
++		_alpha = 80;//3 alpha = 0.8;
++	}
++	function onOut(){//3 function onOut(e){
++		_alpha = 100;//3 alpha = 1;
++	}
++/*3
++	public function new() {
++		super();
++*/
++		// Simple visual so you can see it
++		//3 var shape = new Shape();
++		beginFill(0x3399FF);//3 shape.graphics.beginFill(0x3399FF);
++		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 shape.graphics.drawRect(0, 0, 120, 80);
++		endFill();//3 shape.graphics.endFill();
++		//3 addChild(shape);
++
++		// a 1/5 margin
++		createTextField('label', 1, 0, 16, 120, 48);//3 var label = new TextField();
++		/*3
++		label.y = 16;
++		label.width = 120;
++		label.height = 48;
++		*/
++		label.text = 'Click';
++		label.selectable = false;
++
++		// a 2/3 size format
++		var tf = new TextFormat();
++		tf.size = 32;
++		tf.align = 'center';//3 tf.align = TextFormatAlign.CENTER;
++		tf.color = 0xff9933;
++		label.setTextFormat(tf);
++
++		// Interactivity
++		useHandCursor = true;//3 buttonMode = true;mouseChildren = false;
++		onRollOver = onOver;//3 addEventListener(MouseEvent.MOUSE_OVER, onOver);
++		onRollOut = onOut;//3 addEventListener(MouseEvent.MOUSE_OUT, onOut);
++		onPress = onClick;//3 addEventListener(MouseEvent.CLICK, onClick);
++
++		//3 addChild(label);
++
++		onEnterFrame=on_Enter_Frame; //3 addEventListener(Event.ENTER_FRAME, on_Enter_Frame);
++/*3	}
++	static
++*/
++	var c=%u;
++	var a=false;var b=false;
++//3 }
++",2)
++sd sprite;set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"MyClip")
++
++call action("
++//3 import flash.Lib;
++
++/*3 class Main {
++	static
++	function main() {
++		var stage = Lib.current.stage;
++*/
++		attachMovie('MyClip','shape',getNextHighestDepth());//3 var shape = new MyClip();
++		shape._x = (Stage.width - 100) / 2;//3 shape.x = (stage.stageWidth - 100) / 2;
++		shape._y = (Stage.height - 100) / 2;//3 shape.y = (stage.stageHeight - 100) / 2;
++/*3
++		stage.addChild(shape);
++
++//		var img = new Bitmap( new MyBitmapData(0, 0) );
++//		Lib.current.addChild(img);
++	}
++}
++
++//import flash.display.BitmapData;
++//import flash.display.Bitmap;
++//@:bitmap('relative/path/to/myfile.png')
++//class MyBitmapData extends BitmapData { }//*
++*/
++")
++
++call swf_done()
++
++call exit(0)
+--- actionswf-1.orig/tests/as3/osrc/c
++++ actionswf-1/tests/as3/osrc/c
+@@ -1,2 +1,2 @@
+ #!/bin/sh
+-rm -f a.oac.o a.out a.swf a.swf.format
++rm -f a.o a.out a.swf a.swf.format #.oac
+--- actionswf-1.orig/tests/ffdec/as
++++ actionswf-1/tests/ffdec/as
+@@ -2,7 +2,8 @@
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../../src; fi
+ is_debug=x _L=../ ${RUN__SHELL} ../asv && \
+ extra=x is_debug=x _L=../ ${RUN__SHELL} ../asv && \
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} expect_obfuscation=./q deobfuscator_launcher=python3 ${RUN__SHELL} ../../oaalternative.sh a.swf "./a.out x x" && cat a.swf.log
++#expect_obfuscation=./q   this is solved since ffdec_24.1.1_nightly3382
++LD_LIBRARY_PATH=${LD_LIBRARY_PATH} deobfuscator_launcher=python3 ${RUN__SHELL} ../../oaalternative.sh a.swf "./a.out x x" && cat a.swf.log
+ 
+ # ffdec=/home/bc/a/ffdec/bin/ffdec ./as
+ # ffdec=/home/bc/a/ffdec/j12/usr/bin/ffdec FFDEC_JARFILENAME=../../../../ffdec/j12/usr/share/java/ffdec/ffdec.jar ./as
