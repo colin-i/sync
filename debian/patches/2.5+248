@@ -1,0 +1,769 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: apr, 17 2026 07:15:14 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+247
++2-5+248
+--- ocompiler-2.orig/o.html
++++ ocompiler-2/o.html
+@@ -984,7 +984,7 @@ format elfobj64<br>
+ Xfile_yesignore at compiler is '!' sign before the command and at otoc will ignore the command.
+ Xfile_variadic at ocompiler is '%' sign at start, followed by '&lt;argument' for va_start at otoc, '|variable' for va_arg, '&gt;' for va_end.
+ </p>
+-<p>Another option specific to otoc is Xfile_declvolatile_yes, to use stack variables at o for recursion but not pointers at c (example: sdu ?attr).</p>
++<p>Another option specific to otoc is Xfile_c_volatile, to use stack variables at o for recursion but not pointers at c (example: sdu ?attr). And Xfile_c_variadic to work with va_list arguments.</p>
+ <table id="selection_table">
+ 	<tr><td>Xfile_proto</td><td>Xfile_function_t_*</td><td class="red">name</td><td class="blue">nr_of_args</td><td class="green">{DA}</td><td>Xfile_proto_*</td></tr>
+ </table>
+@@ -1105,7 +1105,7 @@ Xfile_variadic at ocompiler is '%' sign
+ </table>
+ <br>Table DA:
+ <table id="selection_table">
+-	<tr><td colspan=2>Xfile_declfield_stack</td>                     <td rowspan=2>Xfile_declext_*</td><td rowspan=2>Xfile_decltype_*</td><td rowspan=2>Xfile_declvolatile_*</td></tr>
++	<tr><td colspan=2>Xfile_declfield_stack</td>                     <td rowspan=2>Xfile_declext_*</td><td rowspan=2>Xfile_decltype_*</td><td rowspan=2>Xfile_c_*</td></tr>
+ 	<tr><td>Xfile_declfield_data</td> <td>Xfile_declfield_data_*</td></tr>
+ 	<tr><td colspan=5>Xfile_declfield_varargs</td></tr>
+ </table>
+--- ocompiler-2.orig/otoc/decl.oc
++++ ocompiler-2/otoc/decl.oc
+@@ -1,4 +1,6 @@
+ 
++const Xfile_declfield_data_na=0xff
++
+ #aftercalli
+ 
+ function functiondef_varargs(sd outfile,sd args,sd vargs)
+@@ -74,34 +76,45 @@ function functiondef_entry(sv pbuffer,sd
+ 	set loop.has_entry (TRUE)
+ end
+ 
+-#DA structure(with field from argument)
+-function decl_runtime_core(sv pbuffer,sd outfile,sd field,ss ptype)
++function decl_runtime_core_internal(sv pbuffer,sd outfile,ss ptype,ss ?data)
+ 	charx sign#1;charx type#1;charx volatile#1
+-	if field=(Xfile_declfield_data)
+-		charx data#1;call get_char(pbuffer,#data)
+-		call get_char(pbuffer,#sign)
+-		if ptype=(NULL);call get_char(pbuffer,#type);else;call get_char(pbuffer,ptype);set type ptype#;end
++	call get_char(pbuffer,#sign)
++	if ptype=(NULL);call get_char(pbuffer,#type);else;call get_char(pbuffer,ptype);set type ptype#;end
++	call get_char(pbuffer,#volatile)
++	if volatile!=(Xfile_c_variadic)
+ 		call unsigned_type(outfile,type,sign)
+-
+-		call get_char(pbuffer,#volatile)
+-		#special hack for a pointless long (value), needed to inc/dec
+-		if type=(Xfile_decltype_long)
+-			if data=(Xfile_declfield_data_concrete)
+-				callg write_long(outfile)
+-				ret
++		if data!=(Xfile_declfield_data_na)
++			#special hack for a pointless long (value), needed to inc/dec
++			if type=(Xfile_decltype_long)
++				if data=(Xfile_declfield_data_concrete)
++					callg write_long(outfile)
++					ret
++				end
+ 			end
+ 		end
+ 		callg decl_type(outfile,type,volatile)
+-	elseif field=(Xfile_declfield_stack)
+-		call get_char(pbuffer,#sign)
+-		if ptype=(NULL);call get_char(pbuffer,#type);else;call get_char(pbuffer,ptype);set type ptype#;end
+-		call unsigned_type(outfile,type,sign)
+-
+-		call get_char(pbuffer,#volatile)
+-		callg decl_type(outfile,type,volatile)
+-	else #Xfile_declfield_varargs
+-		callg varargs(outfile)
++		ret
++	end
++	if loop.has_proto_valist=(FALSE) #proto tags are at start, no ignored/allowwrite/directwrite dependent
++		char s="  "^
++		call rewind(outfile)
++		call fwrite(#s,\.s,1,outfile)
++		call fseek(outfile,0,(SEEK_END))
++	end
++	char a="va_list"^
++	callg write(outfile,#a,\.a)
++end
++#DA structure(with field from argument)
++function decl_runtime_core(sv pbuffer,sd outfile,sd field,ss ptype)
++	if field=(Xfile_declfield_data)
++		charx data#1;call get_char(pbuffer,#data)
++		callret decl_runtime_core_internal(pbuffer,outfile,ptype,data)
++	end
++	if field=(Xfile_declfield_stack)
++		callret decl_runtime_core_internal(pbuffer,outfile,ptype,(Xfile_declfield_data_na))
+ 	end
++	#Xfile_declfield_varargs
++	callg varargs(outfile)
+ end
+ function decl_runtime(sv pbuffer,sd outfile,sd field,ss ptype)
+ 	call decl_runtime_core(pbuffer,outfile,field,ptype)
+@@ -164,14 +177,14 @@ function longByte(sd outfile)
+ 	callg write(outfile,#byte.a,\byte.a)
+ end
+ function longByte_ex(sd outfile,sd volatile)
+-	if volatile=(Xfile_declvolatile_no)
++	if volatile=(Xfile_c_normal)
+ 		callg longByte(outfile)
+ 	else
+ 		callg byte(outfile)
+ 	end
+ end
+ function longLong(sd outfile,sd volatile)
+-	if volatile=(Xfile_declvolatile_no)
++	if volatile=(Xfile_c_normal)
+ 		callg write_long_point(outfile)
+ 	else
+ 		callg write_long(outfile)
+@@ -181,7 +194,7 @@ function longWord(sd outfile)
+ 	callg write(outfile,#word.a,\word.a)
+ end
+ function longWord_ex(sd outfile,sd volatile)
+-	if volatile=(Xfile_declvolatile_no)
++	if volatile=(Xfile_c_normal)
+ 		callg longWord(outfile)
+ 	else
+ 		callg word(outfile)
+@@ -191,7 +204,7 @@ function longInt(sd outfile)
+ 	callg write(outfile,#int.a,\int.a)
+ end
+ function longInt_ex(sd outfile,sd volatile)
+-	if volatile=(Xfile_declvolatile_no)
++	if volatile=(Xfile_c_normal)
+ 		callg longInt(outfile)
+ 	else
+ 		callg int(outfile)
+--- ocompiler-2.orig/otoc/loop.oc
++++ ocompiler-2/otoc/loop.oc
+@@ -58,8 +58,8 @@ function loop(sd pointer,sd delim,sd out
+ 	set szfunctiondef 0
+ 	datax icount#1  #dependent on includesReg
+ 	set icount 0
+-
+-	sd nextisignored=ignored_depending_on_tags
++	charx has_proto_valist#1
++	set has_proto_valist (FALSE)
+ 
+ 	#if delim>^(long32)
+ 	vdatax entrystart#1
+@@ -72,6 +72,13 @@ function loop(sd pointer,sd delim,sd out
+ 	add pointer (long32)
+ 	sub delim (long32)
+ 	add delim pointer
++
++	datax ignored#1
++	set ignored (ignored_no)
++	char s="//#include \"stdarg.h\""^ #in case of a proto va_list
++	call writen(output,#s,\.s)
++
++	sd nextisignored=ignored_depending_on_tags
+ 	while pointer!=delim
+ 		charx command#1;call get_char(#pointer,#command)
+ 		if command=(Xfile_noignore)
+@@ -126,7 +133,6 @@ function loop(sd pointer,sd delim,sd out
+ 			datau mults={1,2,4,8,0x10,0x20,0x40,0x80,0x100,0x200,0x400,0x800,0x1000,0x2000,0x4000,0x8000,0x10000,0x20000,0x40000,0x80000}
+ 			datau     *={0x100000,0x200000,0x400000,0x800000,0x1000000,0x2000000,0x4000000,0x8000000,0x10000000,0x20000000,0x40000000,0x80000000}
+ 
+-			datax ignored#1
+ 			if nextisignored=(ignored_depending_on_tags)
+ 				sd igpow=DWORD;mult igpow command
+ 				sd x^mults;add x igpow
+@@ -160,10 +166,9 @@ function loop(sd pointer,sd delim,sd out
+ 			end
+ 		end
+ 	end
+-	if main.result=(EXIT_SUCCESS)
+-		if has_entry=(TRUE)
+-			callg writecrtn(output)
+-		end
++	#if main.result=(EXIT_SUCCESS) leave is from this function
++	if has_entry=(TRUE)
++		callg writecrtn(output)
+ 	end
+ end
+ 
+--- ocompiler-2.orig/otoc/number.oc
++++ ocompiler-2/otoc/number.oc
+@@ -73,7 +73,9 @@ function number_text_pref(sd *outfile,sv
+ 	callg unimplemented("preference number")
+ end
+ function number_text_const(sd outfile,sv pbuffer)
+-	callg number_text_dec(outfile,pbuffer)
++	call writel(outfile) #same thing as consts in code, here are precalculated, at c are expanded
++	call number_text_dec(outfile,pbuffer)
++	callg writer(outfile)
+ end
+ function number_func_size(sd outfile,sv pbuffer)
+ 	callg number_func_sizex(outfile,pbuffer)
+--- ocompiler-2.orig/otoc/var.oc
++++ ocompiler-2/otoc/var.oc
+@@ -5,7 +5,9 @@
+ function arg(sv pbuffer,sd outfile)
+ 	charx a#1;call get_char(pbuffer,#a)
+ 	if a=(Xfile_arg_number)
++		call writel(outfile) #to be consistent, example sub nr (A-10) will be same at o/c with these
+ 		call number(pbuffer,outfile)
++		call writer(outfile)
+ 	elseif a=(Xfile_arg_varfn)
+ 		call varfunc(pbuffer,outfile)
+ 	elseif a=(Xfile_arg_string)
+@@ -183,7 +185,7 @@ function write_string(sd outfile,sd is_m
+ 				sd c;set c pointer;sub c start
+ 				call write(outfile,start,c)
+ 			end
+-			char bs=asciibs;char b#1;char *#2
++			char bs=asciibs;char b#1;char *#2;char *#1 #last char is from sprintf that is null terminating
+ 			set b map#
+ 			if b=(zr)
+ 				call sprintf(#b,"%03o",pointer#)
+--- ocompiler-2.orig/readme.md
++++ ocompiler-2/readme.md
+@@ -18,7 +18,7 @@ On Arch Linux(x86_64), <i>.zst</i> file
+ yay -Sy ocompiler
+ ```
+ \
+-On Fedora 42/43(x86_64):
++On Fedora 42/43/44(x86_64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install ocompiler
+--- ocompiler-2.orig/src/files/actions/main/index/import.oc
++++ ocompiler-2/src/files/actions/main/index/import.oc
+@@ -80,8 +80,8 @@ If errormsg=noerr
+ 										if subtype=(cIMPORTX)
+ 											or import_ref_mask (x86_64bit)
+ 										endif
+-										if g_e_b_p#=(global_err_notset)
+-											or import_ref_mask (aftercallthrowlessbit)
++										if g_e_b_p#!=(global_err_notset)
++											or import_ref_mask (aftercallthrowbit)
+ 										endif
+ 
+ 										Data functionsnr=functionsnumber
+--- ocompiler-2.orig/src/files/functions/actions/dataparse.oc
++++ ocompiler-2/src/files/functions/actions/dataparse.oc
+@@ -159,7 +159,17 @@ function addvarreferenceorunref(sv ptrco
+ 		else
+ 			return "Unexpected pointing sign ('?') at constant declaration."
+ 		endelse
+-	endif
++	elseif firstchar=(Xfile_variadic_sign)
++		If typenumber!=(constantsnumber)
++			dec valsize
++			If valsize=zero
++				Return vars_log_prepare.varname
++			endif
++			call stepcursors(ptrcontent,ptrsize)
++		else
++			return "Unexpected variadic sign ('%') at constant declaration."
++		endelse
++	endelseif
+ 
+ 	If firstchar!=(unrefsign)
+ 		if firstchar=(throwlesssign)   #throwless if on a throwing area
+@@ -170,14 +180,19 @@ function addvarreferenceorunref(sv ptrco
+ 			If valsize=zero
+ 				Return vars_log_prepare.varname
+ 			endif
+-			or mask (aftercallthrowlessbit)
++			#or mask (aftercallthrowlessbit)
+ 			call stepcursors(ptrcontent,ptrsize)
+-		elseIf typenumber!=(constantsnumber)
+-			sd global_err_pB;setcall global_err_pB global_err_pBool()
+-			if global_err_pB#=(global_err_notset)
+-				or mask (aftercallthrowlessbit)
+-			endif
+-		endelseif
++		else
++			#if firstchar=(Xfile_variadic_sign)
++			#else
++			If typenumber!=(constantsnumber)
++				sd global_err_pB;setcall global_err_pB global_err_pBool()
++				if global_err_pB#!=(global_err_notset)
++					or mask (aftercallthrowbit)
++				endif
++			#else
++			endIf
++		endelse
+ 		callret addvarreference(ptrcontent,ptrsize,valsize,typenumber,mask,stackoffset,is_expand)
+ 	EndIf
+ 	If typenumber=(constantsnumber)
+--- ocompiler-2.orig/src/files/functions/actions/fn.oc
++++ ocompiler-2/src/files/functions/actions/fn.oc
+@@ -109,8 +109,8 @@ Function parsefunction(data ptrcontent,d
+ 				or mask (x86_64bit)
+ 			endif
+ 			sd err_pb;setcall err_pb global_err_pBool()
+-			if err_pb#=(global_err_notset)
+-				or mask (aftercallthrowlessbit)
++			if err_pb#!=(global_err_notset)
++				or mask (aftercallthrowbit)
+ 			endif
+ 
+ 			SetCall err addaref(value,ptrcontent,ptrsize,sz,fnnr,mask)
+@@ -486,9 +486,9 @@ function write_function_call(sd ptrdata,
+ 	EndElse
+ 	If err=(noerror)
+ 		#afterbit throwless is at fns imps if before aftercall; at values is throwless after aftercall if sign set
+-		sd tless=aftercallthrowlessbit
++		sd tless=aftercallthrowbit
+ 		and tless mask
+-		if tless=0
++		if tless!=0
+ 			if is_valuedata_call=(FALSE)
+ 				sd global_err_pB;setcall global_err_pB global_err_pBool()
+ 				if global_err_pB#=(FALSE)
+--- ocompiler-2.orig/src/files/functions/xfile_details.oc
++++ ocompiler-2/src/files/functions/xfile_details.oc
+@@ -31,22 +31,32 @@ function xfile_add_declare_base(sd declt
+ 		if err=(noerror)
+ 			setcall err xfile_add_char(decltype)
+ 			if err=(noerror)
+-				ss content;set content pcontent#
+-				if content#!=(pointingsign)  #examples:in ..) or in ..= or one of the assign..expected
+-					callret xfile_add_char((Xfile_declvolatile_no))
+-				endif
+-				if psize!=(NULL)
+-					call stepcursors(pcontent,psize)
+-					if psize#=0 #this is the very rare case when the rare case at vars_log_prepare is not: x_file,not object,end of file,do not compare unallocated space
+-						return vars_log_prepare.varname
+-					endif
+-				endif
+-				callret xfile_add_char((Xfile_declvolatile_yes))
++				callret xfile_c_sign(pcontent,psize)
+ 			endif
+ 		endif
+ 	endif
+ 	return err
+ endfunction
++#err
++function xfile_c_sign(sv pcontent,sd psize)
++	ss content;set content pcontent#
++	ss ?sign;set sign content#
++	if sign!=(pointingsign)  #examples:in ..) or in ..= or one of the assign..expected
++		if sign!=(Xfile_variadic_sign)
++			callret xfile_add_char((Xfile_c_normal))
++		endif
++	endif
++	if psize!=(NULL)
++		call stepcursors(pcontent,psize)
++		if psize#=0 #this is the very rare case when the rare case at vars_log_prepare is not: x_file,not object,end of file,do not compare unallocated space
++			return vars_log_prepare.varname
++		endif
++	endif
++	if sign=(pointingsign)
++		callret xfile_add_char((Xfile_c_volatile))
++	endif
++	callret xfile_add_char((Xfile_c_variadic))
++endfunction
+ 
+ #err
+ function xfile_add_declare_fndec_if(sd decltype,sd is_stack,sd is_expand,sd is_signed,ss content,sd size)
+@@ -200,7 +210,7 @@ function xfile_structdef(sd b)
+ 	call lseek(main.xfile,b,(SEEK_SET))
+ 	char a=Xfile_function_t_struct
+ 	call write(main.xfile,#a,(bsz))
+-end
++endfunction
+ function xfile_fndef_structend_if(sd el_or_e)
+ 	if main.xstruct!=(unierror)
+ 		datax reg#1
+--- ocompiler-2.orig/src/files/headers/header.oh
++++ ocompiler-2/src/files/headers/header.oh
+@@ -19,8 +19,8 @@ Const datapointbit=0x08
+ #bit offset 4: 1 means is nobits
+ const expandbit=0x10
+ 
+-#bit offset 5: 1 means ignore aftercall
+-const aftercallthrowlessbit=0x20
++#bit offset 5: 1 means apply aftercall
++const aftercallthrowbit=0x20
+ 
+ #bit offset 6: is functionX/importX
+ const x86_64bit=0x40
+--- ocompiler-2.orig/src/files/headers/xfile.oh
++++ ocompiler-2/src/files/headers/xfile.oh
+@@ -31,6 +31,7 @@ const Xfile_declfield_const_cond=1
+ 
+ const Xfile_declfield_data_concrete=0
+ const Xfile_declfield_data_expand=1
++#const Xfile_declfield_data_na=0xff at otoc decl_runtime_core_internal
+ 
+ const Xfile_decltype_byte=0
+ const Xfile_decltype_intByte=1
+@@ -44,8 +45,9 @@ const Xfile_decltype_long=7
+ #const Xfile_decltype_varargs=Xfile_decltype_const+1  #is used only Xfile_declfield_varargs
+ #const Xfile_decltype_done=0xff
+ 
+-const Xfile_declvolatile_no=0
+-const Xfile_declvolatile_yes=1
++const Xfile_c_normal=0
++const Xfile_c_volatile=1
++const Xfile_c_variadic=2
+ 
+ const Xfile_declfeature_normal=0
+ const Xfile_declfeature_unref=1
+--- ocompiler-2.orig/tests/.expected/a.out.c
++++ ocompiler-2/tests/.expected/a.out.c
+@@ -1,4 +1,5 @@
+-long*intern(int,int*,long*,unsigned long*);
++  #include "stdarg.h"
++long*intern(int,int*,long*,unsigned long*,va_list);
+ void f(int*,...);
+ long*printf(long,long);
+ long*sprintf(long,long,...);
+@@ -7,7 +8,6 @@ long*main(int*,...);
+ multi
+ line
+ */
+-#include "stdarg.h"
+ #include "stddef.h"
+ #include "the_setjmp.h"
+ static unsigned char c1=1;
+@@ -24,7 +24,7 @@ static unsigned char cc[]={97,122};
+ #endif//ok
+ static unsigned char a[3];static long b=a;
+ static unsigned char no_hotgroup=1;static long no_hotgroup_test=&no_hotgroup;
+-long*     intern(int a,int* b,long* c,unsigned long* d){//commenting
++long*     intern(int a,int* b,long* c,unsigned long* d,va_list the_va_list){//commenting
+ 	int recursion;
+ 	unsigned long* pointing=intern;
+ 	a++;
+@@ -48,6 +48,7 @@ void      f(int* dummy,...){//void f(...
+ 	va_list the_va_list;va_start(the_va_list,dummy);
+ 	long* a;
+ 	long b=sizeof(c2);
++	intern((1),"0\n1\r2\t3\0004\\5\"6x3g07",a,a,the_va_list);
+ 	a=va_arg(the_va_list,long);
+ 	a=(long)&b;
+ 	va_end(the_va_list);
+@@ -59,51 +60,50 @@ void      f(int* dummy,...){//void f(...
+ 	int c;
+ 	long d=&c;
+ 	a=(long)((struct st*)d)->a;
+-	if(2==2){
++	if((2)==(2)){
+ 		return;
+ 	};
+ };
+ long*     main(int* argc,...){
+-	signed char* sigextstr=-1;sigextstr=(long)-2;
++	signed char* sigextstr=-1;sigextstr=(long)(-2);
+ 	b=(long)b;
+-	b=(long)b+(long)sizeof(struct st);
+-	b=(long)b-(long)sizeof(struct st);
+-	b=(long)b*(long)sizeof(((struct st*)0)->a);
+-	b=(long)b*(long)sizeof(((struct st*)0)->a);
+-	c1=(long)c1/(long)offsetof(struct st,a);
+-	c1=(unsigned long)c1/(long)sizeof(struct st);
+-	c1=(long)c1%(long)1;
+-	c1=(unsigned long)c1%(long)1;
+-	c1=(long)c1&(long)1;
+-	c1=(long)c1|(long)1;
+-	b=(long)b^(long)1;
+-	intern(1,"0\n1\r2\t3\0004\\5\"6x3g07",a,a);
++	b=(long)b+(long)(sizeof(struct st));
++	b=(long)b-(long)(sizeof(struct st));
++	b=(long)b*(long)(sizeof(((struct st*)0)->a));
++	b=(long)b*(long)(sizeof(((struct st*)0)->a));
++	c1=(long)c1/(long)(offsetof(struct st,a));
++	c1=(unsigned long)c1/(long)(sizeof(struct st));
++	c1=(long)c1%(long)(1);
++	c1=(unsigned long)c1%(long)(1);
++	c1=(long)c1&(long)(1);
++	c1=(long)c1|(long)(1);
++	b=(long)b^(long)(1);
+ 	b=(long)printf(b,b);
+-	if(1==1){
++	if((1)==(1)){
+ 		//elseif 1!!1
+ 		//elseif 1!1
+ 	};
+-	if(1!=1){
+-	}else if(1<1){
++	if((1)!=(1)){
++	}else if((1)<(1)){
+ 	}else{};
+-	if(1>1){};
+-	if(1<=1){};
+-	if(1>=1){};
+-	if((unsigned long)1<(unsigned long)1){};
+-	if((unsigned long)1>(unsigned long)1){};
+-	if((unsigned long)1<=(unsigned long)1){};
+-	if((unsigned long)1>=(unsigned long)1){};
+-	while(1==2){
++	if((1)>(1)){};
++	if((1)<=(1)){};
++	if((1)>=(1)){};
++	if((unsigned long)(1)<(unsigned long)(1)){};
++	if((unsigned long)(1)>(unsigned long)(1)){};
++	if((unsigned long)(1)<=(unsigned long)(1)){};
++	if((unsigned long)(1)>=(unsigned long)(1)){};
++	while((1)==(2)){
+ 		continue;
+ 	};
+ 	while(1){
+ 		break;
+ 	};
+ 	unsigned char z=0xff+077+12-3+(4*3/2/1&1|1^1%5%5<<3>>3>>3==2!=2<3>3<=4>=4&&7||7<6>6<=6>=6);//char er=3!!2 char er=3!2 char er=3$2
+-	unsigned char z2=a1;unsigned char z3=-a1;unsigned char z4=~a1;unsigned char z5=~-a1;
++	unsigned char z2=(a1);unsigned char z3=-(a1);unsigned char z4=~(a1);unsigned char z5=~-(a1);
+ 	unsigned char q1=sizeof(long);unsigned char q2=sizeof(struct st);unsigned char q3=offsetof(struct st,a);unsigned char q4=sizeof(((struct st*)0)->a);
+ 	__builtin_trap();
+-	return 2;
++	return (2);
+ 	if(setjmp(the_jmp_buf))return -1;
+-	return main(0);
++	return main((0));
+ };
+--- ocompiler-2.orig/tests/.expected/a.out.oc.log
++++ ocompiler-2/tests/.expected/a.out.oc.log
+@@ -4,7 +4,5 @@ ninclude.oh
+ q
+ ninclude.oh
+ q
+-ninclude.oh
+-q
+ q
+ x00000069
+--- ocompiler-2.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-2/tests/.expected/a.out.oc.x.txt
+@@ -1,56 +1,57 @@
+-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
++AAACAAACAAAAYzkCAgAAAAAAAB0IAgABBAAAAgAAAGNhAgAAAwEAAAAxHx0IAgABBgAAAgAAAGNi
++AgAAAwEAAAAxHwgCAAAAAAACAAAAY2MCAgACAAAAYXoBAgsAAABjb25zdHUgYTE9MQgAAAIAAABh
++MQIAAAMBAAAAMR8IAAECAAAAYTECAAADAQAAADIfBAIAAABvawgCAAAAAAABAAAAYQEAAwEAAAAz
++Hx0IAgABBwAAAQAAAGIAAAEAAABhCAIAAAAAAAsAAABub19ob3Rncm91cAIAAAMBAAAAMR8dCAIA
++AQcAABAAAABub19ob3Rncm91cF90ZXN0AAALAAAAbm9faG90Z3JvdXAHAAAGAAAAaW50ZXJuAAUA
++AAACAAEFAAABAAAAYQEBBgAAAQAAAGIBAQcAAAEAAABjAQAHAAABAAAAZAEBBwIACwAAAHRoZV92
++YV9saXN0BAoAAABjb21tZW50aW5nCAEBBgEACQAAAHJlY3Vyc2lvbgEAAwEAAAAxHwgBAAcAAAgA
++AABwb2ludGluZwABBgAAAGludGVybiEKAAAACAAAAHBvaW50aW5nAQBFAgAAAAgAAABwb2ludGlu
++ZwAJAgAAAAEAAABhAAkEAAAAAQAAAGEACQMAAAABAAAAYwAJBQAAAAEAAABjAAkGAAAAAQAAAGMA
++CQcAAAAJAAAAcmVjdXJzaW9uACEIAgABBwAACwAAAHRoZV9qbXBfYnVmAQADAQAAADEfCQgAAAAL
++AAAAdGhlX2ptcF9idWYACQkAAAALAAAAdGhlX2ptcF9idWYACQoAAAABAAAAYwAJCwAAAAEAAABj
++AAkMAAAAAQAAAGMACQACAAAAAQAAAGQAFAEHAAACAAAAc3QBAAAAAAgCAAEFAAABAAAAYgEAAwEA
++AAAxHwgCAQEFAAABAAAAYQEAAwEAAAAxHxQBBwABAQAAAGYAAQAAAAEBBgAABQAAAGR1bW15BGQA
++AAB2b2lkIGYoLi4uKSB3YXMgd29ya2luZyB3aXRoIGdjYzEzIGJ1dCB3aXRoIDUgc3RpbGwgaXM6
++IElTTyBDIHJlcXVpcmVzIGEgbmFtZWQgYXJndW1lbnQgYmVmb3JlICcuLi4nHzwFAAAAZHVtbXkh
++CAEBBgAACwAAAHRoZV92YV9saXN0AAAFAAAAZHVtbXkIAgEBBwAAAQAAAGEBAAMBAAAAMR8IAgAB
++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
+--- ocompiler-2.orig/tests/.expected/a.out.txt
++++ ocompiler-2/tests/.expected/a.out.txt
+@@ -1,9 +1,9 @@
+-f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAAp5UECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
+-BAAAAIQECACEBAh1AAAAdQAAAAYAAAAAEAAAAQAAAHUEAAB1lAQIdZQECHkDAAB5AwAABQAAAAAQ
+-AAADAAAA7gcAAO6XBAjulwQIEwAAABMAAAAEAAAAAQAAAAIAAAABCAAAAagECAGoBAhQAAAAUAAA
+-AAQAAAABAAAAAQAAAAEIAAABqAQIAagECOIAAADiAAAABgAAAAAQAAAIAAAAAAAAAAAAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQAAAAMAAAACAAAAmagECJkIAAAaAAAAAAAAAAAAAAAB
+-AAAAAAAAABEAAAAGAAAAAwAAAAGoBAgBCAAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
++f0VMRgEBAQAAAAAAAAAAAAIAAwABAAAA4ZUECDQAAADUAAAAAAAAADQAIAAFACgAAwABAAEAAAAA
++BAAAAIQECACEBAh1AAAAdQAAAAYAAAAAEAAAAQAAAHUEAAB1lAQIdZQECI0DAACNAwAABQAAAAAQ
++AAADAAAAAggAAAKYBAgCmAQIEwAAABMAAAAEAAAAAQAAAAIAAAAVCAAAFagECBWoBAhQAAAAUAAA
++AAQAAAABAAAAAQAAABUIAAAVqAQIFagECOIAAADiAAAABgAAAAAQAAAIAAAAAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQAAAAMAAAACAAAAragECK0IAAAaAAAAAAAAAAAAAAAB
++AAAAAAAAABEAAAAGAAAAAwAAABWoBAgVCAAAUAAAAAEAAAAAAAAAAQAAAAgAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -17,24 +17,25 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEC
+ AzAxCjIzAAEAAAABAAAAAQAAAAEAAAAdhAQIAAEAAAABAAAAYXoAAAAohAQIAS+EBAgAAAAAAAAA
+-AAAAAAACAAAAcYQECDAKMQ0yCTMANFw1IjZ4M2cwNwBHAf/+AAQEBAQAAAAAAAAAAAAAAAAAAAAA
++AAAAAAACAAAAMAoxDTIJMwA0XDUiNngzZzA3AHGEBAhHAf/+AAQEBAQAAAAAAAAAAAAAAAAAAAAA
+ AIuEJAQAAACjNIQECFNVi+yL3IHrCAAAALh1lAQIiUMEugQAAAAD04sCugQAAAAD04sSiQK6NIQE
+ CP8CujSEBAj/CroUAAAAA9WDAgS6FAAAAAPVgyoEuhQAAAAD1fcai9P3Ero4hAQIiSq6OIQECIsq
+ yVvDuhQAAAAD1dEiuhQAAAAD1dEquhQAAAAD1dE6uhgAAAAD1YsCyVvDU1WL7IvcyVvDU1WL7Ivc
+-uECEBAi6bYQECIkCum2EBAiLEosCukCEBAiJArpthAQIixIPtgK6QIQECIkCum2EBAiLEosCukCE
+-BAiJArpthAQIixKLArpAhAQIiQK6bYQECIsSiwK6QIQECIkCukSEBAiLEoPCBIsCum2EBAiJArgC
+-AAAAuQIAAAA5wQ+FAwAAAMlbw8lbw1NVi+yL3IHrBAAAALj/////iUMAuP7///+L04kCuiuEBAiL
+-ArorhAQIiQK4BAAAALorhAQIAQK4BAAAALorhAQIKQK5BAAAALorhAQIiwL34borhAQIiQK5BAAA
+-ALorhAQIiwL36borhAQIiQKxBLoAhAQIigIPuuAHcwXGxP/rA8bEAPb5iAKxCLoAhAQIigLGxAD2
+-8YgCsQG6AIQECIoCD7rgB3MFxsT/6wPGxAD2+YgisQG6AIQECIoCxsQA9vGIIrABugCEBAggArAB
+-ugCEBAgIArgBAAAAuiuEBAgxAvy3hYvjuiiEBAgPtgJQulCEBAgPtgJQukiEBAiLwlBoAQAAAOjE
+-/f//i+O6K4QECIsCULorhAQIiwJQuNuoBAj/ELorhAQIiQK4AQAAALkBAAAAOcEPhQAAAAC4AQAA
+-ALkBAAAAOcEPhAUAAADpFwAAALgBAAAAuQEAAAA5wQ+NBQAAAOkAAAAAuAEAAAC5AQAAADnBD44A
+-AAAAuAEAAAC5AQAAADnBD48AAAAAuAEAAAC5AQAAADnBD4wAAAAAuAEAAAC5AQAAADnBD4MAAAAA
+-uAEAAAC5AQAAADnBD4YAAAAAuAEAAAC5AQAAADnBD4cAAAAAuAEAAAC5AQAAADnBD4IAAAAAi+O5
+-AQAAALorhAQIiwKB+QAAAAB0B//J/zSI6/G4K4QECP8QuAIAAAC5AQAAADnBD4UFAAAA6en////M
+-uAEAAADHwwIAAADNgLplhAQIiSqL42gAAAAA6Lz9///JW8MvbGliL2xkLWxpbnV4LnNvLjIAAQAA
+-AAAAAAAEAAAAUagECAYAAABpqAQICwAAABAAAAAFAAAAmagECAoAAAAaAAAABwAAALOoBAgIAAAA
+-JAAAAAkAAAAMAAAAAAAAAAAAAAABAAAAAwAAAAAAAAAAAAAAAQAAAAIAAAACAAAAAAAAAAAAAAAS
+-AAAABAAAAAAAAAAAAAAAEgAAAAYAAAAAAAAAAAAAABIAAABhAGIAYwBmAAAuZHluc3RyAC5keW5h
+-bWljANeoBAgBAAAAAAAAANuoBAgBAQAAAAAAAN+oBAgBAgAAAAAAAAAAAAAAAAAAAAAAAA==
++gesEAAAAuAwAAAADxYlDAIvji9OLAlC6KIQECA+2AlC6KIQECIsCULpEhAQIi8JQaAEAAADoHP//
++/7hAhAQIum2EBAiJArpthAQIixKLArpAhAQIiQK6bYQECIsSD7YCukCEBAiJArpthAQIixKLArpA
++hAQIiQK6bYQECIsSiwK6QIQECIkCum2EBAiLEosCukCEBAiJArpXhAQIixKDwgSLArpthAQIiQK4
++AgAAALkCAAAAOcEPhQMAAADJW8PJW8NTVYvsi9yB6wQAAAC4/////4lDALj+////i9OJArorhAQI
++iwK6K4QECIkCuAQAAAC6K4QECAECuAQAAAC6K4QECCkCuQQAAAC6K4QECIsC9+G6K4QECIkCuQQA
++AAC6K4QECIsC9+m6K4QECIkCsQS6AIQECIoCD7rgB3MFxsT/6wPGxAD2+YgCsQi6AIQECIoCxsQA
++9vGIArEBugCEBAiKAg+64AdzBcbE/+sDxsQA9vmIIrEBugCEBAiKAsbEAPbxiCKwAboAhAQIIAKw
++AboAhAQICAK4AQAAALorhAQIMQL8pIWL47orhAQIiwJQuiuEBAiLAlC476gECP8QuiuEBAiJArgB
++AAAAuQEAAAA5wQ+FAAAAALgBAAAAuQEAAAA5wQ+EBQAAAOkXAAAAuAEAAAC5AQAAADnBD40FAAAA
++6QAAAAC4AQAAALkBAAAAOcEPjgAAAAC4AQAAALkBAAAAOcEPjwAAAAC4AQAAALkBAAAAOcEPjAAA
++AAC4AQAAALkBAAAAOcEPgwAAAAC4AQAAALkBAAAAOcEPhgAAAAC4AQAAALkBAAAAOcEPhwAAAAC4
++AQAAALkBAAAAOcEPggAAAACL47kBAAAAuiuEBAiLAoH5AAAAAHQH/8n/NIjr8bgrhAQI/xC4AgAA
++ALkBAAAAOcEPhQUAAADp6f///8y4AQAAAMfDAgAAAM2AumWEBAiJKovjaAAAAADo4v3//8lbwy9s
++aWIvbGQtbGludXguc28uMgABAAAAAAAAAAQAAABlqAQIBgAAAH2oBAgLAAAAEAAAAAUAAACtqAQI
++CgAAABoAAAAHAAAAx6gECAgAAAAkAAAACQAAAAwAAAAAAAAAAAAAAAEAAAADAAAAAAAAAAAAAAAB
++AAAAAgAAAAIAAAAAAAAAAAAAABIAAAAEAAAAAAAAAAAAAAASAAAABgAAAAAAAAAAAAAAEgAAAGEA
++YgBjAGYAAC5keW5zdHIALmR5bmFtaWMA66gECAEAAAAAAAAA76gECAEBAAAAAAAA86gECAECAAAA
++AAAAAAAAAAAAAAAAAAAA
+--- ocompiler-2.orig/tests/a.out.oc
++++ ocompiler-2/tests/a.out.oc
+@@ -6,7 +6,6 @@ line
+ !
+ 
+ override include_sec 1
+-include "stdarg.h" "include.oh"
+ include "stddef.h" "include.oh"
+ include "the_setjmp.h" "include.oh"
+ 
+@@ -26,7 +25,7 @@ constif a1=2 #ok
+ char a#3;value b^a
+ char no_hotgroup=1;value no_hotgroup_test^no_hotgroup
+ 
+-function intern(data a,sd b,sv c,svu d) #commenting
++function intern(data a,sd b,sv c,svu d,sv %the_va_list) #commenting
+ 	sd ?recursion
+ 	svu pointing^intern
+ 	!set pointing# pointing
+@@ -50,8 +49,10 @@ function st()
+ end
+ functionv f(sd dummy) #void f(...) was working with gcc13 but with 5 still is: ISO C requires a named argument before '...'
+ 	%<dummy
++	!sd the_va_list^dummy
+ 	valuex a#1
+ 	value b=\main.c2
++	call intern(1,"0\n1\r2\t3\04\\5\"6\x3g\x307",main.a:a,main.a,the_va_list)
+ 	%|a
+ 	set a #b
+ 	%>
+@@ -89,7 +90,6 @@ entryv main(sd argc)
+ 
+ 	!hex -:,~\,~-\\+(1+01+0x2+?x_file+\intern+\\intern+\intern.a+\intern.a\)
+ 
+-	call intern(1,"0\n1\r2\t3\04\\5\"6\x3g\x307",main.a:a,main.a)
+ 	set b printf(b,b)
+ 
+ 	if 1=1
