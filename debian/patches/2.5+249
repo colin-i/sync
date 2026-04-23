@@ -1,0 +1,680 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: apr, 23 2026 04:05:03 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- ocompiler-2.orig/Makefile
++++ ocompiler-2/Makefile
+@@ -3,13 +3,16 @@ TOPTARGETS := install-proj clean distcle
+ 
+ #NOOCONV ? is at debian/ocompiler.install , will install here but not in the final deb
+ 
+-#this at pkgbuild, must set because is not found dpkg-architecture, and that is making ifeq i386 not same as ifneq amd64
+-ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), i386)
+-conv_64=1
++#                                                             || arch/fedora/suse
++ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH 2>/dev/null || uname -m)
++ARCH := $(patsubst i586,i386,$(ARCH))
++
++ifeq ($(ARCH),i386)
++	conv_64=1
+ else
+-ifndef conv_64
+-conv_64=0
+-endif
++	ifndef conv_64
++		conv_64=0
++	endif
+ endif
+ 
+ ifeq ($(conv_64),1)
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+248
++2-5+249
+--- ocompiler-2.orig/o.html
++++ ocompiler-2/o.html
+@@ -982,7 +982,7 @@ format elfobj64<br>
+ <p>First long(4 bytes) is null or offset of entry which will be at the end.</p>
+ <p>Xfile_noignore at ocompiler is '^' sign before the command, and at otoc will noignore a tagIgnore argument.
+ Xfile_yesignore at compiler is '!' sign before the command and at otoc will ignore the command.
+-Xfile_variadic at ocompiler is '%' sign at start, followed by '&lt;argument' for va_start at otoc, '|variable' for va_arg, '&gt;' for va_end.
++Xfile_variadic at ocompiler is '%' sign at start, followed by '&lt;argument' for va_start at otoc, '&variable' for va_copy, '|variable' for va_arg, '&gt;' for va_end. <i>va_copy</i> will also replace 'the_va_list' with <i>variable</i> until <i>va_end</i>.
+ </p>
+ <p>Another option specific to otoc is Xfile_c_volatile, to use stack variables at o for recursion but not pointers at c (example: sdu ?attr). And Xfile_c_variadic to work with va_list arguments.</p>
+ <table id="selection_table">
+@@ -1069,9 +1069,10 @@ Xfile_variadic at ocompiler is '%' sign
+ 	<tr><td>Xfile_iend</td></tr>
+ </table>
+ <table id="selection_table">
+-	<tr><td rowspan=3>Xfile_variadic</td><td>Xfile_variadic_begin</td>        <td class="red" rowspan=2>var</td></tr>
++	<tr><td rowspan=4>Xfile_variadic</td><td>Xfile_variadic_begin</td>        <td class="red" rowspan=3>var</td></tr>
++	<tr>                                 <td>Xfile_variadic_copy</td></tr>
+ 	<tr>                                 <td>Xfile_variadic_get</td></tr>
+-	<tr>                                 <td colspan=2>Xfile_variadic_end</td></tr>
++	<tr>                                 <td rowspan=2>Xfile_variadic_end</td></tr>
+ </table>
+ <table id="selection_table">
+ 	<tr><td>Xfile_noignore</td></tr>
+--- ocompiler-2.orig/otoc/Makefile
++++ ocompiler-2/otoc/Makefile
+@@ -26,6 +26,8 @@ FULLOBJLOG = ${FULLOBJS}.log
+ number=number.oh
+ tags=tags.oh
+ 
++ver=version.oh
++vers=../${ver}
+ 
+ ifneq (${platform},win)
+ 
+@@ -70,7 +72,7 @@ endif
+ %.oh: %.pre
+ 	${launcher} ./$<
+ 
+-${OBJ}: ${FULLOBJS} ${tags} ${number}
++${OBJ}: ${FULLOBJS} ${tags} ${number} ${vers}
+ 	${OCOMP} $< ${OFLAGS}
+ ${fullprog}: ${OBJ}
+ 	${OLINK} ${FULLOBJLOG}
+@@ -80,6 +82,9 @@ ${fullprog}: ${OBJ}
+ 		${ATLDCOM} ${prog} ${FULLOBJO} ${AFTERLDCOM}; \
+ 	fi
+ 
++${vers}:
++	cd .. && $(MAKE) -f ./Makefile ${ver}
++
+ install:
+ 	$(MAKE) all
+ 	$(MAKE) install-proj
+@@ -89,9 +94,7 @@ install-proj:
+ #is at debian/ocompiler.install , will install here but not in the final deb
+ 
+ clean:
+-	-rm -f ${FULLOBJO}
+-	-rm -f ${FULLOBJLOG}
+-	-rm -f ${fullprog}
++	-rm -f ${FULLOBJO} ${FULLOBJLOG} ${fullprog} ${vers}
+ 	-rm -f ${number} number.pre number.pre.o number.pre.oc.log
+ 	-rm -f ${tags} tags.pre tags.pre.o tags.pre.oc.log
+ distclean: clean
+--- ocompiler-2.orig/otoc/ascii.oh
++++ ocompiler-2/otoc/ascii.oh
+@@ -25,9 +25,11 @@ const asciisquareright=0x5d      #]
+ const asciicirc=0x5e             ;#^
+ const asciic=0x63                #c
+ const asciih=0x68                #h
++const asciil=0x6c                #l
+ const asciin=0x6e                #n
+ const asciio=0x6f                #o
+ const asciir=0x72                #r
++const asciis=0x73                #s
+ const asciit=0x74                #t
+ const asciicurlyleft=0x7b        #{
+ const asciior=0x7c               ;#|
+--- ocompiler-2.orig/otoc/decl.oc
++++ ocompiler-2/otoc/decl.oc
+@@ -101,8 +101,11 @@ function decl_runtime_core_internal(sv p
+ 		call fwrite(#s,\.s,1,outfile)
+ 		call fseek(outfile,0,(SEEK_END))
+ 	end
+-	char a="va_list"^
+-	callg write(outfile,#a,\.a)
++	set loop.variadic_pointer (TRUE)
++	call write(outfile,#variadic_wrap.va_list,\variadic_wrap.va_list-1)
++	if options.strip_va_list=(FALSE)
++		callg mul(outfile)
++	end
+ end
+ #DA structure(with field from argument)
+ function decl_runtime_core(sv pbuffer,sd outfile,sd field,ss ptype)
+--- ocompiler-2.orig/otoc/loop.oc
++++ ocompiler-2/otoc/loop.oc
+@@ -60,6 +60,11 @@ function loop(sd pointer,sd delim,sd out
+ 	set icount 0
+ 	charx has_proto_valist#1
+ 	set has_proto_valist (FALSE)
++	valuex variadic_fork#1
++	set variadic_fork (NULL)
++	datax variadic_fork_size#1
++	charx variadic_pointer#1
++	set variadic_pointer (FALSE)
+ 
+ 	#if delim>^(long32)
+ 	vdatax entrystart#1
+@@ -75,7 +80,7 @@ function loop(sd pointer,sd delim,sd out
+ 
+ 	datax ignored#1
+ 	set ignored (ignored_no)
+-	char s="//#include \"stdarg.h\""^ #in case of a proto va_list
++	char s="//#include <stdarg.h>"^ #in case of a proto va_list
+ 	call writen(output,#s,\.s)
+ 
+ 	sd nextisignored=ignored_depending_on_tags
+@@ -314,6 +319,15 @@ function iend()
+ 	end
+ end
+ 
++function variadic_wrap(sd outfile,ss name,sd sz,ss fnname,sd fnsz)
++	char va_list="va_list "^
++	call write(outfile,#va_list,\.va_list)
++	call write(outfile,name,sz)
++	call writet(outfile)
++	call write(outfile,fnname,fnsz)
++	call writel(outfile)
++end
++
+ include "action.oc"
+ include "decl.oc"
+ include "cond.oc"
+@@ -321,7 +335,7 @@ include "number.oc"
+ include "var.oc"
+ 
+ function commentmulti(sd outfile,sv pbuffer)
+-	char b=asciiasterisk
++	char b=asciiasterisk #this point is in a combination, is untouchable
+ 	char a={asciislash,asciiasterisk}
+ 	call write(outfile,#a,2)
+ 	datax sz#1;valuex pointer#1
+@@ -520,6 +534,7 @@ function end(sd outfile,sv pbuffer)
+ 	if type=(Xfile_end_func)
+ 		set loop.function_start_base (err)
+ 		set loop.innerfunction (FALSE)
++		set loop.variadic_pointer (FALSE)
+ 	end
+ 	callg writecrtn(outfile)
+ end
+@@ -590,9 +605,10 @@ function orphan(sd *outfile,sv pbuffer)
+ end
+ function interrupt(sd outfile)
+ 	#this is not arm #char a="__asm__(\"int $3\");"
+-	#this is no x86 #__asm__("BKPT");
++	#this is no x86 #__asm__("BKPT"); for 32 and __asm__("brk #0"); for 64
++	#include <signal.h> and raise(SIGTRAP); plus one 'n' but this will be complex
+ 	char a="__builtin_trap();"^
+-	#"__builtin_trap();" #this is not continuing on x86 but is an temporary solution
++	#"__builtin_trap();" #this is not continuing on x86 but is a temporary solution
+ 	callg writen(outfile,#a,\.a)
+ end
+ function variadic(sd outfile,sv pbuffer)
+@@ -601,29 +617,50 @@ function variadic(sd outfile,sv pbuffer)
+ 		datax sz#1;valuex name#1
+ 		call get_string(pbuffer,#sz,#name)
+ 		if type=(Xfile_variadic_begin)
+-			char va_list="va_list "^
+-			char va_list_name="the_va_list"^
+-			call write(outfile,#va_list,\.va_list+\.va_list_name)
+-			call writet(outfile)
+-			char va_start="va_start("^
+-			call write(outfile,#va_start,\.va_start)
+-			call write(outfile,#va_list_name,\.va_list_name)
+-			call writec(outfile)
++			char va_start="va_start"^
++			call variadic_wrap(outfile,#var.va_list_name,\var.va_list_name-1,#va_start,\.va_start)
++			call write(outfile,#var.va_list_name,\var.va_list_name)
+ 			call write(outfile,name,sz)
+ 			call writertnl(outfile)
+-		else
++		elseif type=(Xfile_variadic_copy)
++			set loop.variadic_fork name;set loop.variadic_fork_size sz
++			char va_copy="va_copy"^
++			call variadic_wrap(outfile,name,sz,#va_copy,\.va_copy)
++			call write(outfile,name,sz)
++			call writec(outfile)
++			call write(outfile,#var.va_list_name,\var.va_list_name-1)
++			call writertnl(outfile)
++		else #Xfile_variadic_arg
+ 			call write(outfile,name,sz)
+ 			call writee(outfile)
+ 			char va_arg="va_arg("^
+ 			call write(outfile,#va_arg,\.va_arg)
+-			call write(outfile,#va_list_name,\.va_list_name)
+-			call writec(outfile)
++			if loop.variadic_pointer=(TRUE)
++				if loop.variadic_fork=(NULL)
++					if options.strip_va_list=(FALSE)
++						call mul(outfile)
++					end
++				end
++			end
++			if loop.variadic_fork=(NULL)
++				call write(outfile,#var.va_list_name,\var.va_list_name)
++			else
++				call write(outfile,loop.variadic_fork,loop.variadic_fork_size)
++				call writec(outfile)
++			end
+ 			call write_long(outfile)
+ 			call writertnl(outfile)
+ 		end
+ 	else
+-		char va_end="va_end(the_va_list)"^
+-		callg writetn(outfile,#va_end,\.va_end)
++		char va_end="va_end("^
++		call write(outfile,#va_end,\.va_end)
++		if loop.variadic_fork=(NULL)
++			call write(outfile,#var.va_list_name,\var.va_list_name-1)
++		else
++			call write(outfile,loop.variadic_fork,loop.variadic_fork_size)
++			set loop.variadic_fork (NULL)
++		end
++		callg writertnl(outfile)
+ 	end
+ end
+ function proto(sd outfile,sv pbuffer)
+@@ -704,7 +741,12 @@ function write(sd outfile,ss buf,sd sz)
+ 		end
+ 	end
+ end
++function writen(sd outfile,ss buf,sd sz)
++	call write(outfile,buf,sz)
++	callg writenl(outfile)
++end
+ 
++#function writea is at mul from number and that is somehow with Makefile and number.pre.oc
+ function writec(sd outfile)
+ 	char c=asciicomma
+ 	callg write(outfile,#c,1)
+@@ -822,15 +864,6 @@ function writecrtn(sd outfile)
+ 	callg writetnl(outfile) #with termination only for struct
+ end
+ 
+-function writen(sd outfile,ss buf,sd sz)
+-	call write(outfile,buf,sz)
+-	callg writenl(outfile)
+-end
+-function writetn(sd outfile,ss buf,sd sz)
+-	call write(outfile,buf,sz)
+-	callg writetnl(outfile)
+-end
+-
+ function fprintu(sd outfile,sd c)  #has an upper write_allow check
+ 	sd items;set items fprintf(outfile,"%u",c) #safe from directwrite at this moment
+ 	if items<0
+--- ocompiler-2.orig/otoc/number.oc
++++ ocompiler-2/otoc/number.oc
+@@ -164,7 +164,7 @@ function sub(sd outfile)
+ 	callg write(outfile,#action_tdec.a,1)
+ end
+ function mul(sd outfile)
+-	callg write(outfile,#main.point,1)
++	callg write(outfile,#main.point,\main.point)
+ end
+ function div(sd outfile)
+ 	callg write(outfile,#comment.a,1)
+--- ocompiler-2.orig/otoc/otoc.oc
++++ ocompiler-2/otoc/otoc.oc
+@@ -3,6 +3,8 @@ format elfobj64
+ 
+ include "common.oh"
+ 
++include "../version.oh"
++
+ importx "puts" puts
+ importx "fopen" fopen
+ importx "fclose" fclose
+@@ -48,7 +50,7 @@ charx long_cast_size#1
+ #
+ char long_long="long "^
+ char long_simple="long"^
+-char point=asciiasterisk
++char point=asciiasterisk #this point is untouchable, is in a combination
+ char long_long_reserve={asciispace,asciispace,asciispace,asciispace,asciispace}
+ 
+ importx "strlen" strlen
+@@ -87,27 +89,44 @@ include "tags.oh"
+ 	return out
+ end
+ 
+-function parse_options(sd _argc,sv _argv)
++function option_long_long()
++	set main.long #main.long_long
++	set main.long_size \main.long_long+\main.long_simple
++	set main.long_cast_size \main.long_long+\main.long_simple+\main.point
++end
++function options(sd _argc,sv _argv)
++	set main.long #main.long_simple
++	set main.long_size \main.long_simple
++	set main.long_cast_size \main.long_simple+\main.point
++	charx strip_va_list#1
++	set strip_va_list (FALSE)
+ 	sv argv;set argv _argv#
+ 	ss s;set s argv#
+ 	if s#=(asciihyphen)
+ 		inc s
++		ss a;set a s
++		if s#=(asciil) #long long
++			call option_long_long()
++			inc s
++		end
++		if s#=(asciis) # *va_list*
++			set strip_va_list (TRUE)
++			inc s
++		end
+ 		if s#=(asciinul)
+ 			if _argc#<3
+ 				return (EXIT_FAILURE)
+ 			end
+-			#long long
++			if a=s
++				#here can return failure, but why not to remain backward compatible, - simple was long long
++				call option_long_long()
++			end
+ 			dec _argc#
+ 			incst _argv#
+-			set main.long #main.long_long
+-			set main.long_size \main.long_long+\main.long_simple
+-			set main.long_cast_size \main.long_long+\main.long_simple+\main.point
+ 			return (EXIT_SUCCESS)
+ 		end
++		return (EXIT_FAILURE)
+ 	end
+-	set main.long #main.long_simple
+-	set main.long_size \main.long_simple
+-	set main.long_cast_size \main.long_simple+\main.point
+ 	return (EXIT_SUCCESS)
+ end
+ 
+@@ -136,7 +155,7 @@ include "loop.oc"
+ 
+ include "entry.oc" "entryraw.oc"
+ 	if argc>=2
+-		sd ok;set ok parse_options(#argc,#argv)
++		sd ok;set ok options(#argc,#argv)
+ 		if ok=(EXIT_SUCCESS)
+ 			ss s;set s argv#
+ 			data ignores=0
+@@ -152,5 +171,9 @@ include "entry.oc" "entryraw.oc"
+ 			call exit(a)
+ 		end
+ 	end
+-	call puts("Usage: otoc [-] filePath [tagIgnore1 .. tagIgnoreN]")
++	call puts("Usage: otoc [-[OPTIONS]] filePath [tagIgnore1 .. tagIgnoreN]")
++	call puts(#version)
++	call puts("OPTIONS(only - is like l):")
++	call puts("\tl\tlong long")
++	call puts("\ts\tstrip pointer at va_list")
+ 	call exit((EXIT_FAILURE))
+--- ocompiler-2.orig/otoc/var.oc
++++ ocompiler-2/otoc/var.oc
+@@ -105,9 +105,18 @@ function var(sv pbuffer,sd outfile)
+ 		call write(outfile,#a,1)
+ 		call writesr(outfile)
+ 	else
++		if loop.variadic_fork!=(NULL)
++			char va_list_name="the_va_list,"^
++			if sz=\.va_list_name-1
++				sd c;set c memcmp(pointer,#va_list_name,\.va_list_name-1)
++				if c=0
++					callg write(outfile,loop.variadic_fork,loop.variadic_fork_size)
++					ret
++				end
++			end
++		end
+ 		callg write(outfile,pointer,sz)
+-	end
+-	#Xfile_suffix_no Xfile_suffix_notasuffix
++	end #Xfile_suffix_notasuffix
+ end
+ 
+ #VF structure
+@@ -136,7 +145,7 @@ function varfunc(sv pbuffer,sd outfile)
+ 			call writel(outfile)
+ 			call write(outfile,#functiondef_intern.a,\functiondef_intern.a)
+ 			call write(outfile,pointer,sz)
+-			call write(outfile,#main.point,1)
++			call mul(outfile)
+ 			call writer(outfile)
+ 			call write(outfile,vr,szv)
+ 			call writer(outfile)
+--- ocompiler-2.orig/ounused/ounused.oc
++++ ocompiler-2/ounused/ounused.oc
+@@ -52,6 +52,7 @@ if argc>1
+ 	call freeall()
+ 	return (EXIT_SUCCESS)
+ endif
++call Message("Usage: ounused log1 [... logN]")
+ include "../version.oh"
+ call Message(#version)
+ return (EXIT_FAILURE)
+--- ocompiler-2.orig/src/files/functions/xfile_details.oc
++++ ocompiler-2/src/files/functions/xfile_details.oc
+@@ -612,11 +612,12 @@ function xfile_variadic(sv pcontent,sd p
+ 				ss content;set content pcontent#
+ 				char c#1
+ 				set c content#
+-				call stepcursors(pcontent,psize)
++				call stepcursors(pcontent,psize) #step here for variadic_end
+ 				if c=(Xfile_variadic_get)
+ 				elseif c=(Xfile_variadic_begin)
+ 				elseif c=(Xfile_variadic_end)
+ 					callret xfile_add_char(c)
++				elseif c=(Xfile_variadic_copy)
+ 				else
+ 					return err
+ 				endelse
+--- ocompiler-2.orig/src/files/headers/xfile.oh
++++ ocompiler-2/src/files/headers/xfile.oh
+@@ -281,5 +281,6 @@ const Xfile_end_cond=0
+ const Xfile_end_func=1
+ 
+ const Xfile_variadic_begin=Xfile_numbers_operation_less
++const Xfile_variadic_copy=Xfile_numbers_operation_and
+ const Xfile_variadic_get=Xfile_numbers_operation_or
+ const Xfile_variadic_end=Xfile_numbers_operation_greater
+--- ocompiler-2.orig/tests/.expected/a.out.c
++++ ocompiler-2/tests/.expected/a.out.c
+@@ -1,5 +1,5 @@
+-  #include "stdarg.h"
+-long*intern(int,int*,long*,unsigned long*,va_list);
++  #include <stdarg.h>
++long*intern(int,int*,long*,unsigned long*,va_list*);
+ void f(int*,...);
+ long*printf(long,long);
+ long*sprintf(long,long,...);
+@@ -24,7 +24,7 @@ static unsigned char cc[]={97,122};
+ #endif//ok
+ static unsigned char a[3];static long b=a;
+ static unsigned char no_hotgroup=1;static long no_hotgroup_test=&no_hotgroup;
+-long*     intern(int a,int* b,long* c,unsigned long* d,va_list the_va_list){//commenting
++long*     intern(int a,int* b,long* c,unsigned long* d,va_list* the_va_list){//commenting
+ 	int recursion;
+ 	unsigned long* pointing=intern;
+ 	a++;
+@@ -33,6 +33,10 @@ long*     intern(int a,int* b,long* c,un
+ 	c--;
+ 	c=-(long)c;
+ 	recursion=~(long)recursion;
++	pointing=va_arg(*the_va_list,long);
++	va_list test;va_copy(test,the_va_list);
++	pointing=va_arg(test,long);
++	va_end(test);
+ 	if(setjmp(the_jmp_buf))return -1;
+ 	longjmp(the_jmp_buf,1);
+ 	c=(long)c<<1;
+@@ -48,9 +52,12 @@ void      f(int* dummy,...){//void f(...
+ 	va_list the_va_list;va_start(the_va_list,dummy);
+ 	long* a;
+ 	long b=sizeof(c2);
+-	intern((1),"0\n1\r2\t3\0004\\5\"6x3g07",a,a,the_va_list);
+ 	a=va_arg(the_va_list,long);
++	va_list test;va_copy(test,the_va_list);
++	intern((1),"0\n1\r2\t3\0004\\5\"6x3g07",a,a,test);
++	a=va_arg(test,long);
+ 	a=(long)&b;
++	va_end(test);
+ 	va_end(the_va_list);
+ 	b=(long)a[0];
+ 	b=(long)((char*)a)[0];
+--- ocompiler-2.orig/tests/.expected/a.out.oc.x.txt
++++ ocompiler-2/tests/.expected/a.out.oc.x.txt
+@@ -1,4 +1,4 @@
+-/gYAAAAABgAAAGludGVybgUAAAACAAEFAAEBBgABAQcAAQAHAAEBBwIBAAECAAAAc3QAAAAAAAAA
++OQcAAAAABgAAAGludGVybgUAAAACAAEFAAEBBgABAQcAAQAHAAEBBwIBAAECAAAAc3QAAAAAAAAA
+ AQAAAGYCAAAAAQEGAAMAAQAAAQAAAGIEAAAAcHV0cwAAAAAAIAEAAAEAAABjBgAAAHByaW50ZgAC
+ AAAAIAEAAAEAAABmBwAAAHNwcmludGYBAgAAAAAABAAAAG1haW4CAAAAAQEGAAMBBQEDDAAAAApt
+ dWx0aQpsaW5lChoLAAAAaW5jbHVkZV9zZWMAAwEAAAAxHwYAAAgAAABzdGRkZWYuaAEACgAAAGlu
+@@ -15,43 +15,44 @@ AAACAAEFAAABAAAAYQEBBgAAAQAAAGIBAQcAAAEA
+ YV9saXN0BAoAAABjb21tZW50aW5nCAEBBgEACQAAAHJlY3Vyc2lvbgEAAwEAAAAxHwgBAAcAAAgA
+ AABwb2ludGluZwABBgAAAGludGVybiEKAAAACAAAAHBvaW50aW5nAQBFAgAAAAgAAABwb2ludGlu
+ ZwAJAgAAAAEAAABhAAkEAAAAAQAAAGEACQMAAAABAAAAYwAJBQAAAAEAAABjAAkGAAAAAQAAAGMA
+-CQcAAAAJAAAAcmVjdXJzaW9uACEIAgABBwAACwAAAHRoZV9qbXBfYnVmAQADAQAAADEfCQgAAAAL
+-AAAAdGhlX2ptcF9idWYACQkAAAALAAAAdGhlX2ptcF9idWYACQoAAAABAAAAYwAJCwAAAAEAAABj
+-AAkMAAAAAQAAAGMACQACAAAAAQAAAGQAFAEHAAACAAAAc3QBAAAAAAgCAAEFAAABAAAAYgEAAwEA
+-AAAxHwgCAQEFAAABAAAAYQEAAwEAAAAxHxQBBwABAQAAAGYAAQAAAAEBBgAABQAAAGR1bW15BGQA
+-AAB2b2lkIGYoLi4uKSB3YXMgd29ya2luZyB3aXRoIGdjYzEzIGJ1dCB3aXRoIDUgc3RpbGwgaXM6
+-IElTTyBDIHJlcXVpcmVzIGEgbmFtZWQgYXJndW1lbnQgYmVmb3JlICcuLi4nHzwFAAAAZHVtbXkh
+-CAEBBgAACwAAAHRoZV92YV9saXN0AAAFAAAAZHVtbXkIAgEBBwAAAQAAAGEBAAMBAAAAMR8IAgAB
+-BwAAAQAAAGICAAALBAAAAG1haW4CAAAAYzIAHwsAAAYAAABpbnRlcm4FAAAAAgAAAAsAAAB0aGVf
++CQcAAAAJAAAAcmVjdXJzaW9uAB98CAAAAHBvaW50aW5nHyYEAAAAdGVzdB98CAAAAHBvaW50aW5n
++Hz4hCAIAAQcAAAsAAAB0aGVfam1wX2J1ZgEAAwEAAAAxHwkIAAAACwAAAHRoZV9qbXBfYnVmAAkJ
++AAAACwAAAHRoZV9qbXBfYnVmAAkKAAAAAQAAAGMACQsAAAABAAAAYwAJDAAAAAEAAABjAAkAAgAA
++AAEAAABkABQBBwAAAgAAAHN0AQAAAAAIAgABBQAAAQAAAGIBAAMBAAAAMR8IAgEBBQAAAQAAAGEB
++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
+--- ocompiler-2.orig/tests/a.out.oc
++++ ocompiler-2/tests/a.out.oc
+@@ -35,6 +35,10 @@ function intern(data a,sd b,sv c,svu d,s
+ 	decst c
+ 	neg c
+ 	not recursion
++	%|pointing
++	%&test
++	%|pointing
++	%>
+ 	!value the_jmp_buf#1
+ 	base the_jmp_buf
+ 	leave the_jmp_buf
+@@ -52,10 +56,13 @@ functionv f(sd dummy) #void f(...) was w
+ 	!sd the_va_list^dummy
+ 	valuex a#1
+ 	value b=\main.c2
++	%|a
++	%&test
+ 	call intern(1,"0\n1\r2\t3\04\\5\"6\x3g\x307",main.a:a,main.a,the_va_list)
+ 	%|a
+ 	set a #b
+ 	%>
++	%>
+ 	set b a#
+ 	set b a#s
+ 	set b a#w
+--- ocompiler-2.orig/tests/d
++++ ocompiler-2/tests/d
+@@ -1,9 +1,6 @@
+ set -e
+ if [ -z "${OCONV}" ]; then OCONV="${launcher} ../otoc/otoc"; fi
+ . ./x ${1}
+-${launcher} ${OCONV} ${1}.oc.x import
+-cat ${1}.c
+-z=`cat ~/s/actionswf-1/oad/cflags`
+-cc -w ${z:14} ${1}.c
++./d_ $1
+ mv ${1}.c .expected
+ 
+--- /dev/null
++++ ocompiler-2/tests/d_
+@@ -0,0 +1,4 @@
++${launcher} ${OCONV} ${1}.oc.x import
++cat ${1}.c
++z=`cat ~/s/actionswf-1/oad/cflags`
++cc -w ${z:14} ${1}.c
+--- ocompiler-2.orig/tests/db
++++ ocompiler-2/tests/db
+@@ -6,7 +6,11 @@ shift
+ if [ -n "${winlauncher}" ]; then launcher=${winlauncher}; fi
+ ${launcher} ${OCONV} $a.oc.x import $@
+ ./c1 $a || {
+-	echo enter to write, ctrl c to exit
+-	read -t $((60*60*24))
+-	./d $a
++	echo t enter for arm test, else write, ctrl c to exit
++	read -t $((60*60*24)) ans
++	if [ "${ans}" = t ]; then
++		./d_ $a
++	else
++		./d $a
++	fi
+ }
