@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: apr, 23 2026 12:57:23 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/csrc/Makefile
++++ actionswf-1/csrc/Makefile
+@@ -36,6 +36,8 @@ $(foreach var,$(expitems),$(eval cfiles
+ $(foreach var,$(items),$(eval cfiles += ${items_prefix}${var}.c))
+ 
+ ifeq (${conv_64},1) #to cross compile
++	OCONVFLAGS=-s
++#yes, was not set earlier at arm64 when cross for armhf(even setting CC to armhf will change that), and i386 is not like x86_64 in terms of va_list
+ 	ifneq ($(CC),arm-linux-gnueabihf-gcc)
+ 		model=-m32
+ 	endif
+--- /dev/null
++++ actionswf-1/csrc/m32d
+@@ -0,0 +1 @@
++conv_64=1 ./md
+--- /dev/null
++++ actionswf-1/csrc/m32dr
+@@ -0,0 +1 @@
++CC=arm-linux-gnueabihf-gcc ./m32d
+--- actionswf-1.orig/tests/ac
++++ actionswf-1/tests/ac
+@@ -2,8 +2,8 @@
+ if [ -z "${old}" ]; then
+ 	L1=../csrc
+ 	LD_LIBRARY_PATH=${L1}
+-	CC=cc
+-	if [ -n "${expand}" ]; then
++	if [ -z "${CC}" ]; then CC=cc; fi
++	if [ "${expand}" = x ]; then
+ 		shopt -s expand_aliases #for gd
+ 		source ~/aliases
+ 	fi
+--- /dev/null
++++ actionswf-1/tests/ac32r
+@@ -0,0 +1 @@
++conv_64=1 CC=arm-linux-gnueabihf-gcc ./ac
+--- actionswf-1.orig/tests/bc
++++ actionswf-1/tests/bc
+@@ -1 +1,6 @@
+-launcher='gd --args' expand=x ./ac
+\ No newline at end of file
++
++if [ -z "${expand}" ]; then
++	launcher='gd --args' expand=x ./ac
++else
++	launcher='gdb --args' ./ac
++fi
