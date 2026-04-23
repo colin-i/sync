@@ -1,0 +1,100 @@
+Format ElfObj64
+
+include "../include/prog.h" "../include/prog.oh"
+include "../include/throw.h" "../include/throw.oh"
+
+import "for_in_ptr" for_in_ptr
+import "is_ainit" is_ainit
+
+importx "free" free
+
+import "ebase" ebase
+#aftercallimport ebool
+
+#this/an action
+
+import "action_local" action_local
+import "actionsf_local" actionsf_local
+import "action_format" action_format
+
+functionX action(ss ac)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+#ss ac       actionscript string to be parsed
+	call is_ainit((xlog_ainit_false))
+	callg action_local(ac)
+endfunction
+#see at part_done functionX action_init(ss ac)
+functionXv actionf(ss buffer,ss *format)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+#ss buffer   the buffer where to sprintf the format and the arguments
+#ss format   the format
+#...         % arguments here
+	if buffer!=(NULL)
+		call is_ainit((xlog_ainit_false))
+		call actionsf_local((NULL),#buffer)
+	else
+		callret action_format(#buffer) #this at actionf_sprite is same, sprite will be extra argument, let NULL there be guardian
+	end
+endfunction
+functionXv actionsf(sdu psize,sv pbuffer,ss *format)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+	call is_ainit((xlog_ainit_false))
+	callg actionsf_local(psize,#pbuffer)
+endfunction
+#see at part_done functionXv actionf_init(ss buffer,ss *format)
+functionX actiond(ss ac) #deprecated
+	sd ptr;set ptr for_in_ptr()
+	sd was;set was ptr#
+	set ptr# (flag_forin1)
+	call action(ac)
+	set ptr# was
+end
+
+#sprite
+
+import "action_sprite_base" action_sprite_base
+
+functionX action_sprite(sd sprite,ss actions)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+#sd sprite    sprite id
+#ss actions   same as action
+	call is_ainit((xlog_ainit_false))
+	callg action_sprite_base(sprite,actions,(TRUE))
+endfunction
+functionX action_init_sprite(sd sprite,ss actions)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+	call is_ainit((xlog_ainit_true))
+	callg action_sprite_base(sprite,actions,(TRUE))
+end
+import "actionsf_sprite_local" actionsf_sprite_local
+functionXv actionf_sprite(sd sprite,ss buffer,ss *format)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+#sd sprite    sprite id
+#ss buffer    same as actionf
+#ss format    same as actionf
+	call is_ainit((xlog_ainit_false))
+	callg actionsf_sprite_local(sprite,(NULL),#buffer)
+endfunction
+functionXv actionf_init_sprite(sd sprite,ss buffer,ss *format)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+	call is_ainit((xlog_ainit_true))
+	callg actionsf_sprite_local(sprite,(NULL),#buffer)
+end
+functionXv actionsf_sprite(sd sprite,sdu psize,sv pbuffer,ss *format)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+	call is_ainit((xlog_ainit_false))
+	callg actionsf_sprite_local(sprite,psize,#pbuffer)
+endfunction
+functionXv actionsf_init_sprite(sd sprite,sdu psize,sv pbuffer,ss *format)
+	base globala.jmp_data;call ebase(globala.jmp_data)
+	call is_ainit((xlog_ainit_true))
+	callg actionsf_sprite_local(sprite,psize,#pbuffer)
+end
+
+#both
+
+functionX actions_free(ss buffer)
+	call free(buffer)
+end
+
+entryraw globala()

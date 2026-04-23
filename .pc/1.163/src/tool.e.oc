@@ -1,0 +1,40 @@
+Format ElfObj64
+
+^import "erbool" erbool #without this what erbool is returning is cannot read that memory
+functionx erbool_get()
+    ss p;setcall p erbool()
+    return p#
+endfunction
+
+functionx erbool_reset()
+    ss p;setcall p erbool()
+    set p# 0
+endfunction
+
+include "../include/prog.h" "../include/prog.oh"
+
+#multithread unsafe
+char pad=xlog_pad_default
+
+import "swf_mem_free" swf_mem_free
+import "debug_data" debug_data
+functionx freereset()
+#this is called by user only if want to abort after some calls
+#               and at some frees
+	call debug_data()
+	#free and set initial null/-1.....
+	call swf_mem_free()
+endfunction
+
+functionx xlog_pad_get()
+	return globalr.pad
+endfunction
+functionx xlog_pad_set(ss ?new_pad)
+	if new_pad!=0
+		set globalr.pad new_pad
+	else #it is div mult and at 1 is equal at 0 is bad
+		set globalr.pad 1
+	end
+endfunction
+
+entryraw globalr() # abcdefghiloprstuwx

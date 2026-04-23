@@ -1,0 +1,53 @@
+
+format elfobj64
+
+importx "fopen" fopen
+importx "fseek" fseek
+importx "ftell" ftell
+importx "malloc" malloc
+importx "fread" fread
+importx "_exit" exit
+
+function text(ss name)
+	sd file;set file fopen(name,"rb")
+	call fseek(file,0,2) #SEEK_END=2
+	ss sz;set sz ftell(file)
+	call fseek(file,0,0) #SEEK_SET=0
+	sd size=1;add size sz
+	sd m;set m malloc(size)
+	call fread(m,sz,1,file)
+	add sz m
+	set sz# 0
+	return m
+end
+
+include "entryraw.oc" "entry.oc"
+
+override include_sec 1
+einclude "../dev/import.oh"
+
+call xlog_pad_set(0x30)
+
+sd f
+if argc=1
+	set f (prexx_flags|flagpre_x_pad|flagpre_write_no)
+else
+	importx "puts" puts
+	call puts("xxu_flags flag_titles")
+	set f (xxu_flags|flag_titles)
+end
+call swf_new_ex("a.swf",0x80,0x80,0x050607,2,f)
+
+ss buf;set buf text("./aoc/a")
+call action(buf)
+
+sd presprite;set presprite swf_sprite_new()
+call action_sprite(presprite,"trace('b'+this.value)")
+set buf text("./aoc/b")
+call action_init_sprite(presprite,buf)
+sd sprite;set sprite swf_sprite_done(presprite)
+call swf_exports_add(sprite,"carSymbol")
+
+call swf_done()
+
+call exit(0)

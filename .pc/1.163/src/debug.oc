@@ -1,0 +1,639 @@
+
+format elfobj64
+
+include "../include/prog.h" "../include/prog.oh"
+
+#multithread unsafe
+valuex drow#1
+value offsets=NULL
+valuex target#1
+valuex dend#1
+#
+value dfile=NULL
+value dfile2=NULL
+#now is a string #datax a#1  #65535
+value dmem=NULL
+#mem_struct_size said is 8 first 4 all_size, and after mem_struct__size_off is the size and for ,ff(3 bytes here) there tag+len+u16len
+#but all_size is growing +0x1000 from that limit, and the error is catched there, valuex?
+#there is a limit on actions and on constant pool, so don't worry here
+dataxu dsize#1
+dataxu dall_size#1
+dataxu drows#1
+#
+dataxu pcsize#1
+#
+charx dprbool#1
+charx dprfull#1
+#
+datax prexx#1
+
+function debug_mark_start()
+	set globald.drow 0
+endfunction
+function debug_mark_add()
+	add globald.drow :
+endfunction
+function debug_mark_get()
+	sv a;set a globald.drow
+	add a globald.offsets
+	return a
+endfunction
+
+import "mem_free" mem_free
+import "f_close" f_close
+
+import "x_data" x_data
+import "alt_free" alt_free
+import "format_free" format_free
+function debug_data()
+	call x_data()
+	if globald.dfile!=(NULL)
+		call f_close(#globald.dfile)
+		if globald.dfile2!=(NULL)
+			call f_close(#globald.dfile2)
+		end
+		if globald.offsets!=(NULL)
+			call mem_free(#globald.offsets)
+			if globald.dmem!=(NULL)
+				call mem_free(#globald.dmem)
+			end
+		end
+	endif
+	call alt_free()
+	call format_free()
+endfunction
+
+function debug_phase_init(ss pointer)
+	if globald.offsets!=(NULL)
+		sv a;setcall a debug_mark_get()
+		set a# pointer
+		call debug_mark_add()
+	endif
+endfunction
+
+import "action_code_get" action_code_get   #the pointer is not reallocated, can use offset but will be slower
+
+function debug_phase_parse(ss pointer)
+	if globald.offsets!=(NULL)
+		sv a
+		sv start;setcall start debug_mark_get()
+		if globald.target=(NULL)
+		#need to know empty rows
+			set a start
+			while pointer>a#
+				incst a
+			endwhile
+			set globald.target a
+		else
+			set a globald.target
+		endelse
+		#if pointer>=^a#  # and > ? it's not with spaces at end, therefore ";   \nabc" can go wrong
+		if pointer<^a#
+			ret
+		endif
+		sd x;setcall x action_code_get()
+		while start#<^pointer   #or a
+			set start# x
+			call debug_mark_add()
+			setcall start debug_mark_get()
+		endwhile
+		set start# x      ##also,set for this row, can be the only set
+		call debug_mark_add()
+		set globald.target (NULL)
+	endif
+endfunction
+function debug_phase_parse_end() #for the case when last rows are blank
+	if globald.offsets!=(NULL)
+		sd x;setcall x action_code_get()
+		sv start
+		set start debug_mark_get()
+		while start<^globald.dend
+			set start# x
+			call debug_mark_add()
+			setcall start debug_mark_get()
+		endwhile
+	end
+end
+
+function debug_action_phase()
+	if globald.offsets!=(NULL)
+		call debug_mark_start()  #second and third iteration
+	endif
+endfunction
+
+importx "sprintf" sprintf
+importx "memcpy" memcpy
+
+function md_printf(sd c,sd format,sd val) #to not write null on unknown
+	char mem#5
+	sd n;set n sprintf(#mem,format,val)
+	call memcpy(c,#mem,n)
+	return n
+end
+
+import "string_nl_print" string_nl_print
+
+function deprecation_init(sd flags)
+	and flags (flag_deprecation_no|flag_deprecation_yes)
+	if flags=(flag_none)
+		set globald.dprbool (TRUE)
+		set globald.dprfull (FALSE)
+	elseif flags=(flag_deprecation_yes)
+		set globald.dprbool (TRUE)
+		set globald.dprfull (TRUE)
+	else #flag_deprecation_no
+		set globald.dprbool (FALSE)
+	end
+end
+
+^importx "getenv" getenv 1 #is not an int return, and unlike malloc is not known to be size_t
+importx "strlen" strlen #is builtin
+importx "malloc" malloc #is predefined and already known to be long
+^importx "fopen" fopen 2
+importx "fscanf" fscanf
+importx "fclose" fclose
+
+const EOF=-1
+function user_flags(sw pflags)
+	ss h
+include "../include/platformhome.h" "../include/platformhome.oh" #"../include/linhome.oh" "../include/winhome.oh"
+	set h getenv(homefolder)
+	if h!=(NULL)
+		ss sz;set sz strlen(h)
+		char prefs=".actionswf"^
+		sd len=1+\.prefs+1
+		add len sz
+		sd m;set m malloc(len)
+		if m!=(NULL)
+			call memcpy(m,h,sz)
+			add sz m
+			set sz# (path_separator)
+			inc sz
+			call memcpy(sz,#prefs,\.prefs)
+			add sz \.prefs
+			set sz# (Nullchar)
+			sd f;set f fopen(m,"rb")
+			if f!=(NULL)
+				data flags#1   ;#protocol %x is unsigned int
+				sd ret;set ret fscanf(f,"%x",#flags)
+				if ret!=(EOF)
+					or pflags# flags
+				end
+				call fclose(f)
+			end
+			call free(m)
+		end
+	end
+end
+
+import "row_termination" row_termination
+^import "swf_actionblock_get" swf_actionblock_get #full return
+import "swf_actionblock_get_size" swf_actionblock_get_size
+^import "block_get_psize" block_get_psize 1 #full return
+^import "block_get_mem" block_get_mem 1
+^import "word_arg_to_stack" word_arg_to_stack 1
+import "for_in" for_in
+import "frames_as_shows" frames_as_shows
+import "ainit" ainit
+import "pool_init" pool_init
+import "verbose" verbose
+
+importx "fseek" fseek
+^importx "fread" fread 4
+importx "fprintf" fprintf
+importx "free" free
+
+
+#aftercallimport ebool
+
+^import "memalloc" memalloc 1
+import "alt_init" alt_init
+import "format_init" format_init
+import "dtitles_init" dtitles_init
+import "x_init" x_init
+^import "f_open_mem_ex" f_open_mem_ex 2
+^import "strlen_of" strlen_of 2
+
+function flags_init(sd flags,ss path) #this order is copied in a comment at flags.oh
+	set flags pool_init(flags)
+	set flags x_init(flags,path)
+	set flags log_init(flags,path)
+	call alt_init(flags,path)
+	call format_init(flags,path)
+	call dtitles_init(flags)
+
+	call frames_as_shows(flags)
+	call for_in(flags)
+	call deprecation_init(flags)
+	call verbose(flags)
+endfunction
+
+function log_init(sd flags,ss path)
+	if globald.dfile!=(NULL)
+		call error("swf started, log not closed")
+	end
+	set globald.prexx flags
+	and globald.prexx (prexx_flags)
+	sd test=flagpre_log
+	and test flags
+	if test=(flagpre_log)
+		sd size=4;addcall size strlen_of(path,4+1)
+		sd b;setcall b memalloc(size)
+		vstr lg="%s.log"
+		call sprintf(b,lg,path)
+		setcall globald.dfile f_open_mem_ex(b,"w+b")  #+ is because at definefunction it is reading back for delimiter character, when .log is for oad
+
+		if globald.prexx=(prexx_flags)
+			set test (flagpre_mix) #first log is with prexx, second log is for alt
+			and test flags
+			if test!=0
+				call sprintf(b,lg,b)
+				set globald.dfile2 f_open_mem_ex(b,"wb")
+			end
+			call free(b)
+
+			setcall globald.offsets memalloc(1)  #0 on some systems can be NULL return
+			#
+			setcall globald.dmem memalloc(1)
+			#this is later #set globald.dsize 0
+			set globald.dall_size 1
+
+			and flags (~antixx_write)
+		else
+			call free(b)
+		end
+	end
+	return flags
+end
+
+import "f_printf1" f_printf1
+import "f_printf2" f_printf2
+import "f_write" f_write
+^import "f_tell" f_tell 1
+^import "memrealloc" memrealloc 2
+
+function debug_action_init(ss ac)
+	if globald.dfile!=(NULL)
+		set globald.drows 0 #for fast check
+		if globald.prexx=(prexx_flags)
+			sd start;set start ac
+
+			sv row=1     #at least one row, example: row 1,3 actions
+			while ac#!=0
+				call row_termination(#ac,#row)
+				inc ac
+			endwhile
+
+			#out rows\nac\n
+			char f={Percent,l_low,u_low,xlog_nl,Percent,s_low,xlog_nl,Nullchar}
+			call f_printf2(globald.dfile,#f,row,start)
+
+			mult row :
+			setcall globald.offsets memrealloc(globald.offsets,row)
+
+			call debug_mark_start()  #prepare for first iteration
+
+			#set target to 0, for recognizing blank rows at second iteration
+			set globald.target (NULL)
+
+			add row globald.offsets
+			decst row   ##must be last entry not after
+			set globald.dend row   ##at third iteration
+
+			set globald.dsize 0
+		end
+	endif
+endfunction
+
+function debug_phase_code(sd codepointer)
+	if globald.prexx=(prexx_flags)
+		sv a;setcall a debug_mark_get()
+		if a<=^globald.dend ##else can't point  ("function a(){}") , flush_end will catch }
+			if codepointer>=^a#   #can also be smaller, or larger tested at function/condition blocks
+				if globald.dsize!=0  # example  function(){\n}\n and no actions for here, for function was already a line with actions
+					sv rows;set rows a
+					while codepointer>=^rows#   # > ? same as above
+						call debug_mark_add()
+						setcall rows debug_mark_get()
+						if rows>=globald.dend   ;# > ? example when last row is b=1 }" then rows now will point at one row after last row
+						# > also in ("function a(){}")
+							break
+						endif
+					endwhile
+					sub rows a
+					div rows :
+					#do not write now, can be break;} or Not Not If  and need to truncate that
+					set globald.pcsize globald.dsize
+					set globald.dsize 0
+					add globald.drows rows  ## add? is the case with break+ret and remove them and will be an empty row and that flush was skipped, below example
+					#example, add var q , at while break below example (at debug_phase_code_flush)
+				end
+			endif
+		endif
+	endif
+endfunction
+function debug_phase_code_flush_part(sd sz)
+	call f_write(globald.dfile,globald.dmem,sz)
+	char a=xlog_nl
+	callg f_write(globald.dfile,#a,1)
+end
+function debug_phase_code_flush()
+	if globald.drows!=0
+		if globald.pcsize!=0
+		# while(q){\nbreak;\n}  and with this example showing that previous ifs are ok also at last flush call
+		#there are rows with only one action_one, example in tests/ffdec
+			#out rows,[action1,action2]\n   #is not reaching here at "     " at no actions
+			#will not bother concludefunction where is asking with ftell
+			char format={xlog_actions,Percent,l_low,u_low,Nullchar}
+			call f_printf1(globald.dfile,#format,globald.drows) #add a * because still can be row like a preid start row, example: while break}
+			call debug_phase_code_flush_part(globald.pcsize)
+			set globald.drows 0
+		end
+	end
+end
+function debug_phase_code_flush_end()
+	call debug_phase_code_flush()
+	if globald.dsize!=0 #cases: function a(){}\n\n , function a(){}
+		call fseek(globald.dfile,-1,(SEEK_CUR))
+		callg debug_phase_code_flush_part(globald.dsize) # if(1==1){}else{} is size 3
+	end
+end
+
+function alt_log()
+	if globald.dfile2!=(NULL)
+		return globald.dfile2
+	end
+	if globald.prexx!=(prexx_flags)
+		return globald.dfile
+	end
+	return (NULL)
+end
+function logs_printf(sd log,sd ?nr)
+	char u={Percent,u_low,xlog_nl,Nullchar}
+	callg f_printf1(log,#u,nr)
+end
+function debug_printf(sd ?ix)
+	call logs_printf(globald.dfile,ix)
+	if globald.dfile2!=(NULL)
+		callg logs_printf(globald.dfile2,ix)
+	end
+end
+#function debug_base_core(sd ?id)
+#	callg debug_printf(id) #swf_button is calling action_sprite
+#end
+function debug_base(sd ?id)
+	if globald.dfile!=(NULL)
+		call debug_printf(id)
+		sd ai;set ai ainit()
+		callg debug_printf(ai)
+	end
+end
+function debug_show(sd ?id)
+	if globald.dfile!=(NULL)
+		call debug_printf(id)
+		char nls={xlog_nl,xlog_nl}
+		call debug_write(#nls,2)
+		sd alt;set alt alt_log()
+		if alt!=(NULL)
+			callg f_write(alt,#nls,1)
+		end
+	end
+end
+function debug_write(ss s,sd d)
+	call f_write(globald.dfile,s,d)
+	if globald.dfile2!=(NULL)
+		callg f_write(globald.dfile2,s,d)
+	end
+end
+function debug_spritedone(sd p,sd i)
+	if globald.dfile!=(NULL)
+		call debug_printf(p)
+		char nl=xlog_nl
+		call debug_write(#nl,1)
+		callg debug_printf(i)
+	end
+end
+function debug_export(sd ?i,ss e,sd size)
+	if globald.dfile!=(NULL)
+		sd alt;set alt alt_log()
+		if alt!=(NULL)
+			call logs_printf(alt,i)
+			char nls={xlog_nl,xlog_nl}
+			call f_write(alt,#nls,2)
+			call f_write(alt,e,size)
+			char nl=xlog_nl
+			callg debug_write(#nl,1)
+		end
+	end
+end
+
+function debug_phase_code_add(ss ?is_long,ss arg2,ss ?delim)
+	call debug_phase_code_flush()  #since Slash, function c(){\n} , will also add empty row but with one .
+	sd sz;set sz globald.dsize
+	if is_long=(TRUE)
+		add sz (action_debug_comma+2+2)
+	else
+		add sz (action_debug_comma)
+	end
+	if sz>^globald.dall_size
+		set globald.dall_size sz
+		add globald.dall_size 0x1000
+		set globald.dmem memrealloc(globald.dmem,globald.dall_size)
+	end
+	ss m;set m globald.dmem
+	add m globald.dsize
+	if is_long=(TRUE)
+		set m# delim
+		inc m
+		sd here_sz
+		ss second=1
+		add second arg2
+		if second#!=0
+			set here_sz md_printf(m,"%X",second#) #printf("%X",0xff) is FF only
+			add m here_sz
+			sub here_sz 2
+			call md_printf(m,"%02X",arg2#)
+		else
+			set here_sz md_printf(m,"%X",arg2#)  #only 0 is also printed
+			sub here_sz 2+2
+		end
+		add sz here_sz   ##is +0 or -1[+-1]  and for the else is -2 -3
+	else
+		set m# arg2 ##even if is only 1 action is lines,a1,a2...an
+	end
+	set globald.dsize sz
+end
+function debug_phase_code_add_long(ss arg2,ss ?delim)
+	callg debug_phase_code_add((TRUE),arg2,delim)
+end
+function debug_phase_code_add_jump_if(ss arg2,ss ?xlog_j)
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_long(arg2,xlog_j)
+	end
+end
+function debug_phase_code_add_jumpback_if(ss arg2)
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_long(arg2,(xlog_jumpback))
+	end
+end
+function debug_phase_code_add_one(ss arg2)
+	callg debug_phase_code_add((FALSE),arg2,(xlog_act))
+endfunction
+function debug_phase_code_add_if(ss ?is_long,ss arg2)
+	if globald.prexx=(prexx_flags) #at oalt no action sizes
+		callg debug_phase_code_add(is_long,arg2,(xlog_act))
+	endif
+endfunction
+function debug_phase_code_remove(sd swflength,sd length)
+	sd memblock;set memblock swf_actionblock_get()
+	sd p;set p block_get_psize(memblock)
+	sub p# swflength
+
+	if globald.prexx=(prexx_flags)
+		if globald.dsize=0 #was last command on previous row
+			sub globald.pcsize length
+			#and let the empty row if is the case, then still can break there
+			ret
+		end
+		sub globald.dsize length
+	end
+end
+
+function debug_definefunction(sv pointers)
+	if globald.prexx=(prexx_flags) #at oalt no action sizes
+		set pointers# f_tell(globald.dfile)
+		incst pointers
+
+		set pointers#d^ swf_actionblock_get_size()
+		incst pointers
+
+		sd offset
+		set offset globald.dsize
+		char dummy={0xff,0xff} #0,0 is not ok inside
+		call debug_phase_code_add_long(#dummy,(xlog_function))
+		#inc offset ##to skip Comma  #but at fseek is not needed because fread is already skipping that
+		set pointers#d^ offset
+	endif
+end
+import "error" error
+function debug_concludefunction(sv pointers)
+	if globald.prexx=(prexx_flags) #at oalt no action sizes
+		sd prev_fileoffset;set prev_fileoffset pointers#
+		sd now;set now f_tell(globald.dfile)
+		incst pointers
+
+		sd block;setcall block swf_actionblock_get()
+		sd blockmem;set blockmem block_get_mem(block)
+		add blockmem pointers#d^
+		sd size;set size word_arg_to_stack(blockmem)
+		incst pointers
+
+		sd offset;set offset pointers#d^
+		vstr format="%04X"
+		if prev_fileoffset!=now   ##often case where the function has multiple lines, now line is on the file and not in mem
+			add prev_fileoffset 2 # * from the start of the row and first digit
+			call fseek(globald.dfile,prev_fileoffset,(SEEK_SET))
+			#now need to skip first number that is the number of rows
+			whiletrue
+				char a#1
+				sd ret
+				set ret fread(#a,1,1,globald.dfile)
+				if a<(_0)  #there is a delimiter from here
+					break
+				endif
+				if a>(_9) #many are starting with string delim
+					break
+				end
+				if ret!=1
+					call error("Who modified the debug file?") #but since files are not exclusives, need to also verify the return
+				end
+			end
+			call fseek(globald.dfile,offset,(SEEK_CUR))
+			call fprintf(globald.dfile,format,size)    #overwrite the dummy write
+			call fseek(globald.dfile,0,(SEEK_END))
+		else #on mem
+			sd c;set c globald.dmem
+			inc offset ##to skip delimiter
+			add c offset
+			call md_printf(c,format,size)
+		end
+	endif
+end
+
+import "x_log" x_log
+function debug_xlog_ex(sd codepointer,sd type)
+	if globald.prexx=(prexx_flags)
+		call debug_phase_code_add_one(type)
+	else
+		callg x_log(codepointer)
+	end
+end
+function debug_xlog(sd codepointer) #/
+# forin{[ if/loop{[  [else :[  loop}[ if}[ else}[
+#not all &jump will start a new branch, example continue and break
+	callg debug_xlog_ex(codepointer,(xlog_branch))
+end
+function debug_xlog_stepin(sd codepointer) #{
+#for;;[ ?[ func{[
+	callg debug_xlog_ex(codepointer,(xlog_innerbranch))
+end
+function debug_xlog_stepout(sd codepointer) #}
+# for;;[ func}[ :}[
+	callg debug_xlog_ex(codepointer,(xlog_innerbranchend))
+end
+function debug_xlog_pool(sd nr) #pool_flag is already tested
+	if globald.prexx=(prexx_flags)
+		if nr<256  #at oad when is reading the log, it has constant8/constant16, after pool substitutions in the second swf, it is another lookup with string/c8/c16, must recalculate
+		#at write to xx, new can compare ssize and id has the word nr < or >= 256
+			wordu a=xlog_const8_log-_0  #Constant8 lookup has 1 byte
+			call debug_phase_code_add_long(#a,(xlog_string))
+		else #const16
+			wordu b=xlog_const16_log-_0  #Constant16 lookup has 2 bytes
+			callg debug_phase_code_add_long(#b,(xlog_string))
+		end
+	end
+end
+
+function debug_xlog_loop()
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_loop))
+	end
+end
+function debug_xlog_break()
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_break))
+	end
+end
+function debug_xlog_forin(wordxu type)
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_long(#type,(xlog_forin))
+	end
+end
+function debug_xlog_return()
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_return))
+	end
+end
+function debug_xlog_call()
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_call))
+	end
+end
+function debug_xlog_unimplemented()
+	if globald.prexx=(prexx_flags)
+		callg debug_phase_code_add_one((xlog_unimplemented))
+	end
+end
+
+function deprecation()
+	if globald.dprbool=(TRUE)
+		vstr e="DBL tags are deprecated; use GIF/JPEG/PNG/img functions, flag_deprecation_no"
+		if globald.dprfull=(TRUE)
+			call error(e)
+		else
+			call string_nl_print(e)
+		end
+	end
+end
+
+entryraw globald()

@@ -1,0 +1,721 @@
+
+format elfobj64
+
+include "../include/prog.h" "../include/prog.oh"
+
+import "identifiers_set" identifiers_set
+import "stack_to_word_arg" stack_to_word_arg
+import "stack_to_word_arg_twips" stack_to_word_arg_twips
+import "rect_prepare" rect_prepare
+import "dword_swap" dword_swap
+import "args_advance" args_advance
+import "bits_packs" bits_packs
+import "NumFill_NumLin" NumFill_NumLin
+import "NumFill_NumLin_get" NumFill_NumLin_get
+import "shapewithstyle_records" shapewithstyle_records
+import "printEr" printEr
+^import "word_arg_to_stack" word_arg_to_stack 1
+import "file_get_content__resources_free" file_get_content__resources_free
+import "matrix_translate" matrix_translate
+^import "struct_ids" struct_ids 2 #full
+import "block_get_size" block_get_size
+^import "block_get_mem" block_get_mem 1
+import "block_reset_size" block_reset_size
+
+^import "alt_action" alt_action 2 # full return
+import "swf_actionblock_change_back" swf_actionblock_change_back
+
+import "deprecation" deprecation
+import "user_flags" user_flags
+
+importx "strlen" strlen
+importx "fseek" fseek
+importx "fclose" fclose
+
+#aftercalli
+
+import "swf_actionblock_change" swf_actionblock_change
+import "swf_mem_init" swf_mem_init
+import "swf_mem_add" swf_mem_add
+import "rect_add" rect_add
+import "swf_frames_reg" swf_frames_reg
+import "swf_tag" swf_tag
+import "identifiers_get" identifiers_get
+import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+import "error" error
+import "file_get_content" file_get_content
+import "exportsId_get" exportsId_get
+
+import "flags_init" flags_init
+function swf_new_ex_local(ss path,sd ?width,sd ?height,sd ?backgroundcolor,ss ?fps,sd ?flags)
+#ss path             file out pathname
+#sd width
+#sd height
+#sd backgroundcolor  0xRRGGBB  value
+#sd fps              swf frames per second
+#sd flags            see flags.oh
+    #F=uncompressed, C=ZLib
+#const hd_start=\
+#    char *=F
+#    char *={W,S}
+#    char *version=8
+const file_sz_off=4
+#    data *FileLength#1
+#data size=\-hd_start
+#vdata hd_pack%hd_start
+
+	call user_flags(#flags)
+	call flags_init(flags,path)
+	call swf_mem_init(path,(file_sz_off),flags)
+	#identifiers for swf
+	call identifiers_set(0);#font with id 0 isn't visible in the placements
+
+	char hd1={F,W,S,8,0,0,0,0}
+	call swf_mem_add(#hd1,8)
+
+	#rect
+	call rect_add(width,height)
+
+#const hd2=\
+#    char *FrameRate=0
+#        char FrameRate#1
+#    char *FrameCount={0,0}  #will be incremented at least once
+#data size2=\-hd2
+#vdata hd_pack2%hd2
+	#x.x format
+#	set FrameRate fps
+	char hd2={0,0,0,0};ss pointer^hd2
+	inc pointer;set pointer# fps
+	call swf_mem_add(#hd2,4)
+
+	call swf_frames_reg() #is a rect with nbits above, ..., faster here
+
+#	char setbackgroundtag#2
+#	char red#1
+#	char green#1
+#	char blue#1
+	charx bg#5;ss cursor^bg
+	add cursor 4;set cursor# backgroundcolor
+	dec cursor;divu backgroundcolor 0x100;set cursor# backgroundcolor
+	dec cursor;divu backgroundcolor 0x100;set cursor# backgroundcolor
+	callg swf_tag(#bg,(SetBackGroundColor),3)
+endfunction
+
+#id
+function swf_font_local(ss fontname,ss ?font_flags)
+#ss fontname    = a string with the browser font, for example "_sans"
+#sd font_flags  = prog.oh file is with the flags
+#    const font_hd_start=\
+#    char id#2
+#   char Flags#1
+#    char *Language=0
+#    char FontNameLen#1
+	const font_hd_start_size=5
+#    vdata font_hd_start^id
+	char data={0,0,0,0,0};ss pointer^data
+
+	data NumGlyphs=0
+
+	sd fontid
+	setcall fontid identifiers_get()
+	call stack_to_word_arg(fontid,#data)
+	add pointer (WORD);set pointer# font_flags
+	add pointer (BYTE+BYTE);set pointer# strlen(fontname)
+
+	sw ?size=font_hd_start_size+2
+
+	ss ?has_layout=FontFlagsHasLayout
+	and has_layout font_flags
+	add size pointer#
+	if has_layout!=0
+		add size (2+2+2+2)
+	endif
+
+	call swf_tag_recordheader_entry((DefineFont2),size)
+	call swf_mem_add(#data,(font_hd_start_size))
+	call swf_mem_add(fontname,pointer#)
+	call swf_mem_add(#NumGlyphs,2)
+	if has_layout!=0
+		char FontAscent={0,0}
+		char *FontDescent={0,0}
+		char *FontLeading={0,0}
+		char *KerningCount={0,0}
+		call swf_mem_add(#FontAscent,(2+2+2+2))
+	endif
+	return fontid
+endfunction
+
+#id
+function swf_text_local(sd ?bound_width,sd ?bound_height,ss variablename,sw ?flags,sv structure)
+#sd bound_width  width of the text
+#sd bound_height height
+#ss variablename to change it with actionscript
+#sd flags        see dev/action_swf.oh at text flags
+#sv structure    see edittext_struct()  from character.oc, set the flags first
+	#CharacterID
+	sd ?size=2
+	#RECT
+	sd rect
+	datax rectsz#1
+	call rect_prepare(#rect,#rectsz,bound_width,bound_height)
+	add size rectsz
+	#flags
+	add size 2
+	#FontID
+	sd p_fontid
+	sw ?hasfont=HasFont
+	and hasfont flags
+	if hasfont!=0
+		set p_fontid structure
+		add size 2
+	endif
+	#FontClass
+	ss fontclassname
+	sd fontclasssize
+	sw ?hasfontclass=HasFontClass
+	and hasfontclass flags
+	add structure (2*DWORD)
+	if hasfontclass!=0
+		if hasfont!=0
+			call error("HasFontClass can't be true if HasFont is true.")
+		endif
+		set fontclassname structure#
+		setcall fontclasssize strlen(fontclassname)
+		inc fontclasssize
+		add size fontclasssize
+	endif
+	#FontHeight
+	sd p_font_height
+	sub structure (DWORD)
+	if hasfont!=0
+		set p_font_height structure
+		add size 2
+	endif
+	#TextColor
+	sd p_rgba
+	sw ?hastextcolor=HasTextColor
+	and hastextcolor flags
+	add structure (DWORD+:)
+	if hastextcolor!=0
+		set p_rgba structure
+		add size 4
+	endif
+	#MaxLength
+	sd p_maxlength
+	sw ?hasmaxlength=HasMaxLength
+	and hasmaxlength flags
+	add structure (DWORD)
+	if hasmaxlength!=0
+		set p_maxlength structure
+		add size 2
+	endif
+	#layout
+	ss p_layout
+	data layout_size=4*WORD+BYTE
+	sw ?haslayout=HasLayout
+	and haslayout flags
+	add structure (DWORD+:)
+	if haslayout!=0
+		set p_layout structure
+		add size layout_size
+	endif
+	#VariableName
+	sd vlen
+	setcall vlen strlen(variablename)
+	inc vlen
+	add size vlen
+	#InitialText
+	ss initialtext
+	sd initialtextsize
+	sw ?hastext=HasText
+	and hastext flags
+	sub structure :
+	if hastext!=0
+		set initialtext structure#
+		setcall initialtextsize strlen(initialtext)
+		inc initialtextsize
+		add size initialtextsize
+	endif
+
+	call swf_tag_recordheader_entry((DefineEditText),size)
+	sd ?id
+	setcall id identifiers_get()
+	call swf_mem_add(#id,2)
+	call swf_mem_add(rect,rectsz)
+	call swf_mem_add(#flags,2)
+	#
+	if hasfont!=0
+		call swf_mem_add(p_fontid,2)
+	endif
+	if hasfontclass!=0
+		call swf_mem_add(fontclassname,fontclasssize)
+	endif
+	if hasfont!=0
+		sd ?height
+		set height p_font_height#
+		mult height 20
+		if height>^0xffFF
+			call error("large font height error")
+		end
+		call swf_mem_add(#height,2)
+	endif
+	if hastextcolor!=0 #this if at treasure finder
+		sd ?not_touching;set not_touching dword_swap(p_rgba#)
+		call swf_mem_add(#not_touching,4)
+	endif
+	if hasmaxlength!=0
+		call swf_mem_add(p_maxlength,2)
+	endif
+	if haslayout!=0  #this if at treasure finder
+#		char l_align#1
+#		char l_leftmargin#2
+#		char l_rightmargin#2
+#		char l_indent#2
+#		char l_leading#2
+		charx layoutdata#9;ss p_layoutdata^layoutdata
+		set p_layoutdata# p_layout#
+		add p_layout (DWORD);inc p_layoutdata;call stack_to_word_arg_twips(p_layout#w,p_layout)
+		add p_layout (DWORD);add p_layoutdata (WORD);call stack_to_word_arg_twips(p_layout#w,p_layout)
+		add p_layout (DWORD);add p_layoutdata (WORD);call stack_to_word_arg_twips(p_layout#w,p_layout)
+		add p_layout (DWORD);add p_layoutdata (WORD);call stack_to_word_arg_twips(p_layout#w,p_layout)
+		call swf_mem_add(#layoutdata,layout_size)
+	endif
+	call swf_mem_add(variablename,vlen)
+	if hastext!=0
+		call swf_mem_add(initialtext,initialtextsize)
+	endif
+	return id
+endfunction
+
+import "shape_records_add" shape_records_add
+#id
+function swf_shape_local(sd ?width,sd ?height,sd args)
+#sd width
+#sd height
+#sd args        see swf_shape_basic or swf_image(last part) for example, or see shape_records_add and it's sub-functions to see how the swf SHAPERECORD is added
+    if width=0
+        call error("shape width 0 not allowed")
+    elseif height=0
+        call error("shape height 0 not allowed")
+    endelseif
+    sd ?fillstyle
+    sd ?fillarg
+    sd ?linewidth
+    sd ?linecolor
+
+    setcall fillstyle args_advance(#args)
+    if fillstyle!=(no_fill)
+        setcall fillarg args_advance(#args)
+    endif
+    setcall linewidth args_advance(#args)
+    if linewidth!=0
+        setcall linecolor args_advance(#args)
+    endif
+    ########
+    sd ?shape_size
+
+    #id
+    sd ?shape_id
+    setcall shape_id identifiers_get()
+    set shape_size (WORD)
+
+	#rect
+	sd rect
+	datax rect_size#1
+	call rect_prepare(#rect,#rect_size,width,height)
+	add shape_size rect_size
+
+	#SHAPEWITHSTYLE
+
+#	char FillStyleCount#1
+#	char FillStyleType#1
+#	data data#3
+#	vdata fillstyles^FillStyleCount
+	charx filldata#14;ss pfilldata^filldata
+	sd ?fillstyles_size=1
+	if fillstyle!=(no_fill) #these ifs at treasure finder
+#		set FillStyleCount 1
+		set pfilldata# 1
+#		set FillStyleType fillstyle
+		inc pfilldata;set pfilldata# fillstyle
+		add fillstyles_size 1
+		inc pfilldata
+		if fillstyle=(solid_fill)
+			setcall pfilldata#d dword_swap(fillarg)
+			add fillstyles_size (DWORD)
+		#elseif linear gradient fill,radial gradient fill or focal radial gradient fill
+		else
+		#if fillstyle==(repeating_bitmap_fill)
+		#clipped bitmap fill,non-smoothed repeating bitmap or non-smoothed clipped bitmap
+			call stack_to_word_arg(fillarg,pfilldata)
+			add pfilldata (WORD)
+			#matrix,scaleX=20,scaleY=20,translateX=0,translateY=0
+			#first bit: scaleX 0 and Y 0;or 1;=>0;else is 1
+			#const FIXEDBITS=16
+			#x and y=floor(scaleX*(1<<FIXEDBITS))=0x00140000
+			#Nbits is 0x15 + 1(sign)
+			const predef_nbits=0x16
+			const predef_XYscale=0x00140000
+			#rotate is 0
+			#translate nbits is 0
+			call bits_packs(pfilldata,6,1,1,(predef_nbits),(NBits_size),(predef_XYscale),(predef_nbits),(predef_XYscale),(predef_nbits),0,1,0,(NBits_size))
+			#char ref_id#2
+			#char matrix#7
+			add fillstyles_size (2+7)
+		endelse
+	else
+#		set FillStyleCount 0
+		set pfilldata# 0
+	end
+	add shape_size fillstyles_size
+	set pfilldata #filldata
+
+#	char LineStyleCount#1
+#	char line_points#2
+#	data color#1
+#	vdata linestyles^LineStyleCount
+	charx linedata#7;ss plinedata^linedata
+	sd ?linestyles_size=1
+
+#	set LineStyleCount 0
+	if linewidth!=0  #these ifs at treasure finder
+#		set LineStyleCount 1
+		set plinedata# 1
+		inc plinedata
+		mult linewidth 20
+		call stack_to_word_arg(linewidth,plinedata)
+		add plinedata (WORD)
+		setcall plinedata#d dword_swap(linecolor)
+		add linestyles_size (WORD+DWORD)
+	else
+		set plinedata# 0
+	end
+	add shape_size linestyles_size
+	set plinedata #linedata
+
+	#NumFillBits/NumLineBits
+	call NumFill_NumLin(pfilldata#,plinedata#)
+	ss ?NFill_NLin;setcall NFill_NLin NumFill_NumLin_get((TRUE));mult NFill_NLin 0x10;orcall NFill_NLin NumFill_NumLin_get((FALSE))
+	inc shape_size
+
+	#shaperecord[n]
+	sd shapewithstyle_record_start
+	setcall shapewithstyle_record_start shapewithstyle_records()
+#	value pointer#1;data pos#1
+	datax dest_pos#(:/DWORD)+1;sv ppointer^dest_pos
+	sd ppos=:;add ppos ppointer
+#	set pos 0x80
+	set ppos# 0x80
+	set ppointer# shapewithstyle_record_start
+	while args#!=-1
+		call shape_records_add(ppointer,#args)
+	endwhile
+	data end={0,0};sd end_record^end
+	call shape_records_add(ppointer,#end_record)
+	if ppos#!=0x80
+		inc ppointer# #on suffix inc is ok
+	endif
+	sd records_sz
+	set records_sz ppointer#
+	sub records_sz shapewithstyle_record_start
+	add shape_size records_sz
+
+    call swf_tag_recordheader_entry((DefineShape3),shape_size)
+    call swf_mem_add(#shape_id,2)
+    call swf_mem_add(rect,rect_size)
+    call swf_mem_add(pfilldata,fillstyles_size)
+    call swf_mem_add(plinedata,linestyles_size)
+    call swf_mem_add(#NFill_NLin,1)
+    call swf_mem_add(shapewithstyle_record_start,records_sz)
+
+    return shape_id
+endfunction
+
+#id
+function swf_shape_bitmap_local_repeating(sd ?bitmapId,sd ?width,sd ?height)
+	callret swf_shape_bitmap_local(bitmapId,width,height,(repeating_bitmap_fill))
+end
+function swf_shape_bitmap_local_clipped(sd ?bitmapId,sd ?width,sd ?height)
+	callret swf_shape_bitmap_local(bitmapId,width,height,(clipped_bitmap_fill))
+end
+function swf_shape_bitmap_local(sd ?bitmapId,sd ?width,sd ?height,sd ?bitmap_fill)
+#                                                                 ruffle will extra pixel at repeating image and at transparent is annoying
+#sd bitmapId    id, e.g.: from swf_dbl
+	sd ?width_variable=-1
+	mult width_variable width
+	sd ?height_variable=-1
+	mult height_variable height
+
+	data strct={re,re,0,0,StateFillStyle0,1,1,re,0,1,1,0,re,1,1,re,0,1,1,0,re,-1};sd pstruct^strct
+#	data struct#1
+#	set struct bitmap_fill
+	set pstruct# bitmap_fill
+#	data refid#1
+#	set refid bitmapId
+	add pstruct (DWORD);set pstruct# bitmapId
+#	data *=0
+#		data *={0,StateFillStyle0}
+
+#	data *={1,1}
+#		data w1#1;data *=0
+#	set w1 width
+	add pstruct (6*DWORD);set pstruct# width
+
+#	data *={1,1}
+#		data *=0;data h1#1
+#	set h1 height
+	add pstruct (5*DWORD);set pstruct# height
+
+#	data *={1,1}
+#		data w2#1;data *=0
+#	set w2 width_variable
+	add pstruct (3*DWORD);set pstruct# width_variable
+
+#	data *={1,1}
+#		data *=0;data h2#1
+#	set h2 height_variable
+	add pstruct (5*DWORD);set pstruct# height_variable
+
+#	data *=-1
+	callret swf_shape_local(width,height,#strct)
+endfunction
+
+#id
+function swf_image_ex_local(ss imagepath,sd p_wh,sd verif)
+#ss imagepath = path name for the dbl image
+#sd p_wh      = pointer width height
+	sd ?dbl_id
+	setcall dbl_id swf_dbl_ex_local(imagepath,p_wh,verif)
+	#add dbl to a shape
+	sd ?width;set width p_wh#;add p_wh (DWORD)
+	callret swf_shape_bitmap_local_clipped(dbl_id,width,p_wh#)
+endfunction
+import "swf_tag_recordheader_long_entry" swf_tag_recordheader_long_entry
+import "word_swap" word_swap
+#id
+function swf_dbl_ex_local(ss imagepath,sd p_wh,sd verif)
+#ss imagepath = path name for the dbl image
+#sd p_wh = pointer width a dword and height next dword
+	sd id
+	sd mem
+	sd size
+	sd cursor
+	setcall mem file_get_content(imagepath,#size)
+	if size<(dblsignature+dblsize)
+		call error("missing image header")
+	endif
+	char hd_magic0={D,B,L,1};vdata magic0^hd_magic0
+	char hd_magic00={D,B,L,2};vdata magic00^hd_magic00
+	char hd_magic1={D,B,l_low,1};vdata magic1^hd_magic1
+	char hd_magic2={D,B,l_low,2};vdata magic2^hd_magic2
+	if mem#!=magic1#
+	if mem#!=magic2#
+	if mem#!=magic0#
+	if mem#!=magic00#
+		call printEr("expecting dbl(define bits lossless 1 or 2)header; filepath: ")
+		call error(imagepath)
+	endif;endif;endif;endif
+	set cursor mem
+	add cursor 2
+	sd header
+	sd image_size
+	if cursor#s^=(l_low)
+		inc cursor
+		if cursor#s^=(1)
+			set header (DefineBitsLossless)
+		else
+			set header (DefineBitsLossless2)
+		end
+		inc cursor
+		set image_size dword_swap(cursor#)
+		add cursor (DWORD)
+		sub size (2*DWORD)
+	else #this is 1950-1952 when all size was on WORD
+		inc cursor
+		if cursor#s^=(1)
+			set header (DefineBitsLossless)
+		else
+			set header (DefineBitsLossless2)
+		end
+		inc cursor
+		set image_size word_swap(cursor#w^)
+		add cursor (WORD)
+		sub size (DWORD+WORD)
+	end
+#include "/home/bc/games/this_is_for_testing"
+	if image_size>size
+		call error("size error at dbl")
+	endif
+	#add the define bits lossless file to mem
+	add size (WORD)
+	call swf_tag_recordheader_long_entry(header,size)
+	setcall id identifiers_get()
+	call swf_mem_add(#id,(WORD))
+	if p_wh!=0
+		#get width and height;BitmapFormat UI8,BitmapWidth UI16,BitmapHeight UI16
+		if image_size<(2*WORD+BYTE)
+			call error("size error at dbl when looking for width/height")
+		endif
+		sd pointer
+		set pointer cursor
+		add pointer (BYTE)
+		setcall p_wh# word_arg_to_stack(pointer)
+		add pointer (WORD)
+		add p_wh (DWORD)
+		setcall p_wh# word_arg_to_stack(pointer)
+	endif
+	call swf_mem_add(cursor,image_size)
+	call file_get_content__resources_free()
+	if verif=(FALSE)
+		call deprecation()
+	end
+	return id
+endfunction
+
+^import "f_open" f_open 2
+^import "f_tell_errors" f_tell_errors 1
+#id
+function swf_jpeg_local(ss imagepath,ss ?tag,ss alphapath)
+#ss imagepath = path name for the image
+#char tag = jpeg 2 or 3
+#ss alphapath = path name for the image alpha
+	sd mem
+	sd size
+	sd size2
+	setcall mem file_get_content(imagepath,#size)
+	sd allsize;set allsize size
+	if tag=(DefineBitsJPEG3)
+		sd file;set file f_open(alphapath,"rb")
+		call fseek(file,0,(SEEK_END))
+		set size2 f_tell_errors(file)
+		call fclose(file) #i m closing it because i don't want to hardcode error(), but that means to add another little check here, in the meantime, another prog can fast modify everything and here no held at resources
+		add allsize size2
+		if allsize<0 #going to sign bit
+			call error("two big files")
+		end
+		add allsize (DWORD)
+	end
+	add allsize (WORD) #if going to sign bit, the error will be catched at realloc
+	call swf_tag_recordheader_long_entry(tag,allsize)
+	sd id
+	setcall id identifiers_get()
+	call swf_mem_add(#id,(WORD))
+	if tag=(DefineBitsJPEG3)
+		call swf_mem_add(#size,(DWORD))
+	end
+	call swf_mem_add(mem,size)
+	call file_get_content__resources_free()
+	if tag=(DefineBitsJPEG3)
+		setcall mem file_get_content(alphapath,#size)
+		if size!=size2
+			call error("sizes hazard at jpeg 3")
+		end
+		call swf_mem_add(mem,size)
+		call file_get_content__resources_free()
+	end
+	return id
+endfunction
+
+function swf_placeobject_local(sd ?refid,sd ?depth)
+#sd refid    the id
+#sd depth    depth value
+     callg swf_placeobject_coords_local(refid,depth,0,0)
+endfunction
+function swf_placeobject_coords_local(sd ?refid,sd ?depth,sd ?x,sd ?y) #x/y can be negative
+#sd refid
+#sd depth
+#sd x         x coordinate
+#sd y         y coordinate
+#const PlaceFlagHasClipActions=0x80
+#const PlaceFlagHasClipDepth=0x40
+#const PlaceFlagHasName=0x20
+#const PlaceFlagHasRatio=0x10
+#const PlaceFlagHasColorTransform=0x8
+const PlaceFlagHasMatrix=0x4
+const PlaceFlagHasCharacter=0x2
+#const PlaceFlagMove=0x1
+    sd flags=PlaceFlagHasMatrix|PlaceFlagHasCharacter
+    sd matrix
+    dataxu matrixsz#1
+    call matrix_translate(#matrix,#matrixsz,x,y)
+
+    sd ?size=5
+    add size matrixsz
+    call swf_tag_recordheader_entry((PlaceObject2),size)
+    call swf_mem_add(#flags,1)
+    call swf_mem_add(#depth,2)
+    #character id
+    call swf_mem_add(#refid,2)
+    #matrix
+    callg swf_mem_add(matrix,matrixsz)
+endfunction
+function swf_removeobject_local(sd depth)
+#sd depth        depth for the removeobject2 tag
+    call swf_tag_recordheader_entry((RemoveObject2),2)
+    #depth
+    callg swf_mem_add(#depth,2)
+endfunction
+
+function swf_exports_done_local()
+#write all the exports to the swf
+    sd exports
+    setcall exports exportsId_get()
+    sd block
+    setcall block struct_ids((ids_get),exports)
+    sd size
+    setcall size block_get_size(block)
+    if size!=0
+        #
+        call swf_tag_recordheader_entry((ExportAssets),size)
+        #
+        sd exp
+        setcall exp block_get_mem(block)
+        call swf_mem_add(exp,size)
+        call block_reset_size(block)
+    endif
+endfunction
+
+
+
+import "debug_base" debug_base
+import "action_base" action_base
+import "format_store" format_store
+function action_local(ss ac)
+	sd alt_ac;set alt_ac alt_action(ac,0)
+	if alt_ac!=(NULL)  #can be two action() same DoAction
+		call debug_base(0)
+		call action_base(alt_ac)
+		if alt_ac!=ac
+			call file_get_content__resources_free()
+		else #keep as3 format counter
+			callg format_store("")
+		end
+	end
+end
+import "actions_format" actions_format
+function actionsf_local(sdu psize,sv pbuffer)
+	sd alt_ac;set alt_ac alt_action(pbuffer#,0)
+	if alt_ac!=(NULL)
+		call debug_base(0)
+		if pbuffer#=alt_ac
+			call actions_format(psize,pbuffer)
+		else
+			call action_base(alt_ac)
+			call file_get_content__resources_free()
+		end
+	end
+end
+function actionsf_sprite_local(sd sprite,sdu psize,sv pbuffer)
+	sd alt_ac;set alt_ac alt_action(pbuffer#,sprite)
+	if alt_ac!=(NULL)
+		call debug_base(sprite)
+		call swf_actionblock_change(sprite)
+		if pbuffer#=alt_ac
+			call actions_format(psize,pbuffer)
+		else
+			call action_base(alt_ac)
+			call file_get_content__resources_free()
+		end
+		call swf_actionblock_change_back()
+	end
+end

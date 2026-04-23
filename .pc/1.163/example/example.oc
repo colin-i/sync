@@ -1,0 +1,134 @@
+format elfobj64
+
+#a simple shape moving on the stage example
+
+importx "_exit" exit
+
+include "entry_arg.oc" "entry.oc"
+
+override include_sec 1
+einclude "../dev/import.oh"
+
+const width=640
+const height=480
+const shape_lat=40
+
+####################
+
+const flags1=prexx_flags|flagpre_x_pad
+#|flagpre_write_no
+const flags2=xxu_flags   ;#for tests/data . flag_compress is at ffdec test, and here will compare from 2 different(maybe) zlibs
+const flags3=flags2|flag_compress
+
+sd flags
+if argc=1
+	set flags (flags1)
+elseif argc=2
+	set flags (flags2)
+else
+	set flags (flags3)
+end
+
+call xlog_pad_set(0x30)
+
+call swf_new_ex("example.swf",(width),(height),0x001100,24,flags)
+
+sd shape
+setcall shape swf_shape_basic((shape_lat),(shape_lat),0xffeeFEff,0x11FF22ff)
+
+sd movie_preid
+setcall movie_preid swf_sprite_new()
+
+call action_init_sprite(movie_preid,"_root.tog=0")
+call action_init_sprite(movie_preid,"_root.tog++") #to demonstrate multiple init at oad
+
+call swf_sprite_placeobject(movie_preid,shape,1)
+call swf_sprite_showframe(movie_preid)
+
+sdu size
+ss a_c=0
+call actionsf_sprite(movie_preid,#size,#a_c,"var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move",(width),(height),(shape_lat))
+
+call action_sprite(movie_preid,"
+if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+else if(this._x<=left)_root.x_coef=_root.x_coef*-1;
+this._x=move*_root.x_coef+this._x;
+if(this._y>=bottom)_root.y_coef=_root.y_coef*-1;
+else if(this._y<=top)_root.y_coef=_root.y_coef*-1;
+this._y=move*_root.y_coef+this._y;
+")
+
+call swf_sprite_showframe(movie_preid)
+
+sd movie
+setcall movie swf_sprite_done(movie_preid)
+
+call swf_exports_add(movie,"movie")
+call swf_exports_done()
+
+sd f;set f swf_font_basic("_sans")
+char ButtonData_a="Toggle"
+data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 24,24}
+vstr *^ButtonData_a
+data ButtonData_c#1;set ButtonData_c f;data *=20
+data *vert_off=-5
+data *font_color=0xff
+vstr ButtonData_d#1;set ButtonData_d "
+if(_root.tog==1){
+	_root.tog=0;_root._movie.stop()
+}else if(_root.tog==0){
+//else if is intentional to demonstrate if_flag
+	_root.tog=1;_root._movie.play()
+}"
+sd b;set b swf_button(150,50,#ButtonData)
+call swf_placeobject(b,0)
+
+call actionsf(#size,#a_c,"
+var x_coef=%u;
+var y_coef=%u;
+function test(){
+	function test2(){
+		attachMovie('movie','_movie',1);
+		_movie._x=100;
+		_movie._y=100;
+	}
+	test2();
+}
+function test3(){
+	test();
+	var more_oad_tests=new Array(1,2);
+	for(var a in more_oad_tests){
+		trace(more_oad_tests[a]);
+		for(b in more_oad_tests){
+			if(b==2){
+				break;
+			}
+			trace(more_oad_tests[b]);
+		}
+		if(a==1){
+			return 1;
+		}
+	}
+}
+var this_is_just_a_test=0;
+while(true){
+	this_is_just_a_test++;
+	if(this_is_just_a_test==1){
+		continue;
+	}
+	if(this_is_just_a_test==2){
+		test3();
+	}else{
+		break;
+	}
+}
+
+",1,1)
+
+call swf_showframe()
+call swf_done()
+
+call actions_free(a_c)
+
+call exit(0)
+#return 0
