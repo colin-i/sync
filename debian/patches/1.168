@@ -1,0 +1,307 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: apr, 30 2026 14:00:03 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/csrc/Makefile
++++ actionswf-1/csrc/Makefile
+@@ -6,7 +6,9 @@ ifndef OCONV
+ OCONV=otoc
+ endif
+ ifndef linkerflags
+-linkerflags=-s #-O1..fast will break the test at bionic(at least)
++linkerflags=-O3 -march=native -s
++# -flto currently breaks. ... block_get_size is pointer(translator), int when we use it, at == 0 comparation lto if having O1 will skip
++#	when trying to find what lto/O mix, -fno-strict-aliasing will produce less crashes
+ endif
+ ifndef compilerflags
+ compilerflags=${linkerflags}
+@@ -15,6 +17,10 @@ ifndef EXTRA_CFLAGS
+ include ../oad/cflags
+ endif
+ 
++ifndef prefix
++prefix=/usr
++endif
++
+ ifeq ($(shell dpkg-architecture -qDEB_HOST_ARCH), arm64)
+ #let error if not dpkg-architecture to be visible for correction . or || uname -m , patsubst
+ 	OCONVFLAGS=-s
+@@ -53,7 +59,7 @@ all: headers ${proj}
+ #can't put headers at proj, will phony libactionswf.so
+ ${proj}: ${exte} ${eobs}
+ 	${OLINK} ${logs}
+-	$(CC) ${model} ${linkerflags} -shared ${eobs} -o $@ -L. -l:${exte} -Wl,--exclude-libs=${exte}
++	$(CC) ${model} ${linkerflags} -shared ${eobs} -o $@ `pkg-config --libs zlib` -L. -l:${exte} -Wl,--exclude-libs=${exte}
+ ${exte}: ${obs}
+ 	$(AR) cr ${exte} $^
+ # -e DllMain
+@@ -67,13 +73,21 @@ headers:
+ 	${OCONV} ${OCONVFLAGS} $<.x import
+ 	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} ${backsrc}$*.c -o $@
+ 
+-clean:
++clean-obj:
++	-rm -f ${obs} ${eobs}
++clean: clean-obj
+ 	$(MAKE) -C ../include clean
+ 	$(MAKE) -C ../dev clean-csrc
+-	-rm -f ${obs} ${eobs} ${logs} ${exte} ${proj}
++	-rm -f ${logs} ${exte} ${proj}
+ 	-rm -f ${xfiles} ${cfiles}
+ distclean: clean
+ 
+-.PHONY: all headers clean distclean
++install:
++	install -D ${proj} $(DESTDIR)$(prefix)/lib${install_number}/${proj}
++
++uninstall:
++	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${proj}
++
++.PHONY: all headers clean clean-obj distclean install uninstall
+ 
+ # global usings: abcdefghiloprstuwx jkmnqvy
+--- actionswf-1.orig/csrc/md
++++ actionswf-1/csrc/md
+@@ -1,2 +1,3 @@
+ 
+-linkerflags=-g make $@
++if [ -z "${linkerflags}" ]; then linkerflags=-g; fi
++make linkerflags="${linkerflags}" $@
+--- actionswf-1.orig/include/program.oh
++++ actionswf-1/include/program.oh
+@@ -91,9 +91,9 @@ const action_code_values_unit=DWORD
+ const recordheader_long_mark=0x3f
+ const recordheader_upperbits=recordheader_long_mark+1
+ 
+-const action_debug_free=0
+-const action_debug_get=1
+-const action_debug_get_mem=2
++#const action_debug_free=0
++#const action_debug_get=1
++#const action_debug_get_mem=2
+ 
+ const actionjump_contentsize=2
+ const smallbackjump=-actionjump_contentsize
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -9,7 +9,8 @@ ifndef OCONV
+ OCONV=otoc
+ endif
+ ifndef linkerflags
+-linkerflags=-O3 -s #Ofast is breaking the test
++linkerflags=-O3 -march=native -s
++# -Ofast: - crashes that don't happen with -O3
+ endif
+ ifndef compilerflags
+ compilerflags=${linkerflags}
+--- actionswf-1.orig/src/Makefile
++++ actionswf-1/src/Makefile
+@@ -9,7 +9,7 @@ endif
+ 
+ ifndef linkerflags
+ linkerflags=-O3 -s
+-#-O0 to 3 is same at .so here
++#vs executables, -Olevel(any level, is same not, but "may change") is more significant here. -O without level is another thing, and -O0 is like without -O.
+ endif
+ ifndef prefix
+ prefix=/usr
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -150,39 +150,33 @@ end
+ #debug
+ 
+ import "mem_free" mem_free
+-function action_debug(sd type)
+-	if type=(action_debug_get_mem)
+-		return globalu.memorig
+-	endif
+-	if type=(action_debug_get)
+-		return #globalu.orig
+-	end
+-	# action_debug_free
+-	set globalu.orig (NULL)
+-	if globalu.memorig!=(NULL);call mem_free(#globalu.memorig);endif
++function action_debug_orig()
++	return #globalu.orig
+ endfunction
++function action_debug_memorig()
++	return #globalu.memorig
++end
+ function action_debug_free_macro()
+-    call action_debug((action_debug_free))
++	set globalu.orig (NULL)
++	if globalu.memorig!=(NULL);call mem_free(#globalu.memorig);endif
+ endfunction
+ 
+ import "printEr" printEr
+ import "string_nl_print" string_nl_print
+ function action_error()
+-	sv p_action_errors
+-	setcall p_action_errors action_debug((action_debug_get))
+-	if p_action_errors#=(NULL)
++	if globalu.orig=(NULL)
+ 		ret
+ 	endif
+ 
+ 	call printEr("Row: ")
+ 
+ 	# ac and mem is not ok at arm c code can be 16 bit aligned
+-	vstr stack#2
+-	sv st^stack  #can do more with only at c sign !
+-	call memcpy(st,p_action_errors,(2*:))
++	#vstr stack#2
++	#sv st^stack  #can do more with only at c sign !
++	#call memcpy(st,p_action_errors,(2*:))
++	#sv mem=:;add mem st
+ 	sd row
+-	sv mem=:;add mem st
+-	setcall row escape_action(st#,mem#,globalu.dcode,(NULL))
++	setcall row escape_action(globalu.orig,globalu.memorig,globalu.dcode,(NULL))
+ 	#a small reserve for a number like 2 000 000 000
+ 	char a#dword_to_string_char
+ 	ss row_nr^a
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -2,7 +2,8 @@ Format ElfObj64
+ 
+ include "../include/prog.h" "../include/prog.oh"
+ 
+-^import "action_debug" action_debug 1 #full return
++^import "action_debug_orig" action_debug_orig #full return
++^import "action_debug_memorig" action_debug_memorig #full return
+ import "action_data" action_data
+ ^import "action_code_values" action_code_values #full
+ ^import "action_code_values_action" action_code_values_action #full
+@@ -52,12 +53,12 @@ function action_base(ss ac)
+ 		call debug_x_pointers(mem,last)
+ 		call debug_action_phase()
+ 
+-		sv p_action_errors
+-		setcall p_action_errors action_debug((action_debug_get))
+-		set p_action_errors# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
+-		sv cursor;set cursor p_action_errors
+-		incst cursor
+-		set cursor# mem
++		sv _orig
++		setcall _orig action_debug_orig()
++		set _orig# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
++		sv _mem
++		set _mem action_debug_memorig()
++		set _mem# mem
+ 		call endcom(ac,mem) #also for line end term to follow
+ 		while mem#!=0
+ 			setcall mem action_code_row(mem,(FALSE))
+@@ -65,7 +66,7 @@ function action_base(ss ac)
+ 		call debug_phase_parse_end() #can't be after math_end the case when last rows are blank
+ 		call action_code_set((math_end))
+ 		#reset to stop adding row nr at errors
+-		set p_action_errors# (NULL)
++		set _orig# (NULL)
+ 		call brace_blocks_end()
+ 
+ 		call debug_action_phase()
+--- actionswf-1.orig/src/m64d
++++ actionswf-1/src/m64d
+@@ -1,4 +1,4 @@
+ 
+-make linkerflags=${linkerflags} OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" $@
++make linkerflags="${linkerflags}" OFLAGSEXTRA+=" function_name 1 nul_res_pref 1" $@
+ 
+ #make strippy="python /home/bc/Desktop/ostriputil/ostriputil-1/ostriputil/main.py" OFLAGSEXTRA="function_name 1 nul_res_pref 1" $@
+--- actionswf-1.orig/src/swf.e.oc
++++ actionswf-1/src/swf.e.oc
+@@ -425,7 +425,7 @@ functionX swf_imagex(ss imagepath)
+ 	callret imgx(imagepath,(NULL),(TRUE))  #imgx has another base location and util.oc is not stacking them at the moment, if this is not last must compare or stack them
+ end
+ functionX swf_imagex_ex(ss imagepath,sd p_wh)
+-	base globalw.jmp_data;call ebase(globalw.jmp_data) #sane
++	base globalw.jmp_data;call ebase(globalw.jmp_data) #same
+ 	callret imgx(imagepath,p_wh,(TRUE))    #same
+ end
+ functionX swf_img(ss imagepath)
+--- actionswf-1.orig/src/x.oc
++++ actionswf-1/src/x.oc
+@@ -47,12 +47,13 @@ function is_x()
+ 	return (TRUE)
+ end
+ 
+-^import "action_debug" action_debug 1 #full return
++^import "action_debug_memorig" action_debug_memorig
+ function x_pointer(sv pointer)
+ 	ss value
+ 	set value pointer#
+ 	if globalx.xfile!=(NULL)
+-		sd mem;set mem action_debug((action_debug_get_mem))
++		sv mem;set mem action_debug_memorig()
++		set mem mem#
+ 		if globalx.twice=(FALSE)
+ 			sub pointer# mem
+ 			inc pointer#  ##only to not be comparable with (no_pointer)
+--- actionswf-1.orig/tests/a.c
++++ actionswf-1/tests/a.c
+@@ -34,15 +34,19 @@ int main(int argc,char**argv){
+ 	xlog_pad_set(0x30);
+ 
+ 	int f;
++	char*s="a.swf";
+ 	if(argc==1)f=prexx_flags|flagpre_x_pad|flagpre_write_no;
+ 	else if(argc==2){
+ 		f=xxu_flags|flag_titles;
+ 	}else{
+ 		sscanf(argv[2],"%x",&f);
++		if(argc==4){
++			s=argv[3];
++		}
+ 	}
+ 	printf("%x\n",f);
+ 
+-	swf_new_ex("a.swf",0x80,0x80,0x050607,2,f);
++	swf_new_ex(s,0x80,0x80,0x050607,2,f);
+ 	char*a=text("./aoc/a");
+ 	size_t sz;char*b=0;
+ 	actionsf(&sz,&b,a,1,"a");
+--- actionswf-1.orig/tests/ac
++++ actionswf-1/tests/ac
+@@ -1,6 +1,9 @@
+ 
++if [ -z "${out}" ]; then out=a.out; fi
+ if [ -z "${old}" ]; then
+-	L1=../csrc
++	if [ -z "${L1}" ]; then
++		L1=../csrc
++	fi
+ 	LD_LIBRARY_PATH=${L1}
+ 	if [ -z "${CC}" ]; then CC=cc; fi
+ 	if [ "${expand}" = x ]; then
+@@ -14,7 +17,7 @@ else #same as apy
+ 	CC=x86_64-linux-gnu-gcc
+ 	launcher=qq
+ fi
+-${CC} -g a.c -L${L1} -lactionswf ${L2} -lz || exit 1
++${CC} ${model} -g a.c -o ${out} -L${L1} -lactionswf ${L2} -lz || exit 1
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out && \
+ #eval is to expand gd alias
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out x
+--- /dev/null
++++ actionswf-1/tests/ac32
+@@ -0,0 +1 @@
++conv_64=1 model=-m32 ./ac

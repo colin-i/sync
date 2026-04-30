@@ -1,0 +1,20 @@
+
+if [ -z "${old}" ]; then
+	L1=../csrc
+	LD_LIBRARY_PATH=${L1}
+	if [ -z "${CC}" ]; then CC=cc; fi
+	if [ "${expand}" = x ]; then
+		shopt -s expand_aliases #for gd
+		source ~/aliases
+	fi
+else #same as apy
+	L1=~/x86_64_lib
+	LD_LIBRARY_PATH=${L1}:~/x86_64_lib/cross
+	L2=-L/home/bc/x86_64_lib/cross
+	CC=x86_64-linux-gnu-gcc
+	launcher=qq
+fi
+${CC} -g a.c -L${L1} -lactionswf ${L2} -lz || exit 1
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out && \
+#eval is to expand gd alias
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out x
