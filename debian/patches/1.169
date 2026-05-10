@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: mai, 10 2026 06:58:35 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/csrc/md
++++ actionswf-1/csrc/md
+@@ -1,3 +1,3 @@
+ 
+-if [ -z "${linkerflags}" ]; then linkerflags=-g; fi
++if [ -z "${linkerflags}" ]; then linkerflags='-g -fsanitize=undefined'; fi
+ make linkerflags="${linkerflags}" $@
+--- /dev/null
++++ actionswf-1/csrc/mdo
+@@ -0,0 +1,3 @@
++
++if [ -z "${linkerflags}" ]; then linkerflags='-g -fsanitize=undefined -O3 -march=native'; fi
++make linkerflags="${linkerflags}" $@
+--- actionswf-1.orig/oad/Makefile
++++ actionswf-1/oad/Makefile
+@@ -8,13 +8,18 @@ endif
+ ifndef OCONV
+ OCONV=otoc
+ endif
++
+ ifndef linkerflags
+-linkerflags=-O3 -march=native -s
+-# -Ofast: - crashes that don't happen with -O3
++	linkerflags=-O3 -s
++	# -Ofast: - crashes that don't happen with -O3
++	ifeq ($(findstring mingw,$(CC)),)
++		linkerflags += -march=native
++	endif
+ endif
+ ifndef compilerflags
+-compilerflags=${linkerflags}
++	compilerflags=${linkerflags}
+ endif
++
+ ifndef EXTRA_CFLAGS
+ include ./cflags
+ endif
+--- actionswf-1.orig/python/actionswf/_action.py
++++ actionswf-1/python/actionswf/_action.py
+@@ -38,9 +38,9 @@ def actionf_sprite(*args, sprite, buffer
+ def actionf_init_sprite(*args, sprite, buffer, format):
+ 	_lib.actionf_init_sprite(sprite, buffer, format.encode('utf-8'), *args)
+ def actionsf_sprite(*args, sprite, psize, pbuffer, format):
+-	_lib.actionf_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
++	_lib.actionsf_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
+ def actionsf_init_sprite(*args, sprite, psize, pbuffer, format):
+-	_lib.actionf_init_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
++	_lib.actionsf_init_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
+ 
+ def actions_free(buffer):
+ 	_lib.actions_free(buffer)
+--- actionswf-1.orig/python/actionswf/_tool.py
++++ actionswf-1/python/actionswf/_tool.py
+@@ -13,8 +13,8 @@ def init(lib):
+ 	global _lib
+ 	_lib=lib
+ 
+-def erbool_get(): #this to enforce no arguments
+-	return _lib.erbool_get()
++def erbool_get():
++	return _lib.erbool_get()[0]
+ def erbool_reset():
+ 	_lib.erbool_reset()
+ 
+--- actionswf-1.orig/python/v2
++++ actionswf-1/python/v2
+@@ -1 +1 @@
+-1.4
+\ No newline at end of file
++1.5
+\ No newline at end of file
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -61,13 +61,13 @@ import "bits_bigendian" bits_bigendian
+ import "numbitsMax" numbitsMax
+ 
+ #n
+-function shape_records_NumBits(sd p_val)
+-    sd val=-2;add val p_val#
+-    if val<0
+-        mult val -1;add p_val# val
+-        return 0
+-    endif
+-    return val
++function shape_records_NumBits(ss p_val)
++	sss ?val=-2;add val p_val#
++	if val<0
++		mult val -1;add p_val# val
++		return 0
++	endif
++	return val
+ endfunction
+ #get:fill/lin
+ function NumFill_NumLin(sd ?fill,sd ?lin)
+--- actionswf-1.orig/src/img.oc
++++ actionswf-1/src/img.oc
+@@ -143,13 +143,13 @@ import "swf_shape_bitmap_local_clipped"
+ 
+ function imgx_decision(sd dbl_size,sd jpg_size,ss dbl,ss jpg,ss msk,sd p_wh,ss ?is_image) #,sd is_clipped
+ 	base globali.jmp_data;call ebase(globali.jmp_data)
+-	datax width#1;datax height#1
+ 	if dbl_size<^jpg_size
+ 		if is_image=(FALSE)
+ 			callret swf_dbl_ex_local(dbl,p_wh,(TRUE))
+ 		end
+ 		if p_wh=(NULL)
+-			callret swf_image_ex_local(dbl,#width,(TRUE))
++			datax dims#2;sd _dims^dims
++			callret swf_image_ex_local(dbl,_dims,(TRUE))
+ 		end
+ 		callret swf_image_ex_local(dbl,p_wh,(TRUE))
+ 	end
+@@ -159,7 +159,9 @@ function imgx_decision(sd dbl_size,sd jp
+ 	else
+ 		set id swf_jpeg_local(jpg,(DefineBitsJPEG3),msk)
+ 	end
++	sd ?width
+ 	set width dbl_dim(dbl,0)
++	sd ?height
+ 	set height dbl_dim(dbl,(WORD))
+ 	if p_wh!=(NULL)
+ 		set p_wh# width
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -481,7 +481,7 @@ function swf_shape_bitmap_local(sd ?bitm
+ endfunction
+ 
+ #id
+-function swf_image_ex_local(ss imagepath,sd p_wh,sd verif)
++function swf_image_ex_local(ss imagepath,sd p_wh,ss ?verif)
+ #ss imagepath = path name for the dbl image
+ #sd p_wh      = pointer width height
+ 	sd ?dbl_id
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -212,7 +212,7 @@ function swf_mem_init(ss path,sd len,sd
+ 	#4
+ 	call push_init()
+ 	#
+-	sd test=flagpre_write_no;and test flags
++	sd ?test=flagpre_write_no;and test flags
+ 	if test=0
+ 		set globals.filelength_offseted len
+ 		set globals.is_file_write (TRUE)
+--- actionswf-1.orig/tests/ffdec/f
++++ actionswf-1/tests/ffdec/f
+@@ -19,7 +19,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 				if [ "${a}" = 2 ]; then exit; fi
+ 				if [ -n "${wait}" ]; then read; fi
+ 				if [ -z "${ffdec}" ]; then
+-					. ~/games/ep/ffdec #~/games/ffdec /home/bc/a/a/s/actionswf-1/tests/ffdec/a.swf
++					. ~/games/ffdec #~/games/ffdec /home/bc/a/a/s/actionswf-1/tests/ffdec/a.swf
+ 				else
+ 					ffd=${ffdec}
+ 				fi

@@ -1,0 +1,559 @@
+Format ElfObj64
+
+include "../include/prog.h" "../include/prog.oh"
+const max_char_records=256
+const sim64pointer_size=:-DWORD
+const sim64pointer_unit=sim64pointer_size/DWORD
+
+#multithread unsafe
+dataxu NFill_NLin#1
+charx shapewithstyle_record#max_char_records
+#
+datax edittext_struct#11+sim64pointer_unit+sim64pointer_unit
+#function edittext_struct()
+#   data fontid#1
+#    data *font_height#1
+#    str *fontclassname#1;char *sim64pointer#sim64pointerSize
+#    data *rgba#1
+#    data *maxlength#1
+#    str *initialtext#1;char *sim64pointer_reserved#sim64pointerSize
+#    data *layout_align#1
+#    data *layout_leftmargin#1
+#    data *layout_rightmargin#1
+#    data *layout_indent#1
+#    data *layout_leading#1
+#    return #fontid
+#endfunction
+#
+datax button_mem_struct#10
+
+function button_mem()
+#	data up#1
+#	data *over#1
+#	data *hit#1
+
+#	data *width#1
+#	data *height#1
+
+#	data *no_text#1
+#	data *font_id#1
+#	data *font_height#1
+#	data *y#1
+#	data *font_color#1
+
+	return #globalc.button_mem_struct
+endfunction
+
+import "stack_to_word_arg" stack_to_word_arg
+
+#value
+function args_advance(sv p_args)
+    sd value
+    set value p_args#
+    add p_args# (DWORD)
+    return value#
+endfunction
+function shapewithstyle_records()
+    return #globalc.shapewithstyle_record
+endfunction
+
+import "bits_bigendian" bits_bigendian
+import "numbitsMax" numbitsMax
+
+#n
+function shape_records_NumBits(sd p_val)
+    sd val=-2;add val p_val#
+    if val<0
+        mult val -1;add p_val# val
+        return 0
+    endif
+    return val
+endfunction
+#get:fill/lin
+function NumFill_NumLin(sd ?fill,sd ?lin)
+	set globalc.NFill_NLin lin;mult fill 0x10;or globalc.NFill_NLin fill
+endfunction
+function NumFill_NumLin_get(sd ?int_data)
+	if int_data=(FALSE);set int_data globalc.NFill_NLin;and int_data 0x0F;return int_data;endif
+	set int_data globalc.NFill_NLin;div int_data 0x10;return int_data
+end
+
+#edittext
+
+function edittext_font(sd fontid,sd fontheight)
+    sd s
+    set s #globalc.edittext_struct
+    set s# fontid
+    add s (DWORD)
+    set s# fontheight
+endfunction
+function edittext_rgba(sd val)
+    sd ed_str
+    set ed_str #globalc.edittext_struct
+    add ed_str (3*DWORD+sim64pointer_size);set ed_str# val
+endfunction
+function edittext_layout(sd in_args)
+    sd s
+    set s #globalc.edittext_struct
+    add s (6*DWORD+sim64pointer_size+sim64pointer_size)
+    set s# in_args#
+    add s (DWORD);add in_args (DWORD);set s# in_args#
+    add s (DWORD);add in_args (DWORD);set s# in_args#
+    add s (DWORD);add in_args (DWORD);set s# in_args#
+    add s (DWORD);add in_args (DWORD);set s# in_args#
+endfunction
+function edittext_text(ss text)
+    sv s
+    set s #globalc.edittext_struct
+    add s (5*DWORD+sim64pointer_size)
+    set s# text
+endfunction
+
+import "free_sprite_id" free_sprite_id
+import "matrix_translate" matrix_translate
+
+import "action_size" action_size
+
+#aftercallimport ebool
+
+import "swf_shape_local" swf_shape_local
+import "swf_text_local" swf_text_local
+import "action_sprite_base" action_sprite_base
+
+
+#shape
+
+import "error" error
+function shape_records_bits(sd ?value,sd ?size,sv p_dest_pos)
+	#why was this here? data start#1
+	#and this, this is called through shape_records_add    if p_dest_pos==0
+	#	set start value
+	#	return (void)
+	#endif
+	sd pointer
+	set pointer p_dest_pos#
+	sub pointer #globalc.shapewithstyle_record
+	if pointer=(max_char_records)
+		#was >=
+		call error("too many arguments at shape")
+	endif
+	sd p_pos
+	set p_pos p_dest_pos
+	add p_pos :
+	call bits_bigendian(value,size,p_dest_pos,p_pos)
+endfunction
+function shape_records_add(sd p_dest_pos,sd p_args)
+	sd ?edge
+    setcall edge args_advance(p_args)
+    call shape_records_bits(edge,1,p_dest_pos)
+	if edge=0
+    #StyleChangeRecord,#EndShapeRecord
+		sd ?flags
+        setcall flags args_advance(p_args)
+        call shape_records_bits(flags,5,p_dest_pos)
+        if flags=0
+        #EndShapeRecord
+            ret
+        endif
+        #StateMoveTo
+        call shape_records_add_moveto(p_dest_pos,flags,p_args)
+        #
+		sd ?f_l_bits
+		sd ?fill
+        #StateFillStyle0
+        set fill flags;and fill (StateFillStyle0)
+        if fill!=0
+            setcall f_l_bits NumFill_NumLin_get((TRUE));call shape_records_bits(1,f_l_bits,p_dest_pos)
+        endif
+        #StateFillStyle1
+        set fill flags;and fill (StateFillStyle1)
+        if fill!=0
+            setcall f_l_bits NumFill_NumLin_get((TRUE));call shape_records_bits(1,f_l_bits,p_dest_pos)
+        endif
+        #StateLineStyle
+        and flags (StateLineStyle)
+        if flags!=0
+            setcall f_l_bits NumFill_NumLin_get((FALSE))
+            call shape_records_bits(1,f_l_bits,p_dest_pos)
+        endif
+        ret
+	endif
+    call shape_records_add_edge(p_dest_pos,p_args)
+endfunction
+function shape_records_add_moveto(sd p_dest_pos,sd flags,sd p_args)
+    and flags (StateMoveTo)
+    if flags=0
+        ret
+    endif
+	sd ?x
+    setcall x args_advance(p_args)
+	sd ?y
+    setcall y args_advance(p_args)
+	ss ?numbits
+    mult x 20
+    mult y 20
+    setcall numbits numbitsMax(x,y)
+    call shape_records_bits(numbits,(NBits_size),p_dest_pos)
+    call shape_records_bits(x,numbits,p_dest_pos)
+    call shape_records_bits(y,numbits,p_dest_pos)
+endfunction
+function shape_records_add_edge(sd p_dest_pos,sd p_args)
+	sd ?straight_edge
+    setcall straight_edge args_advance(p_args)
+    call shape_records_bits(straight_edge,1,p_dest_pos)
+    if straight_edge=1
+        call shape_records_add_edge_straight(p_dest_pos,p_args)
+    else
+        call shape_records_add_edge_curved(p_dest_pos,p_args)
+    endelse
+endfunction
+function shape_records_add_edge_straight(sd p_dest_pos,sd p_args)
+	sd ?width=20;multCall width args_advance(p_args)
+	sd ?height=20;multCall height args_advance(p_args)
+	ss ?counter;setcall counter numbitsMax(width,height)
+    #NumBits(UB[4])
+	ss ?NumBits;setcall NumBits shape_records_NumBits(#counter)
+    call shape_records_bits(NumBits,4,p_dest_pos)
+    #GeneralLineFlag
+	ss ?GeneralLineFlag=0
+    if width!=0;if height!=0;set GeneralLineFlag 1;endif;endif
+    call shape_records_bits(GeneralLineFlag,1,p_dest_pos)
+	#Vert(1)/Horz(0)
+	sd ?vertical
+	if GeneralLineFlag=0
+		set vertical 1
+		if width!=0;set vertical 0;endif
+		call shape_records_bits(vertical,1,p_dest_pos)
+	endif
+    #DeltaX SB[NumBits+2]
+	ss ?DeltaX=TRUE;if GeneralLineFlag=0;if vertical=1;set DeltaX (FALSE);endif;endif
+    if DeltaX=(TRUE);call shape_records_bits(width,counter,p_dest_pos);endif
+    #DeltaY SB[NumBits+2]
+	ss ?DeltaY=TRUE;if GeneralLineFlag=0;if vertical=0;set DeltaY (FALSE);endif;endif
+    if DeltaY=(TRUE);call shape_records_bits(height,counter,p_dest_pos);endif
+endfunction
+function shape_records_add_edge_curved(sd p_dest_pos,sd p_args)
+	sd ?control_x
+    setcall control_x args_advance(p_args)
+	sd ?control_y
+    setcall control_y args_advance(p_args)
+	sd ?anchor_x
+    setcall anchor_x args_advance(p_args)
+	sd ?anchor_y
+    setcall anchor_y args_advance(p_args)
+    mult control_x 20
+    mult control_y 20
+    mult anchor_x 20
+    mult anchor_y 20
+	ss ?numbits
+	ss ?numbits2
+    setcall numbits numbitsMax(control_x,control_y)
+    setcall numbits2 numbitsMax(anchor_x,anchor_y)
+    if numbits2>^numbits
+        set numbits numbits2
+    endif
+    #NumBits(UB[4])
+	ss ?Num_Bits;setcall Num_Bits shape_records_NumBits(#numbits)
+    call shape_records_bits(Num_Bits,4,p_dest_pos)
+    #SB[NumBits+2]
+    call shape_records_bits(control_x,numbits,p_dest_pos)
+    call shape_records_bits(control_y,numbits,p_dest_pos)
+    call shape_records_bits(anchor_x,numbits,p_dest_pos)
+    call shape_records_bits(anchor_y,numbits,p_dest_pos)
+endfunction
+#id
+function swf_shape_simple(sd ?width,sd ?height,sd ?fillcolor,sd ?lineheight,sd ?linecolor,sd ?xcurve,sd ?ycurve)
+	sd ?wd;set wd width;sub wd lineheight
+	sd ?hg;set hg height;sub hg lineheight
+	sv ?test
+	set test lineheight;mult test 2;if test>^width;call error("lineheight value against width is too high for shape");endif
+	set test lineheight;mult test 2;if test>^height;call error("lineheight value against height is too high for shape");endif
+	set test wd;divu test 2;if xcurve>^wd;call error("xcurve value is too high for shape");endif #even if will -1 curves in this function, cannot let signed, the comp will have no logic
+	set test hg;divu test 2;if ycurve>^hg;call error("ycurve value is too high for shape");endif
+	sd ?lineheight_hf;set lineheight_hf lineheight;div lineheight_hf 2
+
+	sd ?width_variable
+	sd ?height_variable
+    set width_variable wd
+    set height_variable hg
+    sub width_variable xcurve
+    sub width_variable xcurve
+    sub height_variable ycurve
+    sub height_variable ycurve
+
+	const und=0
+	data structu={und,und,und,und, 0,und,und,und, 1,1,und,0, 1,0,und,0,0,und, 1,1,0,und, 1,0,0,und,und,0, 1,1,und,0, 1,0,und,0,0,und, 1,1,0,und, 1,0,0,und,und,0, -1};sd strct^structu
+	#             4               +4             +4         +6               +4         +6               +4       +6                 +4         +6               +1
+
+	#data header#4
+	#sd strct^header
+	if lineheight=0;add strct (DWORD);endif
+	sd cursor;set cursor strct
+	set cursor# (solid_fill);add cursor (DWORD)
+	set cursor# fillcolor;add cursor (DWORD)
+	set cursor# lineheight
+	if lineheight!=0;add cursor (DWORD);set cursor# linecolor;endif
+	add cursor (DWORD)
+	#the header is connected with the part below
+
+	#data *styles_type=0
+	#set cursor# 0
+	add cursor (DWORD)
+	#data styles#1
+	#set styles (StateFillStyle0|StateMoveTo);if lineheight!=0;or styles (StateLineStyle);endif
+	set cursor# (StateFillStyle0|StateMoveTo);if lineheight!=0;or cursor# (StateLineStyle);endif
+	add cursor (DWORD)
+	#data x_move#1
+	#set x_move lineheight_hf;add x_move xcurve
+	set cursor# lineheight_hf;add cursor# xcurve
+	add cursor (DWORD)
+	#data y_move#1
+	#set y_move lineheight_hf
+	set cursor# lineheight_hf
+	add cursor (DWORD)
+
+	#data *straight_wd={1,1}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 1
+	add cursor (DWORD)
+	#data w1#1;data *s_w_d=0
+	#set w1 width_variable
+	set cursor# width_variable;add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+
+	#data *curved_ne={1,0}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+	#data xNE#1
+	#set xNE xcurve
+	set cursor# xcurve;add cursor (DWORD)
+	#data *ne_d={0,0}
+	#set cursor# 0
+	add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+	#data yNE#1
+	#set yNE ycurve
+	set cursor# ycurve;add cursor (DWORD)
+
+	#data *straight_hg={1,1}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 1
+	add cursor (DWORD)
+	#data *s_h_d=0;data h1#1
+	#set cursor# 0
+	add cursor (DWORD)
+	#set h1 height_variable
+	set cursor# height_variable;add cursor (DWORD)
+
+	#data *curved_se={1,0}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+	#data *se_y_d=0
+	#set cursor# 0
+	add cursor (DWORD)
+	#data ySE#1
+	#set ySE ycurve
+	set cursor# ycurve;add cursor (DWORD)
+	#data xSE#1
+	mult xcurve -1
+	#set xSE xcurve
+	set cursor# xcurve;add cursor (DWORD)
+	#data *se_x_d=0
+	#set cursor# 0
+	add cursor (DWORD)
+
+	#data *straight_wd_back={1,1}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 1
+	add cursor (DWORD)
+	#data w2#1;data *s_w_b_d=0
+	mult width_variable -1
+	#set w2 width_variable
+	set cursor# width_variable;add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+
+	#data *curved_sv={1,0}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+	#data xSV#1
+	#set xSV xcurve
+	set cursor# xcurve;add cursor (DWORD)
+	#data *sv_d={0,0}
+	#set cursor# 0
+	add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+	mult ycurve -1
+	#data ySV#1
+	#set ySV ycurve
+	set cursor# ycurve;add cursor (DWORD)
+
+	#data *straight_hg_back={1,1}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 1
+	add cursor (DWORD)
+	#data *s_h_b_d=0;data h2#1
+	#set cursor# 0
+	add cursor (DWORD)
+	mult height_variable -1
+	#set h2 height_variable
+	set cursor# height_variable;add cursor (DWORD)
+
+	#data *curved_nv={1,0}
+	#set cursor# 1
+	add cursor (DWORD)
+	#set cursor# 0
+	add cursor (DWORD)
+	#data *nv_y_d=0
+	#set cursor# 0
+	add cursor (DWORD)
+	#data yNV#1
+	#set yNV ycurve
+	set cursor# ycurve;add cursor (DWORD)
+	#data xNV#1
+	mult xcurve -1
+	#set xNV xcurve
+	set cursor# xcurve;add cursor (DWORD)
+	#data *nv_x_d=0
+	#set cursor# 0
+	add cursor (DWORD)
+
+	#data *struct_end=-1
+	#set cursor# -1;add cursor (DWORD)
+
+	callret swf_shape_local(width,height,strct)
+endfunction
+
+#id
+function swf_text_initial_font_centered(sd ?width,sd ?height,ss text,sd ?font_id,sd ?font_height,sd ?font_color)
+    call edittext_font(font_id,font_height)
+    call edittext_rgba(font_color)
+    data layout={layout_align_center,0,0,0,0}
+    call edittext_layout(#layout)
+    call edittext_text(text)
+	callret swf_text_local(width,height,"",(HasFont|HasText|HasTextColor|HasLayout|ReadOnly|NoSelect),#globalc.edittext_struct)
+endfunction
+
+#button
+
+import "identifiers_get" identifiers_get
+import "swf_tag_recordheader_entry" swf_tag_recordheader_entry
+import "swf_mem_add" swf_mem_add
+import "new_sprite_id" new_sprite_id
+import "pool_read" pool_read
+import "dtitles_frame_one" dtitles_frame_one
+import "write_action_one" write_action_one
+#id
+function swf_button_base(sd ?state_def_id,sd ?state_over_id,sd ?state_down_id,ss actions,sd ?noText,sd ?text_id,sd ?y)
+    sd ?size=2+1+2;#ButtonId,TrackAsMenu,ActionOffset
+
+	sd ?Characters_CharacterEndFlag_size
+    setcall Characters_CharacterEndFlag_size buttonrecord_size(0,0)
+    mult Characters_CharacterEndFlag_size 3
+    if noText=(FALSE)
+        addcall Characters_CharacterEndFlag_size buttonrecord_size(0,y)
+    endif
+    inc Characters_CharacterEndFlag_size
+
+    add size Characters_CharacterEndFlag_size
+
+	#char BUTTONCONDACTION={0,0};#CondActionSize
+	#char *CondOverDownToOverUp={8,0}
+	char BUTTONCONDACTION={0,0,8,0}
+    const BUTTONCONDACTION_header_size=2+2
+    #is action,pool and sprite, it's more code to get action,pool only
+    sd ?id
+    setcall id new_sprite_id()
+	call pool_read(id,-1)
+
+    call action_sprite_base(id,actions,(FALSE))
+
+	sd ?ButtonId
+	setcall ButtonId identifiers_get()  #is final at buttons
+	call dtitles_frame_one(id,ButtonId)
+
+    add size (BUTTONCONDACTION_header_size)
+    addcall size action_size(id)
+
+    call swf_tag_recordheader_entry((DefineButton2),size)
+    call swf_mem_add(#ButtonId,2)
+    char TrackAsMenu=0
+    call swf_mem_add(#TrackAsMenu,(BYTE))
+	sd ?ActionOffset=2;add ActionOffset Characters_CharacterEndFlag_size
+    call swf_mem_add(#ActionOffset,(WORD))
+
+	call buttonrecord(0,0,(ButtonStateUp),state_def_id,1)
+	call buttonrecord(0,0,(ButtonStateOver),state_over_id,2)
+	call buttonrecord(0,0,(ButtonStateDown|ButtonStateHitTest),state_down_id,3)
+	if noText=(FALSE)
+		call buttonrecord(0,y,(ButtonStateUp|ButtonStateOver|ButtonStateDown|ButtonStateHitTest),text_id,4)
+	endif
+    char CharacterEndFlag=0
+    call swf_mem_add(#CharacterEndFlag,1)
+    call swf_mem_add(#BUTTONCONDACTION,(BUTTONCONDACTION_header_size))
+	call write_action_one(id)
+
+	call free_sprite_id(id,ButtonId)
+	return ButtonId
+endfunction
+
+const buttonrecord_top_size=1+2+2
+#size
+function buttonrecord_size(sd ?x,sd ?y)
+	#ButtonReserved[2]=0,ButtonHasBlendMode[1]=0,ButtonHasFilterList[1]=0
+	#states[4]
+	sd ?size=buttonrecord_top_size
+
+	#PlaceMatrix
+	sd matrix
+	datax matrixsz#1
+	call matrix_translate(#matrix,#matrixsz,x,y)
+
+	add size matrixsz
+
+	add size (BYTE)
+
+	return size
+endfunction
+#void
+function buttonrecord(sd ?x,sd ?y,ss ?states,sd ?id,sd ?depth)
+	char bits#1+2+2;ss pbits^bits
+	#char bits#1
+	#char CharacterID#2
+	#char PlaceDepth#2
+
+	#set bits states
+	set pbits# states;inc pbits
+
+	#call stack_to_word_arg(id,#CharacterID)
+	call stack_to_word_arg(id,pbits);add pbits (WORD)
+
+	#call stack_to_word_arg(depth,#PlaceDepth)
+	call stack_to_word_arg(depth,pbits)
+
+	call swf_mem_add(#bits,(buttonrecord_top_size))
+
+	#PlaceMatrix
+	sd matrix
+	datax matrixsz#1
+	call matrix_translate(#matrix,#matrixsz,x,y)
+	call swf_mem_add(matrix,matrixsz)
+
+	char CXFORMWITHALPHA=0
+	callg swf_mem_add(#CXFORMWITHALPHA,(BYTE))
+endfunction
+
+entryraw globalc()

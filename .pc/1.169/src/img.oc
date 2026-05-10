@@ -1,0 +1,175 @@
+
+format elfobj64
+
+include "../include/prog.h" "../include/prog.oh"
+include "../include/throw.h" "../include/throw.oh"
+
+#multithread unsafe
+datax vflag#1
+
+function verbose(sd ?f)
+	set globali.vflag (flag_verbose)
+	and globali.vflag f
+end
+function verbose_get()
+	return globali.vflag
+end
+
+importx "strlen" strlen
+importx "memcmp" memcmp
+importx "memcpy" memcpy
+importx "malloc" malloc
+importx "access" access
+importx "free" free
+importx "printf" printf
+
+import "ebase" ebase
+^import "erbool" erbool
+
+#aftercalli
+
+^import "f_size" f_size 1
+^import "f_size_errors" f_size_errors 1
+import "error" error
+^import "memalloc" memalloc 1
+
+function imgx(ss dbl,sd p_wh,ss ?is_image) #,sd is_clipped
+	sd len;set len strlen(dbl)
+	ss cr;set cr dbl
+	add cr len
+	sd sz;set sz cr
+	sd size;set size cr
+	char jp=".jpg"
+	char ms=".msk"
+	while dbl!=cr
+		dec cr
+		if cr#=(Period)
+			set size cr
+			inc cr
+			sub sz cr
+			if sz=3
+				ss jj=1
+				add jj #jp
+				datax cmp#1;set cmp memcmp(cr,jj,3)
+				ss mm=1
+				add mm #ms
+				datax cmp2#1;set cmp2 memcmp(cr,mm,3)
+				whiletrue
+					if cmp!=0
+						if cmp2!=0
+							break
+						end
+					end
+					call error("img is pairing with jpg/msk error") #will leave at bp
+					break #to silence the jump
+				end
+			end
+			break
+		end
+	end
+
+	sd dbl_size;set dbl_size f_size(dbl)
+	sub dbl_size 4+4  #is unsigned compared to stay in ui32 tags, if short overflow will fail at dbl checks anyway
+
+	sub size dbl
+	set sz size
+	add size 5
+
+	sd f1;set f1 memalloc(size)
+	call memcpy(f1,dbl,sz)
+	set cr f1
+	add cr sz
+	call memcpy(cr,#ms,5)
+
+	sd ?id; sd jpg_size
+	sd acs;set acs access(f1,(F_OK))
+	if acs!=0 #opac
+		call memcpy(cr,#jp,5)
+		set jpg_size f_size_errors(f1)
+		set id imgx_decision(dbl_size,jpg_size,dbl,f1,(NULL),p_wh,is_image)
+	else #transparent
+		set jpg_size f_size_errors(f1) #is msk size
+		sd jpg;set jpg malloc(size)
+		if jpg!=(NULL)
+			call memcpy(jpg,dbl,sz)
+			set cr jpg
+			add cr sz
+			call memcpy(cr,#jp,5)
+
+			add jpg_size f_size_errors(jpg)
+			#if jpg_size>0 #overflow can't make in swf, ui32tags
+			add jpg_size 4
+			#if jpg_size>0 #same
+			set id imgx_decision(dbl_size,jpg_size,dbl,jpg,f1,p_wh,is_image)
+			#end
+			#end
+			call free(jpg)
+		end
+	end
+	call free(f1)
+	ss p;setcall p erbool();if p#=0
+		if globali.vflag!=(flag_none)
+			add dbl_size 2 #again, ui32 tags
+			add jpg_size 2
+			ss ?c
+			if dbl_size<^jpg_size
+				set c (Lessthan)
+			else
+				set c (Greaterthan)
+			end
+			ss plus
+			if acs!=0
+				set plus ""
+			else
+				set plus "+msk"
+			end
+			call printf("dbl 0x%lx %c jpg%s 0x%lx",dbl_size,c,plus,jpg_size)
+			if p_wh!=(NULL)
+				sd w;set w p_wh#
+				add p_wh (DWORD)
+				call printf(" %hux%hu",w,p_wh#)
+			end
+			call printf(" %s\n",dbl)
+		end
+		return id
+	end
+end
+
+import "swf_dbl_ex_local" swf_dbl_ex_local
+import "swf_image_ex_local" swf_image_ex_local
+import "swf_jpeg_local" swf_jpeg_local
+import "dbl_dim" dbl_dim
+import "swf_shape_bitmap_local_clipped" swf_shape_bitmap_local_clipped
+
+function imgx_decision(sd dbl_size,sd jpg_size,ss dbl,ss jpg,ss msk,sd p_wh,ss ?is_image) #,sd is_clipped
+	base globali.jmp_data;call ebase(globali.jmp_data)
+	datax width#1;datax height#1
+	if dbl_size<^jpg_size
+		if is_image=(FALSE)
+			callret swf_dbl_ex_local(dbl,p_wh,(TRUE))
+		end
+		if p_wh=(NULL)
+			callret swf_image_ex_local(dbl,#width,(TRUE))
+		end
+		callret swf_image_ex_local(dbl,p_wh,(TRUE))
+	end
+	sd ?id
+	if msk=(NULL)
+		set id swf_jpeg_local(jpg,(DefineBitsJPEG2))
+	else
+		set id swf_jpeg_local(jpg,(DefineBitsJPEG3),msk)
+	end
+	set width dbl_dim(dbl,0)
+	set height dbl_dim(dbl,(WORD))
+	if p_wh!=(NULL)
+		set p_wh# width
+		add p_wh (DWORD)
+		set p_wh# height
+	end
+	if is_image=(FALSE)
+		return id
+	end
+	callret swf_shape_bitmap_local_clipped(id,width,height)
+end
+
+entryraw globali()
