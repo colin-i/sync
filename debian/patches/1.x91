@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: mai, 10 2026 07:33:14 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -1785,9 +1785,12 @@ static void type(int cr,WINDOW*w){
+ 	row*r=&rows[y];
+ 	int rw=(int)(y-ytext);
+ 	if(rw<rwnr){
+-		xtext=r->sz;
+ 		cl=0;
+-		refreshpage(w);
++		//if(xtext!=r->sz){this can also be added if here was not a rare case
++		xtext=r->sz;
++		refreshpage(w);//here if nothing next, like nothing to do on backspace or del, will move cursor down, so, adding the next wmove
++		wmove(w,rw,0);  //this wmove
++		//}
+ 	}else{
+ 		size_t dif=xx-x;
+ 		cl-=dif;
