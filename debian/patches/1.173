@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: iun, 11 2026 16:36:31 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- /dev/null
++++ actionswf-1/oaas/mdo
+@@ -0,0 +1,2 @@
++
++linkerflags='-g -fsanitize=undefined -O3 -march=native' make
+--- actionswf-1.orig/oaas/translate.oc
++++ actionswf-1/oaas/translate.oc
+@@ -849,6 +849,7 @@ function translate_search_base(ss start,
+ 	set t 2
+ 	and t ptypes#
+ 	if t!=0
++		set pointer start
+ 		if cursor!=start
+ 			set pointer strdup(start) #else will be a collision
+ 		end
+@@ -865,6 +866,7 @@ function translate_search_base(ss start,
+ 	set t 4
+ 	and t ptypes#
+ 	if t!=0
++		set pointer start
+ 		if cursor!=start
+ 			set pointer strdup(start)
+ 		end
+--- actionswf-1.orig/tests/as
++++ actionswf-1/tests/as
+@@ -1,3 +1,3 @@
+ #!/bin/sh
+ if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../${inter}src; fi
+-${RUN__SHELL} ./${inter}asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out x
++${RUN__SHELL} ./${inter}asv && LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out x
+--- actionswf-1.orig/tests/asv
++++ actionswf-1/tests/asv
+@@ -20,14 +20,14 @@ o a${interext}.oc logfile 0 conv_64 ${co
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then
+ 			#local cc has -lz? bionic i386 cc has no -lz? who cares
+ 			echo cc a${interext}.o ${l_z} -L${_L}../${inter}src -lactionswf
+-			cc a${interext}.o ${l_z} -L${_L}../${inter}src -lactionswf
++			cc a${interext}.o -L${_L}../${inter}src -lactionswf ${l_z}
+ 		else
+ 			echo cc a.o ${l_z} -L${LD_LIBRARY_PATH} -lactionswf
+ 			cc a.o ${l_z} -L${LD_LIBRARY_PATH} -lactionswf
+ 		fi
+ 	fi && {
+ 		if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=${_L}../${inter}src; fi
+-		echo LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
+-		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ./a.out ${extra}
++		echo LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out ${extra}
++		LD_LIBRARY_PATH=${LD_LIBRARY_PATH} ${launcher} ./a.out ${extra}
+ 	}
+ }

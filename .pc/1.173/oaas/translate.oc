@@ -1,0 +1,1039 @@
+
+format elfobj64
+
+const a_page_size=0x1000
+#multithread unsafe
+charx a_page#a_page_size;vstr a_page_switch^a_page;charx b_page#a_page_size
+
+einclude "../include/common.h" "../include/common.oh"
+Const b_low=0x62
+Const c_low=0x63
+Const d_low=0x64
+Const e_low=0x65
+Const f_low=0x66
+Const g_low=0x67
+Const h_low=0x68
+Const i_low=0x69
+Const m_low=0x6D
+Const n_low=0x6E
+Const o_low=0x6F
+Const p_low=0x70
+Const r_low=0x72
+Const t_low=0x74
+Const v_low=0x76
+Const w_low=0x77
+
+importx "free" free
+importx "memcmp" memcmp
+importx "strcpy" strcpy
+importx "strdup" strdup
+importx "snprintf" snprintf
+importx "strstr" strstr
+
+^import "commaafter" commaafter 1
+^import "commaon" commaon 1
+^import "equalafter" equalafter 1
+^import "equalon" equalon 1
+import "object_com" object_com
+import "object_make" object_make
+^import "parecafter" parecafter 1
+^import "parecon" parecon 1
+^import "pareoafter" pareoafter 1
+^import "pareoon" pareoon 1
+^import "pluson" pluson 1
+^import "quotafter" quotafter 1
+^import "quoton" quoton 1
+^import "replace" replace 5
+^import "semicolafter" semicolafter 1
+^import "semicolon" semicolon 1
+^import "spcfullafters" spcfullafters 1
+^import "spcfull" spcfull 1
+^import "strip" strip 3
+import "to_upper" to_upper
+import "translated" translated
+import "untranslated" untranslated
+
+function switch_page()
+	if globalt.a_page_switch=#globalt.a_page
+		set globalt.a_page_switch #globalt.b_page
+		return #globalt.a_page
+	end
+	set globalt.a_page_switch #globalt.a_page
+	return #globalt.b_page
+end
+
+#a cdEfg i  LMnOP RST V X
+# b     h jk     q   u w yz
+#also at the end
+
+#a	s [s]
+#d	s [s] but diff at format
+#c	comment
+#f	p/s
+#g	string
+#i	string
+#n	a letter and predef format
+#v	s s
+#}	mix indents and in
+
+function translate_one(ss in,ss indents)
+	ss oa;set oa spcfull(in)
+	sd ?len
+	ss ?chr;set chr oa#
+	ss cursor;ss pointer;ss ?reminder;ss ext;ss o_a
+	char blank=""
+	if chr=(a_low)
+		set o_a oa
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			inc oa
+
+			set cursor spcfullafters(#oa)
+			if cursor!=oa
+				set ext " extends "
+				set pointer spcfull(cursor)
+				set reminder cursor#;set cursor# (Nullchar)
+			else
+				set ext #blank
+				set pointer ext
+				set reminder (Nullchar)
+			end
+			set o_a# (Nullchar)
+			set len snprintf(#globalt.a_page,(a_page_size),"%s%sclass %s%s%s{",indents,in,oa,ext,pointer)
+			if len>0
+				if len<(a_page_size)
+					call translated("Class")
+					return #globalt.a_page
+				end
+			end
+			set o_a# (a_low)
+			set cursor# reminder
+			break
+		end
+	elseif chr=(c_low)
+		set cursor oa
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			set cursor# (Slash)
+			set reminder oa#;set oa# (Slash)
+			set len snprintf(#globalt.a_page,(a_page_size),"%s%s",indents,in)
+			if len>0
+				if len<(a_page_size)
+					call translated("Comment")
+					return #globalt.a_page
+				end
+			end
+			set oa# reminder
+			set cursor# (c_low)
+			break
+		end
+	elseif chr=(d_low)
+		set o_a oa
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			inc oa
+			set cursor spcfullafters(#oa)
+			if cursor!=oa
+				set ext "."
+				set pointer spcfull(cursor)
+				set reminder cursor#;set cursor# (Nullchar)
+			else
+				set ext #blank
+				set pointer ext
+				set reminder (Nullchar)
+			end
+			set o_a# (Nullchar)
+			set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s%saddChild(%s);",indents,in,pointer,ext,oa)
+			if len>0
+				if len<(a_page_size)
+					call translated("AddChild")
+					return #globalt.a_page
+				end
+			end
+			set o_a# (d_low)
+			set cursor# reminder
+			break
+		end
+	elseif chr=(f_low)
+		set cursor oa
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			inc oa
+			whiletrue
+				ss type;ss name
+				if oa#=(p_low)
+					set type "public"
+					set name "new"
+					set ext "super();"
+				elseif oa#=(s_low)
+					set type "static"
+					set name "main"
+					set ext #blank
+				else
+					break
+				end
+				inc oa
+				if oa#=(Nullchar)
+					set cursor# (Nullchar)
+					set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s function %s(){%s",indents,in,type,name,ext)
+					if len>0
+						if len<(a_page_size)
+							call translated("Function")
+							return #globalt.a_page
+						end
+					end
+					set cursor# (f_low)
+				end
+				break
+			end
+			break
+		end
+	elseif chr=(g_low)
+		set cursor translate_one_1((g_low),oa,"%s%svar %s=Lib.current.stage;",indents,in,"Stage")
+		if cursor!=oa
+			return cursor
+		end
+	elseif chr=(i_low)
+		set cursor translate_one_1((i_low),oa,"%s%simport %s;",indents,in,"Import")
+		if cursor!=oa
+			return cursor
+		end
+	elseif chr=(n_low)
+		set o_a oa
+		inc oa
+		if oa#=(Nullchar)
+			set o_a# (Nullchar)
+			set len snprintf(#globalt.a_page,(a_page_size),"%s%sstatic",indents,in)
+			if len>0
+				if len<(a_page_size)
+					call translated("Static")
+					return #globalt.a_page
+				end
+			end
+			set o_a# (n_low)
+		end
+	elseif chr=(v_low)
+		set o_a oa
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			inc oa
+			set cursor spcfullafters(#oa)
+			if cursor!=oa
+				set pointer spcfull(cursor)
+				if pointer!=cursor
+					set reminder cursor#;set cursor# (Nullchar)
+					set o_a# (Nullchar)
+					set pointer translate_one_var(indents,in,oa,pointer,#globalt.a_page,#blank)
+					if pointer!=in
+						return pointer
+					end
+					set o_a# (v_low)
+					set cursor# reminder
+				end
+			end
+			break
+		end
+	elseif chr=(Nullchar)
+		call translated("blank")
+		return in
+	else
+		if oa#=(Closingbrace)
+			inc oa
+			if oa#=(Nullchar)
+				set len snprintf(#globalt.a_page,(a_page_size),"%s%s",indents,in)
+				if len>0
+					if len<(a_page_size)
+						call translated("closing")
+						return #globalt.a_page
+					end
+				end
+			end
+		end
+	end
+	call untranslated(in)
+	return in
+end
+function translate_one_1(ss ?chr,ss oa,ss format,ss indents,ss in,ss ok)
+	ss cursor;set cursor oa
+	inc oa
+	whiletrue
+		if oa#!=(Space)
+			if oa#!=(HorizontalTab)
+				break
+			end
+		end
+		inc oa
+		set cursor# (Nullchar)
+		sd ?len;set len snprintf(#globalt.a_page,(a_page_size),format,indents,in,oa)
+		if len>0
+			if len<(a_page_size)
+				call translated(ok)
+				return #globalt.a_page
+			end
+		end
+		set cursor# chr
+		break
+	end
+	return cursor
+end
+function translate_one_var(ss indents,ss in,ss oa,ss pointer,ss out,ss two)
+	sd ?len
+	set len snprintf(out,(a_page_size),"%s%svar %s=new %s();%s",indents,in,oa,pointer,two)
+	if len>0
+		if len<(a_page_size)
+			call translated("Var")
+			return globalt.a_page_switch
+		end
+	end
+	return in
+end
+
+#e	()
+#l	b or e
+#m	seHandCursor=; same as p but diff at format and continuation
+#o	onPATTERN=;
+#p	alpha=;
+#r	(,),)(,
+#s	_ and more
+#t	'',,,,)
+#v	''''
+#x	=''
+
+function translate_two(ss start,ss in)
+	ss oa;set oa spcfull(in)
+	ss cursor;ss pointer
+	ss ?chr;set chr oa#
+	if chr=(e_low)
+		inc oa
+		set cursor translate_eparam(start) #why here? who is using untranslated, anyway
+		if cursor!=start
+			set cursor translate_two_switch(oa,cursor)
+			if cursor!=oa
+				return cursor
+			end
+		end
+	elseif chr=(l_low)
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			inc oa
+			set pointer pluson(oa)
+			if pointer!=oa
+				set pointer# (Nullchar)
+			end
+			set cursor translate_fill(start,oa)
+			set cursor translate_two_switchAfter(cursor,oa,pointer)
+			if cursor!=oa
+				return cursor
+			end
+			dec oa
+			break
+		end
+	elseif chr=(m_low)
+		inc oa
+		set cursor translate_buttonmode(start,oa)
+		if cursor!=start;return cursor;end
+	elseif chr=(o_low)
+		inc oa
+		set cursor translate_onev(start)
+		if cursor!=start
+			set cursor translate_two_switch(oa,cursor)
+			if cursor!=oa
+				return cursor
+			end
+		end
+	elseif chr=(p_low)
+		inc oa
+		set cursor translate_alpha(start)
+		if cursor!=start
+			set cursor translate_two_switch(oa,cursor)
+			if cursor!=oa
+				return cursor
+			end
+		end
+	elseif chr=(r_low)
+		inc oa
+		whiletrue
+			if oa#!=(Space)
+				if oa#!=(HorizontalTab)
+					break
+				end
+			end
+			inc oa
+			set pointer pluson(oa)
+			if pointer!=oa
+				set pointer# (Nullchar)
+			end
+			set cursor translate_rect(start,oa)
+			set cursor translate_two_switchAfter(cursor,oa,pointer)
+			if cursor!=oa
+				return cursor
+			end
+			dec oa
+			break
+		end
+	elseif chr=(s_low)
+		inc oa
+		set cursor translate_srch(start,oa)
+		if cursor!=oa;return cursor;end
+	elseif chr=(t_low)
+		inc oa
+		set cursor translate_textfield(start)
+		if cursor!=start
+			set cursor translate_two_switch(oa,cursor)
+			if cursor!=oa
+				return cursor
+			end
+		end
+	elseif chr=(v_low)
+		inc oa
+		set cursor translate_var(start)
+		if cursor!=start
+			set cursor translate_two_switch(oa,cursor)
+			if cursor!=oa
+				return cursor
+			end
+		end
+	elseif chr=(x_low)
+		inc oa
+		set cursor translate_textformat(start)
+		if cursor!=start
+			set cursor translate_two_switch(oa,cursor)
+			if cursor!=oa
+				return cursor
+			end
+		end
+	elseif chr=(Nullchar)
+		ss mem;set mem strdup(start) #must remember that start is touched in calls #set cursor fn(mem,oa) is not yet through otoc
+		set cursor translate_textformat(mem)
+		if cursor=mem
+			call strcpy(mem,start)
+			set cursor translate_textfield(mem)
+			if cursor=mem
+				call strcpy(mem,start)
+				set cursor translate_var(mem)
+				if cursor=mem
+					call strcpy(mem,start)
+					set cursor translate_srch_all(mem)
+					if cursor=mem
+						call strcpy(mem,start)
+						set cursor translate_alpha(mem)
+						if cursor=mem
+							call strcpy(mem,start)
+							set cursor translate_buttonmode(mem,(NULL))
+							if cursor=mem
+								call strcpy(mem,start)
+								set cursor translate_onev(mem)
+								if cursor=mem
+									call strcpy(mem,start)
+									set cursor translate_eparam(mem)
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		call free(mem)
+		if cursor!=mem;return cursor;end
+	end
+	return in
+end
+function translate_two_switch(ss oa,ss cursor)
+	if oa#=(Nullchar)
+		return cursor
+	end
+	if oa#=(Plus)
+		callret translate_two_switcher(oa)
+	end
+	return oa
+end
+function translate_two_switcher(ss oa)
+	inc oa
+	ss page;set page switch_page()
+	set page translate_two(page,oa)
+	if page!=oa
+		return page
+	end
+	dec oa
+	return oa
+end
+function translate_two_switchAfter(ss cursor,ss oa,ss pointer)
+	if pointer!=oa
+		if cursor!=oa
+			set cursor translate_two_switcher(pointer)
+			if cursor!=pointer
+				return cursor
+			end
+		end
+		set pointer# (Plus)
+	else
+		if cursor!=oa
+			return cursor
+		end
+	end
+	return oa
+end
+
+function translate_eparam(ss start)
+	ss str="()"
+	ss p;set p strstr(start,str)
+	if p!=(NULL)
+		set p# (Nullchar)
+		inc p
+		sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%s(e%s",start,p)
+		#set p# '('
+		if n>0
+			if n<(a_page_size)
+				call translated("Event")
+				return globalt.a_page_switch
+			end
+		end
+	end
+	return start
+end
+
+function translate_fill(ss indents,ss name)
+	ss cursor;set cursor spcfull(indents)
+	ss ?chr;set chr cursor#
+	whiletrue
+		if chr!=(b_low)
+			if chr!=(e_low)
+				break
+			end
+		end
+		set cursor# (Nullchar)
+		inc cursor
+		sd ?len
+		set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s.graphics.%c%s",indents,name,chr,cursor)
+		if len>0
+			if len<(a_page_size)
+				call translated("Fill")
+				return globalt.a_page_switch
+			end
+		end
+	end
+	return name
+end
+
+function translate_buttonmode(ss indents,ss oa)
+	ss cursor;set cursor spcfull(indents)
+	set cursor# (Nullchar)
+	inc cursor
+	sd ?c
+	char against="seHandCursor="^
+	set c memcmp(cursor,#against,13)
+	if c=0
+		add cursor 13
+		ss pointer
+		sd ?len
+		set pointer globalt.a_page_switch
+		sd ?size;set size (a_page_size)
+		set len snprintf(pointer,size,"%sbuttonMode=%s",indents,cursor)
+		if len>0
+			if len<(a_page_size)
+				ss ok="ButtonMode"
+				whiletrue
+					if oa=(NULL)
+						break
+					end
+					if oa#=(Nullchar)
+						break
+					end
+					#here is not always wanted to be if there are no children inside, or if disabling the button
+					if oa#=(b_low) #is set once to make it look like a button
+						inc oa
+						add pointer len
+						sub size len
+						set len snprintf(pointer,size,"mouseChildren=false;")
+						if len<0
+							return indents
+						end
+						if len>=size
+							return indents
+						end
+					end
+					if oa#=(Plus)
+						call translated(ok)
+						set cursor translate_two_switcher(oa)
+						if cursor!=oa
+							return cursor
+						end
+						return indents
+					end
+					break
+				end
+				call translated(ok)
+				return globalt.a_page_switch
+			end
+		end
+	end
+	return indents
+end
+
+function translate_onev(ss start)
+	ss cursor
+	set cursor equalon(start)
+	if cursor!=start
+		ss pointer;set pointer cursor
+		while start!=pointer
+			dec pointer
+			if pointer#=(o_low)
+				inc pointer
+				if pointer#=(n_low)
+					inc pointer
+					vstr mous="Mouse"
+					sd ?c
+					set c memcmp(pointer,"EnterFrame",10) #memcmp is defined to compare the first 10 bytes
+					if c=0
+						set cursor translate_on(start,"","ENTER_FRAME",cursor)
+					else
+						set c memcmp(pointer,"Press",5)
+						if c=0
+							set cursor translate_on(start,mous,"CLICK",cursor)
+						else
+							set c memcmp(pointer,"RollOver",8)
+							if c=0
+								set cursor translate_on(start,mous,"MOUSE_OVER",cursor)
+							else
+								set c memcmp(pointer,"RollOut",7)
+								if c=0
+									set cursor translate_on(start,mous,"MOUSE_OUT",cursor)
+								end
+							end
+						end
+					end
+					if c=0
+						if cursor!=start
+							call translated("On")
+							return cursor
+						end
+					end
+					break # on is unique at the moment
+				end
+				dec pointer
+			end
+		end
+	end
+	return start
+end
+function translate_on(ss start,ss type,ss ev,ss value)
+	inc value
+	ss cursor
+	set cursor semicolon(value)
+	if cursor!=value
+		ss pointer
+		set pointer spcfull(start)
+		set pointer# (Nullchar)
+		set cursor# (Nullchar)
+		inc cursor
+		sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%saddEventListener(%sEvent.%s,%s);%s",start,type,ev,value,cursor)
+		if n>0
+			if n<(a_page_size)
+				return globalt.a_page_switch
+			end
+		end
+	end
+	return start
+end
+
+function translate_alpha(ss indents)
+	ss cursor;set cursor spcfull(indents)
+	set cursor# (Nullchar)
+	inc cursor
+	sd ?c
+	ss sizer=6
+	char against="alpha="^
+	set c memcmp(cursor,#against,sizer)
+	if c=0
+		add sizer cursor
+		ss pointer
+		set pointer semicolon(sizer)
+		if pointer!=sizer
+			set pointer# (Nullchar)
+			inc pointer
+			sd ?len
+			set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s/100;%s",indents,cursor,pointer)
+			if len>0
+				if len<(a_page_size)
+					call translated("Alpha")
+					return globalt.a_page_switch
+				end
+			end
+		end
+	end
+	return indents
+end
+
+function translate_rect(ss indents,ss name)
+	ss cursor;set cursor spcfull(indents)
+	set cursor# (Nullchar) #on lineTo...
+	inc cursor
+	ss width
+	set width pareoafter(cursor)
+	if width!=cursor
+		ss width_end
+		set width_end commaon(width) #(width,
+		if width_end!=width
+			ss y=1;add y width_end
+			ss y_end
+			set y_end parecon(y)   #,y)
+			if y_end!=y
+				set cursor y_end
+				inc cursor
+				ss height
+				set height commaon(cursor)
+				if height!=cursor
+					ss height_end
+					set height_end parecafter(height)    #,height)
+					if height_end!=height
+						set cursor height_end
+						inc cursor
+						ss x;set x pareoon(cursor)
+						if x!=cursor
+							ss x_end
+							set x_end commaafter(x) #(x,
+							if x_end!=x
+								set cursor semicolon(x_end)
+								if cursor!=x_end
+									set x_end# (Nullchar)
+									set y_end# (Nullchar)
+									set width_end# (Nullchar)
+									set height_end# (Nullchar)
+									sd ?len
+									set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s.graphics.drawRect%s%s,%s%s%s",indents,name,x,y,width,height,cursor)
+									if len>0
+										if len<(a_page_size)
+											call translated("Rect")
+											return globalt.a_page_switch
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return name
+end
+
+function translate_srch(ss start,ss oa)
+	ss cursor
+	whiletrue
+		if oa#!=(Nullchar)
+			if oa#!=(Plus)
+				break
+			end
+		end
+		set cursor translate_srch_all(start)
+		if cursor!=start
+			call translated("SearchAll")
+			if oa#=(Plus)
+				set cursor translate_two_switcher(oa)
+				if cursor=oa
+					return oa
+				end
+			end
+			return cursor
+		end
+		return oa
+	end
+	whiletrue
+		if oa#!=(Space)
+			if oa#!=(HorizontalTab)
+				break
+			end
+		end
+		set cursor translate_search(start,oa)
+		if cursor!=oa
+			return cursor
+		end
+		break
+	end
+	return oa
+end
+function translate_srch_all(ss start)
+	ss ?t=7
+	ss cursor
+	set cursor translate_search_base(start,#t)
+	if t=0
+		return start
+	end
+	return cursor
+end
+function translate_search(ss start,ss oa)
+	ss cursor;set cursor oa
+	inc cursor
+	ss ?types=0
+	while cursor#!=(Nullchar)
+		if cursor#=(_)
+			or types 1
+			inc cursor
+			continue
+		end
+		if cursor#=(w_low)
+			or types 2
+			inc cursor
+			continue
+		end
+		if cursor#=(h_low)
+			or types 4
+			inc cursor
+			continue
+		end
+		if cursor#=(Plus)
+			break
+		end
+		return oa
+	end
+	ss ?t;set t types
+	ss pointer
+	set pointer translate_search_base(start,#types)
+	if types=t
+		call translated("Search")
+		if cursor#=(Plus)
+			set pointer translate_two_switcher(cursor)
+			if pointer=cursor
+				return cursor
+			end
+		end
+		return pointer
+	end
+	return oa
+end
+function translate_search_base(ss start,ss ptypes)
+	ss cursor;set cursor start
+	ss str
+	ss ?t=1
+	and t ptypes#
+	if t!=0
+		set str strip(start,globalt.a_page_switch,(a_page_size)) #can't recognize at search all if is good or bad without different buffer
+		if str!=start
+			set start str
+		else
+			xor ptypes# 1
+		end
+	end
+	ss pointer
+	set t 2
+	and t ptypes#
+	if t!=0
+		if cursor!=start
+			set pointer strdup(start) #else will be a collision
+		end
+		set str replace(pointer,"Stage.w","stage.stageW",globalt.a_page_switch,(a_page_size))
+		if cursor!=start
+			call free(pointer)
+		end
+		if str!=pointer
+			set start str
+		else
+			xor ptypes# 2
+		end
+	end
+	set t 4
+	and t ptypes#
+	if t!=0
+		if cursor!=start
+			set pointer strdup(start)
+		end
+		set str replace(pointer,"Stage.h","stage.stageH",globalt.a_page_switch,(a_page_size))
+		if cursor!=start
+			call free(pointer)
+		end
+		if str!=pointer
+			set start str
+		else
+			xor ptypes# 4
+		end
+	end
+	return start
+end
+
+function translate_textfield(ss start)
+	ss cursor
+	set cursor translate_label(start)
+	if cursor!=start
+		call translated("Text")
+		return cursor
+	end
+	return start
+end
+function translate_label(ss indents)
+	ss cursor;set cursor spcfull(indents)
+	set cursor# (Nullchar) #on create...
+	ss name
+	inc cursor
+	set name quotafter(cursor)
+	if name!=cursor
+		set cursor quoton(name)
+		if cursor!=name
+			ss buffer;set buffer globalt.a_page_switch
+			sd ?size
+			set size object_make(indents,name,cursor,"TextField",#buffer,(a_page_size))
+			if size!=0
+				inc cursor
+				ss pointer
+				set pointer commaafter(cursor)
+				if pointer!=cursor
+					set cursor commaafter(pointer)
+					if cursor!=pointer
+						set pointer commaon(cursor)
+						if pointer!=cursor
+							sd ?len
+							set len object_com(name,"x",cursor,pointer,#buffer,size)
+							if len!=0
+								inc pointer
+								set cursor commaon(pointer)
+								if cursor!=pointer
+									set size object_com(name,"y",pointer,cursor,#buffer,len)
+									if size!=0
+										inc cursor
+										set pointer commaon(cursor)
+										set len object_com(name,"width",cursor,pointer,#buffer,size)
+										if len!=0
+											inc pointer
+											set cursor parecon(pointer)
+											set size object_com(name,"height",pointer,cursor,#buffer,len)
+											if size!=0
+												inc cursor
+												set pointer semicolafter(cursor) # this for + case
+												if pointer!=cursor
+													set len snprintf(buffer,size,"%s",pointer) #strncat or strncpy are not good here
+													if len>=0
+														if len<size
+															return globalt.a_page_switch
+														end
+													end
+												end
+											end
+										end
+									end
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	return indents
+end
+
+function translate_var(ss indents)
+	ss cursor;set cursor spcfull(indents)
+	set cursor# (Nullchar) #on attach...
+	ss class
+	inc cursor
+	set class quotafter(cursor)
+	if class!=cursor
+		set cursor quoton(class)
+		if cursor!=class
+			set cursor# (Nullchar)
+			inc cursor
+			ss name
+			set name quotafter(cursor)
+			if name!=cursor
+				set cursor quoton(name)
+				if cursor!=class
+					set cursor# (Nullchar)
+					inc cursor
+					ss pointer
+					set pointer semicolafter(cursor)
+					if pointer!=cursor
+						ss b=""
+						set cursor translate_one_var(indents,b,name,class,globalt.a_page_switch,pointer)
+						if cursor!=b
+							call translated("VarMorph")
+							return cursor
+						end
+					end
+				end
+			end
+		end
+	end
+	return indents
+end
+
+function translate_textformat(ss start)
+	ss cursor
+	set cursor equalafter(start)
+	if cursor!=start
+		ss type
+		set type quotafter(cursor)
+		if type!=cursor
+			ss pointer
+			set pointer quoton(type)
+			if pointer!=type
+				call to_upper(type,pointer)
+				set cursor# (Nullchar)
+				set pointer# (Nullchar)
+				inc pointer
+				sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%sTextFormatAlign.%s%s",start,type,pointer)
+				if len>0
+					if len<(a_page_size)
+						call translated("TextFormat")
+						return globalt.a_page_switch
+					end
+				end
+			end
+		end
+	end
+	return start
+end
+
+entryraw globalt()
+
+#!
+AddChild
+Alpha
+blank
+ButtonMode
+Class
+closing
+Comment
+Event
+Fill
+Function
+Import
+On
+Rect
+Search
+SearchAll
+Stage
+Static
+Text
+TextFormat
+Var
+VarMorph
