@@ -1,0 +1,420 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: iun, 11 2026 10:17:03 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -1,11 +1,11 @@
+ # EDitOR
+ 
+ ## Install
+-On Ubuntu(amd64 arm64/armhf)(focal jammy noble) from PPA.
++On Ubuntu(amd64 arm64/armhf)(focal jammy noble resolute) from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+-Or the *manual installation step* from this link *https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6* \
++Or the *manual installation step* from this [link](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6#manual-installation-step).\
+ Install:
+ ```sh
+ sudo apt-get install edor
+@@ -58,5 +58,4 @@ Use *\-\-prefix=your_path* at *./configu
+ Uninstall command is *make uninstall*.
+ 
+ ## Donations
+-The *donations* section is here
+-*https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6*
++The *donations* section is [here](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6#donations).
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -717,6 +717,57 @@ command_char change_tab_size(bar_byte cu
+ 	}
+ 	return command_false;
+ }
++
++#define color_string_macro "%hi"
++#define color_strings_macro color_string_macro "," color_string_macro
++command_char change_color(bar_byte cursor){//input0 is null therminated
++	int pos;//is bar_byte but will be a warning
++	if (sscanf(input0, color_strings_macro "%n", &foregroundcolor, &backgroundcolor, &pos) == 2 && input0[pos] == '\0'){
++		// valid: exactly "number,number"
++		if(init_pair(color_b,foregroundcolor,backgroundcolor)!=ERR){
++			rewriteprefs;
++		}
++	}
++	return command_ok;//If the color pair was previously initialized, the screen is refreshed and all occurrences of that color pair are changed to the new definition.
++	//anyway there are no colored selections
++}
++bool color_writeprefs(int f,char*tmbuf){
++	char n=sprintf(tmbuf,"%hu",foregroundcolor);
++	if(write(f,&n,sizeof(char))==sizeof(char)){
++		if(write(f,tmbuf,n)==n){
++			n=sprintf(tmbuf,"%hu",backgroundcolor);
++			if(write(f,&n,sizeof(char))==sizeof(char)){
++				if(write(f,tmbuf,n)==n){
++					return true;
++				}
++			}
++		}
++	}
++	return false;
++}
++bool color_readprefs(int f,char*rd){
++	char n;if(read(f,&n,sizeof(char))==sizeof(char)){
++		if(n<=maxshort){
++			if(read(f,rd,n)==n){
++				rd[n]='\0';
++				if(sscanf(rd,"%hu",&foregroundcolor)==1){
++					if(read(f,&n,sizeof(char))==sizeof(char)){
++						if(n<=maxshort){
++							if(read(f,rd,n)==n){
++								rd[n]='\0';
++								if(sscanf(rd,"%hu",&backgroundcolor)==1){
++									return true;
++								}
++							}
++						}
++					}
++				}
++			}
++		}
++	}
++	return false;
++}
++
+ command_char change_save_timeout(bar_byte cursor){
+ 	char fmt[    1+3+  1+1+1];//let 9999999999999 to be truncated at maxushort
+ 	sprintf(fmt,"%%%hhuhu",cursor);//input0 is null terminated but that was for another way, not depending on that
+@@ -1372,9 +1423,13 @@ command_char command(comnrp_define comnr
+ 		}else if(*comnrp==com_nr_ext){
+ 			extdata*d=((extdata**)comnrp)[1];
+ 			cursor=sprintf(input,"%s",(d->orig)[0]);//on prefs is len<=0xff and max_path_0 is 0x100
++		}else if(*comnrp==com_nr_tab){
++			cursor=sprintf(input,"%c",tab_sz+'0');
+ 		}else if(*comnrp==com_nr_restore){
+ 			cursor=sprintf(input,"%u",timeout_duration);
+-		}else{
++		}else if(*comnrp==com_nr_color){
++			cursor=sprintf(input,color_strings_macro,foregroundcolor,backgroundcolor);
++		}else{// goto swkey save
+ 			cursor=0;
+ 		}
+ 	}
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -20,9 +20,10 @@
+ #define com_nr_swkey 6
+ #define com_nr_tab 7
+ #define com_nr_restore 8
+-	#define com_nr_passcursor_numbers com_nr_restore
+-#define com_nr_save 9
+-#define com_nr_ext 10
++#define com_nr_color 9
++	#define com_nr_passcursor_numbers com_nr_color
++#define com_nr_save 10
++#define com_nr_ext 11
+ #define comnrp_define char*
+ #define command_resize -2
+ #define command_no -1 //(char)-1 but there is at least a r> comparation
+@@ -37,6 +38,7 @@ typedef struct{
+ #define is_word_char(a) ('0'<=a&&(a<='9'||('A'<=a&&(a<='Z'||(a=='_'||('a'<=a&&a<='z'))))))
+ #define max_path 0xff
+ #define max_path_0 max_path+1
++#define maxshort 6
+ 
+ #define protocol_simple "%u"
+ #undef protocol
+@@ -125,6 +127,8 @@ extern bool mod_flag;
+ extern char*ocode_extension;
+ extern char*textfile;
+ extern unsigned short timeout_duration;
++extern short foregroundcolor;
++extern short backgroundcolor;
+ //bar,tw
+ extern char tab_sz;
+ //bar,tw,tit
+@@ -156,7 +160,10 @@ command_char saving_base(char*);
+ command_char question(const char*);
+ command_char change_key(bar_byte);
+ command_char change_tab_size(bar_byte);
++command_char change_color(bar_byte);
+ command_char change_save_timeout(bar_byte);
++bool color_readprefs(int,char*);
++bool color_writeprefs(int,char*);
+ command_char command(char*,show_key_struct);
+ #define centering2(w,prw,pxc,right) position(0,0);centering3(w,prw,pxc,right);
+ #define centering(w,prw,pxc) centering2(w,prw,pxc,false)
+--- edor-1.orig/s/inc/curses.h
++++ edor-1/s/inc/curses.h
+@@ -1,4 +1,6 @@
+ 
++#define ERR -1
++
+ typedef void WINDOW;
+ extern WINDOW*stdscr;
+ typedef unsigned int chtype;
+@@ -15,16 +17,17 @@ extern "C" {
+ #endif
+ 
+ //main/bar
+-int move(int,int);
++int addch(const chtype);
++int addstr(const char*);
+ int getch(void);
+ int getmaxy(const WINDOW*);
+-int addch(const chtype);
+-int waddch(WINDOW*,const chtype);
++int init_pair(short,short,short);
++int move(int,int);
+ int mvaddch(int,int,const chtype);
+ int mvwaddch(WINDOW*,int,int,const chtype);
+-int addstr(const char*);
+-int wnoutrefresh(WINDOW*);
++int waddch(WINDOW*,const chtype);
+ int wattrset(WINDOW*,int);
++int wnoutrefresh(WINDOW*);
+ WINDOW*newwin(int,int,int,int);
+ //main/bar/tw
+ int getmaxx(const WINDOW*);
+--- edor-1.orig/s/inc/main/curses.h
++++ edor-1/s/inc/main/curses.h
+@@ -5,9 +5,9 @@
+ #define COLOR_BLACK 0
+ #define COLOR_GREEN 2
+ #define COLOR_YELLOW 3
+-#define COLOR_CYAN 6
++#define COLOR_BLUE 4
++//#define COLOR_CYAN 6
+ #define COLOR_WHITE 7
+-#define ERR -1
+ typedef unsigned long mmask_t;
+ typedef struct
+ {
+@@ -65,7 +65,6 @@ int delwin(WINDOW*);
+ //int doupdate(void);
+ int endwin(void);
+ int getmouse(MEVENT*);
+-int init_pair(short,short,short);
+ WINDOW*initscr(void);
+ int keypad(WINDOW*,bool);
+ mmask_t mousemask(mmask_t,mmask_t*);
+--- edor-1.orig/s/inc/unistd.h
++++ edor-1/s/inc/unistd.h
+@@ -31,25 +31,25 @@ ssize_t write(int,const void*,size_t);
+ }
+ #endif
+ 
+-#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
++#if defined(is_main_c)||defined(is_bar_c)||defined(is_tit_c)||defined(is_split_c)
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
+-int access(const char*,int);
+-int close(int);
++ssize_t read(int,void*,size_t);
+ 
+ #ifdef __cplusplus
+ }
+ #endif
+ #endif
+ 
+-#if defined(is_main_c)||defined(is_tit_c)||defined(is_split_c)
++#if defined(is_main_c)||defined(is_bar_c)||defined(is_split_c)
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
+-ssize_t read(int,void*,size_t);
++int access(const char*,int);
++int close(int);
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -155,6 +155,7 @@ bool mod_flag=true;
+ bool ocompiler_flag=false;
+ size_t aftercall;
+ size_t clue=no_clue;size_t normalize_clue=no_clue;
++short foregroundcolor=COLOR_WHITE;short backgroundcolor=COLOR_BLUE;
+ 
+ static char*mapsel=nullptr;
+ //static char*text_file=nullptr;
+@@ -226,10 +227,10 @@ static char tot_inf[maxulong_nul];
+ static char tot_bts;
+ static int tot_x;
+ 
+-#define maxushort 6
+-#define maxushort_nul maxushort+1
++#define maxshort_nul maxshort+1
++#define maxushort 5
+ 
+-static char pref_version[]={'0'};
++static char pref_version[]={'1'};
+ 
+ bool no_char(char z){return z<32||z>=127;}
+ static size_t tab_grow(WINDOW*w,char*a,size_t sz,int*ptr){
+@@ -2110,12 +2111,14 @@ static void writeprefs(int f){
+ 					if(write(f,&sz,extlen_size)==extlen_size){
+ 						if(write(f,filewhites_extension,sz)==sz){
+ 							if(write(f,&tab_sz,sizeof(tab_protocol))==sizeof(tab_protocol)){
+-								char tmbuf[maxushort_nul];
++								char tmbuf[maxshort_nul]; //u here signed at colors
+ 								char n=sprintf(tmbuf,"%hu",timeout_duration);
+ 								if(write(f,&n,sizeof(char))==sizeof(char)){
+ 									if(write(f,tmbuf,n)==n){
+-										if(tit_writeprefs(f)/*true*/){
+-											split_writeprefs(f);
++										if(color_writeprefs(f,tmbuf)/*true*/){
++											if(tit_writeprefs(f)/*true*/){
++												split_writeprefs(f);
++											}
+ 										}
+ 									}
+ 								}
+@@ -2274,7 +2277,11 @@ static bool loopin(WINDOW*w){
+ 				}
+ 			}
+ 			else if(z==(key_titles+A_to_a)){if(pref_change(w,&tit_delims,&tit_delims_new,false,key_titles,0)/*true*/)return true;}
+-			else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
++			else if(z==(key_len+A_to_a)){
++				quick_pack(com_nr_restore,change_save_timeout)
++				if(command((char*)args,(show_key_struct){key_len,0})==command_resize)return true;
++				wmove(w,getcury(w),getcurx(w));
++			}else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
+ 			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
+ 			else if(z==key_actswf2){if(pref_change(w,&split_outformatext,&split_outformatext_new,false,key_actswf2,0)/*true*/)return true;}
+ 			else{
+@@ -2328,6 +2335,12 @@ static bool loopin(WINDOW*w){
+ 					else{indent_flag=true;c=orig_upkey(key_indents);}
+ 					setprefs(mask_indent,indent_flag);
+ 					vis(c,w);//is not showing on stdscr without wnoutrefresh(thisWindow)
++				}else if(chr==key_indopt){
++					char c;
++					if(indopt_flag/*true*/){indopt_flag=false;c=orig_lowkey(key_indopt);}
++					else{indopt_flag=true;c=orig_upkey(key_indopt);}
++					setprefs(mask_indopt,indopt_flag);
++					vis(c,w);
+ 				}else if(chr==key_ocomp){
+ 					if(ocompiler_flag/*true*/){ocompiler_flag=false;c=orig_lowkey(key_ocomp);}
+ 					else{ocompiler_flag=true;c=orig_upkey(key_ocomp);
+@@ -2354,20 +2367,17 @@ static bool loopin(WINDOW*w){
+ 					quick_pack(com_nr_swkey,change_key)
+ 					if(command((char*)args,(show_key_struct){key_swkey,0})==command_resize)return true;
+ 					wmove(w,getcury(w),getcurx(w));
+-				}else if(chr==key_tab){
++				}else if(chr==key_len){
+ 					quick_pack(com_nr_tab,change_tab_size)
+-					if(command((char*)args,(show_key_struct){key_tab,0})==command_false)wmove(w,getcury(w),getcurx(w));
++					if(command((char*)args,(show_key_struct){key_len,0})==command_false)wmove(w,getcury(w),getcurx(w));
+ 					else return true;
+-				}else if(chr==key_restore){
+-					quick_pack(com_nr_restore,change_save_timeout)
+-					if(command((char*)args,(show_key_struct){key_restore,0})==command_resize)return true;
++				}else if(chr==key_color){
++					quick_pack(com_nr_color,change_color)
++					//If the color pair was previously initialized, the screen is refreshed and all occurrences of that color pair are changed to the new definition.
++					//anyway there are no colored selections
++					command((char*)args,(show_key_struct){key_color,0});//==command_false)
+ 					wmove(w,getcury(w),getcurx(w));
+-				}else if(chr==key_indopt){
+-					char c;
+-					if(indopt_flag/*true*/){indopt_flag=false;c=orig_lowkey(key_indopt);}
+-					else{indopt_flag=true;c=orig_upkey(key_indopt);}
+-					setprefs(mask_indopt,indopt_flag);
+-					vis(c,w);
++					//else return true;
+ 				}else type(c,w);//enter, tab, ^, unknown ctrls
+ 			}else{
+ 				if(strcmp(s,"KEY_F(1)")==0){
+@@ -2691,13 +2701,15 @@ static bool getprefs(){
+ 															tab_sz=tabtest;
+ 															char n;if(read(f,&n,sizeof(char))==sizeof(char)){
+ 																if(n<=maxushort){
+-																	char rd[maxushort_nul];
++																	char rd[maxshort_nul]; //u here signed at readprefs
+ 																	if(read(f,rd,n)==n){
+ 																		rd[n]='\0';
+-																		sscanf(rd,"%hu",&timeout_duration);
+-																		//
+-																		if(tit_readprefs(f)/*true*/){
+-																			split_readprefs(f);
++																		if(sscanf(rd,"%hu",&timeout_duration)==1){
++																			if(color_readprefs(f,rd)/*true*/){
++																				if(tit_readprefs(f)/*true*/){
++																					split_readprefs(f);
++																				}
++																			}
+ 																		}
+ 																	}
+ 																}
+@@ -2778,7 +2790,7 @@ static void writefilebuf(char*cutbuf_fil
+ static void color(){
+ 	if(start_color()!=ERR){
+ 		if(init_pair(color_a,COLOR_BLACK,COLOR_WHITE)!=ERR){//TERM vt100
+-			if(init_pair(color_b,COLOR_BLACK,COLOR_CYAN)!=ERR){
++			if(init_pair(color_b,foregroundcolor,backgroundcolor)!=ERR){
+ 				if(init_pair(color_c,COLOR_BLACK,COLOR_GREEN)!=ERR){
+ 					init_pair(color_d,COLOR_BLACK,COLOR_YELLOW);
+ 				}
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -61,16 +61,16 @@ text="\ncommand mode: left,right,home,en
+ \nCtrl+r = redo\
+ \nCtrl+l = titles (movement, Enter at done, Ctrl+q, other keys to search); Alt+l = last character possibilities\
+ \nCtrl+w = text wrapping (movement. another key to return)\
++\nCtrl+t = enable/disable insensitive search\
+ \nCtrl+e = enable/disable internal mouse/touch\
+ \nCtrl+n = enable/disable indentation\
+-\nCtrl+t = enable/disable insensitive search\
++\nCtrl+d = enable/disable indent follower\
+ \nCtrl+a = enable/disable O language syntax; Alt+a = syntax rescan; Alt+A = change rule extension name (blank is all)\
+ \nCtrl+j = enable/disable OA split syntax; Alt+j = change delimiter; Alt+J = change view delimiter; Alt+Ctrl+j = change rule extension name for splits (blank is all)\
+ \n Ctrl+k = change mix folder (blank is mixless); Alt+k = change mix file ext (blank is no ext); Alt+K = change mix format file ext (blank is no ext); Alt+Ctrl+k = mix file chars to escape\
+ \nCtrl+y = enable/disable spaces->tabs indents at read, tabs->spaces at write; Alt+y = change rule extension name (blank is all)\
+-\nCtrl+d = enable/disable indent follower\
+-\nCtrl+b = change tab size\
+-\nCtrl+x = change save timeout in seconds (0 is default timeout)\
++\nCtrl+b = change selection color, short integers: foreground,background\
++\nCtrl+x = change tab size; Alt+x = change save timeout in seconds (0 is default timeout)\
+ \nCtrl+z = switch keys, applies to Ctrl and lower/upper Alt (example: az , +a becomes +z and +z becomes +a)\
+ \nCtrl+q = quit; Alt+q = quit and return EXIT_FAILURE\
+ \nabcdefghijklmnopqrstuvwxyz\""
+@@ -139,7 +139,7 @@ _find_pos                 ocomp
+ i=98
+ while [ $i -lt 123 ]; do
+ 	case $i in
+-		98) find_pos tab                 $i 1;;     #b
++		98) find_pos color               $i 1;;     #b
+ 		99) find_pos findword            $i 1 1;;   #c
+ 		100) find_pos indopt             $i 1;;     #d
+ 		101) find_pos mouse              $i 1;;     #e
+@@ -157,7 +157,7 @@ while [ $i -lt 123 ]; do
+ 		117) find_pos undo               $i 1 1;;   #u
+ 		118) find_pos visual             $i 1 1;;   #v
+ 		119) is_extern=x find_pos wrap   $i 1;;     #w
+-		120) find_pos restore            $i 1;;     #x
++		120) find_pos len                $i 1 1;;   #x
+ 		121) find_pos whites             $i 1 1;;   #y
+ 		122) find_pos swkey              $i 1;;     #z
+ 		*) wr2 ",${nothing}"; wr4 ",${nothing}";;
