@@ -1,0 +1,1049 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: iul, 15 2026 11:21:11 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/configure.ac
++++ edor-1/configure.ac
+@@ -40,7 +40,7 @@ AC_PROG_CC
+ 
+ # Checks for header files. Checks for libraries.
+ 
+-AC_CHECK_HEADERS(fcntl.h stdlib.h unistd.h time.h)
++AC_CHECK_HEADERS(dirent.h fcntl.h stdlib.h time.h unistd.h)
+ AC_CHECK_HEADERS(curses.h, [
+ 		AC_SUBST(CSS, "")
+ 		AC_SEARCH_LIBS([nc_getmouse],[pdcurses],[AC_DEFINE(OTHER_CURSES,1,[is pdcurses])],[
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -64,19 +64,19 @@ static int fprevnumber;
+ static bool filewhites_reminder;//=false;
+ 
+ #define err_len_min 2
+-bool insensitive=false;
+-static int err_l=0;
++bool insensitive;
++static int err_l;
+ #define b_inf_s "F1 for help"
+ #define quest_ex_s "? y/C/n"
+-static int com_left=sizeof(b_inf_s);
++#define com_left sizeof(b_inf_s)
+ static char input1[max_path_0];
+ static char input2[max_path_0];
+-static char*input0=input1;
++static char*input0;
+ static char inputr[max_path_0];
+-static bar_byte cursorr=0;
++static bar_byte cursorr;
+ #define get_right getbegx(poswn)-1
+ static char inputf[max_path_0];
+-static bar_byte cursorf=0;
++static bar_byte cursorf;
+ 
+ typedef struct{
+ 	size_t yb;
+@@ -85,15 +85,15 @@ typedef struct{
+ 	row_dword xe;
+ 	char*data;
+ }eundo;
+-static eundo*undos=nullptr;
+-static size_t undos_tot=0;
+-static size_t undos_spc=0;
+-static size_t undos_save=0;
+-static size_t undos_max=0;
+-static int undo_v=0;
+-static bool new_f=false;
++static eundo*undos;
++static size_t undos_tot;
++static size_t undos_spc;
++static size_t undos_save;
++static size_t undos_max;
++static int undo_v;
++static bool new_f;
+ #define new_s "New Path"
+-static int new_v=0;
++static int new_v;
+ 
+ void bar_init(){
+ 	move(getmaxy(stdscr)-1,0);
+@@ -889,6 +889,7 @@ void undo_free(){
+ 		free(undos);
+ 	}
+ }
++typedef struct __attribute__((packed)) { row_dword v; } row_dword_ua;
+ static bool undo_add_replace(bar_byte cursor){
+ 	if(undo_expand()/*true*/){
+ 		char*d=(char*)malloc(1+sizeof(row_dword)+cursor);
+@@ -898,15 +899,18 @@ static bool undo_add_replace(bar_byte cu
+ 			un->yb=ytext;un->xb=xtext;
+ 			un->ye=un->yb;un->xe=cursorr;
+ 			un->data=d;
+-			d[0]=ln_term[0];((row_dword*)((void*)&d[1]))[0]=cursor;//is not bar_byte because at first is, but at undo replace there will be the replace that is bigger
++			d[0]=ln_term[0];
++
++			//is not bar_byte because at first is, but at undo replace there will be the replace that is bigger
++			((row_dword_ua*)((void*)&d[1]))->v=cursor;//ubsan friendly, was ((row_dword*)((void*)&d[1]))[0]=cursor;
++
+ 			//memcpy(&d[1]+sizeof(cursor),inputf,cursor);inputf can be insensitive
+ 			memcpy(&d[1]+sizeof(row_dword),&rows[ytext].data[xtext],cursor);
+ 			undo_ok();return false;}}
+ 	return true;
+ }
+ static bool undo_replace(eundo*un,char*data,size_t yb,row_dword xb,row_dword xe,bool is_undo){
+-	row_dword*sz_p=(row_dword*)((void*)&data[1]);
+-	row_dword sz2=sz_p[0];
++	row_dword sz2;memcpy(&sz2, &data[1], sizeof(row_dword));//ubsan friendly, was row_dword*sz_p=(row_dword*)((void*)&data[1]);
+ 	row*r=&rows[yb];
+ 	long memdif=(long)sz2-xe;//is big only if is a long write at replace. strange is that at char the cast is not required
+ 	row_dword sz=r->sz;
+@@ -916,10 +920,11 @@ static bool undo_replace(eundo*un,char*d
+ 	else if(xe>sz2&&is_undo/*true*/){
+ 		data=(char*)realloc(data,1+sizeof(row_dword)+xe);
+ 		if(data==nullptr)return true;
+-		un->data=data;sz_p=(row_dword*)((void*)&data[1]);
++		un->data=data;
++		//sz_p=(row_dword*)((void*)&data[1]);
+ 	}
+ 	char*a=&r->data[xb];
+-	char*b=(char*)(sz_p+1);
++	char *b = data + 1 + sizeof(row_dword); //ubsan friendly, was char*b=(char*)(sz_p+1);
+ 	if(memdif>0){//here will be row_dword at max
+ 		for(size_t i=0;i<xe;i++){
+ 			char c=a[i];a[i]=b[i];b[i]=c;
+@@ -934,7 +939,8 @@ static bool undo_replace(eundo*un,char*d
+ 			for(size_t i=sz2;i<xe;i++)b[i]=a[i];
+ 		row_set(r,xb+sz2,sz-xb-xe,0,&r->data[xb+xe]);
+ 	}
+-	sz_p[0]=xe;un->xe=sz2;
++	memcpy(&data[1], &xe, sizeof(row_dword));//ubsan friendly, was sz_p[0]=xe;
++	un->xe=sz2;
+ 	ytext=yb;xtext=xb+sz2;
+ 	return false;
+ }
+@@ -1650,3 +1656,21 @@ size_t init_aftercall(){
+ 	}else if(*ocode_extension=='\0')return aftercall_find();
+ 	return rows_tot;//still need a value
+ }
++
++void bar_inits_default(){
++	insensitive=false;
++	err_l=0;
++	cursorr=0;
++	cursorf=0;
++	undos=nullptr;
++	undos_tot=0;
++	undos_spc=0;
++	undos_save=0;
++	undos_max=0;
++	undo_v=0;
++	new_f=false;
++	new_v=0;
++}
++void bar_inits(){
++	input0=input1;
++}
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -191,6 +191,8 @@ void texter_macro(const char*);
+ size_t aftercall_find();
+ void aftercall_draw(WINDOW*);
+ size_t init_aftercall();
++void bar_inits_default(void);
++void bar_inits(void);
+ //tw
+ void centering3(WINDOW*,size_t*,row_dword*,bool);
+ //tit
+@@ -217,6 +219,8 @@ bool titles(WINDOW*);
+ void tit_freeprefs();
+ bool tit_writeprefs(int);
+ bool tit_readprefs(int);
++void tit_inits_default(void);
++void tit_inits(void);
+ extern char*tit_delims;
+ extern char*tit_delims_new;
+ 
+@@ -230,6 +234,8 @@ void split_freeprefs();
+ bool split_write_init(char*);
+ const char* split_write(size_t*,int,unsigned int*,bool*);
+ void split_write_free();
++void split_inits_default(void);
++void split_inits(void);
+ extern bool splits_flag;
+ extern split_char split_reminder_c;
+ extern char*sdelimiter;
+--- edor-1.orig/s/inc/main/armv7/stdio.h
++++ /dev/null
+@@ -1,10 +0,0 @@
+-
+-//#include"inc/stddef.h"
+-
+-#ifdef __cplusplus
+-extern "C" {
+-#endif
+-int snprintf(char* __buf, size_t __size, const char* __fmt, ...);
+-#ifdef __cplusplus
+-}
+-#endif
+--- /dev/null
++++ edor-1/s/inc/main/dirent.h
+@@ -0,0 +1,50 @@
++
++typedef struct __dirstream DIR;
++
++#undef platform_is_known
++#ifdef SIZEOF_INT_P
++#	if SIZEOF_INT_P >= 8
++#		ifdef SIZEOF_LONG
++#			if SIZEOF_LONG == 4
++#				define platform_is_known 1
++
++struct dirent
++{
++ long d_ino;
++ unsigned short d_reclen;
++ unsigned short d_namlen;
++ char d_name[260];
++};
++
++#			endif
++#		endif
++#	endif
++#endif
++#ifndef platform_is_known
++
++#include "inc/types.h"
++struct dirent
++{
++	__ino_t d_ino;
++	__off_t d_off;
++	unsigned short int d_reclen;
++	unsigned char d_type;
++	char d_name[256];
++};
++//same on pi 32bit
++
++#else
++#	undef platform_is_known
++#endif
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++int closedir(DIR *dirp);
++DIR *opendir(const char *name);
++struct dirent *readdir(DIR *dirp);
++
++#ifdef __cplusplus
++}
++#endif
+--- edor-1.orig/s/inc/main/stdio.h
++++ edor-1/s/inc/main/stdio.h
+@@ -12,7 +12,7 @@ int getchar(void);
+ int printf(const char *, ...);
+ int putchar(int);
+ int rename(const char*,const char*);
+-//int snprintf(char* __buf, size_t __size, const char* __fmt, ...);
++int snprintf(char* __buf, size_t __size, const char* __fmt, ...);
+ 
+ #ifdef HAVE__GETREENT   //only on windows msys
+ 	FILE**__getreent();
+--- edor-1.orig/s/inc/main/string.h
++++ edor-1/s/inc/main/string.h
+@@ -7,6 +7,8 @@ extern "C" {
+ #endif
+ 
+ void*memset(void*,int,size_t);
++char *strcpy(char *restrict dst, const char *restrict src);
++char *strdup(const char *s);
+ 
+ #ifdef __cplusplus
+ }
+--- edor-1.orig/s/inc/main/sys_stat.h
++++ edor-1/s/inc/main/sys_stat.h
+@@ -26,13 +26,15 @@ typedef unsigned short __mode_t;
+ 
+ #			else
+ 
+-typedef unsigned long int __ino_t;
++#include "inc/types.h"
++//typedef unsigned long int __ino_t;
++//typedef long int __off_t;
++
+ typedef unsigned long int __dev_t;
+ typedef unsigned int __mode_t;
+ typedef unsigned int __nlink_t;
+ typedef unsigned int __uid_t;
+ typedef unsigned int __gid_t;
+-typedef long int __off_t;
+ typedef int __blksize_t;
+ typedef long int __blkcnt_t;
+ typedef time_t __time_t;
+@@ -68,13 +70,15 @@ struct stat
+ #endif
+ #ifndef platform_is_known
+ 
++#include "inc/types.h"
++//typedef unsigned long int __ino_t;
++//typedef long int __off_t;
++
+ typedef unsigned long long int __dev_t;
+-typedef unsigned long int __ino_t;
+ typedef unsigned int __mode_t;
+ typedef unsigned int __nlink_t;
+ typedef unsigned int __uid_t;
+ typedef unsigned int __gid_t;
+-typedef long int __off_t;
+ typedef long int __blksize_t;
+ typedef long int __blkcnt_t;
+ typedef time_t __time_t;
+@@ -113,6 +117,7 @@ struct stat
+ extern "C" {
+ #endif
+ 
++int fstatat(int dirfd, const char *restrict path, struct stat *restrict statbuf, int flags);
+ int mkdir(const char*, __mode_t);
+ int stat(const char *restrict pathname, struct stat *restrict statbuf);
+ 
+--- /dev/null
++++ edor-1/s/inc/types.h
+@@ -0,0 +1,4 @@
++
++typedef long int __off_t;
++typedef unsigned long int __ino_t;
++//_ino_t is short on mingw pointer 8, not needed now
+--- edor-1.orig/s/inc/unistd.h
++++ edor-1/s/inc/unistd.h
+@@ -72,7 +72,8 @@ int close(int);
+ #if defined(is_main_c)||defined(is_split_c)
+ 
+ //sys/types.h
+-typedef long off_t;
++#include "inc/types.h"
++typedef __off_t off_t;
+ //#include <bits/seek_constants.h>
+ #define SEEK_SET 0
+ #define SEEK_END 2
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -13,6 +13,11 @@
+ #else
+ #include"inc/main/curses.h"
+ #endif
++#ifdef HAVE_DIRENT_H
++#include<dirent.h>
++#else
++#include"inc/main/dirent.h"
++#endif
+ #ifdef HAVE_FCNTL_H
+ #include<fcntl.h>
+ #else
+@@ -65,9 +70,6 @@
+ #ifndef HAVE_STDLIB_H
+ #include"inc/main/armv7/stdlib.h"
+ #endif
+-#ifndef HAVE_STDIO_H
+-#include"inc/main/armv7/stdio.h"
+-#endif
+ #ifdef HAVE_SIGNAL_H
+ #include<signal.h>
+ #else
+@@ -144,40 +146,40 @@ static void __attribute__((noreturn)) si
+ #define normalize_ok 1
+ #define normalize_char signed char
+ 
+-char ln_term[3]="\n";
+-size_t ln_term_sz=1;
+-char*textfile=nullptr;
+-row*rows=nullptr;
+-size_t rows_tot=1;
+-size_t ytext=0;
+-row_dword xtext=0;//and what about when xtext + xc goes size_t ? is ok, nothing is lost, tested, (size_t)xtext cast is same without cast, but is recommended
+-bool mod_flag=true;
+-bool ocompiler_flag=false;
++char ln_term[3];
++size_t ln_term_sz;
++char*textfile;
++row*rows;
++size_t rows_tot;
++size_t ytext;
++row_dword xtext;
++bool mod_flag;
++bool ocompiler_flag;
+ size_t aftercall;
+-size_t clue=no_clue;size_t normalize_clue=no_clue;
+-short foregroundcolor=COLOR_WHITE;short backgroundcolor=COLOR_BLUE;
++size_t clue;size_t normalize_clue;
++short foregroundcolor;short backgroundcolor;
+ 
+-static char*mapsel=nullptr;
++static char*mapsel;
+ //static char*text_file=nullptr;
+-static size_t rows_spc=1;//at rows_expand
+-static bool*x_right=nullptr;
+-static int*tabs=nullptr;
++static size_t rows_spc;
++static bool*x_right;
++static int*tabs;
+ static int tabs_rsz;
+ static int yhelp;
+ static bool helpend;
+ static int phelp;
+ static char*helptext;
+-static time_t hardtime=0;
+-static char*restorefile=nullptr;
++static time_t hardtime;
++static char*restorefile;
+ static char restorefile_buf[max_path_0];
+ static char restorefile_buf2[max_path_0];
+-static char*editingfile=nullptr;
++static char*editingfile;
+ static char editingfile_buf[max_path_0];
+ static char editingfile_buf2[max_path_0];
+ 
+-static mmask_t stored_mouse_mask=0;
++static mmask_t stored_mouse_mask;
+ #define stored_mouse_mask_q stored_mouse_mask!=0
+-static bool indent_flag=false;
++static bool indent_flag;
+ #define mask_size 1
+ //#define mask_nomask 0
+ #define mask_mouse 1
+@@ -187,36 +189,35 @@ static bool indent_flag=false;
+ #define mask_splits 0x10
+ #define mask_filewhites 0x20
+ #define mask_indopt 0x40
+-static char prefs_file[max_path_0]={'\0'};//only the first byte is set
+-static char*ocode_extension_new=nullptr;
++static char prefs_file[max_path_0];//={'\0'};//only the first byte is set
++static char*ocode_extension_new;
+ 
+ //static bool visual_bool=false;
+-static char*cutbuf=nullptr;
+-static size_t cutbuf_sz=0;
+-static size_t cutbuf_spc=0;
+-static size_t cutbuf_r=1;
+-static char*text_init_b=nullptr;
++static char*cutbuf;
++static size_t cutbuf_sz;
++static size_t cutbuf_spc;
++static size_t cutbuf_r;
++static char*text_init_b;
+ static char*text_init_e;//is init? malloc to new : realloc. and to free or not to free.
+ static int _rb;static int _cb;
+ static int _re;static int _ce;
+-static int topspace=1;
++#define topspace 1
+ //left,syntax,right individual size
+ #define contentmarginsize 1
+-static int leftspace=contentmarginsize+contentmarginsize;
++#define leftspace (contentmarginsize+contentmarginsize)
+ #define view_margin 8
+-static WINDOW*leftcontent=nullptr;
+-static WINDOW*rightcontent=nullptr;
+-static char at_right_mark='>';
+-static char at_left_mark='<';
+-static char at_content_nomark=' ';
+-static WINDOW*syntaxcontent=nullptr;
+-bool filewhites_flag=false;
+-char*filewhites_extension=(char*)"yml";
+-static char*filewhites_extension_new=nullptr;
++static WINDOW*leftcontent;
++static WINDOW*rightcontent;
++#define at_right_mark '>'
++#define at_left_mark '<'
++#define at_content_nomark ' '
++static WINDOW*syntaxcontent;
++bool filewhites_flag;
++char*filewhites_extension;
++static char*filewhites_extension_new;
+ #define tab_protocol char
+-tab_protocol tab_sz=6;
+-static int user_return=EXIT_SUCCESS;
+-static bool indopt_flag=false;
++tab_protocol tab_sz;
++static bool indopt_flag;
+ 
+ #define splits_activated 'S'
+ #define splits_activated_mixless 'h'
+@@ -230,7 +231,17 @@ static int tot_x;
+ #define maxshort_nul maxshort+1
+ #define maxushort 5
+ 
+-static char pref_version[]={'1'};
++#define pref_version "1"
++#define pref_version_size (sizeof(pref_version)-1)
++
++static char* converted_open;
++
++static int user_return=EXIT_SUCCESS;
++static char reload=1;
++
++#ifndef SIZE_MAX
++# define SIZE_MAX ((size_t)-1)
++#endif
+ 
+ bool no_char(char z){return z<32||z>=127;}
+ static size_t tab_grow(WINDOW*w,char*a,size_t sz,int*ptr){
+@@ -455,8 +466,9 @@ static int helpshow(int n){
+ 	do{
+ 		helpend=helptext[i]==0;
+ 		bool newl=helptext[i]=='\n';
+-		c++;i++;
++		c++;
+ 		bool is_max=c==max;
++		if(!helpend)i++;
+ 		if(newl/*true*/||helpend/*true*/||is_max/*true*/){
+ 			move(y,0);
+ 			//int sum=i-j+cstart;
+@@ -467,20 +479,23 @@ static int helpshow(int n){
+ 			char aux=helptext[i];helptext[i]='\0';
+ 			addstr(&helptext[j]);
+ 			helptext[i]=aux;
+-			//old text seems to go anyway without this
++			//old text seems to go anyway without this when writting new lines
+ 			//if(sum<max)clrtoeol();
+ 			y++;
+ 			if(getmaxy(stdscr)-3<y)break;
+ 			j=i;
+-			if(newl==false){
++			if(is_max/*true*/){
+ 				if(helptext[i]=='\n'){j++;i=j;}
+ 				else cstart=1;
+ 			}
+ 			c=cstart;
+ 		}
+-	}while(helpend==false);
++	}while(!helpend);
++
+ 	int x=getcurx(stdscr);
+ 	if(x!=0)for(;x!=max;x++)addch(' ');//seems that prelast row need this, a color switch will be at next last row
++	//this is because last row is now having a new line for addstr for curses to clean it
++
+ 	return y;
+ }
+ 
+@@ -2134,7 +2149,7 @@ void setprefs(int flag,bool set){
+ 	if(prefs_file[0]!='\0'){
+ 		int f=open(prefs_file,O_RDWR|O_CREAT,S_IRUSR|S_IWUSR);
+ 		if(f!=-1){
+-			bar_byte sz=sizeof(pref_version);
++			bar_byte sz=pref_version_size;
+ 			if(write(f,&sz,extlen_size)==extlen_size){
+ 				if(write(f,pref_version,sz)==sz){
+ 					char mask;
+@@ -2284,7 +2299,13 @@ static bool loopin(WINDOW*w){
+ 			}else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
+ 			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
+ 			else if(z==key_actswf2){if(pref_change(w,&split_outformatext,&split_outformatext_new,false,key_actswf2,0)/*true*/)return true;}
+-			else{
++			else if(z==key_quit){
++				bool q;bool not_q=quit_from_key(w,&q);
++				if(!not_q/*false*/){
++					reload=2;
++					return q;
++				}
++			}else{
+ 				const char*s=keyname(z);
+ 				if(*s==Char_Ctrl){
+ 					if(s[1]==key_actswf){if(pref_change(w,&split_extension,&split_extension_new,false,key_actswf,A_to_a)/*true*/)return true;}
+@@ -2485,7 +2506,7 @@ static void rows_init(size_t size){
+ 	z->sz=b-a;z->spc=0;
+ 	rows_spc=rows_tot;
+ }
+-//DIR*d=fdopendir(fd);//having problems with this and msys2
++//DIR*d=fdopendir(fd);//not at mingw
+ //	DIR*d=opendir(dirname);
+ //	if(d){closedir(d);return true;}//!=nullptr
+ static bool is_dir(char*dirname){
+@@ -2499,28 +2520,17 @@ static bool grab_file(char*f,size_t*text
+ 	bool fake=true;
+ 	int fd=open(f,O_RDONLY);
+ 	if(fd!=-1){
+-		if(is_dir(f)/*true*/){
+-			putchar('\"');
+-			size_t n=strlen(f);
+-			for(size_t i=0;i<n;i++){
+-				putchar(f[i]);
+-			}
+-			//puts(f);
+-			puts("\" is a directory");
+-		}
+-		else{
+-			size_t size=lseek(fd,0,SEEK_END);
+-			if(size!=(size_t)-1){
+-				text_init_b=(char*)malloc(size);
+-				if(text_init_b){//!=nullptr
+-					lseek(fd,0,SEEK_SET);
+-					#pragma GCC diagnostic push
+-					#pragma GCC diagnostic ignored "-Wunused-result"
+-					read(fd,text_init_b,size);
+-					#pragma GCC diagnostic pop
+-					text_sz[0]=size;
+-					fake=false;
+-				}
++		size_t size=lseek(fd,0,SEEK_END);
++		if(size!=(size_t)-1){
++			text_init_b=(char*)malloc(size);
++			if(text_init_b){//!=nullptr
++				lseek(fd,0,SEEK_SET);
++				#pragma GCC diagnostic push
++				#pragma GCC diagnostic ignored "-Wunused-result"
++				read(fd,text_init_b,size);
++				#pragma GCC diagnostic pop
++				text_sz[0]=size;
++				fake=false;
+ 			}
+ 		}
+ 		close(fd);
+@@ -2667,7 +2677,7 @@ static bool getprefs(){
+ 		if(read(f,&len,extlen_size)==extlen_size){
+ 			char prefe_version[0x100*sizeof(bar_byte)];
+ 			if(read(f,prefe_version,len)==len){
+-				if((len!=sizeof(pref_version))||(memcmp(pref_version,prefe_version,len)!=0)){
++				if((len!=pref_version_size)||(memcmp(pref_version,prefe_version,len)!=0)){
+ 					puts("Preferences file version not matching. Run the program with " remove_con);
+ 					return false;
+ 				}
+@@ -2986,10 +2996,87 @@ static void freeprefs(){//these if are n
+ 	if(filewhites_extension_new)free(filewhites_extension_new);//!=nullptr
+ 	tit_freeprefs();
+ }
++static char* dirargfile_to_file(char* f){
++	DIR *dir = opendir(f);
++	char*path=nullptr;
++	if(dir){
++		size_t size=strlen(f)+1;
++		path = malloc(size+1);
++		if(path){
++			int n=snprintf(path,size+1,"%s%c",f,path_separator);
++			if(n>0){
++				if(n==size){
++					size_t right_size=0;
++					char*val=nullptr;
++					struct dirent *ent;
++					size_t paranoia=SIZE_MAX - size - 1;
++					while (ent = readdir(dir)) {
++						if (ent->d_name[0] == '.' &&
++							(ent->d_name[1] == '\0' || (ent->d_name[1] == '.' && ent->d_name[2] == '\0')
++							)
++						)continue; // skip "." and ".."
++						size_t need = strlen(ent->d_name);
++						if(need > right_size){
++							char *tmp = realloc(path, size + need + 1);
++							if (!tmp || (need > paranoia)) {
++								if(path){
++									free(path);
++									path=nullptr;
++								}
++								break;
++							}
++							path = tmp;
++							right_size = need;
++						}
++						strcpy(path+size,ent->d_name);
++						if (is_dir(path)/*true*/)continue;
++						if (!val || strcmp(ent->d_name,val) < 0) {
++							if(val)free(val);
++							val=strdup(ent->d_name);
++							if(!val){
++								free(path);
++								path=nullptr;
++								break;
++							}
++						}
++					}
++					if(val){
++						strcpy(path+size,val);
++						free(val);
++					}else{
++						free(path);
++						path=nullptr;
++					}
++				}
++			}
++		}
++		closedir(dir);
++	}
++	return path;
++}
++static char* get_argfile(char*f){
++	int fd=open(f,O_RDONLY);
++	if(fd!=-1){
++		if(is_dir(f)/*true*/){
++			converted_open=dirargfile_to_file(f);
++			if(!converted_open){
++				putchar('\"');
++				size_t n=strlen(f);
++				for(size_t i=0;i<n;i++){
++					putchar(f[i]);
++				}
++				//puts(f);
++				puts("\" is a directory");
++				close(fd);
++				return nullptr;
++			}
++			f=converted_open;
++		}
++		close(fd);
++	}
++	return f;
++}
+ static void action_go(int argc,char**argv,char*cutbuf_file){
+-	if(command_line(&argc,&argv,cutbuf_file)/*true*/)return;
+-	if(argc>3){puts("Too many arguments.");user_return=EXIT_FAILURE;return;}
+-
+ 	if(prefs_file[0]!='\0'){
+ 		if(!getprefs()){//split is first that depends on prefs
+ 			user_return=EXIT_FAILURE;return;
+@@ -3004,7 +3091,10 @@ static void action_go(int argc,char**arg
+ 	bool not_forced=true;
+ 	bool no_file=argc==1;
+ 	if(no_file==false){
+-		argfile=argv[1];
++		argfile=get_argfile(argv[1]);
++		if(!argfile){//==nullptr
++			user_return=EXIT_FAILURE;return;
++		}
+ 		no_file=new_visual(argfile)/*true*/;
+ 		if(restorefile_path(argfile)/*true*/){
+ 			if(access(restorefile_buf,F_OK)==0){
+@@ -3080,6 +3170,11 @@ static void action_go(int argc,char**arg
+ 	if(ok!=normalize_err){
+ 		WINDOW*w1=initscr();
+ 		if(w1){//!=nullptr
++			if(reload!=0){
++				texter_macro("Reloaded");
++				reload=0;
++			}
++
+ 			if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
+ 
+ 			//if set 1press_and_4,5 will disable right press (for copy menu) anyway
+@@ -3118,18 +3213,77 @@ static void action_go(int argc,char**arg
+ 		}
+ 		free(text_init_b);
+ 	}
+-	freeprefs();
+ }
+ static void action(int argc,char**argv){
+ 	char cutbuf_file[max_path_0];
+ 	cutbuf_file[0]='\0';
+ 	if(help_cutbuffile_preffile(argv[0],cutbuf_file)/*true*/){//this is here, is convenient for remove_config
+-		action_go(argc,argv,cutbuf_file);
+-		if(editingfile)unlink(editingfile);//this can be before and after text_init_b, also, this can be if no argfile when rebase is on with a save as.. //!=nullptr
+-		if(cutbuf)free(cutbuf);//this is init at getfilebuf or if not there at writemembuf //!=nullptr
++		if(!command_line(&argc,&argv,cutbuf_file)/*true*/){
++			if(argc<=3){
++				action_go(argc,argv,cutbuf_file);
++				freeprefs();//action_go
++				if(converted_open){free(converted_open);converted_open=nullptr;}
++				if(editingfile)unlink(editingfile);//this can be before and after text_init_b(action_go), also, this can be if no argfile when rebase is on with a save as.. //!=nullptr
++				if(cutbuf)free(cutbuf);//this is init at getfilebuf(action_go) or if not there at writemembuf //!=nullptr
++			}else{
++				puts("Too many arguments.");user_return=EXIT_FAILURE;
++			}
++		}
+ 		free(helptext);
+ 	}
+ }
++static void inits_default(){
++	ln_term[1]='\0';
++	textfile=nullptr;
++	rows=nullptr;
++	ytext=0;
++	xtext=0;//and what about when xtext + xc goes size_t ? is ok, nothing is lost, tested, (size_t)xtext cast is same without cast, but is recommended
++	ocompiler_flag=false;
++	mapsel=nullptr;
++	x_right=nullptr;
++	tabs=nullptr;
++	hardtime=0;
++	restorefile=nullptr;
++	editingfile=nullptr;
++	stored_mouse_mask=0;
++	indent_flag=false;
++	*prefs_file='\0';
++	ocode_extension_new=nullptr;
++	cutbuf=nullptr;
++	cutbuf_sz=0;
++	cutbuf_spc=0;
++	text_init_b=nullptr;
++	leftcontent=nullptr;
++	rightcontent=nullptr;
++	syntaxcontent=nullptr;
++	filewhites_flag=false;
++	filewhites_extension_new=nullptr;
++	indopt_flag=false;
++
++	keys_map_inits_default();
++
++	bar_inits_default();
++	tit_inits_default();
++	split_inits_default();
++}
++static void inits(){
++	*ln_term='\n';
++	ln_term_sz=1;
++	rows_tot=1;
++	mod_flag=true;
++	clue=no_clue;normalize_clue=no_clue;
++	foregroundcolor=COLOR_WHITE;backgroundcolor=COLOR_BLUE;
++	rows_spc=1;//at rows_expand
++	cutbuf_r=1;
++	filewhites_extension=(char*)"yml";
++	tab_sz=6;
++
++	keys_inits();keys_row_init();keys_row_frompref_init();keys_map_inits();
++
++	bar_inits();
++	tit_inits();
++	split_inits();
++}
+ int main(int argc,char**argv){
+ 	#ifdef ARM7L
+ 	struct sigaction signalhandlerDescriptor;
+@@ -3140,6 +3294,12 @@ int main(int argc,char**argv){
+ 	//baz(argc);
+ 	#endif
+ 
++	main_loop:
++	//while(reload/*!=0*/){
++	reload--;
++	inits();
+ 	action(argc,argv);
+-	return user_return;
++	if(!reload)return user_return;
++	inits_default();
++	goto main_loop;
+ }
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -10,19 +10,20 @@ if [ -z "${level}" ]; then level=${level
+ f=main.h
+ wr_n() { printf '%s' "$@" >> ${f}; echo >> ${f}; }
+ wr () { printf '%s' "$@" >> ${f}; }
+-wr2_n() { buf="${buf}$@
+-"; }
++#wr2_n() { buf="${buf}$@
++#"; }
+ wr2 () { buf="${buf}$@"; }
+-wr3_n() { buf2="${buf2}$@
+-"; }
++#wr3_n() { buf2="${buf2}$@
++#"; }
+ wr3 () { buf2="${buf2}$@"; }
+-wr4_n() { buf3="${buf3}$@
+-"; }
++#wr4_n() { buf3="${buf3}$@
++#"; }
+ wr4 () { buf3="${buf3}$@"; }
++wr5 () { buf4="${buf4}$@"; }
+ 
+ printf '%s\n' "#define hel1 \"USAGE\n\"" > ${f}
+ wr "#define hel2 \""
+-d2=" [--file] [filepath [line_termination: rn/r/n]]\
++d2=" [--file] [file_or_folderWithFile_path [line_termination: rn/r/n]]\
+ \n      --remove-config        Remove configuration files.\
+ \n      --help                 Will guide to enter here.\
+ \nINPUT\
+@@ -72,7 +73,7 @@ text="\ncommand mode: left,right,home,en
+ \nCtrl+b = change selection color, short integers: foreground,background\
+ \nCtrl+x = change tab size; Alt+x = change save timeout in seconds (0 is default timeout)\
+ \nCtrl+z = switch keys, applies to Ctrl and lower/upper Alt (example: az , +a becomes +z and +z becomes +a)\
+-\nCtrl+q = quit; Alt+q = quit and return EXIT_FAILURE\
++\nCtrl+q = quit; Alt+q = quit and return EXIT_FAILURE; Alt+Q = Reload\
+ \nabcdefghijklmnopqrstuvwxyz\""
+ wr_n "${text}"
+ 
+@@ -107,7 +108,8 @@ nothing="{nullptr,nullptr,0,0,0}"
+ 
+ _find_pos () { #name=$1 letter=$2 ctrls=$3 alt=$4 bigalt=$5
+ 	if [ -z "${is_extern}" ]; then wr "static "; fi
+-	wr "char key_${1}=$(echo ${2}-32 | bc);"
++	wr "char key_${1};"
++	wr5 "key_${1}=$(echo ${2}-32 | bc);"
+ 	wr2 "{&key_${1},(unsigned short[]){"
+ #	e=
+ 	z=0
+@@ -150,7 +152,7 @@ while [ $i -lt 123 ]; do
+ 		108) is_extern=x find_pos titles $i 1 1;;   #l
+ 		110) find_pos indents            $i 1;;     #n
+ 		111) find_pos paste              $i 1 1;;   #o
+-		113) is_extern=x find_pos quit   $i 3 1;;   #q
++		113) is_extern=x find_pos quit   $i 3 1 1;; #q
+ 		114) find_pos redo               $i 1;;     #r
+ 		115) is_extern=x find_pos save   $i 1 1;;   #s
+ 		116) find_pos insens             $i 1;;     #t
+@@ -166,23 +168,31 @@ while [ $i -lt 123 ]; do
+ done
+ wr_n ""
+ 
++wr_n "static void keys_inits(){${buf4}}"
++
+ #can define here static a[]; and defines to compile right but is a risk and better to undo them
+ wr_n "#define A_to_a 0x20"
+ if [ ${level} -ge ${level_pref_wr} ]; then
+ 	wr_n "static char keys_row_orig[]={${buf2}};"
+-	wr_n "char*keys_row=keys_row_orig;"
++	wr_n "char*keys_row;static void keys_row_init(){keys_row=keys_row_orig;}"
+ 	if [ ${level} -ge ${level_pref_rd} ]; then
+-		wr_n "static char keys_row_frompref[]={${buf2}};"
++		wr_n "static char keys_row_frompref[${number_of_keys}];static void keys_row_frompref_init(){char a[]={${buf2}};memcpy(keys_row_frompref,a,sizeof(a));}"
+ 		if [ ${level} -ge ${level_map} ]; then
+-			wr_n "static key_struct keys_frompref[]={${buf3}};"  #important to define same here and not at runtime
++			keys_index_interval=$((122-97))
++			keys_index_val=$((keys_index_interval+1))
++
++			wr_n "static key_struct keys_frompref[${keys_index_val}];"
+ 			wr_n "static key_struct keys_orig[]={${buf}};"
+-			wr_n "key_struct*keys=keys_orig;"
++			wr_n "key_struct*keys;"
+ 			wr_n "static char*keys_helptext;"
+-			wr_n "#define key_last_index $((122-97))"
++			wr_n "#define key_last_index ${keys_index_interval}"
+ 			wr_n "#define _0_to_A 0x41"
+ 			wr_n "#define number_of_keys ${number_of_keys}"
+ 			wr_n "char*keys_help;"
+ 			wr_n "#define help_last_part_size $((26+1))"
++
++			wr_n "static void keys_map_inits_default(){key_struct a[]={${buf3}};memcpy(keys_frompref,a,sizeof(a));}"
++			wr_n "static void keys_map_inits(){keys=keys_orig;}"
+ 		fi
+ 	fi
+ fi
+--- edor-1.orig/s/mdh
++++ edor-1/s/mdh
+@@ -1,2 +1,2 @@
+ 
+-extraflags="CFLAGS=-g" ./mh "$@"
++extraflags='CFLAGS=-fsanitize=address,undefined -g' ./mh "$@"
+--- edor-1.orig/s/mdhd
++++ edor-1/s/mdhd
+@@ -1 +1 @@
+-extraflags="CFLAGS=-g" ./headless $@
++extraflags='CFLAGS=-fsanitize=address,undefined -g' ./headless $@
+--- edor-1.orig/s/mh
++++ edor-1/s/mh
+@@ -1 +1,2 @@
+-make -f mk AM_MAKEFLAGS="-f mk" ${extraflags} "$@"
++
++make -f mk AM_MAKEFLAGS="-f mk" "${extraflags}" "$@"
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -47,23 +47,23 @@
+ 
+ #include "def.h"
+ 
+-bool splits_flag=false;
+-split_char split_reminder_c=split_no;
++bool splits_flag;
++split_char split_reminder_c;
+ 
+-char*sdelimiter=(char*)"|||";// iso forbids
+-char*esdelimiter=(char*)"///";
+-char* sdelimiter_new=nullptr;
+-char* esdelimiter_new=nullptr;
+-char*split_out=(char*)"osrc";
+-char*split_out_new=nullptr;
+-char*split_extension=(char*)"oac";
+-char*split_extension_new=nullptr;
+-char*split_outext=(char*)"";//was oc but the reason is at split_write_init at split_extension
+-char*split_outext_new=nullptr;
+-char*split_outformatext=(char*)"split";
+-char*split_outformatext_new=nullptr;
+-char*escape_delims=(char*)"\"'";
+-char*escape_delims_new=nullptr;
++char*sdelimiter;
++char*esdelimiter;
++char* sdelimiter_new;
++char* esdelimiter_new;
++char*split_out;
++char*split_out_new;
++char*split_extension;
++char*split_extension_new;
++char*split_outext;
++char*split_outext_new;
++char*split_outformatext;
++char*split_outformatext_new;
++char*escape_delims;
++char*escape_delims_new;
+ 
+ //char*fulldelim;
+ //unsigned short fulldelim_size;
+@@ -82,7 +82,7 @@ static size_t split_out_size2;
+ static int split_out_file;
+ static int split_out_formatfile;
+ 
+-static char last_escape_char='\0';
++static char last_escape_char;
+ static char*last_split_end;//init at split_write_init
+ static char last_escape_char_store;//no init required
+ 
+@@ -716,3 +716,25 @@ const char* split_write(size_t*_index,in
+ 	}
+ 	return nullptr;
+ }
++
++void split_inits_default(){
++	splits_flag=false;
++	sdelimiter_new=nullptr;
++	esdelimiter_new=nullptr;
++	split_out_new=nullptr;
++	split_extension_new=nullptr;
++	split_outext_new=nullptr;
++	split_outformatext_new=nullptr;
++	escape_delims_new=nullptr;
++	last_escape_char='\0';
++}
++void split_inits(){
++	split_reminder_c=split_no;
++	sdelimiter=(char*)"|||";// iso forbids
++	esdelimiter=(char*)"///";
++	split_out=(char*)"osrc";
++	split_extension=(char*)"oac";
++	split_outext=(char*)"";//was oc but the reason is at split_write_init at split_extension
++	split_outformatext=(char*)"split";
++	escape_delims=(char*)"\"'";
++}
+--- edor-1.orig/s/tit.c
++++ edor-1/s/tit.c
+@@ -32,8 +32,8 @@
+ 
+ #include "base.h"
+ 
+-char*tit_delims=(char*)":";// iso forbids
+-char*tit_delims_new=nullptr;
++char*tit_delims;// iso forbids
++char*tit_delims_new;
+ 
+ static bool titcolor(char b,char*color,WINDOW*w,bool singlechar){
+ 	singlechar=bar_char(b,w,singlechar);
+@@ -202,3 +202,10 @@ bool tit_readprefs(int f){
+ 	}
+ 	return false;
+ }
++
++void tit_inits_default(){
++	tit_delims_new=nullptr;
++}
++void tit_inits(){
++	tit_delims=(char*)":";// iso forbids
++}
