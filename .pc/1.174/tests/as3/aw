@@ -1,0 +1,31 @@
+set -e
+
+if [ "$1" = clean ]; then
+	./c
+	exit
+fi
+
+cd osrc
+LD_LIBRARY_PATH=${HOME}/a/x86_64_lib ./a
+
+cd ..
+#get a wine python from https://www.python.org/downloads/windows/ python-3.14.5-amd64.exe
+#if not at installer, then:
+#	wine6 reg add "HKCU\Environment" /v PATH /t REG_SZ /d "C:\users\bc\AppData\Local\Programs\Python\Python314;%PATH%" /f
+#retest:
+#	wine6 reg query "HKCU\Environment" /v PATH
+#and with system paths:
+#	wine6 cmd /c echo %PATH%
+#WINEPATH,execve are alternatives but at python if none are working, use our OAPATH
+#REG_EXPAND_SZ to expand only
+#F or Z? wine6 cmd
+#WINEDEBUG=+loaddll,+module
+skip_comp=x OAPATH="F:\\home\\bc\\s\\actionswf-1\\oaas" p='wine6 python.exe' ./b
+
+cd dest #this for ./df
+	find . -type f -exec dos2unix {} \;
+cd ..
+no_clean=x skip_src=x ./br
+./df
+echo $?
+rm -r dest

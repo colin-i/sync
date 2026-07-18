@@ -1,0 +1,4314 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: iul, 18 2026 13:18:56 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/cln
++++ actionswf-1/cln
+@@ -1,2 +1,6 @@
+ 
+-cd example && make clean && cd .. && make clean && cd csrc && make clean && cd .. && cd oaas && make clean && cd .. && git status
++cd example && make clean && cd ../csrc && make clean && cd .. && make clean && \
++#if [ -n "${general}" ]; then
++#	cd tests/as3 && ./cf
++#fi &&
++git status
+--- actionswf-1.orig/csrc/md
++++ actionswf-1/csrc/md
+@@ -1,3 +1,3 @@
+ 
+-if [ -z "${linkerflags}" ]; then linkerflags='-g -fsanitize=undefined'; fi
++if [ -z "${linkerflags}" ]; then linkerflags='-g -fsanitize=address'; fi
+ make linkerflags="${linkerflags}" $@
+--- actionswf-1.orig/csrc/mdo
++++ actionswf-1/csrc/mdo
+@@ -1,3 +1,3 @@
+ 
+-if [ -z "${linkerflags}" ]; then linkerflags='-g -fsanitize=undefined -O3 -march=native'; fi
++if [ -z "${linkerflags}" ]; then linkerflags='-g -fsanitize=address,undefined -O3 -march=native'; fi
+ make linkerflags="${linkerflags}" $@
+--- actionswf-1.orig/dev/flags.oh
++++ actionswf-1/dev/flags.oh
+@@ -25,6 +25,8 @@ const flag_noDuplicate=0x10000
+ const flag_verbose=0x20000
+ const flag_xx=0x40000                           #to let .log for alt and .x for regrab
+ const flag_format=0x80000                       #is not reached at .x or at alt
++const flag_splitter_n=0x100000
++const flag_splitter_r=0x200000
+ 
+ const flags_pool=flagpre_pool_write|flag_pool_read
+ const flags_x=flagpre_x|flag_x
+@@ -33,3 +35,4 @@ const prexx_flags=prex_flags|flag_xx
+ const antix_read=flagpre_log|flag_alt|flagpre_x
+ const antixx_write=flag_titles                  #oad and ffdec are counting on this
+ const flags_xx=flag_pool_read|flag_xx
++const flag_splitters=flag_splitter_n|flag_splitter_r
+--- actionswf-1.orig/include/ascii.oh
++++ actionswf-1/include/ascii.oh
+@@ -9,10 +9,10 @@ Const Nullchar=0x00
+ #Const Bell=0x07
+ #Const BackSpace=0x08
+ Const HorizontalTab=0x09
+-#Const LineFeed=0x0A
++Const LineFeed=0x0A
+ #Const VerticalTab=0x0B
+ #Const FormFeed=0x0C
+-#Const CarriageReturn=0x0D
++Const CarriageReturn=0x0D
+ #Const ShiftOut=0x0E
+ #Const ShiftIn=0x0F
+ #Const DataLineEscape=0x10
+--- actionswf-1.orig/include/common.oh
++++ actionswf-1/include/common.oh
+@@ -1,3 +1,6 @@
+ 
+ include "ascii.h" "ascii.oh"
+ const NULL=0
++
++const TRUE=1
++const FALSE=0
+--- actionswf-1.orig/include/program.oh
++++ actionswf-1/include/program.oh
+@@ -1,9 +1,6 @@
+ 
+ include "common.h" "common.oh"
+ 
+-const TRUE=1
+-const FALSE=0
+-
+ #const MAX_PATH=260
+ 
+ #const ENOENT=2
+--- actionswf-1.orig/oaas.html
++++ actionswf-1/oaas.html
+@@ -33,43 +33,50 @@
+ 
+ <body>
+ <h1>OA AS syntax</h1>
+-<p class="red">String</p>
++<p><span class="red">String</span>. Excluding the comment, these can be(or are) separated by spaces/tabs.</p>
+ <p class="blue">Left/Right strings</p>
+ <p class="yellow">Tested</p>
+-<p class="green">[] is optional , or , and</p>
++<p class="green">[] is optional . details</p>
++<p>Link with '+' (//3 s+b or /*3p+s*/). Resolve later with '_'. Ignore with '!'.</p>
+ <table>
+-	<tr><td>a</td>                        <td><table class="red"><tr><td colspan=2>className</td></tr>
+-	                                                             <tr><td>className</td><td>extendName</td></tr></table></td>
+-	                                      <td class="com"><table><tr><td>class <span class="red">className</span>{</td></tr>
+-	                                                             <tr><td>class <span class="red">className</span> extends <span class="red">extendName</span>{</td></tr></table></td></tr>
+-	<tr><td>c</td>                        <td class="red">comment</td><td class="com">//<span class="red">comment</span></td></tr>
+-	<tr><td>d</td>                        <td><table class="red"><tr><td colspan=2>childName</td></tr>
+-	                                                             <tr><td>childName</td><td>parentName</td></tr></table></td>
+-	                                      <td class="com"><table><tr><td>addChild(<span class="red">childName</span>);</td></tr>
+-	                                                             <tr><td><span class="red">parentName</span>.addChild(<span class="red">childName</span>);</td></tr></table></td></tr>
++	<tr><td rowspan=2>a</td>             <td class="red">className</td><td class="com">class <span class="red">className</span>{</td></tr>
++	<tr>                                 <td class="red"><table><tr><td>className</td><td>extendName</td></tr></table></td><td class="com">class <span class="red">className</span> extends <span class="red">extendName</span>{</td></tr>
++	<tr><td class="blue" rowspan=2>b</td><td></td><td class="com">buttonMode=<span class="blue">value;</span></td><td class="com"><span class="yellow">useHandCursor=</span><span class="blue">value;</span></td></tr>
++	<tr>                                 <td>m</td><td class="com">same plus <span class="blue">mouseChildren=false;</span></td></tr>
++	<tr><td>c</td>                       <td class="red">comment</td><td class="com">//<span class="red">comment</span></td></tr>
++	<tr><td rowspan=3>d</td>             <td class="red">childName</td><td class="com">addChild(<span class="red">childName</span>);</td></tr>
++	<tr>                                 <td class="red"><table><td>childName</td><td>parentName</td></tr></table></td><td class="com"><span class="red">parentName</span>.addChild(<span class="red">childName</span>);</td></tr>
++	<tr>                                 <td><table><td class="red">childName</td><td>@</td></tr></table></td><td class="com">stage.addChild(<span class="red">childName</span>);</td></tr>
+ 	<tr><td class="blue" colspan=2>e</td><td class="com">is adding <span class="blue">e</span> in first <span class="blue">()</span></td></tr>
+-	<tr><td rowspan=2>f</td>              <td>p</td><td class="com">public function new(){super();</td></tr>
+-      <tr>                                  <td>s</td><td class="com">static function main(){</td></tr>
+-	<tr><td>g</td>                        <td class="red">varName</td><td class="com">var <span class="red">varName</span>=Lib.current.stage;</td></tr>
+-	<tr><td>i</td>                        <td class="red">importString</td><td class="com">import <span class="red">importString</span>;</td></tr>
+-	<tr><td class="blue">l</td>           <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.<span class="blue">beginFill(color);</span> <span class="green">or</span> <span class="red">name</span>.graphics.<span class="blue">endFill();</span></td><td class="com"><span class="blue">beginFill(color);</span> <span class="green">or</span> <span class="blue">endFill();</span></td></tr>
+-	<tr><td class="blue" rowspan=2>m</td><td></td><td class="com">buttonMode=<span class="blue">value;</span></td><td class="com">u<span class="yellow">seHandCursor=</span><span class="blue">value;</span></td></tr>
+-	<tr>                                  <td>b</td><td class="com">same plus <span class="blue">mouseChildren=false;</span></td></tr>
+-	<tr><td colspan=2>n</td>              <td class="com">static</td></tr>
+-	<tr><td class="blue" colspan=2 rowspan=4>o</td><td class="com">addEventListener(Event.ENTER_FRAME,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onEnterFrame=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr>                                           <td class="com">addEventListener(MouseEvent.MOUSE_CLICK,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onPress=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr>                                           <td class="com">addEventListener(MouseEvent.MOUSE_OVER,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onRollOver=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr>                                           <td class="com">addEventListener(MouseEvent.MOUSE_OUT,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onRollOut=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr><td class="blue" colspan=2>p</td><td class="com"><span class="blue">alpha=value</span>/100;</td><td class="com">_<span class="blue">alpha=value</span><span class="yellow">;</span></td></tr>
++	<tr><td rowspan=2>f</td>             <td>p</td><td class="com">public function new(){super();</td></tr>
++	<tr>                                 <td>s</td><td class="com">static function main(){</td></tr>
++	<tr><td class="blue" colspan=2 rowspan=2>f</td><td class="com">public <span class="blue">function new(){</span>super();</td></tr>
++	<tr>                                           <td class="com">class <span class="blue">Loader</span>{public <span class="blue">function</span> new<span class="blue">(){</span></td><td class="com"><span class="blue">function Loader(){</span></td></tr>
++	<tr><td colspan=2>g</td>             <td class="com">var stage=flash.Lib.current.stage;</td></tr>
++	<tr><td class="blue" colspan=2>h</td><td class="com"><span class="blue">alpha=value</span>/100;</td><td class="com">_<span class="blue">alpha=value</span><span class="yellow">;</span></td></tr>
++	<tr><td>i</td>                       <td class="red">importString</td><td class="com">import <span class="red">importString</span>;</td></tr>
++	<tr><td class="blue" colspan=2>j</td><td class="com"><span class="blue">leftPart=</span>flash.text.TextFormatAlign.<span class="blue">TYPE;</span></td><td class="com"><span class="blue">leftPart=</span><span class="yellow">'</span><span class="blue">type</span><span class="yellow">'</span><span class="blue">;</span></td></tr>
++	<tr><td class="blue">l</td>          <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.<span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="red">name</span>.graphics.<span class="blue">endFill();</span></td><td class="com"><span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="blue">endFill();</span></td></tr>
++	<tr><td class="blue" colspan=2>l</td><td class="com"><span class="green">[</span><span class="blue">name.</span><span class="green">]</span>graphics.<span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="green">[</span><span class="blue">name.</span><span class="green">]</span>graphics.<span class="blue">endFill();</span></td><td class="com"><span class="blue">name.begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="blue">name.endFill();</span></td></tr>
++	<tr><td>m</td>                       <td class="red"><table><tr><td>path</td><td>class</td></tr></table></td><td class="com">@:bitmap('<span class="red">path</span>') class <span class="red">class</span> extends flash.display.BitmapData { }</td></tr>
++	<tr><td class="blue" colspan=2>m</td><td class="com">var <span class="blue">name</span>=new <span class="blue">class</span>(0,0);</td><td class="com"><span class="blue">var name</span><span class="yellow">=</span>flash.display.BitmapData.loadBitmap(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>);</td></tr>
++	<tr><td colspan=2>n</td>             <td class="com">new</td></tr>
++	<tr><td class="blue" colspan=2 rowspan=4>o</td><td class="com">addEventListener(flash.events.Event.ENTER_FRAME,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onEnterFrame=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr>                                           <td class="com">addEventListener(flash.events.MouseEvent.MOUSE_CLICK,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onPress=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr>                                           <td class="com">addEventListener(flash.events.MouseEvent.MOUSE_OVER,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onRollOver=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr>                                           <td class="com">addEventListener(flash.events.MouseEvent.MOUSE_OUT,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onRollOut=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+ 	<tr><td class="blue">r</td>          <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.drawRect<span class="blue">(x,y</span>,<span class="blue">width,height)</span>;</td><td class="com">lineTo<span class="yellow">(</span><span class="blue">width</span><span class="yellow">,</span><span class="blue">y</span><span class="yellow">)</span>;lineTo(width<span class="blue">,height)</span>;lineTo<span class="blue">(x,</span>height)<span class="blue">;</span></td></tr>
++	<tr><td class="blue" colspan=2>r</td><td class="com"><span class="green">[</span><span class="blue">name.</span><span class="green">]</span>...</td><td class="com">...</td></tr>
+ 	<tr><td class="blue" rowspan=4>s</td><td>_</td><td class="com">is removing all <span class="blue">_</span></td></tr>
+ 	<tr>                                 <td>w</td><td class="com">is replacing all <span class="blue">Stage.w</span> with <span class="blue">stage.stageW</span></td></tr>
+ 	<tr>                                 <td>h</td><td class="com">is replacing all <span class="blue">Stage.h</span> with <span class="blue">stage.stageH</span></td></tr>
+ 	<tr>                                 <td><span class="green">[</span>_wh<span class="green">]</span></td> <td class="com">any case or at least one</td></tr>
+-	<tr><td class="blue" colspan=2>t</td><td class="com">var <span class="blue">label</span>=new TextField();<span class="green">[</span><span class="blue">label</span>.x=<span class="blue">x</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.y=<span class="blue">y</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.width=<span class="blue">width</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.height=<span class="blue">height</span>;<span class="green">]</span></td><td class="com">createTextField(<span class="yellow">'</span><span class="blue">label</span><span class="yellow">',</span>nr<span class="yellow">,</span><span class="blue">x</span><span class="yellow">,</span><span class="blue">y</span><span class="yellow">,</span><span class="blue">width</span><span class="yellow">,</span><span class="blue">height</span><span class="yellow">)</span>;</td></tr>
+-	<tr><td>v</td>                       <td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com" rowspan=2>var <span class="red">name</span>=new <span class="red">class</span>();</td></tr>
+-	<tr><td class="blue" colspan=2>v</td>                                                                                                                                                                              <td class="com">attachMovie(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>,<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
+-	<tr><td class="blue" colspan=2>x</td><td class="com"><span class="blue">leftPart=</span>TextFormatAlign.<span class="blue">TYPE;</span></td><td class="com"><span class="blue">leftPart=</span><span class="yellow">'</span><span class="blue">type</span><span class="yellow">'</span><span class="blue">;</span></td></tr>
++	<tr><td class="blue" colspan=2>t</td><td class="com">var <span class="blue">label</span>=new flash.text.TextField();<span class="green">[</span><span class="blue">label</span>.x=<span class="blue">x</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.y=<span class="blue">y</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.width=<span class="blue">width</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.height=<span class="blue">height</span>;<span class="green">]</span></td><td class="com">createTextField(<span class="yellow">'</span><span class="blue">label</span><span class="yellow">',</span>nr<span class="yellow">,</span><span class="blue">x</span><span class="yellow">,</span><span class="blue">y</span><span class="yellow">,</span><span class="blue">width</span><span class="yellow">,</span><span class="blue">height</span><span class="yellow">)</span>;</td></tr>
++	<tr><td>v</td>                                 <td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com">var <span class="red">name</span>=new <span class="red">class</span>();</td></tr>
++	<tr><td colspan=2>x</td>             <td class="com">static</td></tr>
++	<tr><td class="blue" colspan=2 rowspan=2>v</td>                                                                        <td class="com">var <span class="blue">name</span>=new <span class="blue">class</span>();</td><td class="com">attachMovie(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>,<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
++	<tr>                                                                                                                   <td class="com">var <span class="blue">name</span>=new flash.display.Shape();</td><td class="com">createEmptyMovieClip(<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
++	<tr><td class="blue">z</td>          <td class="red"><table><tr><td>p1</td><td>p2</td></tr></table></td><td class="com"><span class="blue">var a=new <span class="red">p1</span><span class="red">p2</span>()</span></td><td class="com"><span class="blue">var a=new <span class="red">p2</span>()</span></td></tr>
+ </table>
+ Other recognized notations:
+ <table>
+--- actionswf-1.orig/oaas/Makefile
++++ actionswf-1/oaas/Makefile
+@@ -11,7 +11,8 @@ ifndef OCONV
+ OCONV=otoc
+ endif
+ ifndef linkerflags
+-	linkerflags=-O3 -s
++	linkerflags=-O3 -flto=auto  -s
++	#unlike csrc or oad, flto here is not breaking, a clue is that libubsan is not erroring
+ 	ifeq ($(findstring mingw,$(CC)),)
+ 		linkerflags += -march=native
+ 	endif
+@@ -45,7 +46,7 @@ firstname=liboaas
+ libname=${firstname}.so
+ libnamedll=${firstname}.dll
+ 
+-objs_needing_headers=translate util
++objs_needing_headers=translate util solve
+ objs_not_needing_headers=${platform}
+ objs=${objs_needing_headers} ${objs_not_needing_headers}
+ 
+@@ -78,7 +79,8 @@ ${libname}: ${objects} ${exte}
+ #headers: this is not good because will trigger no timestamp rebuilds
+ ../include/common.h:
+ 	$(MAKE) -C ../include common.h
+-${obs_needing_headers}: ../include/common.h
++oaas.h: ../include/common.h
++${obs_needing_headers} main.o: oaas.h
+ 
+ ${exte}: ${obs}
+ 	$(AR) cr ${exte} $^
+@@ -88,9 +90,17 @@ ${exte}: ${obs}
+ 	${OCOMP} $< ${OFLAGS} include_sec 1
+ 	${OCONV} ${OCONVFLAGS} $<.x import
+ 	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c
++%.h: %.ohi
++	${OCOMP} $< x_file 2 logfile 0 include_sec 1
++	${OCONV} $<.x
++%.ohi: %.oh
++	echo "format elfobj64" > $@
++	echo "orphan off" >> $@
++	cat $< >> $@
+ 
+ clean:
+ 	$(MAKE) -C ../include clean
++	-rm -f oaas.h oaas.ohi.x
+ 	-rm -f main.oc.log main.oc.x main.c
+ 	-rm -f ${objects} ${exte} ${libname} ${libnamedll}
+ 	-rm -f ${obs} ${logs} ${xfiles} ${cfiles}
+@@ -101,11 +111,11 @@ test:
+ 	echo "Nothing"
+ 
+ install-lib:
+-	install -D ${libname} $(DESTDIR)$(prefix)/lib/${libname}
++	install -D ${libname} $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 
+ install: all install-lib
+ 
+ uninstall:
+-	-rm -f $(DESTDIR)$(prefix)/lib/${libname}
++	-rm -f $(DESTDIR)$(prefix)/lib${install_number}/${libname}
+ 
+ .PHONY: all install install-lib clean distclean uninstall test
+--- actionswf-1.orig/oaas/main.oc
++++ actionswf-1/oaas/main.oc
+@@ -1,11 +1,23 @@
+ 
+ format elfobj64
+ 
++import "print_stdout" print_stdout
++^import "verbosep" verbosep
++
+ ^import "translate_one" translate_one 2
+ ^import "translate_two" translate_two 2
+-
+-import "print_stdout" print_stdout
+ import "translated_ratio" translated_ratio
++^import "openfl" openfl #full
++import "_postpone_char" _postpone_char
++
++^import "solver1" solver1 1
++^import "solver2" solver2 1
++^import "solver4" solver4 1
++^import "solver7" solver7 2
++^import "solver" solver 2
++import "_resolve" _resolve
++
++einclude "oaas.h" "oaas.oh"
+ 
+ functionx line(ss oa)
+ 	callret translate_one(oa,"")
+@@ -24,8 +36,51 @@ functionx startline(ss start,ss oa)
+ 	callret translate_one(oa,start)
+ end
+ 
+-functionx ratio()
+-	call print_stdout("Ratio: ")
+-	call translated_ratio()
+-	call print_stdout("\n")
++functionx ratio(ss ?print)
++	if print=(TRUE)
++		call print_stdout("Ratio: ")
++		call translated_ratio((TRUE))
++		call print_stdout("\n")
++	else
++		callret translated_ratio((FALSE))
++	end
++end
++
++functionx verbose(ss ?bol)
++	ss p;set p verbosep()
++	set p# bol
++end
++functionx flash_to_openfl(ss ?bol)
++	ss p;set p openfl()
++	set p# bol
++end
++functionx sep()
++	return (switch_char)
++end
++functionx postpone_char()
++	callret _postpone_char()
++end
++
++functionx solve1(ss value)
++	ss s
++	set s solver1(value)
++	callret solver(value,s)
++end
++functionx solve2(ss value)
++	ss s
++	set s solver2(value)
++	callret solver(value,s)
++end
++functionx solve4(ss value)
++	ss s
++	set s solver4(value)
++	callret solver(value,s)
++end
++functionx solve7(ss value,ss after)
++	ss s
++	set s solver7(value,after)
++	callret solver(value,s)
++end
++functionx resolve()
++	callret _resolve()
+ end
+--- actionswf-1.orig/oaas/md
++++ actionswf-1/oaas/md
+@@ -1,2 +1,5 @@
+ 
+-compilerflags=-g linkerflags=' ' make $@
++if [ -z "${compilerflags}" ]; then
++	compilerflags='-g -fsanitize=address,undefined'
++fi
++compilerflags="${compilerflags}" linkerflags=' ' make $@
+--- actionswf-1.orig/oaas/mdo
++++ actionswf-1/oaas/mdo
+@@ -1,2 +1,2 @@
+ 
+-linkerflags='-g -fsanitize=undefined -O3 -march=native' make
++linkerflags='-g -fsanitize=address,undefined -O3 -march=native -flto' make
+--- /dev/null
++++ actionswf-1/oaas/oaas.oh
+@@ -0,0 +1,47 @@
++
++einclude "../include/common.h" "../include/common.oh"
++
++#main translate util
++const switch_char=Plus
++
++#translate
++Const Atsymbol=0x40
++Const b_low=0x62
++Const c_low=0x63
++Const d_low=0x64
++Const f_low=0x66
++Const g_low=0x67
++Const h_low=0x68
++Const i_low=0x69
++Const j_low=0x6A
++Const m_low=0x6D
++Const n_low=0x6E
++Const w_low=0x77
++const func_char=f_low
++
++#translate solve
++Const Dollar=0x24
++Const e_low=0x65
++Const o_low=0x6F
++Const p_low=0x70
++Const r_low=0x72
++Const t_low=0x74
++Const v_low=0x76
++const align_char=j_low
++const alpha_char=h_low
++const bitmap_char=m_low
++const evfunc_char=e_low
++const fill_char=l_low
++const ignore_pref=Exclamationmark
++const insert_char=z_low
++const onev_char=o_low
++const rect_char=r_low
++const search_char=s_low
++const text_char=t_low
++const var_char=v_low
++
++#util solve
++const usc_pref=_
++
++#solve
++Const y_low=0x79
+--- /dev/null
++++ actionswf-1/oaas/solve.oc
+@@ -0,0 +1,239 @@
++
++format elfobj64
++
++#multithread unsafe
++charx outvalue#1+11+1+10+1 ;#zflash.text. TextFormat\0
++char stored_char#1
++
++importx "strncmp" strncmp
++importx "printf" printf
++importx "sprintf" sprintf
++
++einclude "oaas.h" "oaas.oh"
++
++^import "on_string_get" on_string_get 1
++^import "enterframe_string_get" enterframe_string_get 1
++^import "press_string_get" press_string_get 1
++^import "rollover_string_get" rollover_string_get 1
++^import "rollout_string_get" rollout_string_get 1
++
++function _resolve()
++	return globals.stored_char
++end
++
++function solver_end(ss value,ss ?small_size)
++	add value small_size
++	if value#=(Nullchar)
++		return #globals.outvalue
++	end
++	return (NULL)
++end
++function solver_endb(ss value,ss ?small_size)
++	add value small_size
++	if value#=(Nullchar)
++		return ""
++	end
++	return (NULL)
++end
++function solver(ss value,ss s)
++	if s=(NULL)
++		call printf("postponed %s\n",value)
++	end
++	return s
++end
++function solver1(ss value)
++	sd ?c
++	char flashtext_string="flash.text."
++	set c strncmp(value,#flashtext_string,\.flashtext_string-1)
++	if c=0
++		add value \.flashtext_string-1
++		char textformat_string="TextFormat"
++		set c strncmp(value,#textformat_string,\.textformat_string-1)
++		if c=0
++			call sprintf(#globals.outvalue,"%c%s %s",(insert_char),#flashtext_string,#textformat_string)
++			callret solver_end(value,\.textformat_string-1)
++		end
++	end
++	return (NULL)
++end
++function solver2(ss value)
++	sd ?c
++	char align_string="String should be flash.text.TextFormatAlign"^
++	set c strncmp(value,#align_string,\.align_string)
++	if c=0
++		call sprintf(#globals.outvalue,"%c",(align_char))
++		callret solver_end(value,\.align_string)
++	end
++	char evfunc_string="() -> Void should be Dynamic -> Void"^
++	set c strncmp(value,#evfunc_string,\.evfunc_string)
++	if c=0
++		call sprintf(#globals.outvalue,"%c",(evfunc_char))
++		callret solver_end(value,\.evfunc_string)
++	end
++	return (NULL)
++end
++function solver4(ss value)
++	sd ?c
++	char unex_string="Unexpected "^
++	set c strncmp(value,#unex_string,\.unex_string)
++	if c=0
++		add value (\.unex_string)
++		char main_string="main"^
++		set c strncmp(value,#main_string,\.main_string)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(ignore_pref))
++			callret solver_end(value,\.main_string)
++		end
++		char new_string="keyword \"new\""^
++		set c strncmp(value,#new_string,\.new_string)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(ignore_pref))
++			callret solver_end(value,\.new_string)
++		end
++	end
++	return (NULL)
++end
++function solver7(ss value,ss after)
++	sd ?c
++	if value#=(usc_pref)
++		inc value
++		if value#=(x_low)
++			inc value
++			if value#=(Nullchar)
++				call sprintf(#globals.outvalue,"%c%c",(search_char),(usc_pref))
++				return #globals.outvalue
++			end
++			return (NULL)
++		end
++		if value#=(y_low)
++			inc value
++			if value#=(Nullchar)
++				call sprintf(#globals.outvalue,"%c%c",(search_char),(usc_pref))
++				return #globals.outvalue
++			end
++			return (NULL)
++		end
++		char alpha_string="alpha"^
++		set c strncmp(value,#alpha_string,\.alpha_string)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(alpha_char))
++			callret solver_end(value,\.alpha_string)
++		end
++		return (NULL)
++	end
++	char var_string="attachMovie"^
++	set c strncmp(value,#var_string,\.var_string)
++	if c=0
++		call sprintf(#globals.outvalue,"%c",(var_char))
++		callret solver_end(value,\.var_string)
++	end
++	char bfil_string="begin"^
++	set c strncmp(value,#bfil_string,\.bfil_string)
++	if c=0
++		add value \.bfil_string
++		char bfilbitmap_string="BitmapFill"^
++		set c strncmp(value,#bfilbitmap_string,\.bfilbitmap_string)
++		if c=0
++			set globals.stored_char (fill_char)
++			callret solver_endb(value,\.bfilbitmap_string)
++		end
++		char bfilsimple_string="Fill"^
++		set c strncmp(value,#bfilsimple_string,\.bfilsimple_string)
++		if c=0
++			set globals.stored_char (fill_char)
++			callret solver_endb(value,\.bfilsimple_string)
++		end
++	end
++	char create_string="create"^
++	set c strncmp(value,#create_string,\.create_string)
++	if c=0
++		add value \.create_string
++		char emclip_string="EmptyMovieClip"^
++		set c strncmp(value,#emclip_string,\.emclip_string)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(var_char))
++			callret solver_end(value,\.emclip_string)
++		end
++		char text_string="TextField"^
++		set c strncmp(value,#text_string,\.text_string)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(text_char))
++			callret solver_end(value,\.text_string)
++		end
++		return (NULL)
++	end
++	char efil_string="endFill"^
++	set c strncmp(value,#efil_string,\.efil_string)
++	if c=0
++		set globals.stored_char (fill_char)
++		callret solver_endb(value,\.efil_string)
++	end
++	if value#=(l_low)
++		inc value
++		char rect_string="ineTo"^
++		set c strncmp(value,#rect_string,\.rect_string)
++		if c=0
++			set globals.stored_char (rect_char)
++			callret solver_endb(value,\.rect_string)
++		end
++		char bitmap_string="oadBitmap"^
++		set c strncmp(value,#bitmap_string,\.bitmap_string)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(bitmap_char))
++			callret solver_end(value,\.bitmap_string)
++		end
++		return (NULL)
++	end
++	char stage_string="Stage"^
++	set c strncmp(value,#stage_string,\.stage_string)
++	if c=0
++		char w=".w"^
++		set c strncmp(after,#w,\.w)
++		if c=0
++			call sprintf(#globals.outvalue,"%cw",(search_char))
++			callret solver_end(value,\.stage_string)
++		end
++		char h=".h"^
++		set c strncmp(after,#h,\.h)
++		if c=0
++			call sprintf(#globals.outvalue,"%ch",(search_char))
++			callret solver_end(value,\.stage_string)
++		end
++		return (NULL)
++	end
++	ss ?z
++	ss cursor
++	set cursor on_string_get(#z)
++	set c strncmp(value,cursor,z)
++	if c=0
++		add value z
++
++		set cursor enterframe_string_get(#z)
++		set c strncmp(value,cursor,z)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(onev_char))
++			callret solver_end(value,z)
++		end
++		set cursor press_string_get(#z)
++		set c strncmp(value,cursor,z)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(onev_char))
++			callret solver_end(value,z)
++		end
++		set cursor rollover_string_get(#z)
++		set c strncmp(value,cursor,z)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(onev_char))
++			callret solver_end(value,z)
++		end
++		set cursor rollout_string_get(#z)
++		set c strncmp(value,cursor,z)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(onev_char))
++			callret solver_end(value,z)
++		end
++	end
++	return (NULL)
++end
++
++entryraw globals()
+--- actionswf-1.orig/oaas/translate.oc
++++ actionswf-1/oaas/translate.oc
+@@ -1,37 +1,63 @@
+ 
+ format elfobj64
+ 
++einclude "oaas.h" "oaas.oh"
++
++const postpone_char=_
+ const a_page_size=0x1000
++
+ #multithread unsafe
+ charx a_page#a_page_size;vstr a_page_switch^a_page;charx b_page#a_page_size
+-
+-einclude "../include/common.h" "../include/common.oh"
+-Const b_low=0x62
+-Const c_low=0x63
+-Const d_low=0x64
+-Const e_low=0x65
+-Const f_low=0x66
+-Const g_low=0x67
+-Const h_low=0x68
+-Const i_low=0x69
+-Const m_low=0x6D
+-Const n_low=0x6E
+-Const o_low=0x6F
+-Const p_low=0x70
+-Const r_low=0x72
+-Const t_low=0x74
+-Const v_low=0x76
+-Const w_low=0x77
++char openfl_bool=FALSE
++#
++char on_string="on"^
++char enterframe_string="EnterFrame"^
++char press_string="Press"^
++char rollover_string="RollOver"^
++char rollout_string="RollOut"^
++char var_translate="%s%svar %s=new %s();"
++char blank=""
++char nw="new"
++char func="function"
++vstr graphics="graphics."
++vstr public="public"
++vstr super="super();"
++vstr class="class"
++vstr sttic="static"
++
++function on_string_get(ss z)
++	set z# \globalt.on_string
++	return #globalt.on_string
++end
++function enterframe_string_get(ss z)
++	set z# \globalt.enterframe_string
++	return #globalt.enterframe_string
++end
++function press_string_get(ss z)
++	set z# \globalt.press_string
++	return #globalt.press_string
++end
++function rollover_string_get(ss z)
++	set z# \globalt.rollover_string
++	return #globalt.rollover_string
++end
++function rollout_string_get(ss z)
++	set z# \globalt.rollout_string
++	return #globalt.rollout_string
++end
+ 
+ importx "free" free
+ importx "memcmp" memcmp
++importx "strncmp" strncmp
+ importx "strcpy" strcpy
+ importx "strdup" strdup
++importx "strlen" strlen
+ importx "snprintf" snprintf
+ importx "strstr" strstr
+ 
+ ^import "commaafter" commaafter 1
+ ^import "commaon" commaon 1
++^import "dotbackafter" dotbackafter 2
+ ^import "equalafter" equalafter 1
+ ^import "equalon" equalon 1
+ import "object_com" object_com
+@@ -44,10 +70,11 @@ import "object_make" object_make
+ ^import "quotafter" quotafter 1
+ ^import "quoton" quoton 1
+ ^import "replace" replace 5
+-^import "semicolafter" semicolafter 1
++#^import "semicolafter" semicolafter 1
+ ^import "semicolon" semicolon 1
+ ^import "spcfullafters" spcfullafters 1
+ ^import "spcfull" spcfull 1
++^import "spcfullback" spcfullback 2
+ ^import "strip" strip 3
+ import "to_upper" to_upper
+ import "translated" translated
+@@ -62,16 +89,18 @@ function switch_page()
+ 	return #globalt.b_page
+ end
+ 
+-#a cdEfg i  LMnOP RST V X
+-# b     h jk     q   u w yz
++#     f      m        v
++#aBcdEFgHiJ LMnO  RST V x Z
++#          k    pq   u wxy
+ #also at the end
+ 
+ #a	s [s]
+-#d	s [s] but diff at format
+ #c	comment
++#d	s [s] but diff at format
+ #f	p/s
+-#g	string
++#g	like n
+ #i	string
++#m      same like v
+ #n	a letter and predef format
+ #v	s s
+ #}	mix indents and in
+@@ -80,183 +109,128 @@ function translate_one(ss in,ss indents)
+ 	ss oa;set oa spcfull(in)
+ 	sd ?len
+ 	ss ?chr;set chr oa#
+-	ss cursor;ss pointer;ss ?reminder;ss ext;ss o_a
+-	char blank=""
++	ss cursor;ss o_a;ss pointer;ss ext
+ 	if chr=(a_low)
++		ss ?reminder
+ 		set o_a oa
+ 		inc oa
+-		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
+-			end
+-			inc oa
+-
+-			set cursor spcfullafters(#oa)
+-			if cursor!=oa
+-				set ext " extends "
+-				set pointer spcfull(cursor)
+-				set reminder cursor#;set cursor# (Nullchar)
+-			else
+-				set ext #blank
+-				set pointer ext
+-				set reminder (Nullchar)
+-			end
+-			set o_a# (Nullchar)
+-			set len snprintf(#globalt.a_page,(a_page_size),"%s%sclass %s%s%s{",indents,in,oa,ext,pointer)
+-			if len>0
+-				if len<(a_page_size)
+-					call translated("Class")
+-					return #globalt.a_page
+-				end
++		set oa spcfull(oa)
++		set cursor spcfullafters(oa)
++		if cursor!=oa
++			set ext " extends "
++			set pointer spcfull(cursor)
++			set reminder cursor#;set cursor# (Nullchar)
++		else
++			set ext #globalt.blank
++			set pointer ext
++			set reminder (Nullchar)
++		end
++		set o_a# (Nullchar)
++		set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s %s%s%s{",indents,in,globalt.class,oa,ext,pointer)
++		if len>0
++			if len<(a_page_size)
++				call translated("Class")
++				return #globalt.a_page
+ 			end
+-			set o_a# (a_low)
+-			set cursor# reminder
+-			break
+ 		end
++		set o_a# (a_low)
++		set cursor# reminder
+ 	elseif chr=(c_low)
+-		set cursor oa
+-		inc oa
+-		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
+-			end
+-			set cursor# (Slash)
+-			set reminder oa#;set oa# (Slash)
+-			set len snprintf(#globalt.a_page,(a_page_size),"%s%s",indents,in)
+-			if len>0
+-				if len<(a_page_size)
+-					call translated("Comment")
+-					return #globalt.a_page
+-				end
++		set oa# (Slash)
++		set len snprintf(#globalt.a_page,(a_page_size),"%s%c%s",indents,(Slash),in)
++		if len>0
++			if len<(a_page_size)
++				call translated("Comment")
++				return #globalt.a_page
+ 			end
+-			set oa# reminder
+-			set cursor# (c_low)
+-			break
+ 		end
++		set oa# (c_low)
+ 	elseif chr=(d_low)
+-		set o_a oa
+-		inc oa
+-		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
+-			end
+-			inc oa
+-			set cursor spcfullafters(#oa)
+-			if cursor!=oa
+-				set ext "."
+-				set pointer spcfull(cursor)
+-				set reminder cursor#;set cursor# (Nullchar)
+-			else
+-				set ext #blank
+-				set pointer ext
+-				set reminder (Nullchar)
+-			end
+-			set o_a# (Nullchar)
+-			set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s%saddChild(%s);",indents,in,pointer,ext,oa)
+-			if len>0
+-				if len<(a_page_size)
+-					call translated("AddChild")
+-					return #globalt.a_page
+-				end
+-			end
+-			set o_a# (d_low)
+-			set cursor# reminder
+-			break
++		set cursor translate_one_add(indents,in,oa)
++		if cursor!=oa
++			return cursor
+ 		end
+-	elseif chr=(f_low)
++	elseif chr=(func_char)
+ 		set cursor oa
+ 		inc oa
++		set oa spcfull(oa)
++
+ 		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
++			ss type;ss name
++			if oa#=(p_low)
++				set type globalt.public
++				set name globalt.nw
++				set ext globalt.super
++			elseif oa#=(s_low)
++				set type globalt.sttic
++				set name "main"
++				set ext #globalt.blank
++			else
++				break
+ 			end
+ 			inc oa
+-			whiletrue
+-				ss type;ss name
+-				if oa#=(p_low)
+-					set type "public"
+-					set name "new"
+-					set ext "super();"
+-				elseif oa#=(s_low)
+-					set type "static"
+-					set name "main"
+-					set ext #blank
+-				else
+-					break
+-				end
+-				inc oa
+-				if oa#=(Nullchar)
+-					set cursor# (Nullchar)
+-					set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s function %s(){%s",indents,in,type,name,ext)
+-					if len>0
+-						if len<(a_page_size)
+-							call translated("Function")
+-							return #globalt.a_page
+-						end
++			if oa#=(Nullchar)
++				set cursor# (Nullchar)
++				set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s %s %s(){%s",indents,in,type,#globalt.func,name,ext)
++				if len>0
++					if len<(a_page_size)
++						call translated("Function")
++						return #globalt.a_page
+ 					end
+-					set cursor# (f_low)
+ 				end
+-				break
++				set cursor# (func_char)
+ 			end
+ 			break
+ 		end
+ 	elseif chr=(g_low)
+-		set cursor translate_one_1((g_low),oa,"%s%svar %s=Lib.current.stage;",indents,in,"Stage")
++		set cursor translate_one_simple(indents,in,oa,"var stage=flash.Lib.current.stage;","Stage",(g_low))
+ 		if cursor!=oa
+ 			return cursor
+ 		end
+ 	elseif chr=(i_low)
+-		set cursor translate_one_1((i_low),oa,"%s%simport %s;",indents,in,"Import")
+-		if cursor!=oa
+-			return cursor
+-		end
+-	elseif chr=(n_low)
+ 		set o_a oa
+ 		inc oa
+-		if oa#=(Nullchar)
+-			set o_a# (Nullchar)
+-			set len snprintf(#globalt.a_page,(a_page_size),"%s%sstatic",indents,in)
+-			if len>0
+-				if len<(a_page_size)
+-					call translated("Static")
+-					return #globalt.a_page
+-				end
++		set oa spcfull(oa)
++
++		set pointer #globalt.blank
++		if globalt.openfl_bool=(TRUE)
++			sd ?c
++			char fl="flash."^
++			set c strncmp(oa,#fl,\.fl)
++			if c=0
++				set pointer "openfl."
++				add oa \.fl
+ 			end
+-			set o_a# (n_low)
+ 		end
+-	elseif chr=(v_low)
+-		set o_a oa
+-		inc oa
+-		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
+-			end
+-			inc oa
+-			set cursor spcfullafters(#oa)
+-			if cursor!=oa
+-				set pointer spcfull(cursor)
+-				if pointer!=cursor
+-					set reminder cursor#;set cursor# (Nullchar)
+-					set o_a# (Nullchar)
+-					set pointer translate_one_var(indents,in,oa,pointer,#globalt.a_page,#blank)
+-					if pointer!=in
+-						return pointer
+-					end
+-					set o_a# (v_low)
+-					set cursor# reminder
+-				end
++
++		set o_a# (Nullchar)
++		set len snprintf(#globalt.a_page,(a_page_size),"%s%simport %s%s;",indents,in,pointer,oa)
++		if len>0
++			if len<(a_page_size)
++				call translated("Import")
++				return #globalt.a_page
+ 			end
+-			break
++		end
++		set o_a# (i_low)
++	elseif chr=(bitmap_char)
++		set cursor translate_one_double("%s%s@:bitmap('%s') class %s extends flash.display.BitmapData { }",indents,in,oa,"Bitmap")
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(n_low)
++		set cursor translate_one_simple(indents,in,oa,#globalt.nw,"New",(n_low))
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(var_char)
++		set cursor translate_one_double(#globalt.var_translate,indents,in,oa,"Var")
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(x_low)
++		set cursor translate_one_simple(indents,in,oa,globalt.sttic,"Static",(x_low))
++		if cursor!=oa
++			return cursor
+ 		end
+ 	elseif chr=(Nullchar)
+ 		call translated("blank")
+@@ -278,184 +252,257 @@ function translate_one(ss in,ss indents)
+ 	call untranslated(in)
+ 	return in
+ end
+-function translate_one_1(ss ?chr,ss oa,ss format,ss indents,ss in,ss ok)
+-	ss cursor;set cursor oa
++function translate_one_simple(ss indents,ss in,ss oa,ss specific,ss onOk,ss ?chr)
++	ss o_a
++	set o_a oa
+ 	inc oa
+-	whiletrue
+-		if oa#!=(Space)
+-			if oa#!=(HorizontalTab)
+-				break
+-			end
+-		end
+-		inc oa
+-		set cursor# (Nullchar)
+-		sd ?len;set len snprintf(#globalt.a_page,(a_page_size),format,indents,in,oa)
++	if oa#=(Nullchar)
++		set o_a# (Nullchar)
++		sd ?len
++		set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s",indents,in,specific)
+ 		if len>0
+ 			if len<(a_page_size)
+-				call translated(ok)
++				call translated(onOk)
+ 				return #globalt.a_page
+ 			end
+ 		end
+-		set cursor# chr
+-		break
++		set o_a# chr
+ 	end
+-	return cursor
++	return o_a
+ end
+-function translate_one_var(ss indents,ss in,ss oa,ss pointer,ss out,ss two)
++function translate_one_double(ss format,ss indents,ss in,ss oa,ss onOk)
++	ss o_a
++	set o_a oa
++	inc oa
++	set oa spcfull(oa)
++	ss cursor
++	set cursor spcfullafters(oa)
++	if cursor!=oa
++		ss pointer
++		set pointer spcfull(cursor)
++		if pointer!=cursor
++			ss ?reminder
++			set reminder cursor#;set cursor# (Nullchar)
++			set o_a# (Nullchar)
++			set pointer translate_leftright(format,indents,in,oa,pointer,#globalt.a_page) #,#globalt.blank)
++			if pointer!=in
++				call translated(onOk)
++				return pointer
++			end
++			set o_a# (var_char)
++			set cursor# reminder
++		end
++	end
++	return o_a
++end
++function translate_one_add(ss indents,ss in,ss oa)
++	ss o_a
++	set o_a oa
++	inc oa
++	set oa spcfull(oa)
++	ss cursor;ss ext;ss pointer;ss ?reminder
++	set cursor spcfullafters(oa)
++	if cursor!=oa
++		set pointer spcfull(cursor)
++		if pointer#=(Atsymbol)
++			inc pointer
++			if pointer#!=(Nullchar)
++				return o_a
++			end
++			set pointer "stage"
++		end
++		set reminder cursor#;set cursor# (Nullchar)
++		set ext "."
++	else
++		set pointer #globalt.blank
++		set ext pointer
++		set reminder (Nullchar)
++	end
++	set o_a# (Nullchar)
+ 	sd ?len
+-	set len snprintf(out,(a_page_size),"%s%svar %s=new %s();%s",indents,in,oa,pointer,two)
++	set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s%saddChild(%s);",indents,in,pointer,ext,oa)
+ 	if len>0
+ 		if len<(a_page_size)
+-			call translated("Var")
+-			return globalt.a_page_switch
++			call translated("AddChild")
++			return #globalt.a_page
++		end
++	end
++	set o_a# (d_low)
++	set cursor# reminder
++	return o_a
++end
++
++function translate_leftright(ss format,ss indents,ss in,ss oa,ss pointer,ss out) #,ss two)
++	sd ?len
++	set len snprintf(out,(a_page_size),format,indents,in,oa,pointer) #,two)
++	if len>0
++		if len<(a_page_size)
++			return out
+ 		end
+ 	end
+ 	return in
+ end
+ 
++#b	useHandCursor=; same as p but diff at format and continuation
+ #e	()
+-#l	b or e
+-#m	seHandCursor=; same as p but diff at format and continuation
++#f	function newOther
++#h	alpha=;
++#l	.( b or e
++#j	=''
++#m	all spcback= ''
+ #o	onPATTERN=;
+-#p	alpha=;
+-#r	(,),)(,
++#r	.( (,),)(,
+ #s	_ and more
+ #t	'',,,,)
+ #v	''''
+-#x	=''
++#z	replacing a to b
+ 
+ function translate_two(ss start,ss in)
+ 	ss oa;set oa spcfull(in)
+ 	ss cursor;ss pointer
+ 	ss ?chr;set chr oa#
+-	if chr=(e_low)
++	if chr=(postpone_char)
++		return start
++	end
++	if chr=(ignore_pref)
++		call translated("Ignored")
++		return #globalt.blank
++	end
++	if chr=(b_low)
+ 		inc oa
++		set cursor translate_buttonmode(start,oa)
++		if cursor!=start;return cursor;end
++	elseif chr=(evfunc_char)
+ 		set cursor translate_eparam(start) #why here? who is using untranslated, anyway
+ 		if cursor!=start
++			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(l_low)
+-		inc oa
+-		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
+-			end
++	elseif chr=(func_char)
++		set cursor translate_function(start)
++		if cursor!=start
+ 			inc oa
+-			set pointer pluson(oa)
+-			if pointer!=oa
+-				set pointer# (Nullchar)
+-			end
+-			set cursor translate_fill(start,oa)
+-			set cursor translate_two_switchAfter(cursor,oa,pointer)
++			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+-			dec oa
+-			break
+ 		end
+-	elseif chr=(m_low)
+-		inc oa
+-		set cursor translate_buttonmode(start,oa)
+-		if cursor!=start;return cursor;end
+-	elseif chr=(o_low)
+-		inc oa
+-		set cursor translate_onev(start)
++	elseif chr=(fill_char)
++		set pointer translate_two_switchBefore(#oa)
++		set cursor translate_fill(start,oa)
++		#here is not required the comparation, is inside
++		set cursor translate_two_switchAfter(cursor,oa,pointer)
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(alpha_char)
++		set cursor translate_alpha(start)
+ 		if cursor!=start
++			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(p_low)
+-		inc oa
+-		set cursor translate_alpha(start)
++	elseif chr=(align_char)
++		set cursor translate_textformat(start)
+ 		if cursor!=start
++			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(r_low)
+-		inc oa
+-		whiletrue
+-			if oa#!=(Space)
+-				if oa#!=(HorizontalTab)
+-					break
+-				end
+-			end
++	elseif chr=(bitmap_char)
++		set cursor translate_bitmap(start)
++		if cursor!=start
+ 			inc oa
+-			set pointer pluson(oa)
+-			if pointer!=oa
+-				set pointer# (Nullchar)
+-			end
+-			set cursor translate_rect(start,oa)
+-			set cursor translate_two_switchAfter(cursor,oa,pointer)
++			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+-			dec oa
+-			break
+ 		end
+-	elseif chr=(s_low)
+-		inc oa
+-		set cursor translate_srch(start,oa)
+-		if cursor!=oa;return cursor;end
+-	elseif chr=(t_low)
+-		inc oa
+-		set cursor translate_textfield(start)
++	elseif chr=(onev_char)
++		set cursor translate_onev(start)
+ 		if cursor!=start
++			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(v_low)
++	elseif chr=(rect_char)
++		set pointer translate_two_switchBefore(#oa)
++		set cursor translate_rect(start,oa)
++		#here is not required the comparation, is inside
++		set cursor translate_two_switchAfter(cursor,oa,pointer)
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(search_char)
+ 		inc oa
+-		set cursor translate_var(start)
++		set cursor translate_srch(start,oa)
++		if cursor!=oa;return cursor;end
++	elseif chr=(text_char)
++		set cursor translate_textfield(start)
+ 		if cursor!=start
++			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(x_low)
+-		inc oa
+-		set cursor translate_textformat(start)
++	elseif chr=(var_char)
++		set cursor translate_var(start)
+ 		if cursor!=start
++			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+ 			if cursor!=oa
+ 				return cursor
+ 			end
+ 		end
++	elseif chr=(insert_char)
++		set pointer translate_two_switchBefore(#oa)
++		set cursor transplate_insert(start,oa) #here is not required the comparation, is inside
++		set cursor translate_two_switchAfter(cursor,oa,pointer)
++		if cursor!=oa
++			return cursor
++		end
+ 	elseif chr=(Nullchar)
+ 		ss mem;set mem strdup(start) #must remember that start is touched in calls #set cursor fn(mem,oa) is not yet through otoc
+-		set cursor translate_textformat(mem)
++											set cursor translate_buttonmode(mem,(NULL))
+ 		if cursor=mem
+ 			call strcpy(mem,start)
+-			set cursor translate_textfield(mem)
++										set cursor translate_eparam(mem)
+ 			if cursor=mem
+ 				call strcpy(mem,start)
+-				set cursor translate_var(mem)
++									set cursor translate_function(mem)
+ 				if cursor=mem
+ 					call strcpy(mem,start)
+-					set cursor translate_srch_all(mem)
++								set cursor translate_alpha(mem)
+ 					if cursor=mem
+ 						call strcpy(mem,start)
+-						set cursor translate_alpha(mem)
++							set cursor translate_textformat(mem)
+ 						if cursor=mem
+ 							call strcpy(mem,start)
+-							set cursor translate_buttonmode(mem,(NULL))
++						set cursor translate_bitmap(mem)
+ 							if cursor=mem
+ 								call strcpy(mem,start)
+-								set cursor translate_onev(mem)
++					set cursor translate_onev(mem)
+ 								if cursor=mem
+ 									call strcpy(mem,start)
+-									set cursor translate_eparam(mem)
++				set cursor translate_srch_all(mem)
++									if cursor=mem
++										call strcpy(mem,start)
++			set cursor translate_textfield(mem)
++										if cursor=mem
++											call strcpy(mem,start)
++		set cursor translate_var(mem)
++										end
++									end
+ 								end
+ 							end
+ 						end
+@@ -472,7 +519,7 @@ function translate_two_switch(ss oa,ss c
+ 	if oa#=(Nullchar)
+ 		return cursor
+ 	end
+-	if oa#=(Plus)
++	if oa#=(switch_char)
+ 		callret translate_two_switcher(oa)
+ 	end
+ 	return oa
+@@ -487,6 +534,19 @@ function translate_two_switcher(ss oa)
+ 	dec oa
+ 	return oa
+ end
++function translate_two_switchBefore(sv _oa)
++	ss oa
++	set oa _oa#
++	inc oa
++	set oa spcfull(oa)
++	ss pointer
++	set pointer pluson(oa)
++	if pointer!=oa
++		set pointer# (Nullchar)
++	end
++	set _oa# oa
++	return pointer
++end
+ function translate_two_switchAfter(ss cursor,ss oa,ss pointer)
+ 	if pointer!=oa
+ 		if cursor!=oa
+@@ -495,7 +555,7 @@ function translate_two_switchAfter(ss cu
+ 				return cursor
+ 			end
+ 		end
+-		set pointer# (Plus)
++		set pointer# (switch_char) #this was set short time outside of this function
+ 	else
+ 		if cursor!=oa
+ 			return cursor
+@@ -504,6 +564,60 @@ function translate_two_switchAfter(ss cu
+ 	return oa
+ end
+ 
++function translate_buttonmode(ss indents,ss oa)
++	ss cursor;set cursor spcfull(indents)
++	sd ?c
++	char against="useHandCursor="
++	set c strncmp(cursor,#against,14)
++	if c=0
++		set cursor# (Nullchar)
++		add cursor 14
++		ss pointer
++		sd ?len
++		set pointer globalt.a_page_switch
++		sd ?size;set size (a_page_size)
++		set len snprintf(pointer,size,"%sbuttonMode=%s%s%s",indents,cursor,against,cursor)
++		if len>0
++			if len<(a_page_size)
++				ss ok="ButtonMode"
++				whiletrue
++					if oa=(NULL)
++						break
++					end
++					if oa#=(Nullchar)
++						break
++					end
++					#here is not always wanted to be if there are no children inside, or if disabling the button
++					if oa#=(m_low) #is set once to make it look like a button
++						inc oa
++						add pointer len
++						sub size len
++						set len snprintf(pointer,size,"mouseChildren=false;")
++						if len<0
++							return indents
++						end
++						if len>=size
++							return indents
++						end
++					end
++					if oa#=(switch_char)
++						call translated(ok)
++						set cursor translate_two_switcher(oa)
++						if cursor!=oa
++							return cursor
++						end
++						return indents
++					end
++					break
++				end
++				call translated(ok)
++				return globalt.a_page_switch
++			end
++		end
++	end
++	return indents
++end
++
+ function translate_eparam(ss start)
+ 	ss str="()"
+ 	ss p;set p strstr(start,str)
+@@ -522,8 +636,94 @@ function translate_eparam(ss start)
+ 	return start
+ end
+ 
++function translate_function(ss indents)
++	ss cursor
++	set cursor spcfull(indents)
++	sd ?c
++	set c strncmp(cursor,#globalt.func,\globalt.func-1)
++	if c=0
++		set cursor# (Nullchar)
++		add cursor \globalt.func-1
++		ss pointer
++		set pointer spcfull(cursor)
++		if pointer!=cursor
++			sd ?len
++			set c strncmp(pointer,#globalt.nw,\globalt.nw-1)
++			if c=0
++				set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s %s%s",indents,globalt.public,#globalt.func,pointer,globalt.super)
++			else
++				set cursor pointer
++				ss ?a
++				whiletrue
++					set a cursor#
++					if a<(_0)
++						if a=(Dollar)
++							inc cursor
++							continue
++						end
++						break
++					end
++					if a<=(_9)
++						inc cursor
++						continue
++					end
++					if a<(A)
++						break
++					end
++					if a<=(Z)
++						inc cursor
++						continue
++					end
++					if a<(a_low)
++						if a=(_)
++							inc cursor
++							continue
++						end
++						break
++					end
++					if a<=(z_low)
++						inc cursor
++						continue
++					end
++					break
++				end
++				set a cursor#
++				if a!=(Nullchar)
++					set cursor# (Nullchar)
++					inc cursor
++					set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s{%s %s %s%c%s",indents,globalt.class,pointer,globalt.public,#globalt.func,#globalt.nw,a,cursor)
++				else
++					set len 0
++				end
++			end
++			if len>0
++				if len<(a_page_size)
++					call translated("FunctionMorph")
++					return globalt.a_page_switch
++				end
++			end
++		end
++	end
++	return indents
++end
++
+ function translate_fill(ss indents,ss name)
+ 	ss cursor;set cursor spcfull(indents)
++	if name#=(Nullchar)
++		whiletrue
++			ss pointer
++			set pointer pareoon(cursor)
++			if pointer!=cursor
++				ss dotp
++				set dotp dotbackafter(cursor,pointer)
++				if dotp!=pointer
++					set cursor dotp
++				end
++				break
++			end
++			return name
++		end
++	end
+ 	ss ?chr;set chr cursor#
+ 	whiletrue
+ 		if chr!=(b_low)
+@@ -534,7 +734,11 @@ function translate_fill(ss indents,ss na
+ 		set cursor# (Nullchar)
+ 		inc cursor
+ 		sd ?len
+-		set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s.graphics.%c%s",indents,name,chr,cursor)
++		if name#=(Nullchar)
++			set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s%c%s",indents,globalt.graphics,chr,cursor)
++		else
++			set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s.%s%c%s",indents,name,globalt.graphics,chr,cursor)
++		end
+ 		if len>0
+ 			if len<(a_page_size)
+ 				call translated("Fill")
+@@ -545,59 +749,37 @@ function translate_fill(ss indents,ss na
+ 	return name
+ end
+ 
+-function translate_buttonmode(ss indents,ss oa)
+-	ss cursor;set cursor spcfull(indents)
+-	set cursor# (Nullchar)
+-	inc cursor
+-	sd ?c
+-	char against="seHandCursor="^
+-	set c memcmp(cursor,#against,13)
+-	if c=0
+-		add cursor 13
+-		ss pointer
+-		sd ?len
+-		set pointer globalt.a_page_switch
+-		sd ?size;set size (a_page_size)
+-		set len snprintf(pointer,size,"%sbuttonMode=%s",indents,cursor)
+-		if len>0
+-			if len<(a_page_size)
+-				ss ok="ButtonMode"
+-				whiletrue
+-					if oa=(NULL)
+-						break
+-					end
+-					if oa#=(Nullchar)
+-						break
+-					end
+-					#here is not always wanted to be if there are no children inside, or if disabling the button
+-					if oa#=(b_low) #is set once to make it look like a button
+-						inc oa
+-						add pointer len
+-						sub size len
+-						set len snprintf(pointer,size,"mouseChildren=false;")
+-						if len<0
+-							return indents
+-						end
+-						if len>=size
+-							return indents
+-						end
+-					end
+-					if oa#=(Plus)
+-						call translated(ok)
+-						set cursor translate_two_switcher(oa)
+-						if cursor!=oa
+-							return cursor
++function translate_bitmap(ss start)
++	ss cursor
++	set cursor equalon(start)
++	if cursor!=start
++		ss name
++		set name quotafter(cursor)
++		if name!=cursor
++			ss pointer
++			set pointer quoton(name)
++			if pointer!=name
++				ss texture
++				set texture spcfullback(start,cursor)
++				if texture!=cursor
++					ss ?reminder
++					set reminder texture#
++					set texture# (Nullchar)
++					inc texture
++					set cursor# (Nullchar)
++					set pointer# (Nullchar)
++					sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%s%c%s=%s %s(0,0);",start,reminder,texture,#globalt.nw,name)
++					if n>0
++						if n<(a_page_size)
++							call translated("BitmapMorph")
++							return globalt.a_page_switch
+ 						end
+-						return indents
+ 					end
+-					break
+ 				end
+-				call translated(ok)
+-				return globalt.a_page_switch
+ 			end
+ 		end
+ 	end
+-	return indents
++	return start
+ end
+ 
+ function translate_onev(ss start)
+@@ -607,40 +789,37 @@ function translate_onev(ss start)
+ 		ss pointer;set pointer cursor
+ 		while start!=pointer
+ 			dec pointer
+-			if pointer#=(o_low)
+-				inc pointer
+-				if pointer#=(n_low)
+-					inc pointer
+-					vstr mous="Mouse"
+-					sd ?c
+-					set c memcmp(pointer,"EnterFrame",10) #memcmp is defined to compare the first 10 bytes
++			sd ?c
++			set c memcmp(pointer,#globalt.on_string,\globalt.on_string) #on is to short for strncmp
++			if c=0
++				add pointer \globalt.on_string
++				vstr mous="Mouse"
++				set c strncmp(pointer,#globalt.enterframe_string,\globalt.enterframe_string) #strncmp is defined to compare the first 10 bytes
++				if c=0
++					set cursor translate_on(start,#globalt.blank,"ENTER_FRAME",cursor)
++				else
++					set c strncmp(pointer,#globalt.press_string,\globalt.press_string)
+ 					if c=0
+-						set cursor translate_on(start,"","ENTER_FRAME",cursor)
++						set cursor translate_on(start,mous,"CLICK",cursor)
+ 					else
+-						set c memcmp(pointer,"Press",5)
++						set c strncmp(pointer,#globalt.rollover_string,\globalt.rollover_string)
+ 						if c=0
+-							set cursor translate_on(start,mous,"CLICK",cursor)
++							set cursor translate_on(start,mous,"MOUSE_OVER",cursor)
+ 						else
+-							set c memcmp(pointer,"RollOver",8)
++							set c strncmp(pointer,#globalt.rollout_string,\globalt.rollout_string)
+ 							if c=0
+-								set cursor translate_on(start,mous,"MOUSE_OVER",cursor)
+-							else
+-								set c memcmp(pointer,"RollOut",7)
+-								if c=0
+-									set cursor translate_on(start,mous,"MOUSE_OUT",cursor)
+-								end
++								set cursor translate_on(start,mous,"MOUSE_OUT",cursor)
+ 							end
+ 						end
+ 					end
+-					if c=0
+-						if cursor!=start
+-							call translated("On")
+-							return cursor
+-						end
++				end
++				if c=0
++					if cursor!=start
++						call translated("On")
++						return cursor
+ 					end
+-					break # on is unique at the moment
+ 				end
+-				dec pointer
++				break # on is unique at the moment
+ 			end
+ 		end
+ 	end
+@@ -656,7 +835,7 @@ function translate_on(ss start,ss type,s
+ 		set pointer# (Nullchar)
+ 		set cursor# (Nullchar)
+ 		inc cursor
+-		sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%saddEventListener(%sEvent.%s,%s);%s",start,type,ev,value,cursor)
++		sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%saddEventListener(flash.events.%sEvent.%s,%s);%s",start,type,ev,value,cursor)
+ 		if n>0
+ 			if n<(a_page_size)
+ 				return globalt.a_page_switch
+@@ -673,7 +852,7 @@ function translate_alpha(ss indents)
+ 	sd ?c
+ 	ss sizer=6
+ 	char against="alpha="^
+-	set c memcmp(cursor,#against,sizer)
++	set c strncmp(cursor,#against,sizer)
+ 	if c=0
+ 		add sizer cursor
+ 		ss pointer
+@@ -696,6 +875,21 @@ end
+ 
+ function translate_rect(ss indents,ss name)
+ 	ss cursor;set cursor spcfull(indents)
++	if name#=(Nullchar)
++		whiletrue
++			ss pointer
++			set pointer pareoon(cursor)
++			if pointer!=cursor
++				ss dotp
++				set dotp dotbackafter(cursor,pointer)
++				if dotp!=pointer
++					set cursor dotp
++				end
++				break
++			end
++			return name
++		end
++	end
+ 	set cursor# (Nullchar) #on lineTo...
+ 	inc cursor
+ 	ss width
+@@ -730,7 +924,11 @@ function translate_rect(ss indents,ss na
+ 									set width_end# (Nullchar)
+ 									set height_end# (Nullchar)
+ 									sd ?len
+-									set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s.graphics.drawRect%s%s,%s%s%s",indents,name,x,y,width,height,cursor)
++									if name#=(Nullchar)
++										set len snprintf(globalt.a_page_switch,(a_page_size),"%s%sdrawRect%s%s,%s%s%s",indents,globalt.graphics,x,y,width,height,cursor)
++									else
++										set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s.%sdrawRect%s%s,%s%s%s",indents,name,globalt.graphics,x,y,width,height,cursor)
++									end
+ 									if len>0
+ 										if len<(a_page_size)
+ 											call translated("Rect")
+@@ -752,14 +950,14 @@ function translate_srch(ss start,ss oa)
+ 	ss cursor
+ 	whiletrue
+ 		if oa#!=(Nullchar)
+-			if oa#!=(Plus)
++			if oa#!=(switch_char)
+ 				break
+ 			end
+ 		end
+ 		set cursor translate_srch_all(start)
+ 		if cursor!=start
+ 			call translated("SearchAll")
+-			if oa#=(Plus)
++			if oa#=(switch_char)
+ 				set cursor translate_two_switcher(oa)
+ 				if cursor=oa
+ 					return oa
+@@ -769,17 +967,9 @@ function translate_srch(ss start,ss oa)
+ 		end
+ 		return oa
+ 	end
+-	whiletrue
+-		if oa#!=(Space)
+-			if oa#!=(HorizontalTab)
+-				break
+-			end
+-		end
+-		set cursor translate_search(start,oa)
+-		if cursor!=oa
+-			return cursor
+-		end
+-		break
++	set cursor translate_search(start,oa)
++	if cursor!=oa
++		return cursor
+ 	end
+ 	return oa
+ end
+@@ -793,8 +983,9 @@ function translate_srch_all(ss start)
+ 	return cursor
+ end
+ function translate_search(ss start,ss oa)
+-	ss cursor;set cursor oa
+-	inc cursor
++	ss cursor
++	#set cursor spcfull(oa) #at py there is a comparation that is not spcfull there
++	set cursor oa
+ 	ss ?types=0
+ 	while cursor#!=(Nullchar)
+ 		if cursor#=(_)
+@@ -812,7 +1003,7 @@ function translate_search(ss start,ss oa
+ 			inc cursor
+ 			continue
+ 		end
+-		if cursor#=(Plus)
++		if cursor#=(switch_char)
+ 			break
+ 		end
+ 		return oa
+@@ -822,7 +1013,7 @@ function translate_search(ss start,ss oa
+ 	set pointer translate_search_base(start,#types)
+ 	if types=t
+ 		call translated("Search")
+-		if cursor#=(Plus)
++		if cursor#=(switch_char)
+ 			set pointer translate_two_switcher(cursor)
+ 			if pointer=cursor
+ 				return cursor
+@@ -903,7 +1094,7 @@ function translate_label(ss indents)
+ 		if cursor!=name
+ 			ss buffer;set buffer globalt.a_page_switch
+ 			sd ?size
+-			set size object_make(indents,name,cursor,"TextField",#buffer,(a_page_size))
++			set size object_make(indents,name,cursor,"flash.text.TextField",#buffer,(a_page_size))
+ 			if size!=0
+ 				inc cursor
+ 				ss pointer
+@@ -929,16 +1120,16 @@ function translate_label(ss indents)
+ 											set cursor parecon(pointer)
+ 											set size object_com(name,"height",pointer,cursor,#buffer,len)
+ 											if size!=0
+-												inc cursor
+-												set pointer semicolafter(cursor) # this for + case
+-												if pointer!=cursor
+-													set len snprintf(buffer,size,"%s",pointer) #strncat or strncpy are not good here
+-													if len>=0
+-														if len<size
+-															return globalt.a_page_switch
+-														end
+-													end
+-												end
++												#inc cursor
++												#set pointer semicolafter(cursor) # this for + case
++												#if pointer!=cursor
++												#	set len snprintf(buffer,size,"%s",pointer) #strncat or strncpy are not good here
++												#	if len>=0
++												#		if len<size
++												return globalt.a_page_switch
++												#		end
++												#	end
++												#end
+ 											end
+ 										end
+ 									end
+@@ -956,31 +1147,36 @@ end
+ function translate_var(ss indents)
+ 	ss cursor;set cursor spcfull(indents)
+ 	set cursor# (Nullchar) #on attach...
+-	ss class
++	ss cls
+ 	inc cursor
+-	set class quotafter(cursor)
+-	if class!=cursor
+-		set cursor quoton(class)
+-		if cursor!=class
++	set cls quotafter(cursor)
++	if cls!=cursor
++		set cursor quoton(cls)
++		if cursor!=cls
+ 			set cursor# (Nullchar)
+ 			inc cursor
+ 			ss name
+ 			set name quotafter(cursor)
+-			if name!=cursor
++			if name!=cursor ##going on attachMovie
+ 				set cursor quoton(name)
+-				if cursor!=class
++				if cursor!=cls
+ 					set cursor# (Nullchar)
+-					inc cursor
+-					ss pointer
+-					set pointer semicolafter(cursor)
+-					if pointer!=cursor
+-						ss b=""
+-						set cursor translate_one_var(indents,b,name,class,globalt.a_page_switch,pointer)
+-						if cursor!=b
+-							call translated("VarMorph")
+-							return cursor
+-						end
++					#inc cursor
++					#ss pointer
++					#set pointer semicolafter(cursor)
++					#if pointer!=cursor
++					set cursor translate_leftright(#globalt.var_translate,indents,#globalt.blank,name,cls,globalt.a_page_switch) #,pointer)
++					if cursor!=#globalt.blank
++						call translated("VarAttach")
++						return cursor
+ 					end
++					#end
++				end
++			else #going on createEmptyMovieClip
++				set cursor translate_leftright(#globalt.var_translate,indents,#globalt.blank,cls,"flash.display.Shape",globalt.a_page_switch) #,pointer)
++				if cursor!=#globalt.blank
++					call translated("VarCreate")
++					return cursor
+ 				end
+ 			end
+ 		end
+@@ -992,9 +1188,9 @@ function translate_textformat(ss start)
+ 	ss cursor
+ 	set cursor equalafter(start)
+ 	if cursor!=start
+-		ss type
+-		set type quotafter(cursor)
+-		if type!=cursor
++		if cursor#=(Singlequote) #enforcing this for no name translations?
++			ss type=1
++			add type cursor
+ 			ss pointer
+ 			set pointer quoton(type)
+ 			if pointer!=type
+@@ -1002,7 +1198,7 @@ function translate_textformat(ss start)
+ 				set cursor# (Nullchar)
+ 				set pointer# (Nullchar)
+ 				inc pointer
+-				sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%sTextFormatAlign.%s%s",start,type,pointer)
++				sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%sflash.text.TextFormatAlign.%s%s",start,type,pointer)
+ 				if len>0
+ 					if len<(a_page_size)
+ 						call translated("TextFormat")
+@@ -1015,11 +1211,48 @@ function translate_textformat(ss start)
+ 	return start
+ end
+ 
+-entryraw globalt()
++function transplate_insert(ss start,ss oa)
++	ss cursor
++	set cursor spcfullafters(oa)
++	if cursor!=oa
++		ss pointer
++		set pointer spcfull(cursor)
++		ss pos
++		set pos strstr(start,pointer)
++		if pos!=(NULL)
++			ss ?reminder
++			set reminder cursor#;set cursor# (Nullchar)
++			set pos# (Nullchar)
++			add pos strlen(pointer)
++			sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s%s%s",start,oa,pointer,pos)
++			if len>0
++				if len<(a_page_size)
++					call translated("Replace")
++					return globalt.a_page_switch
++				end
++			end
++			set cursor# reminder
++		end
++	end
++	return oa
++end
++
++function openfl()
++	return #globalt.openfl_bool
++end
++function _postpone_char()
++	return (postpone_char)
++end
+ 
++entryraw globalt()
+ #!
++tu
++s
++
+ AddChild
+ Alpha
++Bitmap
++BitmapMorph
+ blank
+ ButtonMode
+ Class
+@@ -1028,9 +1261,11 @@ Comment
+ Event
+ Fill
+ Function
++FunctionMorph
+ Import
+ On
+ Rect
++Replace
+ Search
+ SearchAll
+ Stage
+@@ -1038,4 +1273,5 @@ Static
+ Text
+ TextFormat
+ Var
+-VarMorph
++VarAttach
++VarCreate
+--- actionswf-1.orig/oaas/util.oc
++++ actionswf-1/oaas/util.oc
+@@ -1,13 +1,14 @@
+ 
+ format elfobj64
+ 
++^import "platform_stdout" platform_stdout
++
++einclude "oaas.h" "oaas.oh"
++
+ #multithread unsafe
+ valueu translations=0
+ valueu alltranslations=0
+-
+-^import "platform_stdout" platform_stdout
+-
+-einclude "../include/common.h" "../include/common.oh"
++char verbose_bool=FALSE
+ 
+ importx "fputs" fputs
+ importx "memcpy" memcpy
+@@ -54,10 +55,10 @@ function spcfull(ss a)
+ 		end
+ 	end
+ end
+-function spcfullafters(sv c)
+-	set c# spcfull(c#) #this is here because when stopping at first char is same as when stopping at nullchar
++function spcfullafters(ss a)
++	#set c# spcfull(c#) #this is here because when stopping at first char is same as when stopping at nullchar
+ 	#	and that is telling, for example, at class, to write first arg and ignore second arg
+-	ss a;set a c#
++	#ss a;set a c#
+ 	ss b;set b a
+ 	whiletrue
+ 		if a#=(Nullchar)
+@@ -72,6 +73,24 @@ function spcfullafters(sv c)
+ 		end
+ 	end
+ end
++function spcfullback(ss start,ss right)
++	ss left
++	set left right
++	whiletrue
++		dec left
++		if left#=(Space)
++			inc left
++			return left
++		end
++		if left#=(HorizontalTab)
++			inc left
++			return left
++		end
++		if left=start
++			return left
++		end
++	end
++end
+ 
+ function commaafter(ss a)
+ 	callret anyafter(a,(Comma))
+@@ -79,6 +98,20 @@ end
+ function commaon(ss a)
+ 	callret anyon(a,(Comma))
+ end
++function dotbackafter(ss start,ss right)
++	ss left
++	set left right
++	whiletrue
++		dec left
++		if left#=(Period)
++			inc left
++			return left
++		end
++		if left=start
++			return right
++		end
++	end
++end
+ function equalafter(ss a)
+ 	callret anyafter(a,(Equals))
+ end
+@@ -98,7 +131,7 @@ function parecon(ss a)
+ 	callret anyon(a,(Closeparenthesis))
+ end
+ function pluson(ss a)
+-	callret anyon(a,(Plus))
++	callret anyon(a,(switch_char))
+ end
+ function quotafter(ss a)
+ 	callret anyafter(a,(Singlequote))
+@@ -106,9 +139,9 @@ end
+ function quoton(ss a)
+ 	callret anyon(a,(Singlequote))
+ end
+-function semicolafter(ss a)
+-	callret anyafter(a,(Semicolon))
+-end
++#function semicolafter(ss a)
++#	callret anyafter(a,(Semicolon))
++#end
+ function semicolon(ss a)
+ 	callret anyon(a,(Semicolon))
+ end
+@@ -134,7 +167,7 @@ function strip(ss src,ss dest,sd ?out_si
+ 			end
+ 			return start
+ 		end
+-		if src#!=(_)
++		if src#!=(usc_pref)
+ 			set dest# src#
+ 			inc dest
+ 			if dest=end_dest
+@@ -186,21 +219,34 @@ function print_stdout(ss a)
+ 	set so platform_stdout()
+ 	call fputs(a,so)
+ end
+-function translated_ratio()
+-	svu ?n=100
+-	mult n globalu.translations
+-	divu n globalu.alltranslations
+-	call printf("%u%%",n)
++function translated_ratio(ss ?print)
++	svu ?n
++	if globalu.alltranslations=0
++		set n 0
++	else
++		set n 100
++		mult n globalu.translations
++		divu n globalu.alltranslations
++	end
++	if print=(TRUE)
++		call printf("%u%%",n)
++	end
++	return n
+ end
+ function untranslated(ss oa)
+ 	inc globalu.alltranslations
+-	call translated_ratio()
++	call translated_ratio((TRUE))
+ 	call printf(". Untranslated: %s\n",oa)
+ end
+ function translated(ss s)
+ 	inc globalu.translations
+ 	inc globalu.alltranslations
+-	call puts(s)
++	if globalu.verbose_bool!=(FALSE)
++		call puts(s)
++	end
++end
++function verbosep()
++	return #globalu.verbose_bool
+ end
+ 
+ function object_make(ss indents,ss name,ss end,ss class,sv pbuffer,sd ?size)
+--- actionswf-1.orig/oaas3
++++ actionswf-1/oaas3
+@@ -1,12 +1,32 @@
+ #!/usr/bin/python3
+ 
+-# break OAPATH
+-# skip_src   a1 a2a a2b a3 b1b b2b   splits_folder splits_format_ext splits_printf_ext
+-# skip_comp header ffdec compiler no_clean no_confirm
+-
++# break OAPATH target src_name
++# a1 a2a a2b a3 b1b b2b  splits_folder splits_format_ext splits_printf_ext
++# OACACHE from_diagnostics verbose
++
++# skip_orig origf_name mirror_name
++# skip_src allow_untranslated
++# skip_comp  compiler  SERVER_PID header main  no_diagnostics only_diagnostics dump  no_confirm ffdec  no_clean
++
++# / / 3
++#   *   * /
++
++#import ctypes
++#import difflib
++#import json
++#import os
++from pathlib import Path
++#import pdb
++#import signal
++#import shutil
++#import socket
++#import subprocess
+ import sys
++#import time
++#import xml.etree.ElementTree as ET
++
+ if len(sys.argv)!=3:
+-	print('Usage: as3.py output_folder output_file')
++	print(f"Usage: {Path(sys.argv[0]).name} output_folder output_file")
+ 	exit(1)
+ 
+ import os
+@@ -29,226 +49,666 @@ if lib:
+ 	try:
+ 		lib.line.argtypes = [ctypes.c_char_p]; lib.line.restype = ctypes.c_char_p
+ 		lib.startline.argtypes = [ctypes.c_char_p,ctypes.c_char_p]; lib.startline.restype = ctypes.c_char_p
++		lib.ratio.argtypes = [ctypes.c_char]; lib.ratio.restype = ctypes.c_char
++		lib.verbose.argtypes = [ctypes.c_char]
++		lib.flash_to_openfl.argtypes = [ctypes.c_char]
++		lib.sep.restype = ctypes.c_char
++		lib.postpone_char.restype = ctypes.c_char
++		lib.solve1.argtypes = [ctypes.c_char_p]; lib.solve1.restype = ctypes.c_char_p
++		lib.solve2.argtypes = [ctypes.c_char_p]; lib.solve2.restype = ctypes.c_char_p
++		lib.solve4.argtypes = [ctypes.c_char_p]; lib.solve4.restype = ctypes.c_char_p
++		lib.solve7.argtypes = [ctypes.c_char_p,ctypes.c_char_p]; lib.solve7.restype = ctypes.c_char_p
++		lib.resolve.restype = ctypes.c_char
+ 	except Exception:
+ 		print('lib oaas error')
+ 		exit(1)
+ 
+-if os.environ.get('break'):
+-	import pdb; pdb.set_trace()
++if os.environ.get('break'): import pdb; pdb.set_trace()
+ 
+ dest=sys.argv[1]
++def get_module_insens(fl):
++	f=os.path.basename(os.path.dirname(fl))
++	f=f[0].upper() + f[1:]
++	return f
+ def hx_ext(fl):
+-	return os.path.join(dest,os.path.basename(os.path.dirname(fl))+'.hx')
++	return os.path.join(dest,get_module_insens(fl))+'.hx'
+ out_file_name=sys.argv[2]
+ 
+-if os.environ.get('skip_src')==None:
+-	def changeable(a,b,c): globals()[a + b] = c if os.environ.get(a + b) == None else os.environ.get(a + b)
+-	changeable('a','1','/')
+-	changeable('a','2a','/')
+-	changeable('a','2b','*')
+-	changeable('a','3','3')
+-	changeable('b','1b','*')
+-	changeable('b','2b','/')
+-
+-	def premade_formats():
+-		#environ or defaults at edor and src
+-
+-		splits_folder=os.environ.get('splits_folder')
+-		if splits_folder==None:
+-			splits_folder='osrc'
+-
+-		splits_format_ext=os.environ.get('splits_format_ext')
+-		if splits_format_ext==None:
+-			splits_format_ext='split'
+-
+-		#and here at src
+-		splits_printf_ext=os.environ.get('splits_printf_ext')
+-		if splits_printf_ext==None:
+-			splits_printf_ext='format'
++def changeable(a,b,c): globals()[a + b] = c if os.environ.get(a + b) == None else os.environ.get(a + b)
++changeable('a','1','/')
++changeable('a','2a','/')
++changeable('a','2b','*')
++changeable('a','3','3')
++changeable('b','1b','*')
++changeable('b','2b','/')
++def premade_formats():
++	#environ or defaults at edor and src
++
++	splits_folder=os.environ.get('splits_folder')
++	if not splits_folder:
++		splits_folder='osrc'
++
++	splits_format_ext=os.environ.get('splits_format_ext')
++	if not splits_format_ext:
++		splits_format_ext='split'
++
++	#and here at src
++	splits_printf_ext=os.environ.get('splits_printf_ext')
++	if not splits_printf_ext:
++		splits_printf_ext='format'
++
++	def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not directly connected with my edor and src, is like a guardian?
++	a=('' if splits_folder=='' else splits_folder+os.sep)
++
++	return (a+os.path.splitext(out_file_name)[0]+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
++def splits_data(orig=False):
++	splits_file, splits_mix = premade_formats()
++	#for filename in os.listdir(src):
++	with open(splits_file) as splits_file:
++		splits_file_data=splits_file.read()
++		files = splits_file_data.split('\x00')
++		files.pop() # Remove the last empty string
++		files_src = [str(Path(src_name)) + os.sep + str(Path(*Path(f).parts[1:])) for f in files]
++		if not orig:
++			return files_src
++	files_mirror = [str(Path(mirror_name)) + os.sep + str(Path(*Path(f).parts[1:])) for f in files]
++	with open(splits_mix) as splits_mix:
++		splits_mix_data=splits_mix.read()
++		texts = splits_mix_data.split('\x00')
++		texts.pop()
++	return (files,files_mirror,files_src,texts)
++
++target=os.environ.get('target')
++if target:
++	if target!="html5":
++		print('target not available')
++		exit(1)
+ 
+-		def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not directly connected with my edor and src, is like a guardian?
+-		a=('' if splits_folder=='' else splits_folder+os.sep)
++src_name=os.environ.get('src_name')
++if not src_name:
++	src_name='src'
++
++import shutil
++
++skip_orig='skip_orig'
++if not os.environ.get(skip_orig):
++	origf_name=os.environ.get('origf')
++	if not origf_name:
++		origf_name='origf'
++	mirror_name=os.environ.get('mirror_name')
++	if not mirror_name:
++		mirror_name='mirror'
++
++	files,files_mirror,files_src,texts = splits_data(orig=True)
++
++	import difflib
++
++	for i, f in enumerate(files):
++		txt=texts[i]
++		if txt:
++			origf = None
++		else:
++			origf = Path(f)
++		mirror = Path(files_mirror[i])
++		src = Path(files_src[i])
++		if not mirror.exists():
++			# create parent folders
++			mirror.parent.mkdir(parents=True, exist_ok=True)
++			src.parent.mkdir(parents=True, exist_ok=True)
++
++			# create mirror/src copy
++			if origf:
++				shutil.copy(origf, mirror) # or copy2: Identical to copy() except that copy2() also attempts to preserve file metadata.
++				shutil.copy(origf, src)
++			else:
++				with open(mirror,"w") as fl:
++					fl.write(txt)
++				with open(src,"w") as fl:
++					fl.write(txt)
++		else:
++			old = mirror.read_text().splitlines(keepends=True)
++			if origf:
++				new = origf.read_text().splitlines(keepends=True)
++			else:
++				new = txt.splitlines(keepends=True)
++			out = src.read_text().splitlines(keepends=True)
++			matcher = difflib.SequenceMatcher(None, old, new)
++			offset = 0
++			#        old     new
++			for tag, i1, i2, j1, j2 in matcher.get_opcodes():
++				if tag == "equal":
++					continue
++				print(tag)
++				print("old:", old[i1:i2])
++				print("new:", new[j1:j2])
++
++				i1 += offset
++				i2 += offset
++				if tag == "insert":
++					out[i1:i1] = new[j1:j2]
++					offset += (j2 - j1)
++					continue
++				if tag == "replace":
++					out[i1:i2] = new[j1:j2]
++					offset += (j2 - j1) - (i2 - i1)
++					continue
++				if tag == "delete":
++					del out[i1:i2]
++					offset -= (i2 - i1)
++					continue
++				print('?')
++				exit(1)
++			src.write_text(''.join(out))#os.linesep
++			mirror.write_text(''.join(new))
+ 
+-		return (a+os.path.splitext(out_file_name)[0]+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
++terminations="\r\n"
+ 
++OACACHE=os.environ.get('OACACHE')
++if not OACACHE:
++	OACACHE="__oacache__"
++from_diagnostics='from_diagnostics'
++f_d=os.environ.get(from_diagnostics)
++
++import signal
++import time
++def stop_server(s):
++	try:
++		pid=int(s) #TypeError at exiting without a sever
++		os.kill(pid, signal.SIGTERM) #async
++		os.kill(pid, 0)  # signal 0 = just checks if it's alive
++		time.sleep(1)
++		os.kill(pid, 0)
++		os.kill(pid, signal.SIGKILL)
++	except TypeError,ProcessLookupError: #only from os.kill
++		return
++	os.waitpid(pid,0)
++def exiting_serv(s):
++	stop_server(s)
++	exit(1)
++def exiting():
++	exiting_serv(server_pid)
++
++verbose=os.environ.get('verbose')
++
++skip_src='skip_src'
++if not os.environ.get(skip_src):
++	if lib:
++		if target:
++			lib.flash_to_openfl(True)
++		if verbose:
++			lib.verbose(True)
++
++	def exiting_verif():
++		exiting_serv(os.environ.get('SERVER_PID'))
++	allow_untranslated=os.environ.get('allow_untranslated')
++	def make_line(bf):
++		bf = bf.rstrip(terminations.encode()) #this is extra at inline comments
++		byts = bytes(bf)
++		if len(stored):
++			bf=lib.startline(bytes(stored),byts)
++			stored.clear()
++		else:
++			bf=lib.line(byts)
++		if not allow_untranslated:
++			if byts == bf:
++				r = lib.ratio(False)
++				if ord(r) !=  100: #can be blank closing comment
++					print("Untranslated. 'if not os.environ.get('allow_untranslated') failed")
++					exiting_verif()
++		return bf+os.linesep.encode()
+ 	def singleline():
+ 		bf=chars[:pos]
+ 		if lib:
+-			bf = bf.rstrip(b"\r\n") #this is extra at inline comments
+-			if len(stored):
+-				bf=lib.startline(bytes(stored),bytes(bf))
+-				stored.clear()
+-			else:
+-				bf=lib.line(bytes(bf))
+-			dfile.write(bf)
+-			dfile.write(os.linesep.encode())
++			dfile.write(make_line(bf))
+ 		else:
+ 			dfile.write(bf)
+ 
+-	splits_file, splits_mix = premade_formats()
+-
+ 	try:
+ 		os.mkdir(dest)
+ 	except FileExistsError:
+ 		pass
+ 
+-	#for filename in os.listdir(src):
+-	with open(splits_file) as splits_file:
+-		splits_file_data=splits_file.read()
+-		with open(splits_mix) as splits_mix:
+-			splits_mix_data=splits_mix.read()
+ 
+-			files = splits_file_data.split('\x00')
+-			files.pop() # Remove the last empty string
+-			texts = splits_mix_data.split('\x00')
+-			texts.pop()
+-			i=0
+-
+-			multiline_backjump=len(b1b.encode())+len(b2b.encode())
+-
+-			stored=bytearray()
+-			multiline_backjump_start=len(a1.encode())+len(a3.encode())
+-			singleline_backjump_start=multiline_backjump_start
+-			multiline_backjump_start+=len(a2a.encode())
+-			singleline_backjump_start+=len(a2b.encode())
++	multiline_backjump=len(b1b.encode())+len(b2b.encode())
+ 
+-			was_multiline=False
+-			for f in files:
+-				if texts[i]:
+-					text=texts[i]
+-				else:
+-					with open(f) as sfile:
+-						text=sfile.read()
+-				text=text.splitlines(keepends=True)
+-				with open(hx_ext(f),'ab') as dfile: #haxe will not do for .as
+-					mode=0
+-					for line in text:
+-						chars = bytearray(len(line.encode())) #'utf-8'
+-						pos = 0
+-						for c in line:
+-							ch=c.encode()
+-							positions=len(ch)
+-							for j in range(0,positions):
+-								chars[pos]=ch[j]
+-								pos+=1
+-							if mode==0:
+-								if c==a1:
+-									mode=1
+-							elif mode==1:
+-								if c==a2a:
+-									mode=2
+-								elif c==a2b:
+-									mode=3
+-								else:
+-									mode=0
+-							elif mode==2 or mode==3:
+-								if c==a3:
+-									if mode==2:
+-										xpos=singleline_backjump_start
+-									else:
+-										xpos=multiline_backjump_start
+-									stored=chars[:pos-xpos]
+-									mode*=2
+-									pos=0    #notice: both //3 and /*3 will reset the line
+-								else:
+-									mode=0
+-							elif mode==6:
+-								if c==b1b:
+-									mode=7
+-							elif mode==7:
+-								if c==b2b:
+-									mode=0
+-									pos-=multiline_backjump
+-									singleline()
+-									pos=0
+-									was_multiline=True
++	stored=bytearray()
++	multiline_backjump_start=len(a1.encode())+len(a3.encode())
++	singleline_backjump_start=multiline_backjump_start
++	multiline_backjump_start+=len(a2a.encode())
++	singleline_backjump_start+=len(a2b.encode())
++
++	was_multiline=False
++
++	files = splits_data()
++	for f in files:
++		with open(f) as sfile:
++			text=sfile.readlines()
++		if f_d==None:
++			with open(hx_ext(f),'ab') as dfile: #haxe will not do for .as
++				mode=0
++				for line in text:
++					chars = bytearray(len(line.encode())) #'utf-8'
++					pos = 0
++					for c in line:
++						ch=c.encode()
++						positions=len(ch)
++						for j in range(0,positions):
++							chars[pos]=ch[j]
++							pos+=1
++						if mode==0:
++							if c==a1:
++								mode=1
++						elif mode==1:
++							if c==a2a:
++								mode=2
++							elif c==a2b:
++								mode=3
++							else:
++								mode=0
++						elif mode==2 or mode==3:
++							if c==a3:
++								if mode==2:
++									xpos=singleline_backjump_start
+ 								else:
+-									mode=6
+-						if mode==4:
+-							mode=0
+-							singleline()
++									xpos=multiline_backjump_start
++								stored=chars[:pos-xpos]
++								mode*=2
++								pos=0    #notice: both //3 and /*3 will reset the line
++							else:
++								mode=0
+ 						elif mode==6:
+-							singleline()
+-						else:
+-							bf=chars[:pos]
+-							if not was_multiline:
+-								dfile.write(bf)
++							if c==b1b:
++								mode=7
++						elif mode==7:
++							if c==b2b:
++								mode=0
++								pos-=multiline_backjump
++								singleline()
++								pos=0
++								was_multiline=True
+ 							else:
+-								bf=bf.rstrip(b"\r\n") #was already added one separator
+-								dfile.write(bf)
+-								was_multiline=False
+-					#here can test if multiline was closed
+-				i=i+1
+-			if lib:
+-				lib.ratio()
++								mode=6
++					if mode==4:
++						mode=0
++						singleline()
++					elif mode==6:
++						singleline()
++					else:
++						bf=chars[:pos]
++						if not was_multiline:
++							dfile.write(bf)
++						else:
++							bf=bf.rstrip(terminations.encode()) #was already added one separator
++							dfile.write(bf)
++							was_multiline=False
++				#here can test if multiline was closed
++		else:
++			mod = get_module_insens(f)
++			folder = Path(OACACHE)
++			file = folder / folder / mod
++			if file.exists():
++				lines = file.read_text().splitlines()
++				with open(hx_ext(f),'rb') as dfile:
++					out_text = dfile.readlines()
++				for line in lines:
++					#lib is because from_diagnostics tested that
++					line=int(line)
++					in_text=text[line]
++					parts=in_text.split((a1+a2a+a3))
++					if len(parts)!=2:
++						print('error at rerun')
++						exiting_verif()
++					stored = bytearray(parts[0].encode())
++					out_text[line]=make_line(parts[1].encode())
++				with open(hx_ext(f),'wb') as dfile:
++					dfile.writelines(out_text)
++				os.remove(file)
++	if lib:
++		lib.ratio(True)
+ 
+-if os.environ.get('skip_comp')==None:
+-	def error():
++if not os.environ.get('skip_comp'):
++	import subprocess
++	def srun(a):
++		r=subprocess.run(a)
+ 		if r.returncode:
+ 			print('error')
+ 			exit(r.returncode)
++	compiler=os.environ.get('compiler')
++	if not target:
++		if not compiler:
++			compiler='haxe'
++
++		c_dir=os.getcwd() #haxe says no to abs path
++		dest_file=os.path.realpath(out_file_name)
++
++		try:
++			os.chdir(dest)
++		except FileNotFoundError:
++			print('cannot compile without dest') # if skip_src, and was not
++			exit(1)
++		server_pid=os.environ.get('SERVER_PID')
++		if not server_pid:
++			import socket
++			server = subprocess.Popen([compiler, "--wait", "6000"])
++			server_pid=str(server.pid)
++			try:
++				with socket.create_connection(("127.0.0.1", 6000), timeout=1):
++					pass
++			except OSError:
++				time.sleep(1)
++				try:
++					with socket.create_connection(("127.0.0.1", 6000), timeout=1):
++						pass
++				except OSError:
++					print('server error')
++					exiting()
++
++		main=os.environ.get('main')
++		if not main:
++			main='Main'
++		baser=[compiler,'--connect','6000','-swf',dest_file,'-main',main,'-D','flash_strict']
++		#                                                                   this flag for _x to be error
++
++		hd=os.environ.get('header')
++		if hd:
++			baser.extend(['-D','swf-header='+hd])
++			# -swf-header 960:640:60:f68712 -swf-version 15
++			#w:h:fps:rgb
++
++		def prun(a,capture_output=False):
++			if verbose:
++				print(a)
++			return subprocess.run(a,capture_output=capture_output)
++		def crun(a,capture_output=False):
++			r=prun(a,capture_output=capture_output)
++			if r.returncode:
++				print('error')
++				exiting()
++			os.chdir(c_dir) #same like to other plus for diagnostics all cases
++			return r
++
++		o_d=os.environ.get('only_diagnostics')
++		if os.environ.get('no_diagnostics'):
++			crun(baser)
++		else:
++			if not o_d and not f_d:
++				r=prun(baser)
++			if o_d or f_d or r.returncode:
++				baser.extend(['--display'])
++				reuser=list(baser)
++				baser.extend(['diagnostics'])
++				p=crun(baser,capture_output=True)
++
++				def diags(diagnostics):
++					files=splits_data()
++					file_cache = {}
++					touched = set()
++					line_cache = {}
++					line_cache_last = {}
++
++					def save_line(module, line):
++						folder = Path(OACACHE)
++						folder.mkdir(exist_ok=True)
++						file = folder / module  # this is not + , on windows is backslash
++
++						if module not in line_cache:
++							if file.exists():
++								line_cache[module] = set(file.read_text().splitlines())
++							else:
++								line_cache[module] = set()
++							line_cache_last[module] = set()
+ 
+-	import subprocess
++						cache = line_cache[module]
++						cache_last = line_cache_last[module]
+ 
+-	c_dir=os.getcwd() #haxe says no to abs path
+-	dest_file=os.path.realpath(out_file_name)
+-	os.chdir(dest)
+-	compiler=os.environ.get('compiler')
+-	if compiler==None:
+-		compiler='haxe'
+-	hd=os.environ.get('header')
+-	if hd:
+-		r=subprocess.run([compiler,'-swf',dest_file,'-main','Main','-swf-header',hd])
+-	else:
+-		r=subprocess.run([compiler,'-swf',dest_file,'-main','Main'])
+-	# -swf-header 960:640:60:f68712 -swf-version 15
+-	#w:h:fps:rgb
+-	error()
+-
+-	#done for output_folder
+-	os.chdir(c_dir) #back for clean, and maybe ffdec is relative, dest_file is realpath
+-
+-	if os.environ.get('no_clean')==None:
+-		for f in files:
+-			os.remove(hx_ext(f))
+-		os.rmdir(dest)
+-
+-	if os.environ.get('no_confirm')==None:
+-		#confirm is as3
+-
+-		dest_file_tmp=dest_file+'.tmp'
+-		ffdec=os.environ.get('ffdec')
+-		if ffdec==None:
+-			ffdec='ffdec'
+-		r=subprocess.run([ffdec,'-decompress',dest_file,dest_file_tmp])
+-		error()
+-		with open(dest_file_tmp,'rb') as file:
+-			file.seek(8)
+-			#rect
+-			b=file.read(1)
+-			n=b[0]>>3 # 0xff >> 1 is 0x7f
+-			n=5+(n*4)
+-			if n%8:
+-				n=int(n/8)+1
++						line = str(line)
++
++						if not line in cache_last:
++							cache_last.add(line)
++
++							last = folder / folder
++							last.mkdir(exist_ok=True)
++							last_file = last / module
++							with open(last_file, "a") as fp:
++								fp.write(line + os.linesep)
++
++						if line in cache:
++							return False
++
++						cache.add(line)
++						with open(file, "a") as fp:
++							fp.write(line + os.linesep)
++						return True
++
++					def diag():
++						pp=''
++						if kind==7:
++							# this is unstable: module=d["args"]["moduleType"]["name"]
++							#field=d["args"]["entries"][0]["fields"][0]["field"]
++							#module=os.path.splitext(field["pos"]["file"])[0]
++
++							positions=d["range"]["end"]
++							line=positions["line"]
++
++							value=d["args"]["entries"][0]["fields"][0]["field"]["name"]
++						else:
++							positions=d["range"]["start"]
++							line=positions["line"]
++							args=d["args"]
++							if kind==1:
++								if not args:
++									return None
++								value=args[0]["name"]
++							else:
++								value=args.split("\n")[0] #JSON doesn't use the host OS's line-ending convention.
++								if kind==2:
++									character=positions["character"]
++
++									src = Path(fullfilename).read_text() #encoding="utf-8"
++									lines = src.splitlines(keepends=True)
++									# get text before the target line
++									before = "".join(lines[:line])
++									# add characters in the target line
++									offset_chars = len(before) + character
++									# convert character offset -> UTF-8 byte offset
++									offset_bytes = len(src[:offset_chars].encode()) #"utf-8"
++									offset_bytes=str(offset_bytes)
++
++									pp='('+str(line)+':'+str(character)+' at '+offset_bytes+') to '
++
++									os.chdir(dest)
++									reuser.extend([filename+'@'+offset_bytes+'@position'])
++									xm=crun(reuser,capture_output=True)
++									reuser.pop()
++									xm = ET.fromstring(xm.stderr).find('pos')
++									if xm is not None:
++										xm=xm.text
++										line=xm[len(fullfilename)+1:]
++										line=line.split(':')[0]
++										line=int(line)-1 # from human
++						return value,line,positions,pp
++
++					dump=os.environ.get('dump')
++					unresolved=False;resolved=False
++					tr_sep = a1 + a2a + a3
++
++					import xml.etree.ElementTree as ET
++
++					for file in diagnostics:
++						if dump:
++							print(json.dumps(file,indent=10))
++						fullfilename=file["file"]
++						filename=os.path.basename(fullfilename)
++						module=os.path.splitext(filename)[0]
++						print(module)
++						for d in file["diagnostics"]:
++							if d["severity"] == 1:
++								solved = None
++								kind=d["kind"]
++								if kind in [1,2,4,7]:
++									values=diag()
++									if values:
++										value,line,positions,pp=values
++										print(str(kind)+' '+pp+str(line)+' '+value)
++										#now is like: fix one error will fix another 4
++										for f in files:
++											mod = get_module_insens(f)
++											if mod == module:
++												if not lib:
++													print('missing oaas lib')
++													exiting()
++
++												if f not in file_cache:
++													with open(f) as fp:
++														file_cache[f] = fp.readlines()
++												lines = file_cache[f]
++												linestr = lines[line]
++
++												if linestr[-1] in terminations:
++													linestr = linestr.rstrip(terminations)
++													has_term=True
++												else:
++													has_term=False
++
++												match kind:
++													case 7:
++														solved = lib.solve7(value.encode(),linestr[positions["character"]:].encode())
++													case 4:
++														solved = lib.solve4(value.encode())
++													case 2:
++														solved = lib.solve2(value.encode())
++													case _: #1:
++														solved = lib.solve1(value.encode())
++												if not solved:
++													if solved==None:
++														break
++													#this case is with the postpone_char. or normal
++													solved = lib.resolve()
++													#forking = solved.isupper(); if forking: solved=solved.lower()
++													comparator = solved.decode()
++													part1, delim, part2 = linestr.partition(tr_sep)
++													if delim:
++														sep=lib.sep().decode()
++														tokens = part2.split(sep)
++														n = lib.postpone_char().decode()
++														nn = len(n)
++														#c0 = comparator[0] # to compare less, like sw , sh
++														for i,token in enumerate(tokens):
++															token = token.lstrip()          # remove leading whitespace
++															if isinstance(solved, bytes):
++																against=token[0:nn] #token.startswith(n): # can be '_ val' , so, use startswith
++																if against == n:
++																	solved = comparator
++																	token = solved + token[nn:]
++																#elif against == c0: #this comparation was going with another case at next code
++																#	break #example at rect, else will be r x+r+r
++															tokens[i]=token
++														if not isinstance(solved, bytes):
++															save_line(module,line)
++															linestr = part1 + delim + sep.join(tokens)
++														#elif against == c0:
++														#	break #example at rect, else will be r+r+r
++												if isinstance(solved, bytes):
++													solved = solved.decode()
++													if save_line(module,line):
++														linestr = linestr + tr_sep + solved
++													else:
++														s1 = solved[1:]
++														s0 = solved[0]
++														sep=lib.sep().decode()
++														part1, part2 = linestr.split(tr_sep)
++														tokens = part2.split(sep)
++														not_added=True
++														for i,token in enumerate(tokens):
++															if token[0] == s0:
++																if s1: # a case sw then sh, must combine them
++																	if not s1 in token[1:]:
++																		tokens[i] = token + s1
++																not_added=False
++																break
++														if not_added:
++															tokens.extend(solved)
++														linestr = part1 + tr_sep + sep.join(tokens)
++												lines[line] = linestr + (os.linesep if has_term else "")
++												touched.add(f)
++
++												resolved=True
++												break
++								if not solved:
++									unresolved=True
++					if resolved:
++						for f in touched:
++							with open(f, "w") as fp:
++								fp.writelines(file_cache[f])
++						if o_d:
++							return
++						if unresolved:
++							os.environ[from_diagnostics] = "1"
++						else:
++							os.environ[from_diagnostics]='' # still needed at src
++
++						os.environ[skip_orig] = "1"
++						os.environ["SERVER_PID"] = server_pid
++						os.execv(sys.executable, [sys.executable] + sys.argv)
++						#print("never reached")
++					if unresolved:
++						print("diagnostics failed")
++						exiting()
++
++				import json
++				diags(json.loads(p.stderr))
+ 			else:
+-				n=n/8
+-			file.seek(n+3,1)
+-			#tag
+-			tag=file.read(2)
+-			tg=tag[1]<<2
+-			tg_low=tag[0]>>6
+-			tg|=tg_low
+-			if tg!=69:
+-				print('no FileAttributes tag')
+-				exit(1)
+-			tg=tag[0]&0x3f
+-			if tg==0x3f:
+-				print('malformed FileAttributes tag')
+-				exit(1)
+-			#tag data
+-			tg=file.read(1)
+-			if (tg[0]&8)==0:
+-				print('ActionScript3 bit is not set')
+-				exit(1)
++				os.chdir(c_dir) #back for clean, and maybe ffdec is relative, dest_file is realpath
++
++		stop_server(server_pid)
+ 
+-		os.remove(dest_file_tmp)
++		if not os.environ.get('no_confirm') and not o_d: #only diagnostics is a dry run at haxe
++			#confirm is as3
++
++			dest_file_tmp=dest_file+'.tmp'
++			ffdec=os.environ.get('ffdec')
++			if not ffdec:
++				ffdec='ffdec'
++			srun([ffdec,'-decompress',dest_file,dest_file_tmp])
++			with open(dest_file_tmp,'rb') as file:
++				file.seek(8)
++				#rect
++				b=file.read(1)
++				n=b[0]>>3 # 0xff >> 1 is 0x7f
++				n=5+(n*4)
++				if n%8:
++					n=int(n/8)+1
++				else:
++					n=n/8
++				file.seek(n+3,1)
++				#tag
++				tag=file.read(2)
++				tg=tag[1]<<2
++				tg_low=tag[0]>>6
++				tg|=tg_low
++				if tg!=69:
++					print('no FileAttributes tag')
++					exit(1)
++				tg=tag[0]&0x3f
++				if tg==0x3f:
++					print('malformed FileAttributes tag')
++					exit(1)
++				#tag data
++				tg=file.read(1)
++				if (tg[0]&8)==0:
++					print('ActionScript3 bit is not set')
++					exit(1)
++
++			os.remove(dest_file_tmp)
++
++		if not os.environ.get('no_clean'):
++			files=splits_data() #if not files , are also at: orig src diagnostics
++			for f in files:
++				os.remove(hx_ext(f))
++			os.rmdir(dest)
++			shutil.rmtree(OACACHE, ignore_errors=True)
++
++	else:
++		if not compiler:
++			compiler='openfl'
++		srun([compiler,'build','html5'])
+--- actionswf-1.orig/oad/md
++++ actionswf-1/oad/md
+@@ -1,2 +1,5 @@
+ 
+-compilerflags="-g" linkerflags=" " ./m${what_m2} $@
++if [ -z "${compilerflags}" ]; then
++	compilerflags="-fsanitize=address -g"
++fi
++compilerflags="${compilerflags}" linkerflags=" " ./m${what_m2} $@
+--- actionswf-1.orig/oad/save.oc
++++ actionswf-1/oad/save.oc
+@@ -259,6 +259,7 @@ function restore_branch_inners_free(valu
+ 		call restore_branch_free(cursor#)
+ 		incst cursor
+ 	end
++	call free(br#:branch.innerbranches)
+ end
+ function restore_branch_cuts_free(valueu br)
+ 	valueu cursor#1;set cursor br#:branch.cuts
+@@ -283,6 +284,7 @@ function restore_frame_free(valueu fr)
+ 	call restore_strings_free(fr#:preframe.restore_ustrings,fr#:preframe.ustrings,fr#:preframe.ussize)
+ 	call restore_strings_free(fr#:preframe.restore_dstrings,fr#:preframe.strings,fr#:preframe.ssize)
+ 	call restore_branch_free(fr#:preframe.abranch)
++	call free(fr)
+ end
+ function restore_free(svu predata)
+ 	svu pss#1;set pss predata#:preoadata.presprites
+--- actionswf-1.orig/python/actionswf/__init__.py
++++ actionswf-1/python/actionswf/__init__.py
+@@ -22,6 +22,10 @@ class flag(IntEnum):
+ 	noDuplicate=     0x10000
+ 	verbose=         0x20000
+ 	xx=              0x40000
++	format=          0x80000
++	splitter_n=      0x100000
++	splitter_r=      0x200000
++
+ class flags(IntEnum):
+ 	pool=        flag.pre_pool_write|flag.pool_read
+ 	x=           flag.pre_x|flag.x
+@@ -30,6 +34,7 @@ class flags(IntEnum):
+ 	antix_read=  flag.pre_log|flag.alt|flag.pre_x
+ 	antixx_write=flag.titles
+ 	xx=          flag.pool_read|flag.xx
++	splitters=   flag.splitter_n|flag.splitter_r
+ class flagss(IntEnum):
+ 	x=        flag.x|flag.pool_read
+ 	xu=       x|flag.pool_read_unlink
+--- actionswf-1.orig/python/v2
++++ actionswf-1/python/v2
+@@ -1 +1 @@
+-1.5
+\ No newline at end of file
++1.6
+\ No newline at end of file
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -413,6 +413,7 @@ endfunction
+ #format and alt
+ 
+ import "action_base" action_base
++import "action_base_main" action_base_main
+ 
+ function action_format(ss buffer,sv %the_va_list)
+ 	if buffer!=(NULL)
+@@ -466,7 +467,11 @@ function action_sprite_base(sd sprite,ss
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
+ 		call swf_actionblock_change(sprite)
+-		call action_base(alt_ac)
++		if has_frames=(TRUE)
++			call action_base(alt_ac)
++		else
++			call action_base_main(alt_ac)
++		end
+ 		if alt_ac!=actions
+ 			call file_get_content__resources_free()
+ 		end
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -7,11 +7,17 @@ include "../include/prog.h" "../include/
+ value folder=NULL
+ vstrx concat_point#1
+ datax flag_dup#1
++#
++datax flag_splitter#1
++charx markers#max_structures
++charx splitdelim#1+3+1
+ 
+ importx "strrchr" strrchr
+ importx "strcpy" strcpy
+ importx "memcpy" memcpy
+ importx "sprintf" sprintf
++importx "strstr" strstr
++importx "fclose" fclose
+ 
+ ^import "swf_sprite_frames_pointer" swf_sprite_frames_pointer 1 #full return
+ ^import "word_arg_to_stack" word_arg_to_stack 1
+@@ -44,12 +50,17 @@ importx "strlen" strlen
+ ^import "memalloc" memalloc 1
+ import "error" error
+ ^import "len_of" len_of 2
++^import "f_open" f_open 2
++import "f_write" f_write
+ 
+ function alt_init(sd flags,sd path)
+ 	if globall.folder!=(NULL)
+ 		call error("swf started, alt not closed")
+ 	end
+ 
++	set globall.flag_splitter flags
++	and globall.flag_splitter (flag_splitters)
++
+ 	set globall.flag_dup flags
+ 	and globall.flag_dup (flag_noDuplicate) #needed at ffdec reproducible
+ 
+@@ -67,6 +78,27 @@ function alt_init(sd flags,sd path)
+ 		call memcpy(globall.folder,path,size)
+ 		set globall.concat_point size
+ 		call alt_join()
++
++		ss p;set p #globall.markers
++		sd end=max_structures
++		add end p
++		while p!=end
++			set p# 0
++			inc p
++		end
++		if globall.flag_splitter!=0
++			ss s;set s #globall.splitdelim
++			inc s
++			char a="-1;";ss b^a
++			call memcpy(s,b,\.a)
++			dec s
++			if globall.flag_splitter=(flag_splitter_r)
++				set s# (CarriageReturn)
++			else
++				set s# (LineFeed)
++			end
++		end
++
+ 		ret
+ 	end
+ end
+@@ -76,16 +108,15 @@ end
+ function alt_action(ss orig_action,sd ?preid)
+ 	callret alt_action_base(orig_action,preid,(TRUE))
+ end
+-^import "struct_ids_action" struct_ids_action 2 #full
+-import "block_get_size" block_get_size
+ function alt_action_base(ss orig_action,sd ?preid,ss ?has_frames)
+ 	if globall.folder!=(NULL)
+ 		if orig_action!=(NULL) #this to filter a button with no swf actions for example
+-			sd block
+-			setcall block struct_ids_action((ids_get),preid)
+-			sd ?size
+-			setcall size block_get_size(block)
+-			if size=0 #at alt, first action from the frame is with all
++			#setcall block struct_ids_action((ids_get),preid)
++			#setcall size block_get_size(block)
++			#if size=0 #at alt, first action from the frame is with all
++			ss mark;set mark preid
++			add mark #globall.markers
++			if mark#=0
+ 				whiletrue
+ 					if has_frames=(TRUE)
+ 						ss ?ai;set ai ainit()
+@@ -103,12 +134,30 @@ function alt_action_base(ss orig_action,
+ 					call sprintf(globall.concat_point,"%u",preid)
+ 					break
+ 				end
+-
+ 				#datax int#1;set int access(globall.folder,(R_OK))
+ 				#if int=0
+-				sd mem
++				ss mem
+ 				set mem file_get_content(globall.folder,(NULL))
+ 				#call unlink(globall.folder) #if there are two action() at one frame, the second one must not see this
++				whiletrue
++					if globall.flag_splitter!=0
++						ss junction;set junction strstr(mem,#globall.splitdelim)
++						if junction!=(NULL)
++							inc junction ##prexx and alt can go together, must keep system line endings
++							set junction# (Nullchar)
++							add junction \globall.splitdelim-2
++							svu ?sz;set sz strlen(junction)
++
++							sd file;set file f_open(globall.folder,"wb")
++							call f_write(file,junction,sz)
++							call fclose(file)
++							break
++						end
++					end
++					set mark# ~0
++					break
++				end
++
+ 				return mem
+ 			end
+ 		end
+@@ -117,4 +166,13 @@ function alt_action_base(ss orig_action,
+ 	return orig_action
+ end
+ 
++import "swf_actionblock_add" swf_actionblock_add
++
++function alt_splitter()
++	if globall.flag_splitter!=0
++		char vals={0x96, 0x05, 0x00, 0x07, 0xff, 0xff, 0xff, 0xff, 0x17} # push -1 pop, titles have push pop only at last phase?
++		callg swf_actionblock_add(#vals,\.vals)
++	end
++end
++
+ entryraw globall()
+--- actionswf-1.orig/src/faction.oc
++++ actionswf-1/src/faction.oc
+@@ -30,7 +30,14 @@ import "debug_x_pointers" debug_x_pointe
+ import "debug_action_phase" debug_action_phase
+ import "debug_phase_code_flush_end" debug_phase_code_flush_end
+ import "debug_x" debug_x
++import "alt_splitter" alt_splitter
++
+ function action_base(ss ac)
++	call action_base_main(ac)
++	callg alt_splitter()
++end
++
++function action_base_main(ss ac)
+ #ss ac       actionscript string to be parsed
+ 	sd p_values
+ 	setcall p_values action_code_values()
+--- actionswf-1.orig/src/storage.oc
++++ actionswf-1/src/storage.oc
+@@ -419,7 +419,7 @@ function swf_actionblock_add(sd value,sd
+ 	callg mem_block_add(p_block,value,size)
+ endfunction
+ import "debug_phase_code_add_if" debug_phase_code_add_if
+-function actionrecordheader_core(sd ?tag,sd ?size)
++function actionrecordheader_core(ss ?tag,sd ?size)
+ 	char ar#actionrecordheader_size;ss arh^ar
+ 	set arh# tag
+ 	ss psz=actionrecordheader_tag_size
+@@ -429,17 +429,17 @@ function actionrecordheader_core(sd ?tag
+ 	callg debug_phase_code_add_if((TRUE),psz)
+ end
+ import "actionpush" actionpush
+-function actionrecordheader(sd tag,sd size)
++function actionrecordheader(ss ?tag,sd size)
+ #push pool dummy_jump( },for(a;,continue ) store(mixt,enum) if(remForIns) write_jump(breakW,breakForIn) writeif_jump(_add(forin,ifwithnot),break) jump(else) goto definef
+ 	call actionpush()
+-	call actionrecordheader_core(tag,size)
++	callg actionrecordheader_core(tag,size)
+ endfunction
+-function swf_actionrecordheader(sd tag,sd size)
+-    char t#1
+-    char length#2
+-    set t tag
+-    call stack_to_word_arg(size,#length)
+-    call swf_mem_add(#t,3)
++function swf_actionrecordheader(ss tag,sd size)
++	char ar#actionrecordheader_size;ss arh^ar
++	set arh# tag
++	add arh (actionrecordheader_tag_size)
++	call stack_to_word_arg(size,arh)
++	callg swf_mem_add(#ar,(actionrecordheader_size))
+ endfunction
+ 
+ #preid
+--- actionswf-1.orig/src/util.oc
++++ actionswf-1/src/util.oc
+@@ -13,7 +13,7 @@ importx "memcmp" memcmp
+ include "../include/prog.h" "../include/prog.oh"
+ 
+ #multithread unsafe
+-vdatax structures#max_structures     #again, : swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures    ,    pool.constants
++vdatax structures#max_structures     #others: swapdata_max  brace_blocks_max  dup_member  max_char_records  max_structures(also at alt)    ,    pool.constants
+ data index=0
+ char throwless=FALSE
+ charx ainit_bool#1
+--- /dev/null
++++ actionswf-1/tests/.expected/as3/Main.hx
+@@ -0,0 +1,64 @@
++
++@:bitmap('../a.jpg') class My_BitmapData extends flash.display.BitmapData { }
++// no dbl at haxe but still can do @:bitmap('a.jpg', 'mask.png') for jpeg+alphaChannel, more at tmp
++
++class Main{
++	static
++	function main(){
++		var stage=flash.Lib.current.stage;
++
++		var texture=new My_BitmapData(0,0);
++		var text=new flash.display.Shape();
++		var matrix=new flash.geom.Matrix();
++		text.graphics.beginBitmapFill(texture,matrix,true);
++		text.graphics.drawRect(0, 0,120, 80);
++		text.graphics.endFill();
++		stage.addChild(text);
++
++		var shape=new MyClip();
++		shape.x = (stage.stageWidth - 100) / 2;
++		shape.y = (stage.stageHeight - 100) / 2;
++		stage.addChild(shape);
++
++		new
++		Loader();
++	}
++}
++class Loader{public function new(){
++trace('the loader is working');
++}
++}
++
++/*more tests
++import a.b.c;
++static function main(){
++public function new(){super();
++var shape=new Shape();
++
++buttonMode=x;useHandCursor=x;
++function (e)(e)
++class dollar$_isok_at_as2{public function new(e){
++leftPart=flash.text.TextFormatAlign.TYPE;
++q.graphics.begin(a);x
++var texture=new MyBitmapData(0,0);
++addEventListener(flash.events.Event.ENTERFRAME,fune);
++alpha=x/100;
++q.graphics.drawRect(x,y,width,height);
++x(e)
++y(e)
++var q=new flash.text.TextField();q.x=x;q.y=y;q.width=width;q.height=height;
++var p=new q();
++qwerty
++
++buttonMode=x;useHandCursor=x;
++(e)
++public function newsuper();
++a=new q(0,0);
++addEventListener(flash.events.Event.ENTER_FRAME,q);
++alpha=x/100;
++x
++var label=new flash.text.TextField();label.y=16;label.width= 120;label.height= 48;
++var q=new name();
++=flash.text.TextFormatAlign.TYPE;
++*/
++
+--- /dev/null
++++ actionswf-1/tests/.expected/as3/MyClip.hx
+@@ -0,0 +1,80 @@
++
++class MyClip extends flash.display.Sprite{
++	function on_Enter_Frame(e){
++		if(a){
++			x-=c;
++			if(b){
++				y-=c;
++				if(y<=0){
++					b=false;
++				}
++			}else{
++				y+=c;
++				if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(x<=0){
++				a=false;
++			}
++		}else{
++			x+=c;
++			if(b){
++				y-=c;
++				if(y<=0){
++					b=false;
++				}
++			}else{
++				y+=c;
++				if(y+height>=stage.stageHeight){
++					b=true;
++				}
++			}
++			if(x+width>=stage.stageWidth){
++				a=true;
++			}
++		}
++	}
++	// Handlers
++	function onClick(e){
++		trace('Button clicked!');
++	}
++	function onOver(e){
++		alpha= 80/100;
++	}
++	function onOut(e){
++		alpha= 100/100;
++	}
++	public function new(){super();
++		// Simple visual so you can see it
++		graphics.beginFill(0x3399FF);
++		graphics.drawRect(0, 0,120, 80);
++		graphics.endFill();
++
++		// a 1/5 margin
++		var label=new flash.text.TextField();label.y=16;label.width= 120;label.height= 48;
++		label.text = 'Click';
++		label.selectable = false;
++
++		// a 2/3 size format
++		var tf = new flash.text.TextFormat();
++		tf.size = 32;
++		tf.align =flash.text.TextFormatAlign.CENTER;
++		tf.color = 0xff9933;
++		label.setTextFormat(tf);
++
++		// Interactivity
++		buttonMode= true;useHandCursor= true;mouseChildren=false;
++		addEventListener(flash.events.MouseEvent.MOUSE_OVER, onOver);
++		addEventListener(flash.events.MouseEvent.MOUSE_OUT, onOut);
++		addEventListener(flash.events.MouseEvent.CLICK, onClick);
++
++		addChild(label);
++
++		addEventListener(flash.events.Event.ENTER_FRAME, on_Enter_Frame);
++	}
++	static
++	var c=2;
++	var a=false;var b=false;
++}
++
+--- actionswf-1.orig/tests/a
++++ actionswf-1/tests/a
+@@ -22,7 +22,7 @@ ${OCOMP} a${interext}.oc ${OFLAGS} logfi
+ ${LD} ${linker} a${interext}.o -L/home/bc/before/lib -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+ # attention at launchpad and ldprefer (like in ./example)
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out && \
+-if [ -n "${break}" ]; then
++if [ -n "${read}" ]; then
+ 	read
+ fi && \
+ LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out x
+--- actionswf-1.orig/tests/a.c
++++ actionswf-1/tests/a.c
+@@ -50,10 +50,12 @@ int main(int argc,char**argv){
+ 	char*a=text("./aoc/a");
+ 	size_t sz;char*b=0;
+ 	actionsf(&sz,&b,a,1,"a");
+-	free(b);
++	free(b);free(a);
+ 	int presprite=swf_sprite_new();
+ 	action_sprite(presprite,"trace('b'+this.value)");
+-	action_init_sprite(presprite,text("./aoc/b"));
++	a=text("./aoc/b");
++	action_init_sprite(presprite,a);
++	free(a);
+ 	int sprite=swf_sprite_done(presprite);
+ 	swf_exports_add(sprite,"carSymbol");
+ 
+--- actionswf-1.orig/tests/ac
++++ actionswf-1/tests/ac
+@@ -18,6 +18,6 @@ else #same as apy
+ 	launcher=qq
+ fi
+ ${CC} ${model} -g a.c -o ${out} -L${L1} -lactionswf ${L2} -lz || exit 1
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out && \
++LD_PRELOAD=$(gcc -print-file-name=libasan.so) LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out && \
+ #eval is to expand gd alias
+-LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out x
++LD_PRELOAD=$(gcc -print-file-name=libasan.so) LD_LIBRARY_PATH=${LD_LIBRARY_PATH} eval ${launcher} ./a.out x
+--- actionswf-1.orig/tests/as3/a
++++ actionswf-1/tests/as3/a
+@@ -1,6 +1,10 @@
+ #!/bin/sh
+ set -e
++
++base64 -d a.jpg.txt > a.jpg
++#convert -size 1x1 xc:black a.png #or none for transparent
++
+ cd osrc
+ ${RUN__SHELL} ./a
+ cd ..
+-${RUN__SHELL} ./b
++${RUN__SHELL} ./b${go_to_another_launcher}
+--- /dev/null
++++ actionswf-1/tests/as3/a.jpg.txt
+@@ -0,0 +1,11 @@
++/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOzQ+PTo0
++OThBSV1PQUVYRjg5UW5SWGBjaGloP05yenFleV1maGQBERISGBUYLxoaL2RDOUNkZGRkZGRkZGRk
++ZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZP/AABEIAAEAAQMBEQACEQED
++EQH/xAGiAAABBQEBAQEBAQAAAAAAAAAAAQIDBAUGBwgJCgsQAAIBAwMCBAMFBQQEAAABfQECAwAE
++EQUSITFBBhNRYQcicRQygZGhCCNCscEVUtHwJDNicoIJChYXGBkaJSYnKCkqNDU2Nzg5OkNERUZH
++SElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6g4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1
++tre4ubrCw8TFxsfIycrS09TV1tfY2drh4uPk5ebn6Onq8fLz9PX29/j5+gEAAwEBAQEBAQEBAQAA
++AAAAAAECAwQFBgcICQoLEQACAQIEBAMEBwUEBAABAncAAQIDEQQFITEGEkFRB2FxEyIygQgUQpGh
++scEJIzNS8BVictEKFiQ04SXxFxgZGiYnKCkqNTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlq
++c3R1dnd4eXqCg4SFhoeIiYqSk5SVlpeYmZqio6Slpqeoqaqys7S1tre4ubrCw8TFxsfIycrS09TV
++1tfY2dri4+Tl5ufo6ery8/T19vf4+fr/2gAMAwEAAhEDEQA/APP6AP/Z
+--- actionswf-1.orig/tests/as3/a.oc.oac
++++ actionswf-1/tests/as3/a.oc.oac
+@@ -12,11 +12,15 @@ call swf_new_ex("a.swf",550,400,0xffFFff
+ 
+ sd presprite;set presprite swf_sprite_new()
+ char buf#3000
+-call actionf_sprite(presprite,#buf,"|||src/MyClip/clip.as|||",2)
++call actionf_sprite(presprite,#buf,"|||orig/MyClip/clip.as|||",2)
+ sd sprite;set sprite swf_sprite_done(presprite)
+ call swf_exports_add(sprite,"MyClip")
+ 
+-call action("|||src/Main/root.as|||")
++sd img
++set img swf_jpeg("../a.jpg")
++call swf_exports_add(img,"My_BitmapData")
++
++call action("|||orig/Main/root.as|||")
+ 
+ call swf_done()
+ 
+--- actionswf-1.orig/tests/as3/ar
++++ actionswf-1/tests/as3/ar
+@@ -1 +1,6 @@
+-ffdec=~/ffdec/bin/ffdec ./a
+\ No newline at end of file
++go_to_another_launcher=r ./a
++
++#hax like:
++##!/bin/bash
++#unset LD_PRELOAD
++#exec /usr/bin/haxe "$@"
+--- actionswf-1.orig/tests/as3/arf
++++ actionswf-1/tests/as3/arf
+@@ -1 +1 @@
+-no_confirm=x no_clean=x ./ar && ./df
++interact=x no_confirm=x ./ar
+--- actionswf-1.orig/tests/as3/arlf
++++ actionswf-1/tests/as3/arlf
+@@ -1 +1 @@
+-no_confirm=x no_clean=x ./arl && ./df
++interact=x no_confirm=x ./arl
+--- actionswf-1.orig/tests/as3/aw
++++ actionswf-1/tests/as3/aw
+@@ -25,7 +25,6 @@ skip_comp=x OAPATH="F:\\home\\bc\\s\\act
+ cd dest #this for ./df
+ 	find . -type f -exec dos2unix {} \;
+ cd ..
+-no_clean=x skip_src=x ./br
+-./df
++skip_src=x ./br
+ echo $?
+ rm -r dest
+--- actionswf-1.orig/tests/as3/b
++++ actionswf-1/tests/as3/b
+@@ -3,9 +3,13 @@ if [ -z $p ]; then
+ 	p=python3
+ fi
+ if [ -e dest ] && [ -z "${skip_src}" ]; then
+-	rm -r dest
++	rm -rf dest/* __oacache__/*
+ fi
+ if [ -z "${OAPATH}" ]; then
+ 	export OAPATH=../../oaas
+ fi
+-header=550:400:12:ffFFff $p ../../oaas3 dest a.swf
++if [ -z "${verbose+x}" ]; then
++	verbose=x
++fi
++no_clean=x verbose=${verbose} header=550:400:12:ffFFff $p ../../oaas3 dest a.swf \
++&& ./df
+--- actionswf-1.orig/tests/as3/br
++++ actionswf-1/tests/as3/br
+@@ -1 +1,3 @@
+-ffdec=~/ffdec/bin/ffdec ./b
+\ No newline at end of file
++
++LD_PRELOAD=$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libubsan.so)
++ffdec=~/ffdec/bin/ffdec LD_PRELOAD=${LD_PRELOAD} compiler=hax ./b
+--- actionswf-1.orig/tests/as3/brf
++++ actionswf-1/tests/as3/brf
+@@ -1 +1 @@
+-no_confirm=x no_clean=x ./br && ./df
++interact=x no_confirm=x ./br
+--- /dev/null
++++ actionswf-1/tests/as3/brfo
+@@ -0,0 +1 @@
++skip_orig=x ./brf
+--- actionswf-1.orig/tests/as3/c
++++ actionswf-1/tests/as3/c
+@@ -1,6 +1,12 @@
+ #!/bin/sh
+-rm -f a.swf
++rm -f a.swf a.jpg
+ if [ -e dest ]; then
+-	rm -r dest
++	rm -f dest/*
++fi
++if [ -e __oacache__ ]; then
++	rm -rf __oacache__/*
++fi
++if [ -e mirror ]; then
++	rm -r mirror src
+ fi
+ cd osrc && ${RUN__SHELL} ./c
+--- actionswf-1.orig/tests/as3/df
++++ actionswf-1/tests/as3/df
+@@ -1,5 +1,9 @@
+-f=~/Desktop/das3
+-diff ${f} dest || { read;
+-	if [ -e ${f} ]; then
+-		rm -r ${f}
+-	fi && cp -r dest ${f}; }
++f=../.expected/as3
++diff ${f} dest || {
++	if [ -z "${interact}" ]; then
++		exit 1
++	fi
++	read;
++	cp dest/Main.hx ${f}
++	cp dest/MyClip.hx ${f}
++}
+--- /dev/null
++++ actionswf-1/tests/as3/h
+@@ -0,0 +1,2 @@
++
++target=html5 ./arlf
+--- /dev/null
++++ actionswf-1/tests/as3/hc
+@@ -0,0 +1,3 @@
++set -e
++./c
++rm -r bin
+--- /dev/null
++++ actionswf-1/tests/as3/k
+@@ -0,0 +1,2 @@
++pid=$(lsof -t -i :6000)
++kill "$pid"
+--- /dev/null
++++ actionswf-1/tests/as3/orig/Main/root.as
+@@ -0,0 +1,64 @@
++/*3
++m ../a.jpg My_BitmapData
++c no dbl at haxe but still can do @:bitmap('a.jpg', 'mask.png') for jpeg+alphaChannel, more at tmp
++
++a Main
++	x*/
++	function main(){
++		//3g
++
++		var texture=flash.display.BitmapData.loadBitmap('My_BitmapData');
++		createEmptyMovieClip('text',getNextHighestDepth());
++		var matrix=new flash.geom.Matrix();
++		text.beginBitmapFill(texture,matrix,true);
++		text.lineTo(120, 0);text.lineTo(120, 80);text.lineTo(0, 80);
++		text.endFill();
++		//3d text stage
++
++		attachMovie('MyClip','shape',getNextHighestDepth());
++		shape._x = (Stage.width - 100) / 2;
++		shape._y = (Stage.height - 100) / 2;
++		//3d shape @
++
++		//3n
++		Loader();
++	}
++//3}
++function Loader(){//3f
++trace('the loader is working');
++}
++//3}
++
++/*more tests
++//3i a.b.c
++//3f s
++//3f p
++//3v shape Shape
++
++useHandCursor=_x;//3 b+s
++function ()()//3 e+e
++function dollar$_isok_at_as2(){//3 f+e
++_leftPart='type';//3 j+s
++begin(a);_x//3 l q+s
++var texture=flash.display.BitmapData._loadBitmap('My_BitmapData');//3 m+s
++onEnterFrame=_fune;//3 o+s
++_alpha=_x;//3 h+s
++line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
++_x()//3 s+e
++_y()//3 s_+e
++create('q',n,_x,_y,_width,_height);//3 t+s
++attach('q','_p',d);//3 v+s
++_qty//3z wer ty+s
++
++useHandCursor=x;//3
++()//3
++function new//3
++a= 'q'//3
++onEnterFrame=q;//3
++_alpha=x;//3
++_x//3
++createTextField('label',1,0,16, 120, 48);//3
++att('name','q',getNextHighest);//3
++='type';//3
++*/
++main();
+--- /dev/null
++++ actionswf-1/tests/as3/orig/MyClip/clip.as
+@@ -0,0 +1,80 @@
++
++//3a MyClip flash.display.Sprite
++	function on_Enter_Frame(){
++		if(a){
++			_x-=c;
++			if(b){
++				_y-=c;
++				if(_y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;
++				if(_y+_height>=Stage.height){
++					b=true;
++				}
++			}
++			if(_x<=0){
++				a=false;
++			}
++		}else{
++			_x+=c;
++			if(b){
++				_y-=c;
++				if(_y<=0){
++					b=false;
++				}
++			}else{
++				_y+=c;
++				if(_y+_height>=Stage.height){
++					b=true;
++				}
++			}
++			if(_x+_width>=Stage.width){
++				a=true;
++			}
++		}
++	}
++	// Handlers
++	function onClick(){
++		trace('Button clicked!');
++	}
++	function onOver(){
++		_alpha= 80;
++	}
++	function onOut(){
++		_alpha= 100;
++	}
++	function new(){//3 f
++		// Simple visual so you can see it
++		beginFill(0x3399FF);
++		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);
++		endFill();//3 _
++
++		// a 1/5 margin
++		createTextField('label',1,0,16, 120, 48);
++		label.text = 'Click';
++		label.selectable = false;
++
++		// a 2/3 size format
++		var tf = new TextFormat();
++		tf.size = 32;
++		tf.align ='center';
++		tf.color = 0xff9933;
++		label.setTextFormat(tf);
++
++		// Interactivity
++		useHandCursor= true;//3 bm
++		onRollOver = onOver;
++		onRollOut = onOut;
++		onPress = onClick;
++
++		//3d label
++
++		onEnterFrame = on_Enter_Frame;
++	}
++	//3x
++	var c=%u;
++	var a=false;var b=false;
++//3}
++new();
+--- actionswf-1.orig/tests/as3/osrc/a.oc
++++ actionswf-1/tests/as3/osrc/a.oc
+@@ -13,134 +13,157 @@ call swf_new_ex("a.swf",550,400,0xffFFff
+ sd presprite;set presprite swf_sprite_new()
+ char buf#3000
+ call actionf_sprite(presprite,#buf,"
+-/*3i flash.display.MovieClip
+-i flash.display.Shape
+-i flash.events.Event
+-i flash.text.TextField
+-i flash.text.TextFormat
+-i flash.text.TextFormatAlign
+-i flash.events.MouseEvent
+-
+-a MyClip MovieClip*/
+-	function on_Enter_Frame(){//3 e
++//3a MyClip flash.display.Sprite
++	function on_Enter_Frame(){
+ 		if(a){
+-			_x-=c;//3 s _
++			_x-=c;
+ 			if(b){
+-				_y-=c;//3 s _
+-				if(_y<=0){//3 s _
++				_y-=c;
++				if(_y<=0){
+ 					b=false;
+ 				}
+ 			}else{
+-				_y+=c;//3 s _
+-				if(_y+_height>=Stage.height){//3 s _h
++				_y+=c;
++				if(_y+_height>=Stage.height){
+ 					b=true;
+ 				}
+ 			}
+-			if(_x<=0){//3 s _
++			if(_x<=0){
+ 				a=false;
+ 			}
+ 		}else{
+-			_x+=c;//3 s _
++			_x+=c;
+ 			if(b){
+-				_y-=c;//3 s _
+-				if(_y<=0){//3 s _
++				_y-=c;
++				if(_y<=0){
+ 					b=false;
+ 				}
+ 			}else{
+-				_y+=c;//3 s _
+-				if(_y+_height>=Stage.height){//3 s _h
++				_y+=c;
++				if(_y+_height>=Stage.height){
+ 					b=true;
+ 				}
+ 			}
+-			if(_x+_width>=Stage.width){//3 s _w
++			if(_x+_width>=Stage.width){
+ 				a=true;
+ 			}
+ 		}
+ 	}
+ 	// Handlers
+-	function onClick(){//3
++	function onClick(){
+ 		trace('Button clicked!');
+ 	}
+-	function onOver(){//3 e
+-		_alpha= 80;//3 p
++	function onOver(){
++		_alpha= 80;
+ 	}
+-	function onOut(){//3 e
+-		_alpha= 100;//3 p
++	function onOut(){
++		_alpha= 100;
+ 	}
+-/*3
+-	f p*/
++	function new(){//3 f
+ 		// Simple visual so you can see it
+-		//3v shape Shape
+-		beginFill(0x3399FF);//3 l shape
+-		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 r shape
+-		endFill();//3 l shape
+-		//3d shape
++		beginFill(0x3399FF);
++		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);
++		endFill();//3 _
+ 
+ 		// a 1/5 margin
+-		createTextField('label',1,0,16, 120, 48);//3 t
++		createTextField('label',1,0,16, 120, 48);
+ 		label.text = 'Click';
+ 		label.selectable = false;
+ 
+ 		// a 2/3 size format
+ 		var tf = new TextFormat();
+ 		tf.size = 32;
+-		tf.align = 'center';//3 x
++		tf.align ='center';
+ 		tf.color = 0xff9933;
+ 		label.setTextFormat(tf);
+ 
+ 		// Interactivity
+-		useHandCursor= true;//3 mb
+-		onRollOver = onOver;//3 o
+-		onRollOut = onOut;//3 o
+-		onPress = onClick;//3 o
++		useHandCursor= true;//3 bm
++		onRollOver = onOver;
++		onRollOut = onOut;
++		onPress = onClick;
+ 
+ 		//3d label
+ 
+-		onEnterFrame = on_Enter_Frame; //3 o
+-/*3	}
+-	n*/
++		onEnterFrame = on_Enter_Frame;
++	}
++	//3x
+ 	var c=%u;
+ 	var a=false;var b=false;
+-//3 }
++//3}
++new();
+ ",2)
+ sd sprite;set sprite swf_sprite_done(presprite)
+ call swf_exports_add(sprite,"MyClip")
+ 
+-call action("
+-//3i flash.Lib
+-
+-/*3a Main
+-	f s
+-		g stage
+-*/
+-		attachMovie('MyClip','shape',getNextHighestDepth());//3 v
+-		shape._x = (Stage.width - 100) / 2;//3 s
+-		shape._y = (Stage.height - 100) / 2;//3 s
+-		/*3d shape stage
++sd img
++set img swf_jpeg("../a.jpg")
++call swf_exports_add(img,"My_BitmapData")
++
++call action("/*3
++m ../a.jpg My_BitmapData
++c no dbl at haxe but still can do @:bitmap('a.jpg', 'mask.png') for jpeg+alphaChannel, more at tmp
++
++a Main
++	x*/
++	function main(){
++		//3g
++
++		var texture=flash.display.BitmapData.loadBitmap('My_BitmapData');
++		createEmptyMovieClip('text',getNextHighestDepth());
++		var matrix=new flash.geom.Matrix();
++		text.beginBitmapFill(texture,matrix,true);
++		text.lineTo(120, 0);text.lineTo(120, 80);text.lineTo(0, 80);
++		text.endFill();
++		//3d text stage
++
++		attachMovie('MyClip','shape',getNextHighestDepth());
++		shape._x = (Stage.width - 100) / 2;
++		shape._y = (Stage.height - 100) / 2;
++		//3d shape @
+ 
+-c		var img = new Bitmap( new MyBitmapData(0, 0) );
+-c		Lib.current.addChild(img);
++		//3n
++		Loader();
+ 	}
++//3}
++function Loader(){//3f
++trace('the loader is working');
+ }
++//3}
+ 
+-c import flash.display.BitmapData;
+-c import flash.display.Bitmap;
+-c @:bitmap('relative/path/to/myfile.png')
+-c class MyBitmapData extends BitmapData { }//*
+-*/
+ /*more tests
++//3i a.b.c
++//3f s
++//3f p
++//3v shape Shape
++
++useHandCursor=_x;//3 b+s
+ function ()()//3 e+e
++function dollar$_isok_at_as2(){//3 f+e
++_leftPart='type';//3 j+s
+ begin(a);_x//3 l q+s
+-*seHandCursor=_x;//3 m+s
++var texture=flash.display.BitmapData._loadBitmap('My_BitmapData');//3 m+s
+ onEnterFrame=_fune;//3 o+s
+-_alpha=_x;//3 p+s
++_alpha=_x;//3 h+s
+ line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
+ _x()//3 s+e
+-_y()//3 s _+e
++_y()//3 s_+e
+ create('q',n,_x,_y,_width,_height);//3 t+s
+ attach('q','_p',d);//3 v+s
+-_leftPart='type';//3 x+s
++_qty//3z wer ty+s
++
++useHandCursor=x;//3
++()//3
++function new//3
++a= 'q'//3
++onEnterFrame=q;//3
++_alpha=x;//3
++_x//3
++createTextField('label',1,0,16, 120, 48);//3
++att('name','q',getNextHighest);//3
++='type';//3
+ */
++main();
+ ")
+ 
+ call swf_done()
+--- /dev/null
++++ actionswf-1/tests/as3/project.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<project>
++	<app title="Test" file="test" main="Main" version="1.0.0" />
++	<window width="550" height="400" fps="1" background="#FFFFFF" />
++
++	<source path="dest" />
++	<haxelib name="openfl" />
++
++	<haxedef name="debug" />
++	<haxedef name="no-optimize" />
++	<haxedef name="no-inline"/>
++	<haxedef name="source-map" />
++	<haxedef name="source-map-content" />
++</project>
+--- /dev/null
++++ actionswf-1/tests/as3/r
+@@ -0,0 +1 @@
++interact=x skip_orig=x skip_src=x only_diagnostics=x ./br
+--- actionswf-1.orig/tests/as3/src/Main/root.as
++++ /dev/null
+@@ -1,35 +0,0 @@
+-
+-//3i flash.Lib
+-
+-/*3a Main
+-	f s
+-		g stage
+-*/
+-		attachMovie('MyClip','shape',getNextHighestDepth());//3 v
+-		shape._x = (Stage.width - 100) / 2;//3 s
+-		shape._y = (Stage.height - 100) / 2;//3 s
+-		/*3d shape stage
+-
+-c		var img = new Bitmap( new MyBitmapData(0, 0) );
+-c		Lib.current.addChild(img);
+-	}
+-}
+-
+-c import flash.display.BitmapData;
+-c import flash.display.Bitmap;
+-c @:bitmap('relative/path/to/myfile.png')
+-c class MyBitmapData extends BitmapData { }//*
+-*/
+-/*more tests
+-function ()()//3 e+e
+-begin(a);_x//3 l q+s
+-*seHandCursor=_x;//3 m+s
+-onEnterFrame=_fune;//3 o+s
+-_alpha=_x;//3 p+s
+-line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
+-_x()//3 s+e
+-_y()//3 s _+e
+-create('q',n,_x,_y,_width,_height);//3 t+s
+-attach('q','_p',d);//3 v+s
+-_leftPart='type';//3 x+s
+-*/
+--- actionswf-1.orig/tests/as3/src/MyClip/clip.as
++++ /dev/null
+@@ -1,90 +0,0 @@
+-
+-/*3i flash.display.MovieClip
+-i flash.display.Shape
+-i flash.events.Event
+-i flash.text.TextField
+-i flash.text.TextFormat
+-i flash.text.TextFormatAlign
+-i flash.events.MouseEvent
+-
+-a MyClip MovieClip*/
+-	function on_Enter_Frame(){//3 e
+-		if(a){
+-			_x-=c;//3 s _
+-			if(b){
+-				_y-=c;//3 s _
+-				if(_y<=0){//3 s _
+-					b=false;
+-				}
+-			}else{
+-				_y+=c;//3 s _
+-				if(_y+_height>=Stage.height){//3 s _h
+-					b=true;
+-				}
+-			}
+-			if(_x<=0){//3 s _
+-				a=false;
+-			}
+-		}else{
+-			_x+=c;//3 s _
+-			if(b){
+-				_y-=c;//3 s _
+-				if(_y<=0){//3 s _
+-					b=false;
+-				}
+-			}else{
+-				_y+=c;//3 s _
+-				if(_y+_height>=Stage.height){//3 s _h
+-					b=true;
+-				}
+-			}
+-			if(_x+_width>=Stage.width){//3 s _w
+-				a=true;
+-			}
+-		}
+-	}
+-	// Handlers
+-	function onClick(){//3
+-		trace('Button clicked!');
+-	}
+-	function onOver(){//3 e
+-		_alpha= 80;//3 p
+-	}
+-	function onOut(){//3 e
+-		_alpha= 100;//3 p
+-	}
+-/*3
+-	f p*/
+-		// Simple visual so you can see it
+-		//3v shape Shape
+-		beginFill(0x3399FF);//3 l shape
+-		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 r shape
+-		endFill();//3 l shape
+-		//3d shape
+-
+-		// a 1/5 margin
+-		createTextField('label',1,0,16, 120, 48);//3 t
+-		label.text = 'Click';
+-		label.selectable = false;
+-
+-		// a 2/3 size format
+-		var tf = new TextFormat();
+-		tf.size = 32;
+-		tf.align = 'center';//3 x
+-		tf.color = 0xff9933;
+-		label.setTextFormat(tf);
+-
+-		// Interactivity
+-		useHandCursor= true;//3 mb
+-		onRollOver = onOver;//3 o
+-		onRollOut = onOut;//3 o
+-		onPress = onClick;//3 o
+-
+-		//3d label
+-
+-		onEnterFrame = on_Enter_Frame; //3 o
+-/*3	}
+-	n*/
+-	var c=%u;
+-	var a=false;var b=false;
+-//3 }
+--- actionswf-1.orig/tests/data/a
++++ actionswf-1/tests/data/a
+@@ -30,8 +30,10 @@ fi
+ if [ -z "${f}" ]; then
+ 	f=../../example/example.swf
+ fi
++if [ -n "${asan}" ]; then ldpreload=$(gcc -print-file-name=libasan.so); fi
++if [ -n "${ubsan}" ]; then ldpreload=${ldpreload}:$(gcc -print-file-name=libubsan.so); fi
+ ${launcher} ${OCOMP} a.oc x_file 2 logfile 0 && \
+ ${launcher64} ${OCONV} ${OCONVFLAGS} a.oc.x && \
+-${CC} ${model} ${CFLAGS} -g a.c -L../../oad -loadbgdata && \
+-${exelauncher} ${g} ./a.${ext} ${f} || { echo a.out error; exit 1; }
++${CC} ${model} ${CFLAGS} -g a.c -L../../oad -loadbgdata `if [ -n "${asan}" ]; then echo -n '-lasan'; fi` `if [ -n "${ubsan}" ]; then echo -n '-lubsan'; fi` && \
++LD_PRELOAD="${ldpreload}" ${exelauncher} ${g} ./a.${ext} ${f} || { echo a.out error; exit 1; }
+ #if [ -z "${d}" ]; then rm ${f}.data; else cp ${f}.data .; fi
+--- actionswf-1.orig/tests/data/test
++++ actionswf-1/tests/data/test
+@@ -30,6 +30,7 @@ at_folder=../ . ../integ && {
+ 	if [ "${platform}" = "win" ]; then
+ 		sed -i 's/\r$//' data.txt
+ 	fi
++	echo diff ../.expected/data${e}.txt data.txt
+ 	diff ../.expected/data${e}.txt data.txt
+ 	if [ $? != 0 ]; then
+ 		if [ -n "${1}" ]; then exit 1; fi
+@@ -41,6 +42,7 @@ at_folder=../ . ../integ && {
+ 	etestexp=../.expected/example.swf.data${e}
+ 	etestexpt=${etestexp}.txt
+ 	base64 -d ${etestexpt} > ${etestexp}
++	echo diff ${etestexp} ${etest}
+ 	diff ${etestexp} ${etest}
+ 	if [ $? -ne 0 ]; then
+ 		if [ -n "${1}" ]; then exit 1; fi
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -14,11 +14,11 @@ if argc=1
+ 	call puts("prexx_flags flagpre_mix flagpre_write_no") # 0x41509
+ 	set f (prexx_flags|flagpre_mix|flagpre_write_no) #xx to test also at ffdec
+ elseif argc=2
+-	call puts("xx_flags flag_compress")
+-	set f (xx_flags|flag_compress)
++	call puts("xx_flags flag_compress flag_splitter_n")
++	set f (xx_flags|flag_compress|flag_splitter_n)
+ elseif argc=3
+-	call puts("flag_alt read_done flag_compress")
+-	set f (flag_alt|read_done|flag_compress)
++	call puts("flag_alt read_done flag_compress flag_splitter_n")
++	set f (flag_alt|read_done|flag_compress|flag_splitter_n)
+ else
+ 	importx "sscanf" sscanf
+ 	call sscanf(a1,"%x",#f)  #long is only to test
+--- actionswf-1.orig/tests/ffdec/f
++++ actionswf-1/tests/ffdec/f
+@@ -24,6 +24,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 					ffd=${ffdec}
+ 				fi
+ 				is_debug=x ffdec=${ffd} skip_alternative=x ../../oaalternative.sh a.swf && {
++					if [ -n "${wait}" ]; then read; fi
+ 					#expect_obfuscation=./q   this is solved since ffdec_24.1.1_nightly3382
+ 					is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "${q} ./a.out x x" || {
+ 						swfdump -D${1} a.swf.orig > 1
+@@ -39,7 +40,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 	fi
+ }
+ 
+-# for (( i=`pwd | grep -o / | wc -l`; i>0 ; i-- )) do qwe="${qwe}../"; done; ffdec=/home/bc/ffdec/j13/usr/bin/ffdec FFDEC_JARFILENAME=${qwe}home/bc/ffdec/j13/usr/share/java/ffdec/ffdec.jar ./ff
++# for (( i=`pwd | grep -o / | wc -l`; i>0 ; i-- )) do qwe="${qwe}../"; done; ffdec=/home/bc/ffdec/j13/usr/bin/ffdec FFDEC_JARFILENAME=${qwe}home/bc/ffdec/j13/usr/share/java/ffdec/ffdec.jar ./f
+ 
+ # LD_LIBRARY_PATH=/home/bc/x86_64_lib ./ff
+ #LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src qq ./a.out 1 x x
+--- /dev/null
++++ actionswf-1/tests/ffdec/fl
+@@ -0,0 +1 @@
++LD_LIBRARY_PATH=~/x86_64_lib ./f

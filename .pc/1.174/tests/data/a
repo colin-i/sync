@@ -1,0 +1,37 @@
+#!/bin/sh
+
+CFLAGS=$(echo $(cat ../../oad/cflags) | grep -Poe "(?<==).*")
+
+if [ -n "${1}" ]; then
+	if [ "${platform}" = "win" ]; then
+		gdb=/home/bc/a/wgdb/gdb.exe
+	else
+		gdb=gdb
+	fi
+	g="${gdb} -ex start --args"
+fi
+if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+if [ -z "${OCONV}" ]; then OCONV=otoc; fi
+if [ -z "${CC}" ]; then
+	CC=cc
+	if [ "${conv_64}" = 1 ]; then
+		model=-m32
+	fi
+fi
+if [ "${platform}" = "win" ]; then
+	ext=exe
+	exelauncher=wine6
+	export WINEPATH=../../oad
+	OCONVFLAGS=-
+else
+	ext=out
+	export LD_LIBRARY_PATH=../../oad
+fi
+if [ -z "${f}" ]; then
+	f=../../example/example.swf
+fi
+${launcher} ${OCOMP} a.oc x_file 2 logfile 0 && \
+${launcher64} ${OCONV} ${OCONVFLAGS} a.oc.x && \
+${CC} ${model} ${CFLAGS} -g a.c -L../../oad -loadbgdata && \
+${exelauncher} ${g} ./a.${ext} ${f} || { echo a.out error; exit 1; }
+#if [ -z "${d}" ]; then rm ${f}.data; else cp ${f}.data .; fi

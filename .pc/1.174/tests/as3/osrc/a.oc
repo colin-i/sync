@@ -1,0 +1,148 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+override include_sec 1
+einclude "../../../dev/import.oh"
+
+entry main()
+
+call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
+
+sd presprite;set presprite swf_sprite_new()
+char buf#3000
+call actionf_sprite(presprite,#buf,"
+/*3i flash.display.MovieClip
+i flash.display.Shape
+i flash.events.Event
+i flash.text.TextField
+i flash.text.TextFormat
+i flash.text.TextFormatAlign
+i flash.events.MouseEvent
+
+a MyClip MovieClip*/
+	function on_Enter_Frame(){//3 e
+		if(a){
+			_x-=c;//3 s _
+			if(b){
+				_y-=c;//3 s _
+				if(_y<=0){//3 s _
+					b=false;
+				}
+			}else{
+				_y+=c;//3 s _
+				if(_y+_height>=Stage.height){//3 s _h
+					b=true;
+				}
+			}
+			if(_x<=0){//3 s _
+				a=false;
+			}
+		}else{
+			_x+=c;//3 s _
+			if(b){
+				_y-=c;//3 s _
+				if(_y<=0){//3 s _
+					b=false;
+				}
+			}else{
+				_y+=c;//3 s _
+				if(_y+_height>=Stage.height){//3 s _h
+					b=true;
+				}
+			}
+			if(_x+_width>=Stage.width){//3 s _w
+				a=true;
+			}
+		}
+	}
+	// Handlers
+	function onClick(){//3
+		trace('Button clicked!');
+	}
+	function onOver(){//3 e
+		_alpha= 80;//3 p
+	}
+	function onOut(){//3 e
+		_alpha= 100;//3 p
+	}
+/*3
+	f p*/
+		// Simple visual so you can see it
+		//3v shape Shape
+		beginFill(0x3399FF);//3 l shape
+		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);//3 r shape
+		endFill();//3 l shape
+		//3d shape
+
+		// a 1/5 margin
+		createTextField('label',1,0,16, 120, 48);//3 t
+		label.text = 'Click';
+		label.selectable = false;
+
+		// a 2/3 size format
+		var tf = new TextFormat();
+		tf.size = 32;
+		tf.align = 'center';//3 x
+		tf.color = 0xff9933;
+		label.setTextFormat(tf);
+
+		// Interactivity
+		useHandCursor= true;//3 mb
+		onRollOver = onOver;//3 o
+		onRollOut = onOut;//3 o
+		onPress = onClick;//3 o
+
+		//3d label
+
+		onEnterFrame = on_Enter_Frame; //3 o
+/*3	}
+	n*/
+	var c=%u;
+	var a=false;var b=false;
+//3 }
+",2)
+sd sprite;set sprite swf_sprite_done(presprite)
+call swf_exports_add(sprite,"MyClip")
+
+call action("
+//3i flash.Lib
+
+/*3a Main
+	f s
+		g stage
+*/
+		attachMovie('MyClip','shape',getNextHighestDepth());//3 v
+		shape._x = (Stage.width - 100) / 2;//3 s
+		shape._y = (Stage.height - 100) / 2;//3 s
+		/*3d shape stage
+
+c		var img = new Bitmap( new MyBitmapData(0, 0) );
+c		Lib.current.addChild(img);
+	}
+}
+
+c import flash.display.BitmapData;
+c import flash.display.Bitmap;
+c @:bitmap('relative/path/to/myfile.png')
+c class MyBitmapData extends BitmapData { }//*
+*/
+/*more tests
+function ()()//3 e+e
+begin(a);_x//3 l q+s
+*seHandCursor=_x;//3 m+s
+onEnterFrame=_fune;//3 o+s
+_alpha=_x;//3 p+s
+line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
+_x()//3 s+e
+_y()//3 s _+e
+create('q',n,_x,_y,_width,_height);//3 t+s
+attach('q','_p',d);//3 v+s
+_leftPart='type';//3 x+s
+*/
+")
+
+call swf_done()
+
+call exit(0)

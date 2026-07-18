@@ -1,0 +1,85 @@
+Format ElfObj64
+
+include "../include/prog.h" "../include/prog.oh"
+
+^import "action_debug_orig" action_debug_orig #full return
+^import "action_debug_memorig" action_debug_memorig #full return
+import "action_data" action_data
+^import "action_code_values" action_code_values #full
+^import "action_code_values_action" action_code_values_action #full
+^import "escape_action" escape_action 4 #full return
+import "action_debug_free_macro" action_debug_free_macro
+import "debug_phase_parse_end" debug_phase_parse_end
+import "endcom" endcom
+import "action_parse_init" action_parse_init
+import "label_init" label_init
+
+#aftercallimport ebool
+
+#this/an action
+
+^import "action__code_row" action__code_row 1 #full
+import "action_code_set" action_code_set
+^import "action_code_row" action_code_row 2 #full
+^import "dupreserve_string" dupreserve_string 1
+import "brace_blocks_end" brace_blocks_end
+import "error" error
+import "actionx" actionx
+import "debug_action_init" debug_action_init
+import "debug_x_pointers" debug_x_pointers
+import "debug_action_phase" debug_action_phase
+import "debug_phase_code_flush_end" debug_phase_code_flush_end
+import "debug_x" debug_x
+function action_base(ss ac)
+#ss ac       actionscript string to be parsed
+	sd p_values
+	setcall p_values action_code_values()
+	if p_values=(NULL);call error("Don't call the action now.");endif
+	#
+	sd nr
+	setcall nr action_code_values_action()
+	call action_data()
+	call label_init()
+
+	sd x;set x actionx()
+	if x=(FALSE) #if true, only action__code_row loop
+		call action_parse_init()
+
+		ss mem
+		setcall mem dupreserve_string(ac)
+
+		call debug_action_init(ac)
+		sd last;set last escape_action(ac,mem,(NULL),(NULL))
+		call debug_x_pointers(mem,last)
+		call debug_action_phase()
+
+		sv _orig
+		setcall _orig action_debug_orig()
+		set _orig# ac  ##this also requires debug_code to be set, and is set at first action_code_row_ex / at every row, that is from here without any aftercall
+		sv _mem
+		set _mem action_debug_memorig()
+		set _mem# mem
+		call endcom(ac,mem) #also for line end term to follow
+		while mem#!=0
+			setcall mem action_code_row(mem,(FALSE))
+		endwhile
+		call debug_phase_parse_end() #can't be after math_end the case when last rows are blank
+		call action_code_set((math_end))
+		#reset to stop adding row nr at errors
+		set _orig# (NULL)
+		call brace_blocks_end()
+
+		call debug_action_phase()
+
+		sv stored;set stored p_values
+		#                 code_values are not reallocated
+		while p_values#!=(math_end)
+			setcall p_values action__code_row(p_values)  #also at actionx
+		endwhile
+		call debug_phase_code_flush_end()
+		call debug_x(stored,nr#) #need to be after, to modify pointers inside
+
+		#free mem ok,another free is at errors
+		call action_debug_free_macro()
+	end
+endfunction

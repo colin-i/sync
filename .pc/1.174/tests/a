@@ -1,0 +1,28 @@
+
+if [ -z "${LD_LIBRARY_PATH}" ]; then LD_LIBRARY_PATH=../${inter}src; fi
+if [ -z "${OCOMP}" ]; then OCOMP=o; fi
+
+if [ -z "${conv_64}" ] || [ ${conv_64} = 0 ]; then
+	OFLAGS="inplace_reloc 0"
+	LD=/usr/x86_64-linux-gnu/bin/ld
+	_L=/home/bc/x86_64_lib/cross
+	linker=--dynamic-linker=/lib64/ld-linux-x86-64.so.2
+	if [ -z "${launcher}" ]; then
+		launcher=qq
+	fi
+else
+	OFLAGS="conv_64 ${conv_64}"
+	LD=/usr/i686-linux-gnu/bin/ld
+	_L=/home/bc/i386_lib
+	linker=--dynamic-linker=/lib/ld-linux.so.2
+	launcher=q
+fi
+l_z=`pkg-config --libs zlib`
+${OCOMP} a${interext}.oc ${OFLAGS} logfile 0 && \
+${LD} ${linker} a${interext}.o -L/home/bc/before/lib -l:libc.so.6 -L${_L} ${l_z} -L${LD_LIBRARY_PATH} -lactionswf -e main && \
+# attention at launchpad and ldprefer (like in ./example)
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out && \
+if [ -n "${break}" ]; then
+	read
+fi && \
+LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} ${launcher} ./a.out x
