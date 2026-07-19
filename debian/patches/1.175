@@ -1,0 +1,287 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: iul, 19 2026 10:05:54 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/oaas/solve.oc
++++ actionswf-1/oaas/solve.oc
+@@ -11,11 +11,13 @@ importx "sprintf" sprintf
+ 
+ einclude "oaas.h" "oaas.oh"
+ 
++^import "new_string_get" new_string_get 1
+ ^import "on_string_get" on_string_get 1
+ ^import "enterframe_string_get" enterframe_string_get 1
+ ^import "press_string_get" press_string_get 1
+ ^import "rollover_string_get" rollover_string_get 1
+ ^import "rollout_string_get" rollout_string_get 1
++import "verbosev" verbosev
+ 
+ function _resolve()
+ 	return globals.stored_char
+@@ -37,7 +39,11 @@ function solver_endb(ss value,ss ?small_
+ end
+ function solver(ss value,ss s)
+ 	if s=(NULL)
+-		call printf("postponed %s\n",value)
++		ss ?v
++		set v verbosev()
++		if v!=(FALSE)
++			call printf("postponed %s\n",value)
++		end
+ 	end
+ 	return s
+ end
+@@ -90,6 +96,14 @@ function solver4(ss value)
+ 			call sprintf(#globals.outvalue,"%c",(ignore_pref))
+ 			callret solver_end(value,\.new_string)
+ 		end
++		ss ?z
++		ss cursor
++		set cursor new_string_get(#z)
++		set c strncmp(value,cursor,z)
++		if c=0
++			call sprintf(#globals.outvalue,"%c",(ignore_pref))
++			callret solver_end(value,z)
++		end
+ 	end
+ 	return (NULL)
+ end
+--- actionswf-1.orig/oaas/translate.oc
++++ actionswf-1/oaas/translate.oc
+@@ -45,6 +45,10 @@ function rollout_string_get(ss z)
+ 	set z# \globalt.rollout_string
+ 	return #globalt.rollout_string
+ end
++function new_string_get(ss z)
++	set z# \globalt.nw-1
++	return #globalt.nw
++end
+ 
+ importx "free" free
+ importx "memcmp" memcmp
+--- actionswf-1.orig/oaas/util.oc
++++ actionswf-1/oaas/util.oc
+@@ -248,6 +248,9 @@ end
+ function verbosep()
+ 	return #globalu.verbose_bool
+ end
++function verbosev()
++	return globalu.verbose_bool
++end
+ 
+ function object_make(ss indents,ss name,ss end,ss class,sv pbuffer,sd ?size)
+ 	set end# (Nullchar)
+--- actionswf-1.orig/oaas3
++++ actionswf-1/oaas3
+@@ -70,8 +70,10 @@ def get_module_insens(fl):
+ 	f=os.path.basename(os.path.dirname(fl))
+ 	f=f[0].upper() + f[1:]
+ 	return f
++def hx_exte(fl):
++	return get_module_insens(fl)+'.hx'
+ def hx_ext(fl):
+-	return os.path.join(dest,get_module_insens(fl))+'.hx'
++	return os.path.join(dest,hx_exte(fl))
+ out_file_name=sys.argv[2]
+ 
+ def changeable(a,b,c): globals()[a + b] = c if os.environ.get(a + b) == None else os.environ.get(a + b)
+@@ -101,10 +103,10 @@ def premade_formats():
+ 	a=('' if splits_folder=='' else splits_folder+os.sep)
+ 
+ 	return (a+os.path.splitext(out_file_name)[0]+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
+-def splits_data(orig=False):
++def splits_data(orig=False,dirs=''):
+ 	splits_file, splits_mix = premade_formats()
+ 	#for filename in os.listdir(src):
+-	with open(splits_file) as splits_file:
++	with open(dirs+splits_file) as splits_file:
+ 		splits_file_data=splits_file.read()
+ 		files = splits_file_data.split('\x00')
+ 		files.pop() # Remove the last empty string
+@@ -112,7 +114,7 @@ def splits_data(orig=False):
+ 		if not orig:
+ 			return files_src
+ 	files_mirror = [str(Path(mirror_name)) + os.sep + str(Path(*Path(f).parts[1:])) for f in files]
+-	with open(splits_mix) as splits_mix:
++	with open(dirs+splits_mix) as splits_mix:
+ 		splits_mix_data=splits_mix.read()
+ 		texts = splits_mix_data.split('\x00')
+ 		texts.pop()
+@@ -219,7 +221,7 @@ def stop_server(s):
+ 		time.sleep(1)
+ 		os.kill(pid, 0)
+ 		os.kill(pid, signal.SIGKILL)
+-	except TypeError,ProcessLookupError: #only from os.kill
++	except (TypeError,ProcessLookupError): #only from os.kill
+ 		return
+ 	os.waitpid(pid,0)
+ def exiting_serv(s):
+@@ -418,29 +420,43 @@ if not os.environ.get('skip_comp'):
+ 		def prun(a,capture_output=False):
+ 			if verbose:
+ 				print(a)
+-			return subprocess.run(a,capture_output=capture_output)
++			kwargs = {}
++			if capture_output:
++				#kwargs['stdout'] = subprocess.PIPE
++				kwargs['stderr'] = subprocess.PIPE
++			return subprocess.run(a,**kwargs)
+ 		def crun(a,capture_output=False):
+ 			r=prun(a,capture_output=capture_output)
+ 			if r.returncode:
+ 				print('error')
+ 				exiting()
++			return r
++		def crund(a,capture_output=False):
++			r=crun(a,capture_output=capture_output)
+ 			os.chdir(c_dir) #same like to other plus for diagnostics all cases
+ 			return r
+ 
+ 		o_d=os.environ.get('only_diagnostics')
+ 		if os.environ.get('no_diagnostics'):
+-			crun(baser)
++			crund(baser)
+ 		else:
+ 			if not o_d and not f_d:
+ 				r=prun(baser)
+ 			if o_d or f_d or r.returncode:
+-				baser.extend(['--display'])
+-				reuser=list(baser)
+-				baser.extend(['diagnostics'])
+-				p=crun(baser,capture_output=True)
++				def diags():
++					baser.extend(['--display'])
++					reuser=list(baser)
++					files=splits_data(dirs='../')
++
++					import json
++					diagnostics=[]
++					for f in files:
++						ruser=list(reuser)
++						ruser.extend([hx_exte(f)+'@0@diagnostics'])
++						p=crun(ruser,capture_output=True)
++						diagnostics.extend(json.loads(p.stderr))
++					os.chdir(c_dir)
+ 
+-				def diags(diagnostics):
+-					files=splits_data()
+ 					file_cache = {}
+ 					touched = set()
+ 					line_cache = {}
+@@ -518,14 +534,14 @@ if not os.environ.get('skip_comp'):
+ 
+ 									os.chdir(dest)
+ 									reuser.extend([filename+'@'+offset_bytes+'@position'])
+-									xm=crun(reuser,capture_output=True)
++									xm=crund(reuser,capture_output=True)
+ 									reuser.pop()
+ 									xm = ET.fromstring(xm.stderr).find('pos')
+ 									if xm is not None:
+ 										xm=xm.text
+-										line=xm[len(fullfilename)+1:]
+-										line=line.split(':')[0]
+-										line=int(line)-1 # from human
++										lineparts=xm.split(':')
++										if lineparts[0]==fullfilename: #first case at bionic
++											line=int(lineparts[1])-1 # from human
+ 						return value,line,positions,pp
+ 
+ 					dump=os.environ.get('dump')
+@@ -549,7 +565,8 @@ if not os.environ.get('skip_comp'):
+ 									values=diag()
+ 									if values:
+ 										value,line,positions,pp=values
+-										print(str(kind)+' '+pp+str(line)+' '+value)
++										if verbose:
++											print(str(kind)+' '+pp+str(line)+' '+value)
+ 										#now is like: fix one error will fix another 4
+ 										for f in files:
+ 											mod = get_module_insens(f)
+@@ -570,15 +587,14 @@ if not os.environ.get('skip_comp'):
+ 												else:
+ 													has_term=False
+ 
+-												match kind:
+-													case 7:
+-														solved = lib.solve7(value.encode(),linestr[positions["character"]:].encode())
+-													case 4:
+-														solved = lib.solve4(value.encode())
+-													case 2:
+-														solved = lib.solve2(value.encode())
+-													case _: #1:
+-														solved = lib.solve1(value.encode())
++												if kind==7:
++													solved = lib.solve7(value.encode(),linestr[positions["character"]:].encode())
++												elif kind==4:
++													solved = lib.solve4(value.encode())
++												elif kind==2:
++													solved = lib.solve2(value.encode())
++												else: #1:
++													solved = lib.solve1(value.encode())
+ 												if not solved:
+ 													if solved==None:
+ 														break
+@@ -655,8 +671,7 @@ if not os.environ.get('skip_comp'):
+ 						print("diagnostics failed")
+ 						exiting()
+ 
+-				import json
+-				diags(json.loads(p.stderr))
++				diags()
+ 			else:
+ 				os.chdir(c_dir) #back for clean, and maybe ffdec is relative, dest_file is realpath
+ 
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -1,7 +1,7 @@
+ # Action SWF
+ 
+ ## Install
+-On Ubuntu(amd64 i386)(bionic focal jammy noble resolute) from PPA.
++On Ubuntu(amd64)(jammy noble resolute) from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+@@ -52,10 +52,12 @@ pip install actionswf
+ ```
+ 
+ ## From source
+-Compile with [O Compiler](https://github.com/colin-i/o).
++Compile with [O Compiler](https://github.com/colin-i/o). Or convert to C with ocompiler+oconv (more at csrc folder).
+ 
+ ## Info
+-A brief intro is at [readme.txt](https://raw.githubusercontent.com/colin-i/actionswf/master/readme.txt).\
++[OAAS Syntax](https://htmlpreview.github.io/?https://github.com/colin-i/actionswf/blob/master/oaas.html)\
++[X Syntax](https://htmlpreview.github.io/?https://github.com/colin-i/actionswf/blob/master/x.html)\
++More info at [readme.txt](https://raw.githubusercontent.com/colin-i/actionswf/master/readme.txt).\
+ Games by this program at [flashixy](https://flashixy.com).
+ 
+ [//]: # (https://www.kongregate.com/games/bitplayer)
+--- actionswf-1.orig/tests/as3/b
++++ actionswf-1/tests/as3/b
+@@ -1,5 +1,5 @@
+ #!/bin/sh
+-if [ -z $p ]; then
++if [ -z "$p" ]; then
+ 	p=python3
+ fi
+ if [ -e dest ] && [ -z "${skip_src}" ]; then
