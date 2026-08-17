@@ -1,0 +1,258 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: aug, 17 2026 12:41:22 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -333,7 +333,7 @@ command_char saving_base(char*dest){
+ 	return command_false;
+ }
+ //command return
+-static command_char saving(){
++command_char saving(){
+ 	return saving_base(textfile);
+ }
+ static void inputpath(){
+@@ -835,7 +835,12 @@ bool undo_add(size_t yb,row_dword xb,siz
+ }
+ static bool undo_del_backward(eundo*un,size_t yb,size_t xb,size_t ye,size_t xe){
+ 	row_dword x=sizemembuf(yb,xb,ye,xe);
+-	char*v=(char*)malloc(x);
++
++	//char*v=(char*)malloc(x);//this was spotted by claude at a rare unpadded case of redo followed by a del key
++	char dif=x&row_pad;
++	if(dif!=0)dif=(dif^row_pad)+1;
++	char*v=(char*)malloc(x+dif);
++
+ 	if(v==nullptr)return true;
+ 	un->yb=yb;un->xb=xb;un->ye=ye;un->xe=x;
+ 	un->data=v;
+@@ -861,7 +866,7 @@ bool undo_add_ind(size_t yb,size_t ye){
+ 	if(undo_expand()/*true*/){
+ 		undo_newway();
+ 		eundo*un=&undos[undos_tot];
+-		un->ye=yb;un->yb=ye;
++		un->ye=yb;un->yb=ye;//this swap is intentional, more at dos function
+ 		un->data=nullptr;
+ 		undo_ok();return false;}
+ 	return true;
+@@ -973,6 +978,7 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 		if(d){//!=nullptr
+ 			for(size_t i=y2;i<y1;i++){
+ 				row*r=&rows[i];
++				if(rows[i].sz==0)continue; //for consistency
+ 				if(row_alloc(r,0,1,r->sz)/*true*/)return false;
+ 			}
+ 			un->data=nullptr;
+@@ -983,14 +989,16 @@ static bool dos(WINDOW*w,eundo*un,size_t
+ 				row_set(r,0,1,r->sz,&a);
+ 			}
+ 			free(d);
+-			ytext=y1;xtext=1;
++			ytext=y1-1;xtext=1;
+ 			centering2(w,nullptr,nullptr,true)
+ 		}else{
+ 			void*mem=malloc(y1-y2);
+ 			if(mem==nullptr)return false;
+ 			undo_ind_del(un,y2,y1,(char*)mem);
+ 			for(size_t i=y2;i<y1;i++){
+-				row_dword n=rows[i].sz;char*dt=rows[i].data;
++				row_dword n=rows[i].sz;
++				if(n==0)continue;                 // don't touch/underflow blank rows
++				char*dt=rows[i].data;
+ 				for(size_t j=1;j<=n;j++)dt[j-1]=dt[j];
+ 				rows[i].sz--;
+ 			}
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -156,6 +156,7 @@ extern char key_titles;
+ //main
+ void bar_init(void);
+ command_char save(void);
++command_char saving(void);
+ command_char saving_base(char*);
+ command_char question(const char*);
+ command_char change_key(bar_byte);
+--- /dev/null
++++ edor-1/s/da
+@@ -0,0 +1,2 @@
++
++ASAN_OPTIONS=log_path=asan.log:log_exec_name=1:abort_on_error=1 ./edor $@
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -241,6 +241,7 @@ static char* converted_open;
+ 
+ static int user_return=EXIT_SUCCESS;
+ static char reload=1;
++static bool save_and_exit=false;
+ 
+ #ifndef SIZE_MAX
+ # define SIZE_MAX ((size_t)-1)
+@@ -1899,19 +1900,27 @@ static void indent(bool b,size_t ybsel,s
+ 	if(yesel>=rows_tot)ye=rows_tot;
+ 	else ye=yesel+1;
+ 	if(b/*true*/){
++		bool something=false;
+ 		for(size_t i=ybsel;i<ye;i++){
+-			row*r=&rows[i];
+-			if(row_alloc(r,0,1,r->sz)/*true*/)return;
++			if(rows[i].sz!=0){something=true;break;}
+ 		}
+-		if(undo_add_ind(ybsel,ye)/*true*/)return;
+-		for(size_t i=ybsel;i<ye;i++){
+-			row*r=&rows[i];
+-			row_set(r,0,1,r->sz,"\t");
++		if(something/*true*/){
++			for(size_t i=ybsel;i<ye;i++){
++				row*r=&rows[i];
++				if(r->sz==0)continue;                 // skip blank rows
++				if(row_alloc(r,0,1,r->sz)/*true*/)return;
++			}
++			if(undo_add_ind(ybsel,ye)/*true*/)return;
++			for(size_t i=ybsel;i<ye;i++){
++				row*r=&rows[i];
++				if(r->sz==0)continue;                 // skip blank rows
++				row_set(r,0,1,r->sz,"\t");
++			}
++			mod_set_off_wrap();
+ 		}
+-		mod_set_off_wrap();
+ 	}else{
+ 		bool something=false;
+-		for(size_t i=ybsel;i<=ye;i++){
++		for(size_t i=ybsel;i<ye;i++){
+ 			if(rows[i].sz!=0){something=true;break;}
+ 		}
+ 		if(something/*true*/){
+@@ -2962,7 +2971,10 @@ static bool command_line(int*argc,char**
+ 		char*pattern=(*argv)[1];
+ 		if(strcmp(pattern,"--file")==0){
+ 			*argc=(*argc)-1;*argv=(*argv)+1;
+-			return false;
++		}else if(strcmp(pattern,"--save-exit")==0){
++			*argc=(*argc)-1;*argv=(*argv)+1;
++			save_and_exit=true;
++			splits_flag=true;//this function is meaningless without this option
+ 		}else if(strcmp(pattern,"--help")==0){
+ 			//if(*argc!=2){
+ 			//	const char entry_text[]="ENTRY_DEBUG marker\n";//for headless dependencies start test
+@@ -3013,7 +3025,7 @@ static char* dirargfile_to_file(char* f)
+ 					char*val=nullptr;
+ 					struct dirent *ent;
+ 					size_t paranoia=SIZE_MAX - size - 1;
+-					while (ent = readdir(dir)) {
++					while ((ent = readdir(dir))) {
+ 						if (ent->d_name[0] == '.' &&
+ 							(ent->d_name[1] == '\0' || (ent->d_name[1] == '.' && ent->d_name[2] == '\0')
+ 							)
+@@ -3171,41 +3183,46 @@ static void action_go(int argc,char**arg
+ 		}
+ 	}
+ 	if(ok!=normalize_err){
+-		WINDOW*w1=initscr();
+-		if(w1){//!=nullptr
+-			if(reload!=0){
+-				texter_macro("Reloaded");
+-				reload=0;
+-			}
+-
+-			if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
+-
+-			//if set 1press_and_4,5 will disable right press (for copy menu) anyway
+-			//on android longpress to select and copy is a gesture and is different from mouse events
+-			//the only difference with ALL_..EVENTS is that we want to speed up and process all events here (if there is a curses implementation like that)
+-			//this was default for android, but nowadays on desktop is not a default
+-			//stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);//for error, export TERM=vt100
+-			if(stored_mouse_mask_q)stored_mouse_mask=mousemask(all_mouse_events,nullptr);//must set it after initscr to work
+-
+-			if(ocompiler_flag/*true*/){//this is here, in loop can be set if wanted with enable/disable and rescan keys
+-				aftercall=init_aftercall();
+-			}
+-
+-			use_default_colors();//assume_default_colors(-1,-1);//it's ok without this for color pair 0 (when attrset(0))
+-			raw();//stty,cooked; characters typed are immediately passed through to the user program. interrupt, quit, suspend, and flow control characters are all passed through uninterpreted, instead of generating a signal
+-			color();
+-			WINDOW*pw=position_init();
+-			if(pw){//!=nullptr
+-				keypad(w1,true);//this here and not at start: Normalize... and other text will not be after clearscreen
+-				noecho();//characters typed are not echoed
+-				nonl();//no translation,faster
+-				proced(cutbuf_file,w1);
+-				delwin(pw);
+-			}
+-			endwin();
++		if(save_and_exit){
++			if(!textfile)puts("no file for save and exit");
++			else saving();
++		}else{
++			WINDOW*w1=initscr();
++			if(w1){//!=nullptr
++				if(reload!=0){
++					texter_macro("Reloaded");
++					reload=0;
++				}
++
++				if(cutbuf_file[0]!='\0')getfilebuf(cutbuf_file);//this is here,not after cutbuf_file path is set,but after line termination is final
++
++				//if set 1press_and_4,5 will disable right press (for copy menu) anyway
++				//on android longpress to select and copy is a gesture and is different from mouse events
++				//the only difference with ALL_..EVENTS is that we want to speed up and process all events here (if there is a curses implementation like that)
++				//this was default for android, but nowadays on desktop is not a default
++				//stored_mouse_mask=mousemask(ALL_MOUSE_EVENTS,nullptr);//for error, export TERM=vt100
++				if(stored_mouse_mask_q)stored_mouse_mask=mousemask(all_mouse_events,nullptr);//must set it after initscr to work
++
++				if(ocompiler_flag/*true*/){//this is here, in loop can be set if wanted with enable/disable and rescan keys
++					aftercall=init_aftercall();
++				}
++
++				use_default_colors();//assume_default_colors(-1,-1);//it's ok without this for color pair 0 (when attrset(0))
++				raw();//stty,cooked; characters typed are immediately passed through to the user program. interrupt, quit, suspend, and flow control characters are all passed through uninterpreted, instead of generating a signal
++				color();
++				WINDOW*pw=position_init();
++				if(pw){//!=nullptr
++					keypad(w1,true);//this here and not at start: Normalize... and other text will not be after clearscreen
++					noecho();//characters typed are not echoed
++					nonl();//no translation,faster
++					proced(cutbuf_file,w1);
++					delwin(pw);
++				}
++				endwin();
+ 
+-			if(normalize_clue!=no_clue)printf("normalize clue: " protocol "\n",normalize_clue);
+-			if(clue!=no_clue)printf("last row where was an error at split write was: " protocol "\n",clue);
++				if(normalize_clue!=no_clue)printf("normalize clue: " protocol "\n",normalize_clue);
++				if(clue!=no_clue)printf("last row where was an error at split write was: " protocol "\n",clue);
++			}
+ 		}
+ 	}
+ 	if(text_init_b){//!=nullptr
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -23,7 +23,7 @@ wr5 () { buf4="${buf4}$@"; }
+ 
+ printf '%s\n' "#define hel1 \"USAGE\n\"" > ${f}
+ wr "#define hel2 \""
+-d2=" [--file] [file_or_folderWithFile_path [line_termination: rn/r/n]]\
++d2=" [--file or --save-exit] [file_or_folderWithFile_path [line_termination: rn/r/n]]\
+ \n      --remove-config        Remove configuration files.\
+ \n      --help                 Will guide to enter here.\
+ \nINPUT\
