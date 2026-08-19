@@ -1,0 +1,171 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+override include_sec 1
+einclude "../../../dev/import.oh"
+
+entry main()
+
+call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
+
+sd presprite;set presprite swf_sprite_new()
+char buf#3000
+call actionf_sprite(presprite,#buf,"
+//3a MyClip flash.display.Sprite
+	function on_Enter_Frame(){
+		if(a){
+			_x-=c;
+			if(b){
+				_y-=c;
+				if(_y<=0){
+					b=false;
+				}
+			}else{
+				_y+=c;
+				if(_y+_height>=Stage.height){
+					b=true;
+				}
+			}
+			if(_x<=0){
+				a=false;
+			}
+		}else{
+			_x+=c;
+			if(b){
+				_y-=c;
+				if(_y<=0){
+					b=false;
+				}
+			}else{
+				_y+=c;
+				if(_y+_height>=Stage.height){
+					b=true;
+				}
+			}
+			if(_x+_width>=Stage.width){
+				a=true;
+			}
+		}
+	}
+	// Handlers
+	function onClick(){
+		trace('Button clicked!');
+	}
+	function onOver(){
+		_alpha= 80;
+	}
+	function onOut(){
+		_alpha= 100;
+	}
+	function new(){//3 f
+		// Simple visual so you can see it
+		beginFill(0x3399FF);
+		lineTo(120, 0);lineTo(120, 80);lineTo(0, 80);
+		endFill();//3 _
+
+		// a 1/5 margin
+		createTextField('label',1,0,16, 120, 48);
+		label.text = 'Click';
+		label.selectable = false;
+
+		// a 2/3 size format
+		var tf = new TextFormat();
+		tf.size = 32;
+		tf.align ='center';
+		tf.color = 0xff9933;
+		label.setTextFormat(tf);
+
+		// Interactivity
+		useHandCursor= true;//3 bm
+		onRollOver = onOver;
+		onRollOut = onOut;
+		onPress = onClick;
+
+		//3d label
+
+		onEnterFrame = on_Enter_Frame;
+	}
+	//3x
+	var c=%u;
+	var a=false;var b=false;
+//3}
+new();
+",2)
+sd sprite;set sprite swf_sprite_done(presprite)
+call swf_exports_add(sprite,"MyClip")
+
+sd img
+set img swf_jpeg("../a.jpg")
+call swf_exports_add(img,"My_BitmapData")
+
+call action("/*3
+m ../a.jpg My_BitmapData
+c no dbl at haxe but still can do @:bitmap('a.jpg', 'mask.png') for jpeg+alphaChannel, more at tmp
+
+a Main
+	x*/
+	function main(){
+		//3g
+
+		var texture=flash.display.BitmapData.loadBitmap('My_BitmapData');
+		createEmptyMovieClip('text',getNextHighestDepth());
+		var matrix=new flash.geom.Matrix();
+		text.beginBitmapFill(texture,matrix,true);
+		text.lineTo(120, 0);text.lineTo(120, 80);text.lineTo(0, 80);
+		text.endFill();
+		//3d text stage
+
+		attachMovie('MyClip','shape',getNextHighestDepth());
+		shape._x = (Stage.width - 100) / 2;
+		shape._y = (Stage.height - 100) / 2;
+		//3d shape @
+
+		//3n
+		Loader();
+	}
+//3}
+function Loader(){//3f
+trace('the loader is working');
+}
+//3}
+
+/*more tests
+//3i a.b.c
+//3f s
+//3f p
+//3v shape Shape
+
+useHandCursor=_x;//3 b+s
+function ()()//3 e+e
+function dollar$_isok_at_as2(){//3 f+e
+_leftPart='type';//3 j+s
+begin(a);_x//3 l q+s
+var texture=flash.display.BitmapData._loadBitmap('My_BitmapData');//3 m+s
+onEnterFrame=_fune;//3 o+s
+_alpha=_x;//3 h+s
+line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
+_x()//3 s+e
+_y()//3 s_+e
+create('q',n,_x,_y,_width,_height);//3 t+s
+attach('q','_p',d);//3 v+s
+_qty//3z wer ty+s
+
+useHandCursor=x;//3
+()//3
+function new//3
+a= 'q'//3
+onEnterFrame=q;//3
+_alpha=x;//3
+_x//3
+createTextField('label',1,0,16, 120, 48);//3
+att('name','q',getNextHighest);//3
+='type';//3
+*/
+main();
+")
+
+call swf_done()
+
+call exit(0)

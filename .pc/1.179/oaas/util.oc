@@ -1,0 +1,287 @@
+
+format elfobj64
+
+^import "platform_stdout" platform_stdout
+
+einclude "oaas.h" "oaas.oh"
+
+#multithread unsafe
+valueu translations=0
+valueu alltranslations=0
+char verbose_bool=FALSE
+
+importx "fputs" fputs
+importx "memcpy" memcpy
+importx "printf" printf
+importx "puts" puts
+importx "snprintf" snprintf
+importx "strlen" strlen
+importx "strstr" strstr
+
+function anyafter(ss a,ss ?x)
+	ss b;set b a
+	whiletrue
+		if a#=x
+			inc a
+			return a
+		end
+		if a#=(Nullchar)
+			return b
+		end
+		inc a
+	end
+end
+function anyon(ss a,ss ?x)
+	ss b;set b a
+	whiletrue
+		if a#=x
+			return a
+		end
+		if a#=(Nullchar)
+			return b
+		end
+		inc a
+	end
+end
+
+function spcfull(ss a)
+	whiletrue
+		if a#=(HorizontalTab)
+			inc a
+		elseif a#=(Space)
+			inc a
+		else
+			return a
+		end
+	end
+end
+function spcfullafters(ss a)
+	#set c# spcfull(c#) #this is here because when stopping at first char is same as when stopping at nullchar
+	#	and that is telling, for example, at class, to write first arg and ignore second arg
+	#ss a;set a c#
+	ss b;set b a
+	whiletrue
+		if a#=(Nullchar)
+			return b
+		end
+		inc a
+		if a#=(Space)
+			return a
+		end
+		if a#=(HorizontalTab)
+			return a
+		end
+	end
+end
+function spcfullback(ss start,ss right)
+	ss left
+	set left right
+	whiletrue
+		dec left
+		if left#=(Space)
+			inc left
+			return left
+		end
+		if left#=(HorizontalTab)
+			inc left
+			return left
+		end
+		if left=start
+			return left
+		end
+	end
+end
+
+function commaafter(ss a)
+	callret anyafter(a,(Comma))
+end
+function commaon(ss a)
+	callret anyon(a,(Comma))
+end
+function dotbackafter(ss start,ss right)
+	ss left
+	set left right
+	whiletrue
+		dec left
+		if left#=(Period)
+			inc left
+			return left
+		end
+		if left=start
+			return right
+		end
+	end
+end
+function equalafter(ss a)
+	callret anyafter(a,(Equals))
+end
+function equalon(ss a)
+	callret anyon(a,(Equals))
+end
+function pareoafter(ss a)
+	callret anyafter(a,(Openparenthesis))
+end
+function pareoon(ss a)
+	callret anyon(a,(Openparenthesis))
+end
+function parecafter(ss a)
+	callret anyafter(a,(Closeparenthesis))
+end
+function parecon(ss a)
+	callret anyon(a,(Closeparenthesis))
+end
+function pluson(ss a)
+	callret anyon(a,(switch_char))
+end
+function quotafter(ss a)
+	callret anyafter(a,(Singlequote))
+end
+function quoton(ss a)
+	callret anyon(a,(Singlequote))
+end
+#function semicolafter(ss a)
+#	callret anyafter(a,(Semicolon))
+#end
+function semicolon(ss a)
+	callret anyon(a,(Semicolon))
+end
+
+function to_upper(ss s,ss end)
+	while s!=end
+		sub s# (a_low-A)
+		inc s
+	end
+end
+
+function strip(ss src,ss dest,sd ?out_size)
+	ss start;set start src
+	ss start_dest;set start_dest dest
+	ss end_dest;set end_dest dest;add end_dest out_size
+	whiletrue
+		if src#=(Nullchar)
+			set dest# (Nullchar)
+			sub src start
+			sub dest start_dest
+			if src!=dest
+				return start_dest
+			end
+			return start
+		end
+		if src#!=(usc_pref)
+			set dest# src#
+			inc dest
+			if dest=end_dest
+				return start
+			end
+		end
+		inc src
+	end
+end
+function replace(ss string,ss from,ss to,ss out,sd ?out_size) #only for C: keeping it int because to not wrong it by passing an int in int64
+	ss src;set src string
+	ss dst;set dst out
+	svu ?slen;set slen strlen(from)
+	svu ?dlen;set dlen strlen(to)
+	whiletrue
+		ss pos
+		set pos strstr(src,from)
+		if pos=(NULL)
+			if dst!=out
+				sd ?n;set n snprintf(dst,out_size,"%s",src)
+				if n>=0
+					if n<^out_size
+						return out
+					end
+				end
+			end
+			return string
+		end
+		sub pos src
+		if pos<^out_size
+			call memcpy(dst,src,pos)
+			add src pos
+			add dst pos
+			sub out_size pos
+			if dlen<^out_size
+				call memcpy(dst,to,dlen)
+				add src slen
+				add dst dlen
+				sub out_size dlen
+				continue
+			end
+		end
+		return string
+	end
+end
+
+function print_stdout(ss a)
+	sv ?so
+	set so platform_stdout()
+	call fputs(a,so)
+end
+function translated_ratio(ss ?print)
+	svu ?n
+	if globalu.alltranslations=0
+		set n 0
+	else
+		set n 100
+		mult n globalu.translations
+		divu n globalu.alltranslations
+	end
+	if print=(TRUE)
+		call printf("%u%%",n)
+	end
+	return n
+end
+function untranslated(ss oa)
+	inc globalu.alltranslations
+	call translated_ratio((TRUE))
+	call printf(". Untranslated: %s\n",oa)
+end
+function translated(ss s)
+	inc globalu.translations
+	inc globalu.alltranslations
+	if globalu.verbose_bool!=(FALSE)
+		call puts(s)
+	end
+end
+function verbosep()
+	return #globalu.verbose_bool
+end
+function verbosev()
+	return globalu.verbose_bool
+end
+
+function object_make(ss indents,ss name,ss end,ss class,sv pbuffer,sd ?size)
+	set end# (Nullchar)
+	sd ?len;set len snprintf(pbuffer#,size,"%svar %s=new %s();",indents,name,class)
+	if len>0
+		if len<size
+			add pbuffer# len
+			sub size len
+			return size
+		end
+	end
+	return 0
+end
+function object_com(ss name,ss prop,ss value,ss end,sv pbuffer,sd ?size)
+	if value#=(_0)
+		inc value
+		if value=end
+			return size
+		end
+		dec value
+	end
+	set end# (Nullchar)
+	sd ?len;set len snprintf(pbuffer#,size,"%s.%s=%s;",name,prop,value)
+	if len>0
+		if len<size
+			add pbuffer# len
+			sub size len
+			return size
+		end
+	end
+	return 0
+end
+
+entryraw globalu()

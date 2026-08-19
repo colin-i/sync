@@ -1,0 +1,27 @@
+
+format elfobj64
+
+importx "_exit" exit
+
+override include_sec 1
+einclude "../../../dev/import.oh"
+
+entry main()
+
+call swf_new_ex("a.swf",550,400,0xffFFff,12,(flag_format))
+
+sd presprite;set presprite swf_sprite_new()
+char buf#3000
+call actionf_sprite(presprite,#buf,"|||orig/MyClip/clip.as|||",2)
+sd sprite;set sprite swf_sprite_done(presprite)
+call swf_exports_add(sprite,"MyClip")
+
+sd img
+set img swf_jpeg("../a.jpg")
+call swf_exports_add(img,"My_BitmapData")
+
+call action("|||orig/Main/root.as|||")
+
+call swf_done()
+
+call exit(0)

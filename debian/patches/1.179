@@ -1,0 +1,3788 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: aug, 19 2026 06:51:03 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -38,10 +38,12 @@ clean:
+ install:
+ 	install -D oaalternative.sh $(DESTDIR)$(prefix)/bin/oaalternative.sh
+ 	install -D oaalternative.py $(DESTDIR)$(prefix)/bin/oaalternative.py
++	install -D oaalternativer.py $(DESTDIR)$(prefix)/bin/oaalternativer.py
+ 	install -D oaas3 $(DESTDIR)$(prefix)/bin/oaas3
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.sh
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.py
++	-rm -f $(DESTDIR)$(prefix)/bin/oaalternativer.py
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaas3
+ 
+ .PHONY: $(TOPTARGETS) $(MEDTARGETS) $(ALLDIRS)
+--- actionswf-1.orig/cln
++++ actionswf-1/cln
+@@ -1,5 +1,5 @@
+ 
+-cd example && make clean && cd ../csrc && make clean && cd .. && make clean && \
++cd example && make clean && cd ../csrc && make clean && cd .. && make clean && platform=win make clean && \
+ #if [ -n "${general}" ]; then
+ #	cd tests/as3 && ./cf
+ #fi &&
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -27,6 +27,7 @@ cd ../oaas && \
+ cd .. && \
+ cp oaalternative.sh actionswf && \
+ cp oaalternative.py actionswf && \
++cp oaalternativer.py actionswf && \
+ cp oaas3 actionswf/oaas3.py && \
+ cp oaalternative.cmd actionswf && \
+ zip -r actionswf.zip actionswf && \
+--- actionswf-1.orig/oaalternative.py
++++ actionswf-1/oaalternative.py
+@@ -1,159 +1,100 @@
+ #!/usr/bin/python3
+ 
+-default_tab=3
+-
+-import sys
+-if len(sys.argv)!=2: exit(1)
+ import os
+-verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
++import re
++import sys
++
++def transform_do_while(lines):
++	verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
++	while_re = re.compile(r'^([\t ]*)while\s*\((.*)\)\s*;\s*$')
++	tabs=3*' '
++
++	i = 0
++	while i < len(lines):
++		m = while_re.match(lines[i])
++		if not m:
++			i += 1
++			continue
++
++		indent = m.group(1)
++		condition = m.group(2).strip()
++		while_line = i
++
++		# Find matching do by walking backwards and tracking braces
++		level = 0
++		do_line = None
++		j = while_line - 1
++		while j >= 0:
++			line = lines[j]
++			level += line.count('}')
++			level -= line.count('{')
++
++			if level == 0 and re.match(r'^\s*do\b', line):
++				do_line = j
++				break
++			j -= 1
++
++		if do_line is None:
++			i += 1
++			continue
++
++		# Find opening brace after do
++		open_brace_line = do_line
++		while open_brace_line < while_line and '{' not in lines[open_brace_line]:
++			open_brace_line += 1
++
++		if open_brace_line == while_line:
++			i += 1
++			continue
++
++		# Find matching closing brace
++		brace_level = 0
++		close_brace_line = None
++		j = open_brace_line
++		while j < while_line:
++			brace_level += lines[j].count('{')
++			brace_level -= lines[j].count('}')
++			if brace_level == 0:
++				close_brace_line = j
++				break
++			j += 1
++
++		if close_brace_line is None:
++			i += 1
++			continue
++
++		# Extract body between braces
++		body_lines = lines[open_brace_line + 1:close_brace_line]
++
++		replacement = []
++		replacement.append(f"{indent}while(true){{\n")
++		replacement.extend(body_lines)
++		replacement.append(f"{indent}{tabs}if({condition})continue;\n")
++		replacement.append(f"{indent}{tabs}break;\n")
++		replacement.append(f"{indent}}}\n")
++
++		# Replace from do line through while line
++		lines[do_line:while_line + 1] = replacement
++
++		i = do_line + len(replacement)
++
++		if verbose:
++			print(while_line)
++
++	return lines
++
++def main():
++	if len(sys.argv) != 2:
++		print("no input file")
++		sys.exit(1)
++
++	with open(sys.argv[1], "r", encoding="utf-8") as f:
++		lines = f.readlines()
+ 
+-def ind_match(indt,b):
+-	global n,ps
+-	n=pos
+-	while True:
+-		while True:
+-			n-=1
+-			if n<0: exit(1)
+-			if data[n]=='\n': break
+-		ps=n+1
+-		while data[ps]==' ': ps+=1
+-		a=ps-n
+-		if a==indt: break
+-		if b:
+-			if a<indt: exit(1)
+-		elif a>indt: exit(1)
+-
+-with open(sys.argv[1], encoding='utf-8') as f:
+-	data=f.read()  #\r\n is translated to \n also at windows msys2, else data=data.replace('\r','')
+-	if data: # := only from 3.8
+-		start=0
+-		goto='§§goto(addr'
+-		while True:
+-			pos=data.find(goto,start)
+-			if pos==-1: break
+-			start=pos
+-
+-			while True:
+-				if pos==0: exit(1)
+-				pos-=1
+-				if data[pos]!=' ':
+-					break
+-			ind=start-pos
+-			if pos<1: exit(1)
+-			if data[pos]!='\n': exit(1)
+-			pos-=1
+-
+-			start+=len(goto)
+-			if data[pos]!='}':
+-				#allow other goto constructions
+-				continue
+-				#exit(1)
+-
+-			pos-=ind
+-			if pos<0: exit(1)
+-			if data[pos]!='\n': exit(1)
+-
+-			ind_match(ind,True)
+-			if data[ps]!='{': exit(1)
+-			spos=n-1
+-			while data[spos]!='\n':
+-				spos-=1
+-				if spos<0: break                            #spos is A
+-
+-			addr='addr'+data[start:start+4]+':'
+-			if verbose:
+-				print(addr)
+-			start+=4
+-			if data[start:start+3]!=');\n': exit(1)
+-			start+=3                                          #start is D
+-
+-			bpos=data.find(addr,ps,pos)
+-			if bpos==-1: exit(1)
+-			apos=bpos-1
+-			while data[apos]!='\n': apos-=1
+-			ind2=bpos-apos
+-			ind3=ind2-default_tab
+-			ind_match(ind3,False)
+-
+-			bpos+=len(addr)
+-			if data[bpos]!='\n': exit(1)
+-			mark=bpos                                         #mark is B
+-			while True: #here is expecting a lower ind
+-				cpos=bpos+1
+-				while data[cpos]==' ': cpos+=1
+-				indt=cpos-bpos
+-				if indt==ind3: break
+-				if indt<ind3: exit(1)
+-				bpos=cpos+1
+-				while data[bpos]!='\n': bpos+=1             #bpos is BB
+-
+-			apos-=1
+-			if data[apos]!='{': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			apos-=4
+-			if data[apos:apos+4]!='else': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			apos-=1
+-			if data[apos]!='}': exit(1)
+-			apos-=ind3
+-			if data[apos]!='\n': exit(1)
+-			if apos<spos: exit(1)                             #apos is AA
+-
+-			if data[cpos]!='}': exit(1)
+-			cpos+=1
+-			if data[cpos]!='\n': exit(1)                      #cpos is C
+-
+-			if data[ps:ps+8]!='return;\n':
+-				while data[ps]!='\n': ps+=1
+-				n=ps                                        #n is CC
+-
+-			# before modifications, ind<ind3<ind2 , default_tab between ind3 ind2
+-			ind-=1;ind3-=1;ind2-=1
+-			inddif2=ind3-ind      #for C rows
+-			ind3=ind+default_tab  #still can fit in ind2, B rows can be truncated
+-			inddif=ind2-ind3
+-			ind2+=default_tab     #for highest break
+-			maxind=' '*ind2       #same, and can go for rest of inds
+-			text=data[0:spos+1]
+-			text+=maxind[0:ind]+'while(true){\n'
+-
+-			while spos!=apos:                                 #A-AA
+-				text+=maxind[0:default_tab]
+-				spos+=1
+-				a=spos
+-				while data[a]!='\n': a+=1
+-				text+=data[spos:a+1]
+-				spos=a
+-			text+=maxind[0:ind2]+'break;\n'
+-
+-			while ind3<ind2: #multiple of default_tab is not checked
+-				ind2-=default_tab
+-				text+=maxind[0:ind2]+'}\n'
+-
+-			while mark!=bpos:                                 #B-BB
+-				mark+=1+inddif
+-				a=mark
+-				while data[a]!='\n': a+=1
+-				text+=data[mark:a+1]
+-				mark=a
+-			text+=maxind[0:ind3]+'break;\n'
+-			text+=maxind[0:ind]+'}\n'
+-
+-			while cpos!=n:                                    #C-CC
+-				cpos+=1+inddif2
+-				a=cpos
+-				while data[a]!='\n': a+=1
+-				text+=data[cpos:a+1]
+-				cpos=a
+-
+-			a=len(text)
+-			text+=data[start:]
+-			data=text
+-			start=a
++	new_lines = transform_do_while(lines)
+ 
+-with open(sys.argv[1],"w",encoding='utf-8') as f:
+-	f.write(data)
++	with open(sys.argv[1], "w", encoding="utf-8") as f:
++		f.writelines(new_lines)
+ 
+-exit(0)
++if __name__ == "__main__":
++	main()
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -4,6 +4,7 @@
+ #is_debug no_clean
+ #skip_ffdec ffdec
+ #skip_alternative no_number_check scripts skip_deobfuscation expect_obfuscation deobfuscator_launcher
++#ld_preload
+ 
+ if [ -z "${1}" ]; then echo file path required; exit 1; fi
+ 
+@@ -47,6 +48,11 @@ fi
+ if [ -z "${skip_alternative}" ]; then
+ 	if [ -z "${skip_deobfuscation}" ]; then # at readlink -f, all but the last component must exist
+ 		deobfuscator=$(readlink -f "$(dirname "$0")"/oaalternative.py) #.py? to keep the compatibility with windows, else was oaalternativedeobf
++		#case "$deobfuscator" in
++		#	*.*) deobfuscator_t="${deobfuscator%.*}r.${deobfuscator##*.}" ;;
++		#	*)   deobfuscator_t="${deobfuscator}r" ;;
++		#esac
++		deobfuscator_t="${deobfuscator%.py}r.py"
+ 	fi
+ 
+ 	mkdir -p "${out}" || exit 1
+@@ -61,8 +67,10 @@ if [ -z "${skip_alternative}" ]; then
+ 		fi
+ 		if [ -z "${skip_deobfuscation}" ]; then
+ 			if [ -z "${deobfuscator_launcher}" ]; then #executable mode will not be represented in diff, but will be install -m0755 for /usr/bin
++				"${deobfuscator_t}" $2 || exit 1
+ 				a=`"${deobfuscator}" $2` || exit 1
+ 			else #anyway deb test still need
++				"${deobfuscator_launcher}" "${deobfuscator_t}" $2 || exit 1
+ 				a=`"${deobfuscator_launcher}" "${deobfuscator}" $2` || exit 1
+ 			fi
+ 			if [ -n "$a" ]; then
+@@ -70,7 +78,7 @@ if [ -z "${skip_alternative}" ]; then
+ 					echo $a
+ 				fi
+ 				if [ -n "${expect_obfuscation}" ]; then
+-					touch "${expect_obfuscation}" #same reson like in doaction for not using a variable
++					echo "$a" >> "${expect_obfuscation}" #same reson like in doaction for not using a variable
+ 				fi
+ 			fi
+ 		fi
+@@ -248,7 +256,7 @@ if [ -z "${skip_alternative}" ]; then
+ 		if [ ! -e "${expect_obfuscation}" ]; then
+ 			exit 1
+ 		fi
+-		rm "${expect_obfuscation}"
++		#rm "${expect_obfuscation}"
+ 	fi
+ fi
+ #part 2
+@@ -256,7 +264,7 @@ if [ -n "${2}" ]; then
+ 	set -e #at alternative there are return 1 returns
+ 	mv ${v} "${bname}" "${bname}".orig
+ 	cd "${at_start}"
+-	${2} || {
++	LD_PRELOAD=${ld_preload} ${2} || {
+ 		cd "${dname}"
+ 		if [ ! -e "${bname}" ]; then
+ 			mv ${v} "${bname}".orig "${bname}"
+--- /dev/null
++++ actionswf-1/oaalternativer.py
+@@ -0,0 +1,271 @@
++#!/usr/bin/python3
++
++"""
++oaalternativer.py
++
++Generic text-manipulation helpers for editing JS-like function bodies embedded
++in a larger text blob. Built to do the following, for any function found by name:
++
++	1. Locate the function's `while( ... ) { ... }` block.
++	2. Inside that block, replace first `break;` with whatever code follows the
++		while-block (i.e. "what is outside the while code block").
++	3. Inside that block, find the first `if(!...) { ... }` block and:
++		- replace its body with `continue;`
++		- move the original body to right after the if-block's closing brace
++		 (so `if(!x){ return false; }` becomes `if(!x){ continue; } return false;`)
++
++Works via brace/paren matching rather than fixed-format regex, so it isn't
++tied to the exact spacing/indentation of the example.
++"""
++
++import os
++import re
++import sys
++
++
++def find_matching_brace(text, open_index):
++	"""Given the index of a '{' return the index of its matching '}'."""
++	depth = 0
++	for i in range(open_index, len(text)):
++		if text[i] == '{':
++			depth += 1
++		elif text[i] == '}':
++			depth -= 1
++			if depth == 0:
++				return i
++	raise ValueError("No matching '}' found")
++
++
++def find_matching_paren(text, open_index):
++	"""Given the index of a '(' return the index of its matching ')'."""
++	depth = 0
++	for i in range(open_index, len(text)):
++		if text[i] == '(':
++			depth += 1
++		elif text[i] == ')':
++			depth -= 1
++			if depth == 0:
++				return i
++	raise ValueError("No matching ')' found")
++
++
++def extract_function(text, func_name):
++	"""Return (start, end) span of `function func_name(...) { ... }` including braces."""
++	pattern = re.compile(r'function\s+' + re.escape(func_name) + r'\s*\([^)]*\)\s*\{')
++	m = pattern.search(text)
++	if not m:
++		raise ValueError(f"Function '{func_name}' not found")
++	brace_open = m.end() - 1
++	brace_close = find_matching_brace(text, brace_open)
++	return m.start(), brace_close + 1
++
++
++def extract_while_block(func_text):
++	"""Locate the first while(...) { ... } inside func_text."""
++	m = re.search(r'while\s*\(', func_text)
++	if not m:
++		raise ValueError("No while(...) block found")
++	paren_open = m.end() - 1
++	paren_close = find_matching_paren(func_text, paren_open)
++	brace_open = func_text.index('{', paren_close)
++	brace_close = find_matching_brace(func_text, brace_open)
++	return {
++		'while_start': m.start(),
++		'brace_open': brace_open,
++		'brace_close': brace_close,
++	}
++
++
++def replace_break_with_after_text(func_text, while_info):
++	"""Replace first 'break;' inside the while block with the code that
++	follows the while block (i.e. what's 'outside' it, up to the function's
++	closing brace) -- and MOVE that code (remove it from its original spot)
++	rather than just copying it."""
++	block_start = while_info['brace_open']
++	block_end = while_info['brace_close']
++	inner = func_text[block_start + 1:block_end]
++
++	tail_start = block_end + 1
++	tail = func_text[tail_start:]
++	last_brace_idx = tail.rindex('}')  # function's own closing brace
++	after_while_raw = tail[:last_brace_idx]
++	after_while = after_while_raw.strip()
++
++	# 1) copy the "outside" text into first break;
++	if not inner.count("break;"):
++		raise ValueError("No break; statement found")
++	inner_new = inner.replace('break;', after_while, 1)
++
++	# 2) move it: remove the original text from after the while block,
++	#    keeping just the function's closing brace on its own line
++	new_tail = '\n' + tail[last_brace_idx:]
++
++	new_func_text = (
++		func_text[:block_start + 1] + inner_new + func_text[block_end:tail_start]
++		+ new_tail
++	)
++	return new_func_text
++
++
++def find_if_not_block(text):
++	"""Find the first `if(!...) { ... }` block. Returns the exclamation
++	mark's index too, so it can be stripped."""
++	m = re.search(r'if\s*\(\s*!', text)
++	if not m:
++		raise ValueError("No if(!...) block found")
++	exclaim_index = text.index('!', m.start())
++	paren_open = text.index('(', m.start())
++	paren_close = find_matching_paren(text, paren_open)
++	brace_open = text.index('{', paren_close)
++	brace_close = find_matching_brace(text, brace_open)
++	return {
++		'exclaim_index': exclaim_index,
++		'brace_open': brace_open,
++		'brace_close': brace_close,
++	}
++
++
++def convert_if_block_to_continue(text, indent='      '):
++	"""
++	Turn:
++		if(!x) { <body> }
++	into:
++		if(x) { continue; } <body>
++	(drops the '!' and moves <body> to right after the block)
++	"""
++	info = find_if_not_block(text)
++	exclaim_index = info['exclaim_index']
++	brace_open = info['brace_open']
++	brace_close = info['brace_close']
++	body = text[brace_open + 1:brace_close].strip()
++
++	new_text = (
++		text[:exclaim_index]                          # up to (not including) '!'
++		+ text[exclaim_index + 1:brace_open + 1]       # rest of condition + '{'
++		+ f'\n{indent}   continue;\n{indent}'
++		+ text[brace_close:brace_close + 1]            # the '}'
++		+ f'\n{indent}' + body
++		+ text[brace_close + 1:]
++	)
++	return new_text
++
++
++def transform_function(source, func_name, do_break=True, do_not=True):
++	"""Apply the requested transformation(s) to `func_name` inside `source`
++	text and return the new full source text.
++
++	do_break -- apply the 'b' transform: break; -> moved outside-the-while code
++	do_not   -- apply the '!' transform: if(!x){body} -> if(x){continue;} body
++	"""
++	start, end = extract_function(source, func_name)
++	func_text = source[start:end]
++
++	if do_break:
++		while_info = extract_while_block(func_text)
++		func_text = replace_break_with_after_text(func_text, while_info)
++
++	if do_not:
++		while_info = extract_while_block(func_text)  # re-locate (text may have changed)
++		while_block_text = func_text[while_info['brace_open']:while_info['brace_close'] + 1]
++		new_while_block_text = convert_if_block_to_continue(while_block_text)
++		func_text = (
++			func_text[:while_info['brace_open']]
++			+ new_while_block_text
++			+ func_text[while_info['brace_close'] + 1:]
++		)
++
++	return source[:start] + func_text + source[end:]
++
++
++def resolve_control_file(target_path, dbg_marker='.dbg'):
++	"""
++	Given the target source-file path like '../a.dbg/0_1' or '../a.dbg/4'
++	(this is the file that CONTAINS the JS-like text/functions to edit),
++	find the '.dbg' marker in the path and split it into:
++		base   = '../a'          (everything before '.dbg')
++		suffix = '0_1'  or '4'   (everything after '.dbg/')
++	and return (base, suffix, control_file) where
++	control_file = f'{base}.{suffix}' (e.g. '../a.0_1' or '../a.4') --
++	this is the file holding the transform instructions, e.g. 'easy_stop b !'.
++	"""
++	idx = target_path.find(dbg_marker)
++	if idx == -1:
++		raise ValueError(f"'{dbg_marker}' not found in path: {target_path}")
++
++	base = target_path[:idx]
++	remainder = target_path[idx + len(dbg_marker):]
++	suffix = remainder.lstrip('/\\')
++	if not suffix:
++		raise ValueError(f"No suffix found after '{dbg_marker}/' in: {target_path}")
++
++	control_file = f"{base}.{suffix}"
++	return base, suffix, control_file
++
++
++def parse_control_line(line):
++	"""
++	Parse a control-file line like:
++		easy_stop b !
++		easy_stop b
++		easy_stop !
++	Returns (func_name, do_break, do_not).
++	"""
++	tokens = line.split()
++	func_name = tokens[0]
++	flags = set(tokens[1:])
++	do_break = 'b' in flags
++	do_not = '!' in flags
++	return func_name, do_break, do_not
++
++
++def run(target_path):
++	"""Full CLI flow: target_path (sys.argv[1], e.g. '../a.dbg/0_1') is the
++	file holding the JS-like text/functions to transform. Its '.dbg' marker
++	is used to derive the control file (e.g. '../a.0_1') which holds lines
++	like 'easy_stop b !' describing what to do to which function. Applies
++	the requested transform(s) to each named function and writes the result
++	back to target_path in place."""
++	base, suffix, control_file = resolve_control_file(target_path)
++
++	if not os.path.isfile(control_file):
++		return
++
++	global verbose
++	verbose=os.environ.get("is_debug")
++
++	if not os.path.isfile(target_path):
++		raise FileNotFoundError(f"Target file not found: {target_path}")
++
++	with open(control_file) as f:
++		control_lines = [ln.strip() for ln in f if ln.strip()]
++
++	with open(target_path) as f:
++		source = f.read()
++
++	for line in control_lines:
++		func_name, do_break, do_not = parse_control_line(line)
++		if not do_break and not do_not:
++			error(f"Error: no 'b' or '!' flag on line '{line}'")
++		try:
++			source = transform_function(source, func_name, do_break=do_break, do_not=do_not)
++			info(f"Transformed '{func_name}' (b={do_break}, !={do_not})")
++		except ValueError as e:
++			error(f"Error: '{func_name}': {e}")
++
++	with open(target_path, 'w') as f:
++		f.write(source)
++
++	info(f"Updated: {target_path}")
++
++def info(a):
++	if verbose:
++		print(a)
++def error(a):
++	print(a)
++	sys.exit(1)
++
++if __name__ == '__main__':
++	if len(sys.argv) < 2:
++		error("no input file")
++
++	run(sys.argv[1])
+--- actionswf-1.orig/oaas.html
++++ actionswf-1/oaas.html
+@@ -37,10 +37,11 @@
+ <p class="blue">Left/Right strings</p>
+ <p class="yellow">Tested</p>
+ <p class="green">[] is optional . details</p>
+-<p>Link with '+' (//3 s+b or /*3h+s*/). Resolve later with '_'. Ignore with '!'.</p>
++<p>Link with '+' (//3 s+b or /*3h+s*/). Resolve later with '_'. Ignore with '!'. Dual mode is '^'.</p>
+ <table>
+ 	<tr><td rowspan=2>a</td>             <td class="red">className</td><td class="com">class <span class="red">className</span>{</td></tr>
+ 	<tr>                                 <td class="red"><table><tr><td>className</td><td>extendName</td></tr></table></td><td class="com">class <span class="red">className</span> extends <span class="red">extendName</span>{</td></tr>
++	<tr><td class="blue" colspan=2>a</td><td class="com"><span class="blue">var a</span>=[<span class="blue">1,2,3</span>]<span class="blue">;</span></td><td class="com"><span class="blue">var a</span><span class="yellow">=new Array(</span><span class="blue">1,2,3</span><span class="yellow">)</span><span class="blue">;</span></td></tr>
+ 	<tr><td class="blue" rowspan=2>b</td><td></td><td class="com">buttonMode=<span class="blue">value;</span></td><td class="com"><span class="yellow">useHandCursor=</span><span class="blue">value;</span></td></tr>
+ 	<tr>                                 <td>m</td><td class="com">same plus <span class="blue">mouseChildren=false;</span></td></tr>
+ 	<tr><td>c</td>                       <td class="red">comment</td><td class="com">//<span class="red">comment</span></td></tr>
+@@ -53,34 +54,44 @@
+ 	<tr><td class="blue" colspan=2 rowspan=2>f</td><td class="com">public <span class="blue">function new(){</span>super();</td></tr>
+ 	<tr>                                           <td class="com">class <span class="blue">Loader</span>{public <span class="blue">function</span> new<span class="blue">(){</span></td><td class="com"><span class="blue">function Loader(){</span></td></tr>
+ 	<tr><td colspan=2>g</td>             <td class="com">var stage=flash.Lib.current.stage;</td></tr>
++	<tr><td class="blue">g</td>          <td class="red">className</td><td class="com"><span class="blue">var a</span>:<span class="red">className</span><span class="green">[</span>&lt;Dynamic&gt;<span class="green">]</span><span class="blue">;</span></td></tr>
+ 	<tr><td class="blue" colspan=2>h</td><td class="com"><span class="blue">alpha=value</span>/100;</td><td class="com">_<span class="blue">alpha=value</span><span class="yellow">;</span></td></tr>
+ 	<tr><td>i</td>                       <td class="red">importString</td><td class="com">import <span class="red">importString</span>;</td></tr>
+ 	<tr><td class="blue" colspan=2>j</td><td class="com"><span class="blue">leftPart=</span>flash.text.TextFormatAlign.<span class="blue">TYPE;</span></td><td class="com"><span class="blue">leftPart=</span><span class="yellow">'</span><span class="blue">type</span><span class="yellow">'</span><span class="blue">;</span></td></tr>
+-	<tr><td class="blue">l</td>          <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.<span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="red">name</span>.graphics.<span class="blue">endFill();</span></td><td class="com"><span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="blue">endFill();</span></td></tr>
++	<tr><td class="blue" colspan=2 rowspan=2>k</td><td class="com"><span class="blue">if(a</span>==0<span class="blue">)</span></td></tr>
++	<tr>                                           <td class="com"><span class="blue">if(a</span>!=0<span class="blue">)</span></td><td class="com"><span class="blue">if(<span class="yellow">!</span>a)</span></td></tr>
+ 	<tr><td class="blue" colspan=2>l</td><td class="com"><span class="green">[</span><span class="blue">name.</span><span class="green">]</span>graphics.<span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="green">[</span><span class="blue">name.</span><span class="green">]</span>graphics.<span class="blue">endFill();</span></td><td class="com"><span class="blue">name.begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="blue">name.endFill();</span></td></tr>
++	<tr><td class="blue">l</td>          <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.<span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="red">name</span>.graphics.<span class="blue">endFill();</span></td><td class="com"><span class="blue">begin<span class="green">[</span>Bitmap<span class="green">]</span>Fill(n<span class="green">[</span>,t,b<span class="green">]</span>);</span> <span class="green">or</span> <span class="blue">endFill();</span></td></tr>
+ 	<tr><td>m</td>                       <td class="red"><table><tr><td>path</td><td>class</td></tr></table></td><td class="com">@:bitmap('<span class="red">path</span>') class <span class="red">class</span> extends flash.display.BitmapData { }</td></tr>
+ 	<tr><td class="blue" colspan=2>m</td><td class="com">var <span class="blue">name</span>=new <span class="blue">class</span>(0,0);</td><td class="com"><span class="blue">var name</span><span class="yellow">=</span>flash.display.BitmapData.loadBitmap(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>);</td></tr>
+-	<tr><td colspan=2>n</td>             <td class="com">new</td></tr>
+-	<tr><td class="blue" colspan=2 rowspan=4>o</td><td class="com">addEventListener(flash.events.Event.ENTER_FRAME,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onEnterFrame=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr>                                           <td class="com">addEventListener(flash.events.MouseEvent.MOUSE_CLICK,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onPress=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr>                                           <td class="com">addEventListener(flash.events.MouseEvent.MOUSE_OVER,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onRollOver=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr>                                           <td class="com">addEventListener(flash.events.MouseEvent.MOUSE_OUT,<span class="blue">functionName</span>);</td><td class="com"><span class="yellow">onRollOut=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
+-	<tr><td class="blue">r</td>          <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.drawRect<span class="blue">(x,y</span>,<span class="blue">width,height)</span>;</td><td class="com">lineTo<span class="yellow">(</span><span class="blue">width</span><span class="yellow">,</span><span class="blue">y</span><span class="yellow">)</span>;lineTo(width<span class="blue">,height)</span>;lineTo<span class="blue">(x,</span>height)<span class="blue">;</span></td></tr>
++	<tr><td class="blue" colspan=2>n</td><td class="com">new <span class="blue">...</span></td></tr>
++	<tr><td class="blue" colspan=2 rowspan=4>o</td><td class="com"><span class="green">[</span><span class="blue">parent/stage.</span><span class="green">]</span>addEventListener(flash.events.Event.ENTER_FRAME,<span class="blue">functionName</span>);</td><td class="com"><span class="green">[</span><span class="blue">parent.</span><span class="green">]</span><span class="yellow">onEnterFrame=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr>                                           <td class="com">...addEventListener(flash.events.MouseEvent.MOUSE_CLICK,<span class="blue">functionName</span>);</td><td class="com">...<span class="yellow">onPress=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr>                                           <td class="com">...addEventListener(flash.events.MouseEvent.MOUSE_OVER,<span class="blue">functionName</span>);</td><td class="com">...<span class="yellow">onRollOver=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr>                                           <td class="com">...addEventListener(flash.events.MouseEvent.MOUSE_OUT,<span class="blue">functionName</span>);</td><td class="com">...<span class="yellow">onRollOut=</span><span class="blue">functionName</span><span class="yellow">;</span></td></tr>
++	<tr><td colspan=2>p</td>             <td class="com">public</td></tr>
++	<tr><td class="blue">p</td>          <td class="red">name</td><td class="com"><span class="blue">var a=new <span class="red">name</span>();</span></td><td class="com"><span class="blue">var a=new <span class="yellow">Object(</span>);</span></td></tr>
+ 	<tr><td class="blue" colspan=2>r</td><td class="com"><span class="green">[</span><span class="blue">name.</span><span class="green">]</span>...</td><td class="com">...</td></tr>
++	<tr><td class="blue">r</td>          <td class="red">name</td><td class="com"><span class="red">name</span>.graphics.drawRect<span class="blue">(x,y</span>,<span class="blue">width,height)</span>;</td><td class="com">lineTo<span class="yellow">(</span><span class="blue">width</span><span class="yellow">,</span><span class="blue">y</span><span class="yellow">)</span>;lineTo(width<span class="blue">,height)</span>;lineTo<span class="blue">(x,</span>height)<span class="blue">;</span></td></tr>
+ 	<tr><td class="blue" rowspan=4>s</td><td>_</td><td class="com">is removing all <span class="blue">_</span></td></tr>
+ 	<tr>                                 <td>w</td><td class="com">is replacing all <span class="blue">Stage.w</span> with <span class="blue">stage.stageW</span></td></tr>
+ 	<tr>                                 <td>h</td><td class="com">is replacing all <span class="blue">Stage.h</span> with <span class="blue">stage.stageH</span></td></tr>
+ 	<tr>                                 <td><span class="green">[</span>_wh<span class="green">]</span></td> <td class="com">any case or at least one</td></tr>
+ 	<tr><td class="blue" colspan=2>t</td><td class="com">var <span class="blue">label</span>=new flash.text.TextField();<span class="green">[</span><span class="blue">label</span>.x=<span class="blue">x</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.y=<span class="blue">y</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.width=<span class="blue">width</span>;<span class="green">]</span><span class="green">[</span><span class="blue">label</span>.height=<span class="blue">height</span>;<span class="green">]</span></td><td class="com">createTextField(<span class="yellow">'</span><span class="blue">label</span><span class="yellow">',</span>nr<span class="yellow">,</span><span class="blue">x</span><span class="yellow">,</span><span class="blue">y</span><span class="yellow">,</span><span class="blue">width</span><span class="yellow">,</span><span class="blue">height</span><span class="yellow">)</span>;</td></tr>
+-	<tr><td>v</td>                                 <td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com">var <span class="red">name</span>=new <span class="red">class</span>();</td></tr>
++	<tr><td>v</td><td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com">var <span class="red">name</span>=new <span class="red">class</span>();</td></tr>
++	<tr><td>w</td><td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com">var <span class="red">name</span>=new <span class="red">class</span>();<span class="red">name</span>.name='<span class="red">name</span>';</td></tr>
++	<tr><td class="blue" colspan=2 rowspan=2>v <span class="green">or</span> V</td>       <td class="com">var <span class="blue">name</span>=new <span class="blue">class</span>(<span class="blue">a</span>,<span class="blue">10</span>,<span class="blue">True</span>);<span class="green">[[</span><span class="blue">parent/stage.</span><span class="green">]</span>addChild(<span class="blue">name</span>);<span class="green">]</span></td><td class="com"><span class="green">[</span><span class="blue">parent.</span><span class="green">]</span>attachMovie(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>,<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth())<span class="yellow">;</span>this.a<span class="yellow">=</span><span class="blue">a</span><span class="yellow">;</span>this.b<span class="yellow">=</span><span class="blue">10</span><span class="yellow">;</span>this.c<span class="yellow">=</span><span class="blue">True</span><span class="yellow">;</span></td></tr>
++	<tr>                                                                                  <td class="com">var <span class="blue">name</span>=new flash.display.Shape();...</td><td class="com">...createEmptyMovieClip(<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
++	<tr><td class="blue">v<span class="green">or</span>V</td><td class="red">name</td>    <td class="com">var <span class="blue">name</span>=new <span class="red">name</span>();...</td><td class="com">...</td></tr>
++	<tr><td class="blue" colspan=2>w <span class="green">or</span> W</td>                 <td class="com">...</td><td class="com">...</td></tr>
++	<tr><td class="blue">w<span class="green">or</span>W</td><td class="red">name</td>    <td class="com">...<span class="red">name</span>.name=<span class="red">name</span><span class="blue">+extra+1</span>;</td><td class="com">...<span class="blue">+extra+1</span><span class="yellow">,</span>...</td></tr>
+ 	<tr><td colspan=2>x</td>             <td class="com">static</td></tr>
+-	<tr><td class="blue" colspan=2 rowspan=2>v</td>                                                                        <td class="com">var <span class="blue">name</span>=new <span class="blue">class</span>();</td><td class="com">attachMovie(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>,<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
+-	<tr>                                                                                                                   <td class="com">var <span class="blue">name</span>=new flash.display.Shape();</td><td class="com">createEmptyMovieClip(<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
+-	<tr><td class="blue">z</td>          <td class="red"><table><tr><td>p1</td><td>p2</td></tr></table></td><td class="com"><span class="blue">var a=new <span class="red">p1</span><span class="red">p2</span>()</span></td><td class="com"><span class="blue">var a=new <span class="red">p2</span>()</span></td></tr>
++	<tr><td class="blue">z</td>          <td class="red"><table><tr><td>p1</td><td>p2</td></tr></table></td><td class="com"><span class="blue">var a=new <span class="red">p1</span><span class="red">p2</span>();</span></td><td class="com"><span class="blue">var a=new <span class="red">p2</span>();</span></td></tr>
+ </table>
+ Other recognized notations:
+ <table>
+ 	<tr><td>}</td></tr>
+ </table>
++<p>At solver. 'V' or 'W' decision is based on ', '.</p>
+ </body>
+ </html>
+--- actionswf-1.orig/oaas/main.oc
++++ actionswf-1/oaas/main.oc
+@@ -7,8 +7,12 @@ import "print_stdout" print_stdout
+ ^import "translate_one" translate_one 2
+ ^import "translate_two" translate_two 2
+ import "translated_ratio" translated_ratio
++
++import "mainmod_boolset" mainmod_boolset
+ ^import "openfl" openfl #full
++
+ import "_postpone_char" _postpone_char
++^import "dual_mode" dual_mode
+ 
+ ^import "solver1" solver1 1
+ ^import "solver2" solver2 1
+@@ -16,6 +20,7 @@ import "_postpone_char" _postpone_char
+ ^import "solver7" solver7 2
+ ^import "solver" solver 2
+ import "_resolve" _resolve
++^import "_firstline" _firstline
+ 
+ einclude "oaas.h" "oaas.oh"
+ 
+@@ -46,20 +51,34 @@ functionx ratio(ss ?print)
+ 	end
+ end
+ 
+-functionx verbose(ss ?bol)
+-	ss p;set p verbosep()
+-	set p# bol
+-end
+ functionx flash_to_openfl(ss ?bol)
+ 	ss p;set p openfl()
+ 	set p# bol
+ end
++functionx mainmodule_boolset(ss ?b)
++	call mainmod_boolset(b)
++end
++functionx verbose(ss ?bol)
++	ss p;set p verbosep()
++	set p# bol
++end
++
+ functionx sep()
+ 	return (switch_char)
+ end
+ functionx postpone_char()
+ 	callret _postpone_char()
+ end
++functionx dualmode()
++	ss a;set a dual_mode()
++	ss ?b;set b a#
++	set a# (FALSE)
++	return b
++end
++functionx dualmode_reset()
++	ss a;set a dual_mode()
++	set a# (FALSE)
++end
+ 
+ functionx solve1(ss value)
+ 	ss s
+@@ -84,3 +103,9 @@ end
+ functionx resolve()
+ 	callret _resolve()
+ end
++functionx firstline()
++	ss a;set a _firstline()
++	ss ?b;set b a#
++	set a# (FALSE)
++	return b
++end
+--- actionswf-1.orig/oaas/mw
++++ actionswf-1/oaas/mw
+@@ -1,4 +1,4 @@
+ set -e
+-CC=x86_64-w64-mingw32-gcc platform=win make $@
++./mwa
+ cd ../tests/as3
+ ./aw $@
+--- /dev/null
++++ actionswf-1/oaas/mwa
+@@ -0,0 +1 @@
++CC=x86_64-w64-mingw32-gcc platform=win make $@
+--- actionswf-1.orig/oaas/oaas.oh
++++ actionswf-1/oaas/oaas.oh
+@@ -15,30 +15,39 @@ Const h_low=0x68
+ Const i_low=0x69
+ Const j_low=0x6A
+ Const m_low=0x6D
+-Const n_low=0x6E
++Const v_low=0x76
+ Const w_low=0x77
+ const func_char=f_low
++const nvar_char=w_low
++const var_char=v_low
+ 
+ #translate solve
+ Const Dollar=0x24
+ Const e_low=0x65
++Const k_low=0x6B
++Const n_low=0x6E
+ Const o_low=0x6F
+ Const p_low=0x70
+ Const r_low=0x72
+ Const t_low=0x74
+-Const v_low=0x76
+ const align_char=j_low
+ const alpha_char=h_low
++const arrconstr_char=a_low
+ const bitmap_char=m_low
++const compare_char=k_low
+ const evfunc_char=e_low
+ const fill_char=l_low
+ const ignore_pref=Exclamationmark
+ const insert_char=z_low
++const new_char=n_low
++const nVar_char=nvar_char-a_low+A
+ const onev_char=o_low
++const oreplace_char=p_low
+ const rect_char=r_low
+ const search_char=s_low
+ const text_char=t_low
+-const var_char=v_low
++const Var_char=var_char-a_low+A
++const vartype_char=g_low
+ 
+ #util solve
+ const usc_pref=_
+--- actionswf-1.orig/oaas/solve.oc
++++ actionswf-1/oaas/solve.oc
+@@ -1,15 +1,19 @@
+ 
+ format elfobj64
+ 
++einclude "oaas.h" "oaas.oh"
++
+ #multithread unsafe
+-charx outvalue#1+11+1+10+1 ;#zflash.text. TextFormat\0
+ char stored_char#1
++charx outvalue#1+11+1+10+1 ;#zflash.text. TextFormat\0
++#                            gDynamic
++char firstline=FALSE
+ 
++importx "strcmp" strcmp
+ importx "strncmp" strncmp
+ importx "printf" printf
+ importx "sprintf" sprintf
+-
+-einclude "oaas.h" "oaas.oh"
++importx "strstr" strstr
+ 
+ ^import "new_string_get" new_string_get 1
+ ^import "on_string_get" on_string_get 1
+@@ -17,11 +21,15 @@ einclude "oaas.h" "oaas.oh"
+ ^import "press_string_get" press_string_get 1
+ ^import "rollover_string_get" rollover_string_get 1
+ ^import "rollout_string_get" rollout_string_get 1
++import "var_advance" var_advance
+ import "verbosev" verbosev
+ 
+ function _resolve()
+ 	return globals.stored_char
+ end
++function _firstline()
++	return #globals.firstline
++end
+ 
+ function solver_end(ss value,ss ?small_size)
+ 	add value small_size
+@@ -49,27 +57,70 @@ function solver(ss value,ss s)
+ end
+ function solver1(ss value)
+ 	sd ?c
+-	char flashtext_string="flash.text."
+-	set c strncmp(value,#flashtext_string,\.flashtext_string-1)
++	char flash_string="flash."
++	set c strncmp(value,#flash_string,\.flash_string-1)
+ 	if c=0
+-		add value \.flashtext_string-1
+-		char textformat_string="TextFormat"
+-		set c strncmp(value,#textformat_string,\.textformat_string-1)
++		add value \.flash_string-1
++		char flashtext_string="text."
++		set c strncmp(value,#flashtext_string,\.flashtext_string-1)
++		if c=0
++			add value \.flashtext_string-1
++			char textformat_string="TextFormat"
++			set c strcmp(value,#textformat_string) #,\.textformat_string-1)
++			if c=0
++				call sprintf(#globals.outvalue,"%c%s%s %s",(insert_char),#flash_string,#flashtext_string,#textformat_string)
++				return #globals.outvalue ##after a strcmp. solver_end is not required
++			end
++		end
++		char object_string="utils.Object"^
++		set c strncmp(value,#object_string,\.object_string)
+ 		if c=0
+-			call sprintf(#globals.outvalue,"%c%s %s",(insert_char),#flashtext_string,#textformat_string)
+-			callret solver_end(value,\.textformat_string-1)
++			set globals.stored_char (oreplace_char)
++			callret solver_endb(value,\.object_string)
+ 		end
+ 	end
+ 	return (NULL)
+ end
+ function solver2(ss value)
+ 	sd ?c
++	char class_string="Class<"^
++	set c strncmp(value,#class_string,\.class_string)
++	if c=0
++		add value \.class_string
++		call var_advance(value,#value)
++		char cannotcall_string="> cannot be called"
++		set c strcmp(value,#cannotcall_string,\.cannotcall_string)
++		if c=0
++			set globals.firstline (TRUE)
++			call sprintf(#globals.outvalue,"%c",(new_char))
++			return #globals.outvalue
++		end
++	end
++	char compare_string="Int should be Bool" #with null to setFlag/return
++	set c strcmp(value,#compare_string,\.compare_string)
++	if c=0
++		set globals.firstline (TRUE)
++		call sprintf(#globals.outvalue,"%c",(compare_char)) #this is only for !comp side
++		return #globals.outvalue
++	end
+ 	char align_string="String should be flash.text.TextFormatAlign"^
+ 	set c strncmp(value,#align_string,\.align_string)
+ 	if c=0
+ 		call sprintf(#globals.outvalue,"%c",(align_char))
+ 		callret solver_end(value,\.align_string)
+ 	end
++	char arrconstr_string="Too many arguments"^
++	set c strncmp(value,#arrconstr_string,\.arrconstr_string)
++	if c=0
++		call sprintf(#globals.outvalue,"%c",(arrconstr_char))
++		callret solver_end(value,\.arrconstr_string)
++	end
++	char vartype_string="Variable requires type-hint or initialization"^
++	set c strncmp(value,#vartype_string,\.vartype_string)
++	if c=0
++		call sprintf(#globals.outvalue,"%cDynamic",(vartype_char))
++		callret solver_end(value,\.vartype_string)
++	end
+ 	char evfunc_string="() -> Void should be Dynamic -> Void"^
+ 	set c strncmp(value,#evfunc_string,\.evfunc_string)
+ 	if c=0
+@@ -99,10 +150,10 @@ function solver4(ss value)
+ 		ss ?z
+ 		ss cursor
+ 		set cursor new_string_get(#z)
+-		set c strncmp(value,cursor,z)
++		set c strcmp(value,cursor,z)
+ 		if c=0
+ 			call sprintf(#globals.outvalue,"%c",(ignore_pref))
+-			callret solver_end(value,z)
++			return #globals.outvalue
+ 		end
+ 	end
+ 	return (NULL)
+@@ -135,10 +186,12 @@ function solver7(ss value,ss after)
+ 		end
+ 		return (NULL)
+ 	end
++	ss ?chr
+ 	char var_string="attachMovie"^
+ 	set c strncmp(value,#var_string,\.var_string)
+ 	if c=0
+-		call sprintf(#globals.outvalue,"%c",(var_char))
++		set chr solver7_var(after)
++		call sprintf(#globals.outvalue,"%c",chr)
+ 		callret solver_end(value,\.var_string)
+ 	end
+ 	char bfil_string="begin"^
+@@ -165,7 +218,8 @@ function solver7(ss value,ss after)
+ 		char emclip_string="EmptyMovieClip"^
+ 		set c strncmp(value,#emclip_string,\.emclip_string)
+ 		if c=0
+-			call sprintf(#globals.outvalue,"%c",(var_char))
++			set chr solver7_var(after)
++			call sprintf(#globals.outvalue,"%c",chr)
+ 			callret solver_end(value,\.emclip_string)
+ 		end
+ 		char text_string="TextField"^
+@@ -249,5 +303,13 @@ function solver7(ss value,ss after)
+ 	end
+ 	return (NULL)
+ end
++function solver7_var(ss after)
++	ss a
++	set a strstr(after,", ")
++	if a=(NULL)
++		return (Var_char)
++	end
++	return (nVar_char)
++end
+ 
+ entryraw globals()
+--- actionswf-1.orig/oaas/translate.oc
++++ actionswf-1/oaas/translate.oc
+@@ -9,6 +9,8 @@ const a_page_size=0x1000
+ #multithread unsafe
+ charx a_page#a_page_size;vstr a_page_switch^a_page;charx b_page#a_page_size
+ char openfl_bool=FALSE
++char dualmode=FALSE #oaas3 resets this at start, anyway
++charx mainmod_bool#1
+ #
+ char on_string="on"^
+ char enterframe_string="EnterFrame"^
+@@ -24,6 +26,10 @@ vstr public="public"
+ vstr super="super();"
+ vstr class="class"
+ vstr sttic="static"
++vstr double_s="%s%s"
++vstr triple_s="%s%s%s"
++vstr stage="stage"
++vstr dot="."
+ 
+ function on_string_get(ss z)
+ 	set z# \globalt.on_string
+@@ -52,12 +58,15 @@ end
+ 
+ importx "free" free
+ importx "memcmp" memcmp
++importx "strcmp" strcmp
+ importx "strncmp" strncmp
+ importx "strcpy" strcpy
+ importx "strdup" strdup
+ importx "strlen" strlen
+ importx "snprintf" snprintf
+ importx "strstr" strstr
++importx "strchr" strchr
++importx "strrchr" strrchr
+ 
+ ^import "commaafter" commaafter 1
+ ^import "commaon" commaon 1
+@@ -74,14 +83,17 @@ import "object_make" object_make
+ ^import "quotafter" quotafter 1
+ ^import "quoton" quoton 1
+ ^import "replace" replace 5
++^import "semicolafter" semicolafter 1
+ ^import "semicolon" semicolon 1
+ ^import "spcfullafters" spcfullafters 1
+ ^import "spcfull" spcfull 1
+ ^import "spcfullback" spcfullback 2
++^import "strchr_reverse" strchr_reverse 2
+ ^import "strip" strip 3
+ import "to_upper" to_upper
+ import "translated" translated
+ import "untranslated" untranslated
++import "var_advance" var_advance
+ 
+ function switch_page()
+ 	if globalt.a_page_switch=#globalt.a_page
+@@ -92,9 +104,10 @@ function switch_page()
+ 	return #globalt.b_page
+ end
+ 
+-#     f      m        v
+-#aBcdEFgHiJ LMnO  RST V x Z
+-#          k    pq   u wxy
++#a cd fg i   m  p     vwx
++#ab  efgh jklmnop rst vw  z
++#                     VW
++#                q   u   y
+ #also at the end
+ 
+ #a	s [s]
+@@ -104,8 +117,9 @@ end
+ #g	like n
+ #i	string
+ #m      same like v
+-#n	a letter and predef format
+-#v	s s
++#p	public
++#vw	s s
++#x	static
+ #}	mix indents and in
+ 
+ function translate_one(ss in,ss indents)
+@@ -216,17 +230,22 @@ function translate_one(ss in,ss indents)
+ 		end
+ 		set o_a# (i_low)
+ 	elseif chr=(bitmap_char)
+-		set cursor translate_one_double("%s%s@:bitmap('%s') class %s extends flash.display.BitmapData { }",indents,in,oa,"Bitmap")
++		set cursor translate_one_double("%s%s@:bitmap('%s') class %s extends flash.display.BitmapData { }",indents,in,oa,"Bitmap",(bitmap_char))
+ 		if cursor!=oa
+ 			return cursor
+ 		end
+-	elseif chr=(n_low)
+-		set cursor translate_one_simple(indents,in,oa,#globalt.nw,"New",(n_low))
++	elseif chr=(p_low)
++		set cursor translate_one_simple(indents,in,oa,globalt.public,"Public",(p_low))
+ 		if cursor!=oa
+ 			return cursor
+ 		end
+ 	elseif chr=(var_char)
+-		set cursor translate_one_double(#globalt.var_translate,indents,in,oa,"Var")
++		set cursor translate_one_double(#globalt.var_translate,indents,in,oa,"Var",(var_char))
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(nvar_char)
++		set cursor translate_one_nvar(indents,in,oa)
+ 		if cursor!=oa
+ 			return cursor
+ 		end
+@@ -238,23 +257,36 @@ function translate_one(ss in,ss indents)
+ 	elseif chr=(Nullchar)
+ 		call translated("blank")
+ 		return in
+-	else
+-		if oa#=(Closingbrace)
+-			inc oa
+-			if oa#=(Nullchar)
+-				set len snprintf(#globalt.a_page,(a_page_size),"%s%s",indents,in)
+-				if len>0
+-					if len<(a_page_size)
+-						call translated("closing")
+-						return #globalt.a_page
+-					end
+-				end
++	elseif oa#=(Closingbrace)
++		inc oa
++		if oa#=(Nullchar)
++			set cursor translate_one_easy(indents,in,"closing")
++			if cursor!=in
++				return cursor
+ 			end
+ 		end
++	elseif oa#=(Caret)
++		set globalt.dualmode (TRUE)
++		inc oa
++		set cursor translate_one_easy(indents,oa,"dual mode")
++		if cursor!=in
++			return cursor
++		end
+ 	end
+ 	call untranslated(in)
+ 	return in
+ end
++function translate_one_easy(ss indents,ss in,ss onOk)
++	sd ?len
++	set len snprintf(#globalt.a_page,(a_page_size),globalt.double_s,indents,in)
++	if len>0
++		if len<(a_page_size)
++			call translated(onOk)
++			return #globalt.a_page
++		end
++	end
++	return in
++end
+ function translate_one_simple(ss indents,ss in,ss oa,ss specific,ss onOk,ss ?chr)
+ 	ss o_a
+ 	set o_a oa
+@@ -262,7 +294,7 @@ function translate_one_simple(ss indents
+ 	if oa#=(Nullchar)
+ 		set o_a# (Nullchar)
+ 		sd ?len
+-		set len snprintf(#globalt.a_page,(a_page_size),"%s%s%s",indents,in,specific)
++		set len snprintf(#globalt.a_page,(a_page_size),globalt.triple_s,indents,in,specific)
+ 		if len>0
+ 			if len<(a_page_size)
+ 				call translated(onOk)
+@@ -273,7 +305,7 @@ function translate_one_simple(ss indents
+ 	end
+ 	return o_a
+ end
+-function translate_one_double(ss format,ss indents,ss in,ss oa,ss onOk)
++function translate_one_double(ss format,ss indents,ss in,ss oa,ss onOk,ss ?t)
+ 	ss o_a
+ 	set o_a oa
+ 	inc oa
+@@ -292,7 +324,7 @@ function translate_one_double(ss format,
+ 				call translated(onOk)
+ 				return pointer
+ 			end
+-			set o_a# (var_char)
++			set o_a# t
+ 			set cursor# reminder
+ 		end
+ 	end
+@@ -312,10 +344,10 @@ function translate_one_add(ss indents,ss
+ 			if pointer#!=(Nullchar)
+ 				return o_a
+ 			end
+-			set pointer "stage"
++			set pointer globalt.stage
+ 		end
+ 		set reminder cursor#;set cursor# (Nullchar)
+-		set ext "."
++		set ext globalt.dot
+ 	else
+ 		set pointer #globalt.blank
+ 		set ext pointer
+@@ -334,30 +366,69 @@ function translate_one_add(ss indents,ss
+ 	set cursor# reminder
+ 	return o_a
+ end
++function translate_one_nvar(ss indents,ss in,ss oa)
++	ss o_a
++	set o_a oa
++	inc oa
++	set oa spcfull(oa)
++	ss cursor
++	set cursor spcfullafters(oa)
++	if cursor!=oa
++		ss pointer
++		set pointer spcfull(cursor)
++		if pointer!=cursor
++			ss ?reminder
++			set reminder cursor#;set cursor# (Nullchar)
++			set o_a# (Nullchar)
++			sd ?len
++			set len snprintf(#globalt.a_page,(a_page_size),"%s%svar %s=new %s();%s.name='%s';",indents,in,oa,pointer,oa,oa)
++			if len>0
++				if len<(a_page_size)
++					call translated("VarNamed")
++					return #globalt.a_page
++				end
++			end
++			set o_a# (nvar_char)
++			set cursor# reminder
++		end
++	end
++	return o_a
++end
+ 
+-function translate_leftright(ss format,ss indents,ss in,ss oa,ss pointer,ss out) #,ss two)
++function translate_leftright_full(ss format,ss indents,ss in,ss oa,ss pointer,ss out,sd p_len)
+ 	sd ?len
+ 	set len snprintf(out,(a_page_size),format,indents,in,oa,pointer) #,two)
+ 	if len>0
+ 		if len<(a_page_size)
++			if p_len!=(NULL)
++				set p_len# len
++			end
+ 			return out
+ 		end
+ 	end
+ 	return in
+ end
++function translate_leftright(ss format,ss indents,ss in,ss oa,ss pointer,ss out)
++	callret translate_leftright_full(format,indents,in,oa,pointer,out,(NULL))
++end
+ 
++#a	=new Array(...)
+ #b	useHandCursor=; same as p but diff at format and continuation
+ #e	()
+ #f	function newOther
++#g	;
+ #h	alpha=;
++#k	(unimportant) or (!unimportant)
+ #l	.( b or e
+ #j	=''
+ #m	all spcback= ''
++#n	after indents
+ #o	onPATTERN=;
++#p	Object(
+ #r	.( (,),)(,
+ #s	_ and more
+ #t	'',,,,)
+-#v	''''
++#vw	''''   ;=;=; ...
+ #z	replacing a to b
+ 
+ function translate_two(ss start,ss in)
+@@ -371,12 +442,21 @@ function translate_two(ss start,ss in)
+ 		call translated("Ignored")
+ 		return #globalt.blank
+ 	end
+-	if chr=(b_low)
++	if chr=(arrconstr_char)
++		set cursor translate_arrayconstructor(start)
++		if cursor!=start
++			inc oa
++			set cursor translate_two_switch(oa,cursor)
++			if cursor!=oa
++				return cursor
++			end
++		end
++	elseif chr=(b_low)
+ 		inc oa
+ 		set cursor translate_buttonmode(start,oa)
+ 		if cursor!=start;return cursor;end
+ 	elseif chr=(evfunc_char)
+-		set cursor translate_eparam(start) #why here? who is using untranslated, anyway
++		set cursor translate_eparam(start)
+ 		if cursor!=start
+ 			inc oa
+ 			set cursor translate_two_switch(oa,cursor)
+@@ -393,11 +473,26 @@ function translate_two(ss start,ss in)
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(fill_char)
++	elseif chr=(vartype_char)
+ 		set pointer translate_two_switchBefore(#oa)
++		set cursor translate_give(start,oa)
++		set cursor translate_two_switchAfter(cursor,oa,pointer) #here is not required the comparison, is inside
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(compare_char)
++		set cursor translate_compare(start)
++		if cursor!=start
++			inc oa
++			set cursor translate_two_switch(oa,cursor)
++			if cursor!=oa
++				return cursor
++			end
++		end
++	elseif chr=(fill_char)
++		set pointer translate_two_switchBefore_orZero(#oa)
+ 		set cursor translate_fill(start,oa)
+-		#here is not required the comparation, is inside
+-		set cursor translate_two_switchAfter(cursor,oa,pointer)
++		set cursor translate_two_switchAfter_orZero(cursor,oa,pointer) #here is not required the comparison, is inside
+ 		if cursor!=oa
+ 			return cursor
+ 		end
+@@ -428,6 +523,15 @@ function translate_two(ss start,ss in)
+ 				return cursor
+ 			end
+ 		end
++	elseif chr=(new_char)
++		set cursor translate_new(start)
++		if cursor!=start
++			inc oa
++			set cursor translate_two_switch(oa,cursor)
++			if cursor!=oa
++				return cursor
++			end
++		end
+ 	elseif chr=(onev_char)
+ 		set cursor translate_onev(start)
+ 		if cursor!=start
+@@ -437,14 +541,20 @@ function translate_two(ss start,ss in)
+ 				return cursor
+ 			end
+ 		end
+-	elseif chr=(rect_char)
++	elseif chr=(oreplace_char)
+ 		set pointer translate_two_switchBefore(#oa)
+-		set cursor translate_rect(start,oa)
+-		#here is not required the comparation, is inside
++		set cursor translate_object(start,oa) #here is not required the comparison, is inside
+ 		set cursor translate_two_switchAfter(cursor,oa,pointer)
+ 		if cursor!=oa
+ 			return cursor
+ 		end
++	elseif chr=(rect_char)
++		set pointer translate_two_switchBefore_orZero(#oa)
++		set cursor translate_rect(start,oa)
++		set cursor translate_two_switchAfter_orZero(cursor,oa,pointer) #here is not required the comparison, is inside
++		if cursor!=oa
++			return cursor
++		end
+ 	elseif chr=(search_char)
+ 		inc oa
+ 		set cursor translate_srch(start,oa)
+@@ -459,51 +569,82 @@ function translate_two(ss start,ss in)
+ 			end
+ 		end
+ 	elseif chr=(var_char)
+-		set cursor translate_var(start)
+-		if cursor!=start
+-			inc oa
+-			set cursor translate_two_switch(oa,cursor)
+-			if cursor!=oa
+-				return cursor
+-			end
++		set pointer translate_two_switchBefore_orZero(#oa)
++		set cursor translate_var_full(start,oa,(var_char))
++		set cursor translate_two_switchAfter_orZero(cursor,oa,pointer) #here is not required the comparison, is inside
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(Var_char)
++		set pointer translate_two_switchBefore_orZero(#oa)
++		set cursor translate_var_full(start,oa,(Var_char))
++		set cursor translate_two_switchAfter_orZero(cursor,oa,pointer) #here is not required the comparison, is inside
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(nvar_char)
++		set pointer translate_two_switchBefore_orZero(#oa)
++		set cursor translate_var_full(start,oa,(nvar_char))
++		set cursor translate_two_switchAfter_orZero(cursor,oa,pointer) #here is not required the comparison, is inside
++		if cursor!=oa
++			return cursor
++		end
++	elseif chr=(nVar_char)
++		set pointer translate_two_switchBefore_orZero(#oa)
++		set cursor translate_var_full(start,oa,(nVar_char))
++		set cursor translate_two_switchAfter_orZero(cursor,oa,pointer) #here is not required the comparison, is inside
++		if cursor!=oa
++			return cursor
+ 		end
+ 	elseif chr=(insert_char)
+ 		set pointer translate_two_switchBefore(#oa)
+-		set cursor transplate_insert(start,oa) #here is not required the comparation, is inside
++		set cursor transplate_insert(start,oa) #here is not required the comparison, is inside
+ 		set cursor translate_two_switchAfter(cursor,oa,pointer)
+ 		if cursor!=oa
+ 			return cursor
+ 		end
+ 	elseif chr=(Nullchar)
+ 		ss mem;set mem strdup(start) #must remember that start is touched in calls #set cursor fn(mem,oa) is not yet through otoc
+-											set cursor translate_buttonmode(mem,(NULL))
++														set cursor translate_arrayconstructor(mem)
+ 		if cursor=mem
+ 			call strcpy(mem,start)
+-										set cursor translate_eparam(mem)
++													set cursor translate_buttonmode(mem,(NULL))
+ 			if cursor=mem
+ 				call strcpy(mem,start)
+-									set cursor translate_function(mem)
++												set cursor translate_eparam(mem)
+ 				if cursor=mem
+ 					call strcpy(mem,start)
+-								set cursor translate_alpha(mem)
++											set cursor translate_function(mem)
+ 					if cursor=mem
+ 						call strcpy(mem,start)
+-							set cursor translate_textformat(mem)
++										set cursor translate_alpha(mem)
+ 						if cursor=mem
+ 							call strcpy(mem,start)
+-						set cursor translate_bitmap(mem)
++									set cursor translate_textformat(mem)
+ 							if cursor=mem
+ 								call strcpy(mem,start)
+-					set cursor translate_onev(mem)
++								set cursor translate_bitmap(mem)
+ 								if cursor=mem
+ 									call strcpy(mem,start)
+-				set cursor translate_srch_all(mem)
++							set cursor translate_onev(mem)
+ 									if cursor=mem
+ 										call strcpy(mem,start)
+-			set cursor translate_textfield(mem)
++						set cursor translate_srch_all(mem)
+ 										if cursor=mem
+ 											call strcpy(mem,start)
+-		set cursor translate_var(mem)
++					set cursor translate_textfield(mem)
++											if cursor=mem
++												call strcpy(mem,start)
++				set cursor translate_var(mem)
++												if cursor=mem
++													call strcpy(mem,start)
++			set cursor translate_compare(mem)
++													if cursor=mem
++														call strcpy(mem,start)
++		set cursor translate_new(mem)
++													end
++												end
++											end
+ 										end
+ 									end
+ 								end
+@@ -566,6 +707,62 @@ function translate_two_switchAfter(ss cu
+ 	end
+ 	return oa
+ end
++function translate_two_switchBefore_orZero(sv _oa)
++	ss oa
++	set oa _oa#
++	inc oa
++	set oa spcfull(oa)
++	ss pointer
++	set pointer strchr(oa,(Plus))
++	if pointer!=(Nullchar)
++		set pointer# (Nullchar)
++	end
++	set _oa# oa
++	return pointer
++end
++function translate_two_switchAfter_orZero(ss cursor,ss oa,ss pointer)
++	if pointer!=(Nullchar)
++		if cursor!=oa
++			set cursor translate_two_switcher(pointer)
++			if cursor!=pointer
++				return cursor
++			end
++		end
++		set pointer# (switch_char)
++	else
++		if cursor!=oa
++			return cursor
++		end
++	end
++	return oa
++end
++
++function translate_arrayconstructor(ss start)
++	char predefined="=new Array(";
++	ss cursor
++	set cursor strstr(start,#predefined)
++	if cursor!=(NULL)
++		ss pointer
++		set pointer cursor
++		add pointer \.predefined-1
++		ss end
++		set end strrchr(pointer,(Closeparenthesis))
++		if end!=(NULL)
++			set cursor# (Nullchar)
++			set end# (Nullchar)
++			inc end
++			sd ?len
++			set len snprintf(globalt.a_page_switch,(a_page_size),"%s=[%s]%s",start,pointer,end)
++			if len>0
++				if len<(a_page_size)
++					call translated("ArrayConstructor")
++					return globalt.a_page_switch
++				end
++			end
++		end
++	end
++	return start
++end
+ 
+ function translate_buttonmode(ss indents,ss oa)
+ 	ss cursor;set cursor spcfull(indents)
+@@ -627,10 +824,10 @@ function translate_eparam(ss start)
+ 	if p!=(NULL)
+ 		set p# (Nullchar)
+ 		inc p
+-		sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%s(e%s",start,p)
++		sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%s(e%s",start,p)
+ 		#set p# '('
+-		if n>0
+-			if n<(a_page_size)
++		if len>0
++			if len<(a_page_size)
+ 				call translated("Event")
+ 				return globalt.a_page_switch
+ 			end
+@@ -650,54 +847,27 @@ function translate_function(ss indents)
+ 		ss pointer
+ 		set pointer spcfull(cursor)
+ 		if pointer!=cursor
++			ss ?a
++			set a var_advance(pointer,#cursor)
+ 			sd ?len
+-			set c strncmp(pointer,#globalt.nw,\globalt.nw-1)
+-			if c=0
+-				set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s %s%s",indents,globalt.public,#globalt.func,pointer,globalt.super)
+-			else
+-				set cursor pointer
+-				ss ?a
+-				whiletrue
+-					set a cursor#
+-					if a<(_0)
+-						if a=(Dollar)
+-							inc cursor
+-							continue
+-						end
+-						break
+-					end
+-					if a<=(_9)
+-						inc cursor
+-						continue
+-					end
+-					if a<(A)
+-						break
+-					end
+-					if a<=(Z)
+-						inc cursor
+-						continue
+-					end
+-					if a<(a_low)
+-						if a=(_)
+-							inc cursor
+-							continue
+-						end
++			svu ?sz;set sz cursor
++			sub sz pointer
++			whiletrue
++				if sz=\globalt.nw-1
++					set c memcmp(pointer,#globalt.nw,\globalt.nw-1)
++					if c=0
++						set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s %s%s",indents,globalt.public,#globalt.func,pointer,globalt.super)
+ 						break
+ 					end
+-					if a<=(z_low)
+-						inc cursor
+-						continue
+-					end
+-					break
+ 				end
+-				set a cursor#
+ 				if a!=(Nullchar)
+ 					set cursor# (Nullchar)
+ 					inc cursor
+ 					set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s{%s %s %s%c%s",indents,globalt.class,pointer,globalt.public,#globalt.func,#globalt.nw,a,cursor)
+ 				else
+-					set len 0
++					set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s{%s %s %s",indents,globalt.class,pointer,globalt.public,#globalt.func,#globalt.nw)
+ 				end
++				break
+ 			end
+ 			if len>0
+ 				if len<(a_page_size)
+@@ -710,6 +880,98 @@ function translate_function(ss indents)
+ 	return indents
+ end
+ 
++function translate_give(ss indents,ss name)
++	if name#!=(Nullchar)
++		ss cursor
++		set cursor semicolon(indents)
++		if cursor!=indents
++			set cursor# (Nullchar)
++			inc cursor
++			char ar="Array"
++			sd ?c
++			set c strcmp(name,#ar,\.ar)
++			sd ?len
++			ss type
++			if c=0
++				set type "<Dynamic>"
++			else
++				set type #globalt.blank
++			end
++			set len snprintf(globalt.a_page_switch,(a_page_size),"%s:%s%s%c%s",indents,name,type,(Semicolon),cursor)
++			if len>0
++				if len<(a_page_size)
++					call translated("Give")
++					return globalt.a_page_switch
++				end
++			end
++		end
++	end
++	return name
++end
++
++function translate_alpha(ss indents)
++	ss cursor;set cursor spcfull(indents)
++	set cursor# (Nullchar)
++	inc cursor
++	sd ?c
++	ss sizer=6
++	char against="alpha="^
++	set c strncmp(cursor,#against,sizer)
++	if c=0
++		add sizer cursor
++		ss pointer
++		set pointer semicolon(sizer)
++		if pointer!=sizer
++			set pointer# (Nullchar)
++			inc pointer
++			sd ?len
++			set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s/100;%s",indents,cursor,pointer)
++			if len>0
++				if len<(a_page_size)
++					call translated("Alpha")
++					return globalt.a_page_switch
++				end
++			end
++		end
++	end
++	return indents
++end
++
++function translate_compare(ss start)
++	ss cursor
++	set cursor pareoafter(start)
++	if cursor!=start
++		ss end
++		set end strchr(cursor,(Nullchar))
++		whiletrue
++			dec end
++			if end=cursor
++				break
++			end
++			if end#=(Closeparenthesis)
++				set end# (Nullchar)
++				inc end
++				sd ?len
++				if cursor#=(Exclamationmark)
++					set cursor# (Nullchar)
++					inc cursor
++					set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s==0%c%s",start,cursor,(Closeparenthesis),end)
++				else
++					set len snprintf(globalt.a_page_switch,(a_page_size),"%s!=0%c%s",start,(Closeparenthesis),end)
++				end
++				if len>0
++					if len<(a_page_size)
++						call translated("Compare")
++						return globalt.a_page_switch
++					end
++				end
++				break
++			end
++		end
++	end
++	return start
++end
++
+ function translate_fill(ss indents,ss name)
+ 	ss cursor;set cursor spcfull(indents)
+ 	if name#=(Nullchar)
+@@ -771,9 +1033,9 @@ function translate_bitmap(ss start)
+ 					inc texture
+ 					set cursor# (Nullchar)
+ 					set pointer# (Nullchar)
+-					sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%s%c%s=%s %s(0,0);",start,reminder,texture,#globalt.nw,name)
+-					if n>0
+-						if n<(a_page_size)
++					sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%s%c%s=%s %s(0,0);",start,reminder,texture,#globalt.nw,name)
++					if len>0
++						if len<(a_page_size)
+ 							call translated("BitmapMorph")
+ 							return globalt.a_page_switch
+ 						end
+@@ -790,28 +1052,37 @@ function translate_onev(ss start)
+ 	set cursor equalon(start)
+ 	if cursor!=start
+ 		ss pointer;set pointer cursor
++		ss ?stage_required=FALSE
+ 		while start!=pointer
+ 			dec pointer
+ 			sd ?c
+ 			set c memcmp(pointer,#globalt.on_string,\globalt.on_string) #on is to short for strncmp
+ 			if c=0
++				if globalt.mainmod_bool=(TRUE)# test if stage is required
++					ss test
++					set test spcfull(start)
++					if test=pointer
++						set stage_required (TRUE)
++					end
++				end
++
+ 				add pointer \globalt.on_string
+-				vstr mous="Mouse"
+ 				set c strncmp(pointer,#globalt.enterframe_string,\globalt.enterframe_string) #strncmp is defined to compare the first 10 bytes
+ 				if c=0
+-					set cursor translate_on(start,#globalt.blank,"ENTER_FRAME",cursor)
++					set cursor translate_on(start,#globalt.blank,"ENTER_FRAME",cursor,stage_required)
+ 				else
++					vstr mous="Mouse"
+ 					set c strncmp(pointer,#globalt.press_string,\globalt.press_string)
+ 					if c=0
+-						set cursor translate_on(start,mous,"CLICK",cursor)
++						set cursor translate_on(start,mous,"CLICK",cursor,stage_required)
+ 					else
+ 						set c strncmp(pointer,#globalt.rollover_string,\globalt.rollover_string)
+ 						if c=0
+-							set cursor translate_on(start,mous,"MOUSE_OVER",cursor)
++							set cursor translate_on(start,mous,"MOUSE_OVER",cursor,stage_required)
+ 						else
+ 							set c strncmp(pointer,#globalt.rollout_string,\globalt.rollout_string)
+ 							if c=0
+-								set cursor translate_on(start,mous,"MOUSE_OUT",cursor)
++								set cursor translate_on(start,mous,"MOUSE_OUT",cursor,stage_required)
+ 							end
+ 						end
+ 					end
+@@ -828,7 +1099,7 @@ function translate_onev(ss start)
+ 	end
+ 	return start
+ end
+-function translate_on(ss start,ss type,ss ev,ss value)
++function translate_on(ss start,ss type,ss ev,ss value,ss ?stage_required)
+ 	inc value
+ 	ss cursor
+ 	set cursor semicolon(value)
+@@ -837,10 +1108,18 @@ function translate_on(ss start,ss type,s
+ 		set pointer spcfull(start)
+ 		set pointer# (Nullchar)
+ 		set cursor# (Nullchar)
+-		inc cursor
+-		sd ?n;set n snprintf(globalt.a_page_switch,(a_page_size),"%saddEventListener(flash.events.%sEvent.%s,%s);%s",start,type,ev,value,cursor)
+-		if n>0
+-			if n<(a_page_size)
++		#inc cursor
++		ss s1;ss s2
++		if stage_required=(TRUE)
++			set s1 globalt.stage
++			set s2 globalt.dot
++		else
++			set s1 #globalt.blank
++			set s2 #globalt.blank
++		end
++		sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s%saddEventListener(flash.events.%sEvent.%s,%s);",start,s1,s2,type,ev,value) #,cursor)
++		if len>0
++			if len<(a_page_size)
+ 				return globalt.a_page_switch
+ 			end
+ 		end
+@@ -848,32 +1127,25 @@ function translate_on(ss start,ss type,s
+ 	return start
+ end
+ 
+-function translate_alpha(ss indents)
+-	ss cursor;set cursor spcfull(indents)
+-	set cursor# (Nullchar)
+-	inc cursor
+-	sd ?c
+-	ss sizer=6
+-	char against="alpha="^
+-	set c strncmp(cursor,#against,sizer)
+-	if c=0
+-		add sizer cursor
++function translate_object(ss start,ss oa)
++	char a="Object"
++	ss cursor
++	set cursor strstr(start,a)
++	if cursor!=(NULL)
+ 		ss pointer
+-		set pointer semicolon(sizer)
+-		if pointer!=sizer
+-			set pointer# (Nullchar)
+-			inc pointer
+-			sd ?len
+-			set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s/100;%s",indents,cursor,pointer)
++		set pointer pareoon(cursor)
++		if pointer!=cursor
++			set cursor# (Nullchar)
++			sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),globalt.triple_s,start,oa,pointer)
+ 			if len>0
+ 				if len<(a_page_size)
+-					call translated("Alpha")
++					call translated("Object") #RePlace
+ 					return globalt.a_page_switch
+ 				end
+ 			end
+ 		end
+ 	end
+-	return indents
++	return oa
+ end
+ 
+ function translate_rect(ss indents,ss name)
+@@ -987,7 +1259,7 @@ function translate_srch_all(ss start)
+ end
+ function translate_search(ss start,ss oa)
+ 	ss cursor
+-	#set cursor spcfull(oa) #at py there is a comparation that is not spcfull there
++	#set cursor spcfull(oa) #at py there is a comparison that is not spcfull there
+ 	set cursor oa
+ 	ss ?types=0
+ 	while cursor#!=(Nullchar)
+@@ -1147,44 +1419,210 @@ function translate_label(ss indents)
+ 	return indents
+ end
+ 
++function translate_var_full(ss start,ss oa,ss ?type)
++	whiletrue
++		ss pointer
++		if oa#!=(Nullchar)
++			if oa#!=(switch_char)
++				set pointer spcfullafters(oa)
++				if pointer=oa ##else is translate_one
++					#v class
++					ss afterindents;ss atarguments;ss cls
++					set cls translate_var_helper(start,#afterindents,#atarguments,#pointer)
++					if cls!=start
++						ss ?store;set store afterindents#;set afterindents# (Nullchar)
++						sd ?len
++						ss cursor
++						set cursor translate_leftright_full(#globalt.var_translate,start,#globalt.blank,cls,oa,globalt.a_page_switch,#len)
++						if cursor!=#globalt.blank
++							callret translate_var_by_type(type,cursor,len,cls,pointer,afterindents,store,atarguments,"VarCreateClass","VarCreateClassNamed","VarCreateClassAdded","VarCreateClassAddedNamed",start)
++						end
++					end
++				end
++				return oa
++			end
++		end
++		set pointer translate_var_simple(start,type)
++		if pointer=start
++			return oa
++		end
++		return pointer
++	end
++end
++function translate_var_simple(ss indents,ss ?type)
++	ss cls;ss afterindents;ss atarguments;ss delim
++	set cls translate_var_helper(indents,#afterindents,#atarguments,#delim)
++	if cls!=indents
++		ss cursor
++		ss ?store
++		sd ?len
++		ss name
++		set name quotafter(delim)
++		if name!=delim ##going on attachMovie
++			set cursor quoton(name)
++			if cursor!=cls
++				set store afterindents#;set afterindents# (Nullchar)
++				set cursor# (Nullchar)
++				set len snprintf(globalt.a_page_switch,(a_page_size),"%svar %s=new %s(",indents,name,cls)
++				if len>0
++					if len<(a_page_size)
++						inc cursor
++						ss pointer
++						set pointer semicolafter(cursor)
++						if pointer!=cursor
++							ss args
++							set args translate_var_arguments(pointer,globalt.a_page_switch,#len)
++							if args=pointer
++								return indents
++							end
++						end
++						sd ?size=a_page_size
++						sub size len
++						if size>=3
++							set pointer globalt.a_page_switch
++							add pointer len
++							set pointer# (Closeparenthesis)
++							inc pointer
++							set pointer# (Semicolon)
++
++							inc pointer
++							set pointer# (Nullchar)
++							add len 2
++
++							callret translate_var_by_type(type,globalt.a_page_switch,len,name,cursor,afterindents,store,atarguments,"VarAttach","VarAttachNamed","VarAttachAdded","VarAttachAddedNamed",indents)
++						end
++					end
++				end
++			end
++		else #going on createEmptyMovieClip
++			set store afterindents#;set afterindents# (Nullchar)
++			set cursor translate_leftright_full(#globalt.var_translate,indents,#globalt.blank,cls,"flash.display.Shape",globalt.a_page_switch,#len)
++			if cursor!=#globalt.blank
++				callret translate_var_by_type(type,cursor,len,cls,delim,afterindents,store,atarguments,"VarCreate","VarCreateNamed","VarCreateAdded","VarCreateAddedNamed",indents)
++			end
++		end
++	end
++	return indents
++end
++function translate_var_by_type(ss ?type,ss cursor,sd ?len,ss name,ss pointer,ss afterindents,ss ?store,ss atarguments,ss ok1,ss ok2,ss ok3,ss ok4,ss start)
++	if type=(var_char)
++		call translated(ok1)
++		return cursor
++	end
++	if type=(nvar_char)
++		callret translate_var_named(cursor,len,name,pointer,ok2,start)
++	end
++	ss has_dot
++	set has_dot strchr_reverse(atarguments,(Period))
++	ss d
++	if has_dot!=(NULL)
++		set afterindents# store
++		set has_dot# (Nullchar)
++		set d globalt.dot
++	else
++		if globalt.mainmod_bool=(TRUE)
++			set afterindents globalt.stage
++			set d globalt.dot
++		else
++			set afterindents #globalt.blank
++			set d #globalt.blank
++		end
++	end
++	ss extra;set extra cursor
++	add extra len
++	sd ?size=a_page_size
++	sub size len
++	sd ?ln
++	set ln snprintf(extra,size,"%s%saddChild(%s);",afterindents,d,name)
++	if ln>0
++		if ln<size
++			if type=(Var_char)
++				call translated(ok3)
++				return cursor
++			end
++			# nVar_char
++			add len ln
++			callret translate_var_named(cursor,len,name,pointer,ok4,start)
++		end
++	end
++	return start
++end
+ function translate_var(ss indents)
++	callret translate_var_simple(indents,(var_char))
++end
++function translate_var_helper(ss indents,sv p_afterindents,sv p_atarguments,sv p_cursor)
+ 	ss cursor;set cursor spcfull(indents)
+-	set cursor# (Nullchar) #on attach...
++	set p_afterindents# cursor
+ 	ss cls
+ 	inc cursor
+-	set cls quotafter(cursor)
++	set cls quoton(cursor)
+ 	if cls!=cursor
++		set p_atarguments# cls
++		inc cls
+ 		set cursor quoton(cls)
+ 		if cursor!=cls
+ 			set cursor# (Nullchar)
+ 			inc cursor
+-			ss name
+-			set name quotafter(cursor)
+-			if name!=cursor ##going on attachMovie
+-				set cursor quoton(name)
+-				if cursor!=cls
+-					set cursor# (Nullchar)
+-					#inc cursor
+-					#ss pointer
+-					#set pointer semicolafter(cursor)
+-					#if pointer!=cursor
+-					set cursor translate_leftright(#globalt.var_translate,indents,#globalt.blank,name,cls,globalt.a_page_switch) #,pointer)
+-					if cursor!=#globalt.blank
+-						call translated("VarAttach")
+-						return cursor
+-					end
+-					#end
++			set p_cursor# cursor
++			return cls
++		end
++	end
++	return indents
++end
++function translate_var_arguments(ss start,ss out,sd p_len)
++	ss cursor
++	ss first;set first out
++	sd ?len
++	sd ?size=a_page_size
++	ss pointer
++	set pointer start
++	whiletrue
++		set cursor equalafter(pointer)
++		if cursor!=pointer
++			set pointer semicolon(cursor)
++			if pointer!=cursor
++				set pointer# (Nullchar)
++				ss c
++				if out=first
++					add out p_len#
++					sub size p_len#
++					set c #globalt.blank
++				else
++					add out len
++					sub size len
++					set c ","
+ 				end
+-			else #going on createEmptyMovieClip
+-				set cursor translate_leftright(#globalt.var_translate,indents,#globalt.blank,cls,"flash.display.Shape",globalt.a_page_switch) #,pointer)
+-				if cursor!=#globalt.blank
+-					call translated("VarCreate")
+-					return cursor
++				set len snprintf(out,p_len#,globalt.double_s,c,cursor)
++				if len>0
++					if len<size
++						add p_len# len
++						inc pointer
++						continue
++					end
+ 				end
++				return start
+ 			end
+ 		end
++		break
+ 	end
+-	return indents
++	return out
++end
++function translate_var_named(ss cursor,sd ?len,ss oa,ss pointer,ss ok,ss bad_return)
++	ss end
++	set end commaon(pointer)
++	set end# (Nullchar)
++	ss extra;set extra cursor
++	add extra len
++	sd ?size=a_page_size
++	sub size len
++	set len snprintf(extra,size,"%s.name='%s'%s;",oa,oa,pointer)
++	if len>0
++		if len<size
++			call translated(ok)
++			return cursor
++		end
++	end
++	return bad_return
+ end
+ 
+ function translate_textformat(ss start)
+@@ -1214,6 +1652,29 @@ function translate_textformat(ss start)
+ 	return start
+ end
+ 
++function translate_new(ss start)
++	ss cursor
++	set cursor spcfull(start)
++	ss ?reminder
++	set reminder cursor#
++	char a#2;ss b^a
++	if reminder!=(Nullchar)
++		set cursor# (Nullchar)
++		inc cursor
++		set b# reminder
++		inc b
++	end
++	set b# (Nullchar)
++	sd ?len;set len snprintf(globalt.a_page_switch,(a_page_size),"%s%s %s%s",start,#globalt.nw,#a,cursor)
++	if len>0
++		if len<(a_page_size)
++			call translated("New")
++			return globalt.a_page_switch
++		end
++	end
++	return start
++end
++
+ function transplate_insert(ss start,ss oa)
+ 	ss cursor
+ 	set cursor spcfullafters(oa)
+@@ -1243,9 +1704,15 @@ end
+ function openfl()
+ 	return #globalt.openfl_bool
+ end
++function mainmod_boolset(ss ?b)
++	set globalt.mainmod_bool b
++end
+ function _postpone_char()
+ 	return (postpone_char)
+ end
++function dual_mode()
++	return #globalt.dualmode
++end
+ 
+ entryraw globalt()
+ #!
+@@ -1254,6 +1721,7 @@ s
+ 
+ AddChild
+ Alpha
++ArrayConstructor
+ Bitmap
+ BitmapMorph
+ blank
+@@ -1261,12 +1729,17 @@ ButtonMode
+ Class
+ closing
+ Comment
++Compare
+ Event
+ Fill
+ Function
+ FunctionMorph
++Give
+ Import
++New
++Object
+ On
++Public
+ Rect
+ Replace
+ Search
+@@ -1276,5 +1749,16 @@ Static
+ Text
+ TextFormat
+ Var
++VarNamed
+ VarAttach
++VarAttachAdded
++VarAttachAddedNamed
++VarAttachNamed
+ VarCreate
++VarCreateAdded
++VarCreateAddedNamed
++VarCreateNamed
++VarCreateClass
++VarCreateClassAdded
++VarCreateClassAddedNamed
++VarCreateClassNamed
+--- actionswf-1.orig/oaas/util.oc
++++ actionswf-1/oaas/util.oc
+@@ -139,9 +139,9 @@ end
+ function quoton(ss a)
+ 	callret anyon(a,(Singlequote))
+ end
+-#function semicolafter(ss a)
+-#	callret anyafter(a,(Semicolon))
+-#end
++function semicolafter(ss a)
++	callret anyafter(a,(Semicolon))
++end
+ function semicolon(ss a)
+ 	callret anyon(a,(Semicolon))
+ end
+@@ -284,4 +284,55 @@ function object_com(ss name,ss prop,ss v
+ 	return 0
+ end
+ 
++function strchr_reverse(ss s,ss ?c)
++	whiletrue
++		dec s
++		if s#=(Nullchar)
++			return (NULL)
++		end
++		if s#=c
++			return s
++		end
++	end
++end
++
++function var_advance(ss cursor,sv out)
++	ss ?a
++	whiletrue
++		set a cursor#
++		if a<(_0)
++			if a=(Dollar)
++				inc cursor
++				continue
++			end
++			break
++		end
++		if a<=(_9)
++			inc cursor
++			continue
++		end
++		if a<(A)
++			break
++		end
++		if a<=(Z)
++			inc cursor
++			continue
++		end
++		if a<(a_low)
++			if a=(_)
++				inc cursor
++				continue
++			end
++			break
++		end
++		if a<=(z_low)
++			inc cursor
++			continue
++		end
++		break
++	end
++	set out# cursor
++	return a
++end
++
+ entryraw globalu()
+--- actionswf-1.orig/oaas3
++++ actionswf-1/oaas3
+@@ -2,21 +2,23 @@
+ 
+ # break OAPATH target src_name
+ # a1 a2a a2b a3 b1b b2b  splits_folder splits_format_ext splits_printf_ext
+-# OACACHE from_diagnostics verbose
++# OACACHE from_diagnostics verbose main
+ 
+ # skip_orig origf_name mirror_name
+ # skip_src allow_untranslated
+-# skip_comp  compiler  SERVER_PID header main  no_diagnostics only_diagnostics dump  no_confirm ffdec  no_clean
++# skip_comp  launcher compiler header  SERVER_PID server_extern server_compiler skip_connect_test sentinel  no_diagnostics only_diagnostics diag_json dump  no_confirm ffdec  no_clean
+ 
+ # / / 3
+ #   *   * /
+ 
+ #import ctypes
+ #import difflib
++#import itertools
+ #import json
+ #import os
+ from pathlib import Path
+ #import pdb
++#import re
+ #import signal
+ #import shutil
+ #import socket
+@@ -36,12 +38,24 @@ if os.environ.get('OAPATH'):
+ 	OAPATH=os.environ.get('OAPATH')
+ 	#this is windows specific os.add_dll_directory(os.environ.get('OAPATH'))
+ 
++sentinel=os.environ.get('sentinel')
+ import ctypes
+ try: #in LD_LIBRARY_PATH
+ 	lib=ctypes.cdll.LoadLibrary(os.path.join(OAPATH,"liboaas.so"))
+ except Exception:
+ 	try:
+ 		lib=ctypes.cdll.LoadLibrary(os.path.join(OAPATH,"liboaas.dll"))
++		if sentinel: #needed at wine
++			import _winapi
++			_orig_close_handle = _winapi.CloseHandle
++			def _safe_close_handle(h):
++				try:
++					_orig_close_handle(h)
++				except OSError:
++					print('sentinel')  # Wine gives bogus thread handles for native Unix children
++					pass
++					#return _winapi.WAIT_OBJECT_0  # pretend it finished
++			_winapi.CloseHandle = _safe_close_handle
+ 	except Exception:
+ 		lib = None
+ 		# print('no liboaas support')
+@@ -50,15 +64,22 @@ if lib:
+ 		lib.line.argtypes = [ctypes.c_char_p]; lib.line.restype = ctypes.c_char_p
+ 		lib.startline.argtypes = [ctypes.c_char_p,ctypes.c_char_p]; lib.startline.restype = ctypes.c_char_p
+ 		lib.ratio.argtypes = [ctypes.c_char]; lib.ratio.restype = ctypes.c_char
+-		lib.verbose.argtypes = [ctypes.c_char]
++		#lib.dualmode_reset
++
+ 		lib.flash_to_openfl.argtypes = [ctypes.c_char]
+-		lib.sep.restype = ctypes.c_char
+-		lib.postpone_char.restype = ctypes.c_char
++		lib.mainmodule_boolset.argtypes = [ctypes.c_char]
++		lib.verbose.argtypes = [ctypes.c_char]
++
+ 		lib.solve1.argtypes = [ctypes.c_char_p]; lib.solve1.restype = ctypes.c_char_p
+ 		lib.solve2.argtypes = [ctypes.c_char_p]; lib.solve2.restype = ctypes.c_char_p
+ 		lib.solve4.argtypes = [ctypes.c_char_p]; lib.solve4.restype = ctypes.c_char_p
+ 		lib.solve7.argtypes = [ctypes.c_char_p,ctypes.c_char_p]; lib.solve7.restype = ctypes.c_char_p
++
++		lib.dualmode.restype = ctypes.c_char
++		lib.firstline.restype = ctypes.c_char
++		lib.postpone_char.restype = ctypes.c_char
+ 		lib.resolve.restype = ctypes.c_char
++		lib.sep.restype = ctypes.c_char
+ 	except Exception:
+ 		print('lib oaas error')
+ 		exit(1)
+@@ -117,7 +138,8 @@ def splits_data(orig=False,dirs=''):
+ 	with open(dirs+splits_mix) as splits_mix:
+ 		splits_mix_data=splits_mix.read()
+ 		texts = splits_mix_data.split('\x00')
+-		texts.pop()
++		if texts[-1]!=texts[-2]: #when last two are \0\0 is not the same like text\0
++			texts.pop()
+ 	return (files,files_mirror,files_src,texts)
+ 
+ target=os.environ.get('target')
+@@ -211,19 +233,41 @@ if not OACACHE:
+ from_diagnostics='from_diagnostics'
+ f_d=os.environ.get(from_diagnostics)
+ 
+-import signal
+ import time
+ def stop_server(s):
+ 	try:
+-		pid=int(s) #TypeError at exiting without a sever
+-		os.kill(pid, signal.SIGTERM) #async
+-		os.kill(pid, 0)  # signal 0 = just checks if it's alive
++		pid = int(s)
++	except TypeError,ValueError:  #TypeError at exiting without a sever , ValueError at server_extern
++		return
++	if sys.platform == "win32":
++		_stop_windows(pid)
++	else:
++		_stop_posix(pid)
++def _stop_posix(pid):
++	import signal
++	try:
++		os.kill(pid, signal.SIGTERM)
++		os.kill(pid, 0)
+ 		time.sleep(1)
+ 		os.kill(pid, 0)
+ 		os.kill(pid, signal.SIGKILL)
+-	except (TypeError,ProcessLookupError): #only from os.kill
++	except ProcessLookupError:
+ 		return
+-	os.waitpid(pid,0)
++	os.waitpid(pid, 0)
++def _stop_windows(pid):
++	PROCESS_TERMINATE = 0x0001
++	SYNCHRONIZE = 0x00100000
++	kernel32 = ctypes.windll.kernel32
++	handle = kernel32.OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, False, pid)
++	if not handle:
++		return  # no such process
++	try:
++		time.sleep(1)
++		kernel32.TerminateProcess(handle, 1)
++		kernel32.WaitForSingleObject(handle, 5000)  # wait up to 5s, ms
++	finally:
++		kernel32.CloseHandle(handle)
++
+ def exiting_serv(s):
+ 	stop_server(s)
+ 	exit(1)
+@@ -233,6 +277,9 @@ def exiting():
+ verbose=os.environ.get('verbose')
+ if verbose:
+ 	print(sys.argv[1]+' '+sys.argv[2])
++main=os.environ.get('main')
++if not main:
++	main='Main'
+ 
+ skip_src='skip_src'
+ if not os.environ.get(skip_src):
+@@ -282,12 +329,15 @@ if not os.environ.get(skip_src):
+ 	singleline_backjump_start+=len(a2b.encode())
+ 
+ 	was_multiline=False
++	dual_mode=False
+ 
+ 	files = splits_data()
+ 	for f in files:
++		if lib:
++			lib.mainmodule_boolset(get_module_insens(f)==main)
+ 		with open(f) as sfile:
+ 			text=sfile.readlines()
+-		if f_d==None:
++		if not f_d:
+ 			with open(hx_ext(f),'ab') as dfile: #haxe will not do for .as
+ 				mode=0
+ 				for line in text:
+@@ -302,6 +352,9 @@ if not os.environ.get(skip_src):
+ 						if mode==0:
+ 							if c==a1:
+ 								mode=1
++							elif dual_mode:
++								if c==b1b:
++									mode=7
+ 						elif mode==1:
+ 							if c==a2a:
+ 								mode=2
+@@ -315,6 +368,8 @@ if not os.environ.get(skip_src):
+ 									xpos=singleline_backjump_start
+ 								else:
+ 									xpos=multiline_backjump_start
++									if lib:
++										lib.dualmode_reset() #here is the less intensive place to reset a one line dual mode, can also signal at startline if is mode 4 or 6 but is intensive
+ 								stored=chars[:pos-xpos]
+ 								mode*=2
+ 								pos=0    #notice: both //3 and /*3 will reset the line
+@@ -330,6 +385,9 @@ if not os.environ.get(skip_src):
+ 								singleline()
+ 								pos=0
+ 								was_multiline=True
++								dual_mode=False
++							elif dual_mode:
++								mode=0
+ 							else:
+ 								mode=6
+ 					if mode==4:
+@@ -337,6 +395,10 @@ if not os.environ.get(skip_src):
+ 						singleline()
+ 					elif mode==6:
+ 						singleline()
++						if lib:
++							dual_mode=lib.dualmode() #c_char
++							if dual_mode[0]:
++								mode=0
+ 					else:
+ 						bf=chars[:pos]
+ 						if not was_multiline:
+@@ -392,26 +454,41 @@ if not os.environ.get('skip_comp'):
+ 			exit(1)
+ 		server_pid=os.environ.get('SERVER_PID')
+ 		if not server_pid:
+-			import socket
+-			server = subprocess.Popen([compiler, "--wait", "6000"])
+-			server_pid=str(server.pid)
+-			try:
+-				with socket.create_connection(("127.0.0.1", 6000), timeout=1):
+-					pass
+-			except OSError:
+-				time.sleep(1)
+-				try:
+-					with socket.create_connection(("127.0.0.1", 6000), timeout=1):
+-						pass
+-				except OSError:
+-					print('server error')
+-					exiting()
++			server_extern=os.environ.get('server_extern')
++			if not server_extern:
++				import socket
++				server_compiler=os.environ.get('server_compiler')
++				if not server_compiler:
++					server_compiler=compiler
++				server = subprocess.Popen([server_compiler, "--wait", "6000"])
++				server_pid=str(server.pid)
++				skip_connect_test=os.environ.get('skip_connect_test')
++				if skip_connect_test:
++					wait_some=int(skip_connect_test)
++					time.sleep(wait_some)
++				else:
++					wait_some=10  #wine is longer
++					while wait_some:
++						try:
++							with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
++								s.settimeout(1)
++								if s.connect_ex(("127.0.0.1", 6000)) == 0:
++									break
++							#with socket.create_connection(("127.0.0.1", 6000),timeout=1): #timeout is at success
++							#	break
++						except: # OSError:
++							time.sleep(1)
++							wait_some-=1
++							continue
++					if not wait_some:
++						print('server error')
++						exiting()
+ 
+-		main=os.environ.get('main')
+-		if not main:
+-			main='Main'
+ 		baser=[compiler,'--connect','6000','-swf',dest_file,'-main',main,'-D','flash_strict']
+ 		#                                                                   this flag for _x to be error
++		launcher=os.environ.get('launcher')
++		if launcher:
++			baser.insert(0,launcher)
+ 
+ 		hd=os.environ.get('header')
+ 		if hd:
+@@ -419,44 +496,119 @@ if not os.environ.get('skip_comp'):
+ 			# -swf-header 960:640:60:f68712 -swf-version 15
+ 			#w:h:fps:rgb
+ 
+-		def prun(a,capture_output=False):
++		import tempfile
++		def prun(a, capture_output=False):
+ 			if verbose:
+ 				print(a)
+-			kwargs = {}
+-			if capture_output:
+-				#kwargs['stdout'] = subprocess.PIPE
+-				kwargs['stderr'] = subprocess.PIPE
+-			return subprocess.run(a,**kwargs)
++			if not sentinel:
++				kwargs = {}
++				if capture_output:
++					kwargs['stderr'] = subprocess.PIPE
++				return subprocess.run(a,**kwargs)
++			else: #wine always Invalid handle and never reaches return
++				done_path = sentinel+".done"
++				if capture_output:
++					err_path = sentinel+".err"
++				else:
++					err_path = '0'
++				# a = ['/bin/sh', '/home/bc/a/whaxe', ...actual haxe args...]
++				# wrapper script expects: whaxe <done_path> <err_path> <haxe args...>
++				full_cmd = a[:2] + [done_path, err_path] + a[2:]
++				#whaxe, more at tests/as3/aw
++
++				#kwargs = {'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL}
++				proc = subprocess.Popen(full_cmd) #, **kwargs)
++
++				#start = time.monotonic()
++				poll_interval=0.5
++				while not os.path.exists(done_path):
++					#if timeout is not None and time.monotonic() - start > timeout:
++					#	break
++					time.sleep(poll_interval)
++
++				#returncode = 0
++				#if os.path.exists(done_path):
++				with open(done_path) as f:
++					returncode = int(f.read()) #.strip() or "0")
++				os.remove(done_path)
++
++				result = subprocess.CompletedProcess(a, returncode)
++
++				if capture_output:
++					result.stderr = open(err_path).read() #if os.path.exists(err_path) else b""
++					os.remove(err_path)
++				return result
+ 		def crun(a,capture_output=False):
+ 			r=prun(a,capture_output=capture_output)
+ 			if r.returncode:
+ 				print('error')
+ 				exiting()
+ 			return r
+-		def crund(a,capture_output=False):
+-			r=crun(a,capture_output=capture_output)
+-			os.chdir(c_dir) #same like to other plus for diagnostics all cases
+-			return r
+ 
+ 		o_d=os.environ.get('only_diagnostics')
+ 		if os.environ.get('no_diagnostics'):
+-			crund(baser)
++			crun(baser)
++			os.chdir(c_dir) #same like to other plus for diagnostics all cases
+ 		else:
++			if f_d:
++				f_d=int(f_d)
+ 			if not o_d and not f_d:
+ 				r=prun(baser)
+ 			if o_d or f_d or r.returncode:
+ 				def diags():
+-					baser.extend(['--display'])
+-					reuser=list(baser)
++					import json
++					import itertools
++
++					_id_counter = itertools.count(1)
++					diag_json=os.environ.get('diag_json')
++
++					def diag_request(file,mode,offset=0):
++						if not diag_json:
++							return file+'@'+str(offset)+'@'+mode
++						# Legacy "file@offset[@mode]" suffix -> JSON-RPC "display/..." method.
++						# Modes without an explicit @suffix (plain "file@offset") default to completion.
++						#_MODE_TO_METHOD = {
++						#    "":             "display/completion",     # file@offset          -> completion
++						#    "position":     "display/definition",     # file@offset@position -> goto definition
++						#    "usage":        "display/references",     # file@offset@usage    -> find references
++						#    "type":         "display/hover",          # file@offset@type     -> hover/type info
++						#    "signature":    "display/signatureHelp",
++						#    "diagnostics":  "display/diagnostics",    # usually file-only, offset ignored/0
++						#    "metadata":     "display/metadata",       # project-wide, no offset needed
++						#    "module-symbols": "display/moduleSymbols",
++						#}
++
++						# Diagnostics and metadata are project/file scoped, not offset scoped.
++						if mode == "diagnostics":
++							method="display/diagnostics"
++							params = {"file": file}
++						#elif method == "display/metadata":
++						#	params = {}
++						else:
++							method="display/definition"
++							params = {"file": file, "offset": offset}
++						request = {
++							"jsonrpc": "2.0",
++							"id": next(_id_counter),
++							"method": method,
++							"params": params,
++						}
++						return json.dumps(request)
++
++					baser.append('--display')
+ 					files=splits_data(dirs='../')
+ 
+-					import json
+ 					diagnostics=[]
+ 					for f in files:
+-						ruser=list(reuser)
+-						ruser.extend([hx_exte(f)+'@0@diagnostics'])
+-						p=crun(ruser,capture_output=True)
+-						diagnostics.extend(json.loads(p.stderr))
++						baser.append(diag_request(hx_exte(f),'diagnostics'))
++						p=crun(baser,capture_output=True)
++						baser.pop()
++						result=json.loads(p.stderr)
++						if isinstance(result, dict):
++							result = result.get("result")
++							result = result["result"]  # dev build: unwrap the timestamp wrapper
++						# stable build: already the bare list
++						diagnostics.extend(result) #append wrong the type, error throw later
+ 					os.chdir(c_dir)
+ 
+ 					file_cache = {}
+@@ -487,19 +639,21 @@ if not os.environ.get('skip_comp'):
+ 							last = folder / folder
+ 							last.mkdir(exist_ok=True)
+ 							last_file = last / module
+-							with open(last_file, "a") as fp:
++							with open(last_file, "a", newline="") as fp: #newline="" good on wine else will be \r\r\n
+ 								fp.write(line + os.linesep)
+ 
+ 						if line in cache:
+-							return False
++							return #False
+ 
+ 						cache.add(line)
+-						with open(file, "a") as fp:
++						with open(file, "a", newline="") as fp:
+ 							fp.write(line + os.linesep)
+-						return True
++						return #True
+ 
++					import re
+ 					def diag():
+ 						pp=''
++						firstline=None
+ 						if kind==7:
+ 							# this is unstable: module=d["args"]["moduleType"]["name"]
+ 							#field=d["args"]["entries"][0]["fields"][0]["field"]
+@@ -522,7 +676,7 @@ if not os.environ.get('skip_comp'):
+ 								if kind==2:
+ 									character=positions["character"]
+ 
+-									src = Path(fullfilename).read_text() #encoding="utf-8"
++									src = Path(fullfilename).read_text(newline='') #encoding="utf-8" #newline for \r\n wine
+ 									lines = src.splitlines(keepends=True)
+ 									# get text before the target line
+ 									before = "".join(lines[:line])
+@@ -530,21 +684,35 @@ if not os.environ.get('skip_comp'):
+ 									offset_chars = len(before) + character
+ 									# convert character offset -> UTF-8 byte offset
+ 									offset_bytes = len(src[:offset_chars].encode()) #"utf-8"
+-									offset_bytes=str(offset_bytes)
+ 
+-									pp='('+str(line)+':'+str(character)+' at '+offset_bytes+') to '
++									pp='('+str(line)+':'+str(character)+' at '+str(offset_bytes)+') to '
+ 
+ 									os.chdir(dest)
+-									reuser.extend([filename+'@'+offset_bytes+'@position'])
+-									xm=crund(reuser,capture_output=True)
+-									reuser.pop()
+-									xm = ET.fromstring(xm.stderr).find('pos')
+-									if xm is not None:
+-										xm=xm.text
+-										lineparts=xm.split(':')
+-										if lineparts[0]==fullfilename: #first case at bionic
+-											line=int(lineparts[1])-1 # from human
+-						return value,line,positions,pp
++									baser.append(diag_request(filename,'position',offset_bytes))
++									result=prun(baser,capture_output=True)
++									baser.pop()
++									os.chdir(c_dir)
++									#if not result.returncode: # must match ok
++									result = result.stderr
++									if not diag_json:
++										result = ET.fromstring(result).find('pos')
++										if result is not None: #else,example,TextFormatAlign
++											result=result.text
++											#lineparts=result.split(':') #windows... F:...
++											m = re.match(r'^(.+):(\d+):', result)
++											if m.group(1)==fullfilename: #is another file line else, also at first case
++												firstline=line
++												line=int(m.group(2))-1 # from human
++									else:
++										result = json.loads(result) #here are situations like addChild(label) where label is not going to createTextField yet
++										if not "error" in result:
++											result = result.get("result")  #same as before
++											result = result["result"]
++											if isinstance(result,list): #stage.addChild(text); without createEmptyMovieClip
++												if result: # 'Too many arguments' var arcon=new Array(1,2,3);
++													firstline=line
++													line=result[0]["range"]["start"]["line"]
++						return value,line,positions,pp,firstline
+ 
+ 					dump=os.environ.get('dump')
+ 					unresolved=False;resolved=False
+@@ -566,9 +734,9 @@ if not os.environ.get('skip_comp'):
+ 								if kind in [1,2,4,7]:
+ 									values=diag()
+ 									if values:
+-										value,line,positions,pp=values
++										value,line,positions,pp,firstline=values
+ 										if verbose:
+-											print(str(kind)+' '+pp+str(line)+' '+value)
++											print(str(kind)+' '+pp+str(line)+' '+value+('' if not firstline else (' '+str(firstline))))
+ 										#now is like: fix one error will fix another 4
+ 										for f in files:
+ 											mod = get_module_insens(f)
+@@ -581,8 +749,19 @@ if not os.environ.get('skip_comp'):
+ 													with open(f) as fp:
+ 														file_cache[f] = fp.readlines()
+ 												lines = file_cache[f]
+-												linestr = lines[line]
+ 
++												if kind==4:
++													solved = lib.solve4(value.encode())
++												elif kind==2:
++													solved = lib.solve2(value.encode())
++													if solved: # it is no having ""
++														if lib.firstline()[0]:
++															if firstline: #at compare without exclamations is from if, not this case
++																line=firstline
++												elif kind==1:
++													solved = lib.solve1(value.encode())
++
++												linestr = lines[line]
+ 												if linestr[-1] in terminations:
+ 													linestr = linestr.rstrip(terminations)
+ 													has_term=True
+@@ -591,21 +770,15 @@ if not os.environ.get('skip_comp'):
+ 
+ 												if kind==7:
+ 													solved = lib.solve7(value.encode(),linestr[positions["character"]:].encode())
+-												elif kind==4:
+-													solved = lib.solve4(value.encode())
+-												elif kind==2:
+-													solved = lib.solve2(value.encode())
+-												else: #1:
+-													solved = lib.solve1(value.encode())
++
+ 												if not solved:
+ 													if solved==None:
+ 														break
+ 													#this case is with the postpone_char. or normal
+ 													solved = lib.resolve()
+-													#forking = solved.isupper(); if forking: solved=solved.lower()
+-													comparator = solved.decode()
+ 													part1, delim, part2 = linestr.partition(tr_sep)
+ 													if delim:
++														comparator = solved.decode()
+ 														sep=lib.sep().decode()
+ 														tokens = part2.split(sep)
+ 														n = lib.postpone_char().decode()
+@@ -626,53 +799,67 @@ if not os.environ.get('skip_comp'):
+ 															linestr = part1 + delim + sep.join(tokens)
+ 														#elif against == c0:
+ 														#	break #example at rect, else will be r+r+r
++												rslvd=True
+ 												if isinstance(solved, bytes):
+ 													solved = solved.decode()
+-													if save_line(module,line):
+-														linestr = linestr + tr_sep + solved
+-													else:
++													save_line(module,line)
++													try:#still can be a line with markers from orig
++														part1, part2 = linestr.split(tr_sep) #will throw here
+ 														s1 = solved[1:]
+ 														s0 = solved[0]
+ 														sep=lib.sep().decode()
+-														part1, part2 = linestr.split(tr_sep)
+ 														tokens = part2.split(sep)
+-														not_added=True
++														#not_added=True
+ 														for i,token in enumerate(tokens):
+ 															if token[0] == s0:
+ 																if s1: # a case sw then sh, must combine them
+ 																	if not s1 in token[1:]:
+ 																		tokens[i] = token + s1
+-																not_added=False
++																#not_added=False
++																rslvd=False
+ 																break
+-														if not_added:
+-															tokens.extend(solved)
++														#if not_added:
++														if rslvd:
++															tokens.append(solved)
+ 														linestr = part1 + tr_sep + sep.join(tokens)
++													except:
++														linestr = linestr + tr_sep + solved
+ 												lines[line] = linestr + (os.linesep if has_term else "")
+-												touched.add(f)
++												touched.add(f) #these are not rslvd? ok, but make that if s1 case
+ 
+-												resolved=True
++												if rslvd: #can loop infinite without this if is alone
++													resolved=True
+ 												break
+ 								if not solved:
+ 									unresolved=True
+ 					if resolved:
+ 						for f in touched:
+-							with open(f, "w") as fp:
++							with open(f, "w", newline="") as fp: # , newline="" was already explained
+ 								fp.writelines(file_cache[f])
+ 						if o_d:
+ 							return
+ 						if unresolved:
+-							os.environ[from_diagnostics] = "1"
++							os.environ[from_diagnostics] = '1'
+ 						else:
+-							os.environ[from_diagnostics]='' # still needed at src
++							os.environ[from_diagnostics] = '0' #needed at src. Setting SetEnvironmentVariable(name, "") on Windows is documented to delete the variable
++							#so an int() is required
+ 
+ 						os.environ[skip_orig] = "1"
+-						os.environ["SERVER_PID"] = server_pid
++						os.environ["SERVER_PID"] = server_pid if server_pid else '' # server_extern, then here = None is exception
++
++						if os.environ.get("no_execv"):
++							result = subprocess.run([sys.executable] + sys.argv)
++							sys.exit(result.returncode)
+ 						os.execv(sys.executable, [sys.executable] + sys.argv)
+ 						#print("never reached")
+ 					if unresolved:
+ 						print("diagnostics failed")
+ 						exiting()
+-
++					if f_d: #still can be all ok after all diagnostics
++						baser.pop()
++						os.chdir(dest)
++						crun(baser)
++						os.chdir(c_dir)
+ 				diags()
+ 			else:
+ 				os.chdir(c_dir) #back for clean, and maybe ffdec is relative, dest_file is realpath
+--- actionswf-1.orig/readme.md
++++ actionswf-1/readme.md
+@@ -17,7 +17,7 @@ On Arch Linux(x86_64), <i>.zst</i> file
+ yay -Sy actionswf
+ ```
+ \
+-On Fedora 42/43/44(x86_64):
++On Fedora 43/44(x86_64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install actionswf
+--- actionswf-1.orig/src/alt.oc
++++ actionswf-1/src/alt.oc
+@@ -9,7 +9,7 @@ vstrx concat_point#1
+ datax flag_dup#1
+ #
+ datax flag_splitter#1
+-charx markers#max_structures
++#charx markers#max_structures
+ charx splitdelim#1+3+1
+ 
+ importx "strrchr" strrchr
+@@ -22,6 +22,8 @@ importx "fclose" fclose
+ ^import "swf_sprite_frames_pointer" swf_sprite_frames_pointer 1 #full return
+ ^import "word_arg_to_stack" word_arg_to_stack 1
+ import "mem_free" mem_free
++^import "struct_ids_action" struct_ids_action 2 #full
++import "block_get_size" block_get_size
+ 
+ function alt_join()
+ 	add globall.concat_point globall.folder
+@@ -79,13 +81,13 @@ function alt_init(sd flags,sd path)
+ 		set globall.concat_point size
+ 		call alt_join()
+ 
+-		ss p;set p #globall.markers
+-		sd end=max_structures
+-		add end p
+-		while p!=end
+-			set p# 0
+-			inc p
+-		end
++		#ss p;set p #globall.markers
++		#sd end=max_structures
++		#add end p
++		#while p!=end
++		#	set p# 0
++		#	inc p
++		#end
+ 		if globall.flag_splitter!=0
+ 			ss s;set s #globall.splitdelim
+ 			inc s
+@@ -98,8 +100,6 @@ function alt_init(sd flags,sd path)
+ 				set s# (LineFeed)
+ 			end
+ 		end
+-
+-		ret
+ 	end
+ end
+ 
+@@ -111,12 +111,18 @@ end
+ function alt_action_base(ss orig_action,sd ?preid,ss ?has_frames)
+ 	if globall.folder!=(NULL)
+ 		if orig_action!=(NULL) #this to filter a button with no swf actions for example
+-			#setcall block struct_ids_action((ids_get),preid)
+-			#setcall size block_get_size(block)
+-			#if size=0 #at alt, first action from the frame is with all
+-			ss mark;set mark preid
+-			add mark #globall.markers
+-			if mark#=0
++			#ss mark;set mark preid
++			#add mark #globall.markers
++			#if mark#=0
++			whiletrue
++				if globall.flag_splitter=0
++					sd block;sd ?size
++					setcall block struct_ids_action((ids_get),preid)
++					setcall size block_get_size(block)
++					if size!=0 #at alt, first action from the frame is with all
++						break
++					end
++				end
+ 				whiletrue
+ 					if has_frames=(TRUE)
+ 						ss ?ai;set ai ainit()
+@@ -139,24 +145,21 @@ function alt_action_base(ss orig_action,
+ 				ss mem
+ 				set mem file_get_content(globall.folder,(NULL))
+ 				#call unlink(globall.folder) #if there are two action() at one frame, the second one must not see this
+-				whiletrue
+-					if globall.flag_splitter!=0
+-						ss junction;set junction strstr(mem,#globall.splitdelim)
+-						if junction!=(NULL)
+-							inc junction ##prexx and alt can go together, must keep system line endings
+-							set junction# (Nullchar)
+-							add junction \globall.splitdelim-2
+-							svu ?sz;set sz strlen(junction)
+-
+-							sd file;set file f_open(globall.folder,"wb")
+-							call f_write(file,junction,sz)
+-							call fclose(file)
+-							break
+-						end
++				if globall.flag_splitter!=0
++					ss junction;set junction strstr(mem,#globall.splitdelim)
++					if junction!=(NULL)
++						inc junction ##prexx and alt can go together, must keep system line endings
++						set junction# (Nullchar)
++						add junction \globall.splitdelim-2
++						svu ?sz;set sz strlen(junction)
++
++						sd file;set file f_open(globall.folder,"wb")
++						call f_write(file,junction,sz)
++						call fclose(file)
+ 					end
+-					set mark# ~0
+-					break
+ 				end
++				#set mark# ~0
++				#break
+ 
+ 				return mem
+ 			end
+--- actionswf-1.orig/src/file.oc
++++ actionswf-1/src/file.oc
+@@ -3,7 +3,7 @@ Format ElfObj64
+ include "../include/prog.h" "../include/prog.oh"
+ 
+ #multithread unsafe
+-data file=fd_none;vdata fmem=NULL
++data gfile=fd_none;vdata fmem=NULL
+ 
+ vstr fprintf_er="fprintf error"
+ vstr file_write_er="File write error"
+@@ -23,8 +23,8 @@ import "printEr" printEr
+ 
+ import "mem_free" mem_free
+ function file_get_content__resources_free()
+-	if globalf.file!=(fd_none)
+-		call file_close(#globalf.file)
++	if globalf.gfile!=(fd_none)
++		call file_close(#globalf.gfile)
+ 		if globalf.fmem!=(NULL)
+ 			call mem_free(#globalf.fmem)
+ 		endif
+@@ -126,7 +126,7 @@ endfunction
+ function file_get_content(ss filepath,sv p_size)  #size is a stack variable , but here is not like the other cases, here is on full
+ 	sd ?file
+ 	setcall file file_open(filepath,(_open_read))
+-	set globalf.file file
++	set globalf.gfile file
+ 	sd mem; ss size ;#will size# char , and inc dec
+ 	set size filesize(file)
+ 	if p_size!=(NULL)
+--- actionswf-1.orig/tests/.expected/as3/Main.hx
++++ actionswf-1/tests/.expected/as3/Main.hx
+@@ -8,57 +8,95 @@ class Main{
+ 		var stage=flash.Lib.current.stage;
+ 
+ 		var texture=new My_BitmapData(0,0);
+-		var text=new flash.display.Shape();
++		var text=new flash.display.Shape();stage.addChild(text);
+ 		var matrix=new flash.geom.Matrix();
+ 		text.graphics.beginBitmapFill(texture,matrix,true);
+ 		text.graphics.drawRect(0, 0,120, 80);
+ 		text.graphics.endFill();
+-		stage.addChild(text);
+ 
+-		var shape=new MyClip();
++		var shape=new MyClip();stage.addChild(shape);
+ 		shape.x = (stage.stageWidth - 100) / 2;
+ 		shape.y = (stage.stageHeight - 100) / 2;
+-		stage.addChild(shape);
+ 
+-		new
++		//more tests
++		var a=1;
++		var shape2=new MyClip2(a,a);stage.addChild(shape2);shape2.name='shape2';
++		trace("shape2 b is this: "+shape2.b);
++		new 
+ 		Loader();
++		new Loader();
++		if(a!=0)
++			trace("okkkkkkkkkkkkkkk");
++		var b=0;
++		if(b==0)
++			trace("okkkkkkkkkkkkkkk2");
++		var arcon=[1,2,3];
++		
++		//dual mode
++		trace('dual mode here is visible only on as3');
++		
++		trace('dual mode here is visible only on as3');
++		var c=new MyClip();
++		var solved_w=new flash.display.Shape();stage.addChild(solved_w);solved_w.name='solved_w'+1;
+ 	}
+ }
+ class Loader{public function new(){
+ trace('the loader is working');
+ }
+ }
+-
+ /*more tests
++stage.addChild(text);
++stage.addChild(shape);
+ import a.b.c;
+ static function main(){
+ public function new(){super();
+ var shape=new Shape();
++var shape=new Shape();shape.name='shape';
+ 
++q=[q,w,2];
++q=[q,w,2];
++buttonMode=x;useHandCursor=x;
+ buttonMode=x;useHandCursor=x;
+ function (e)(e)
++(e)
+ class dollar$_isok_at_as2{public function new(e){
++public function newsuper();
++class newq{public function new
++var a:Array<Dynamic>;
++alpha=x/100;
++alpha=x/100;
+ leftPart=flash.text.TextFormatAlign.TYPE;
++=flash.text.TextFormatAlign.TYPE;
++(!=0)
++(a!=0)
+ q.graphics.begin(a);x
+ var texture=new MyBitmapData(0,0);
+-addEventListener(flash.events.Event.ENTERFRAME,fune);
+-alpha=x/100;
++a=new q(0,0);
++new Loader();
++new Loader;
++stage.addEventListener(flash.events.Event.ENTERFRAME,fune);
++stage.addEventListener(flash.events.Event.ENTER_FRAME,q);
++var z=new q(
+ q.graphics.drawRect(x,y,width,height);
+ x(e)
+ y(e)
+-var q=new flash.text.TextField();q.x=x;q.y=y;q.width=width;q.height=height;
+-var p=new q();
+-qwerty
+-
+-buttonMode=x;useHandCursor=x;
+-(e)
+-public function newsuper();
+-a=new q(0,0);
+-addEventListener(flash.events.Event.ENTER_FRAME,q);
+-alpha=x/100;
+ x
++var q=new flash.text.TextField();q.x=x;q.y=y;q.width=width;q.height=height;
+ var label=new flash.text.TextField();label.y=16;label.width= 120;label.height= 48;
++var p=new q();
++var p=new flash.display.Shape();stage.addChild(p);
++var p=new flash.display.Shape();stage.addChild(p);p.name='p'+1;
+ var q=new name();
+-=flash.text.TextFormatAlign.TYPE;
++var q=new flash.display.DisplayObjectContainer();
++var q=new flash();stage.addChild(q);
++var _p=new q();w.addChild(_p);
++var q=new name();q.name='q'+2;
++var q=new flash.display.Shape();q.name='q'+1;
++var q=new flash();q.name='q'+1;
++var q=new flash();w.addChild(q);q.name='q';
++qwerty
+ */
+ 
++var is_dual_mode_off=new MyClip();
++
++
+--- actionswf-1.orig/tests/.expected/as3/MyClip.hx
++++ actionswf-1/tests/.expected/as3/MyClip.hx
+@@ -56,6 +56,8 @@ class MyClip extends flash.display.Sprit
+ 		label.text = 'Click';
+ 		label.selectable = false;
+ 
++		addChild(label);
++
+ 		// a 2/3 size format
+ 		var tf = new flash.text.TextFormat();
+ 		tf.size = 32;
+@@ -69,8 +71,6 @@ class MyClip extends flash.display.Sprit
+ 		addEventListener(flash.events.MouseEvent.MOUSE_OUT, onOut);
+ 		addEventListener(flash.events.MouseEvent.CLICK, onClick);
+ 
+-		addChild(label);
+-
+ 		addEventListener(flash.events.Event.ENTER_FRAME, on_Enter_Frame);
+ 	}
+ 	static
+@@ -78,3 +78,7 @@ class MyClip extends flash.display.Sprit
+ 	var a=false;var b=false;
+ }
+ 
++/* more tests
++var _p=new q();addChild(_p);
++var _p=new q();addChild(_p);_p.name='_p'+1;
++*/
+--- /dev/null
++++ actionswf-1/tests/.expected/as3/MyClip2.hx
+@@ -0,0 +1,11 @@
++
++class MyClip2 extends flash.display.Sprite{
++	public
++	var b:Dynamic;
++	public
++	var c:Dynamic;
++	public function new(a,aa){super();
++		b=a;c=aa;
++	}
++}
++
+--- actionswf-1.orig/tests/as3/a
++++ actionswf-1/tests/as3/a
+@@ -1,10 +1,5 @@
+ #!/bin/sh
+ set -e
+ 
+-base64 -d a.jpg.txt > a.jpg
+-#convert -size 1x1 xc:black a.png #or none for transparent
+-
+-cd osrc
+-${RUN__SHELL} ./a
+-cd ..
++${RUN__SHELL} ./ao
+ ${RUN__SHELL} ./b${go_to_another_launcher}
+--- actionswf-1.orig/tests/as3/a.oc.oac
++++ actionswf-1/tests/as3/a.oc.oac
+@@ -16,6 +16,11 @@ call actionf_sprite(presprite,#buf,"|||o
+ sd sprite;set sprite swf_sprite_done(presprite)
+ call swf_exports_add(sprite,"MyClip")
+ 
++set presprite swf_sprite_new()
++call action_sprite(presprite,"|||orig/MyClip2/clip.as|||")
++set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"MyClip2")
++
+ sd img
+ set img swf_jpeg("../a.jpg")
+ call swf_exports_add(img,"My_BitmapData")
+@@ -25,3 +30,20 @@ call action("|||orig/Main/root.as|||")
+ call swf_done()
+ 
+ call exit(0)
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
+--- /dev/null
++++ actionswf-1/tests/as3/ao
+@@ -0,0 +1,8 @@
++#!/bin/sh
++set -e
++
++base64 -d a.jpg.txt > a.jpg
++#convert -size 1x1 xc:black a.png #or none for transparent
++
++cd osrc
++${RUN__SHELL} ./a
+--- actionswf-1.orig/tests/as3/aw
++++ actionswf-1/tests/as3/aw
+@@ -5,10 +5,8 @@ if [ "$1" = clean ]; then
+ 	exit
+ fi
+ 
+-cd osrc
+-LD_LIBRARY_PATH=${HOME}/a/x86_64_lib ./a
++LD_LIBRARY_PATH=${HOME}/a/x86_64_lib ./ao
+ 
+-cd ..
+ #get a wine python from https://www.python.org/downloads/windows/ python-3.14.5-amd64.exe
+ #if not at installer, then:
+ #	wine6 reg add "HKCU\Environment" /v PATH /t REG_SZ /d "C:\users\bc\AppData\Local\Programs\Python\Python314;%PATH%" /f
+@@ -20,11 +18,33 @@ cd ..
+ #REG_EXPAND_SZ to expand only
+ #F or Z? wine6 cmd
+ #WINEDEBUG=+loaddll,+module
+-skip_comp=x OAPATH="F:\\home\\bc\\s\\actionswf-1\\oaas" p='wine6 python.exe' ./b
+ 
+-cd dest #this for ./df
+-	find . -type f -exec dos2unix {} \;
+-cd ..
+-skip_src=x ./br
++if [ -z "${p}" ]; then
++	p='wine6 python.exe'
++fi
++#ffdec only if going on windows path
++#if [ -n "${server_extern}" ]; then # server_extern=x
++#	haxe --wait 6000 &
++#	echo $!
++#fi
++server_compiler="F:\\home\\bc\\a\\haxe\\haxe.exe" no_clean=x no_confirm=x no_execv=x sentinel=0 launcher=/bin/bash compiler=/home/bc/a/whaxe platform=win \
++	OAPATH="F:\\home\\bc\\s\\actionswf-1\\oaas" p="$p" ./b
+ echo $?
+-rm -r dest
++#if [ -n "${server_extern}" ]; then
++#	./k
++#fi
++
++exit
++#!/bin/bash
++a="$1"
++b="$2"
++shift 2
++#c=( ${@:1:3} ../a.swf ${@:5} )
++if [ $b != 0 ]; then
++	/usr/bin/haxe "$@" 2>"$b"
++#	/usr/bin/haxe "${c[@]}" 2>"$b"
++else
++	/usr/bin/haxe "$@"
++#	/usr/bin/haxe "${c[@]}"
++fi
++echo -n $? > "$a"
+--- /dev/null
++++ actionswf-1/tests/as3/awd
+@@ -0,0 +1,2 @@
++p='wine6 python.exe -m pdb' \
++break=x ./aw
+--- actionswf-1.orig/tests/as3/b
++++ actionswf-1/tests/as3/b
+@@ -12,5 +12,10 @@ if [ -z "${verbose+x}" ]; then
+ 	verbose=x
+ 	echo verbose
+ fi
+-no_clean=x verbose=${verbose} header=550:400:12:ffFFff $p ../../oaas3 dest a.swf \
+-&& ${RUN__SHELL} ./df
++no_clean=x verbose=${verbose} header=550:400:12:ffFFff $p ../../oaas3 dest a.swf && {
++	at_folder=../ . ../integ && {
++		${RUN__SHELL} ./df
++		exit
++	}
++	echo all good
++}
+--- actionswf-1.orig/tests/as3/br
++++ actionswf-1/tests/as3/br
+@@ -1,3 +1,10 @@
+ 
++a=`hax --version`
++echo $a
+ LD_PRELOAD=$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libubsan.so)
+-ffdec=~/ffdec/bin/ffdec LD_PRELOAD=${LD_PRELOAD} compiler=hax ./b
++if [ $a = '5.0.0-preview.1' ]; then
++	RUN__SHELL=/bin/bash ffdec=~/ffdec/bin/ffdec LD_PRELOAD=${LD_PRELOAD} compiler=hax skip_connect_test=3 diag_json=x ./b
++else
++	RUN__SHELL=/bin/bash ffdec=~/ffdec/bin/ffdec LD_PRELOAD=${LD_PRELOAD} compiler=hax ./b
++	#for 'read'
++fi
+--- actionswf-1.orig/tests/as3/brd
++++ /dev/null
+@@ -1 +0,0 @@
+-break=x ./br
+\ No newline at end of file
+--- /dev/null
++++ actionswf-1/tests/as3/brfd
+@@ -0,0 +1 @@
++break=x ./brf
+--- actionswf-1.orig/tests/as3/df
++++ actionswf-1/tests/as3/df
+@@ -1,9 +1,15 @@
+ f=../.expected/as3
++if [ "${platform}" = win ]; then
++	cd dest
++		find . -type f -exec dos2unix {} \;
++	cd ..
++fi
+ diff ${f} dest || {
+ 	if [ -z "${interact}" ]; then
+ 		exit 1
+ 	fi
+-	read;
++	read
+ 	cp dest/Main.hx ${f}
+ 	cp dest/MyClip.hx ${f}
++	cp dest/MyClip2.hx ${f}
+ }
+--- actionswf-1.orig/tests/as3/orig/Main/root.as
++++ actionswf-1/tests/as3/orig/Main/root.as
+@@ -13,52 +13,90 @@ a Main
+ 		text.beginBitmapFill(texture,matrix,true);
+ 		text.lineTo(120, 0);text.lineTo(120, 80);text.lineTo(0, 80);
+ 		text.endFill();
+-		//3d text stage
+ 
+ 		attachMovie('MyClip','shape',getNextHighestDepth());
+ 		shape._x = (Stage.width - 100) / 2;
+ 		shape._y = (Stage.height - 100) / 2;
+-		//3d shape @
+ 
++		//more tests
++		var a=1;
++		attachMovie('MyClip2','shape2', getNextHighestDepth());shape2.b=a;shape2.c=a;
++		trace("shape2 b is this: "+shape2.b);
+ 		//3n
+ 		Loader();
++		Loader();
++		if(a)
++			trace("okkkkkkkkkkkkkkk");
++		var b=0;
++		if(!b)
++			trace("okkkkkkkkkkkkkkk2");
++		var arcon=new Array(1,2,3);
++		/*3^
++		//dual mode
++		trace('dual mode here is visible only on as3');
++		*/
++		//3^trace('dual mode here is visible only on as3');
++		var c=new Object();//3_ MyClip
++		createEmptyMovieClip('solved_w'+1, getNextHighestDepth());
+ 	}
+ //3}
+ function Loader(){//3f
+ trace('the loader is working');
+ }
+ //3}
+-
+ /*more tests
++//3d text stage
++//3d shape @
+ //3i a.b.c
+ //3f s
+ //3f p
+ //3v shape Shape
++//3w shape Shape
+ 
++_q=new Array(q,w,2);//3 a+s
++q=new Array(q,w,2);//3
+ useHandCursor=_x;//3 b+s
++useHandCursor=x;//3
+ function ()()//3 e+e
++()//3
+ function dollar$_isok_at_as2(){//3 f+e
++function new//3
++function newq//3
++var _a;//3 gArray+s
++_alpha=_x;//3 h+s
++_alpha=x;//3
+ _leftPart='type';//3 j+s
++='type';//3
++(_)//3k+s
++(a)//3
+ begin(a);_x//3 l q+s
+ var texture=flash.display.BitmapData._loadBitmap('My_BitmapData');//3 m+s
++a= 'q'//3
++L_oader();//3 n+s
++Loader;//3
+ onEnterFrame=_fune;//3 o+s
+-_alpha=_x;//3 h+s
++onEnterFrame=q;//3
++var _z=new Object(//3 pq+s
+ line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
+ _x()//3 s+e
+ _y()//3 s_+e
+-create('q',n,_x,_y,_width,_height);//3 t+s
+-attach('q','_p',d);//3 v+s
+-_qty//3z wer ty+s
+-
+-useHandCursor=x;//3
+-()//3
+-function new//3
+-a= 'q'//3
+-onEnterFrame=q;//3
+-_alpha=x;//3
+ _x//3
++create('q',n,_x,_y,_width,_height);//3 t+s
+ createTextField('label',1,0,16, 120, 48);//3
++attach('q','_p',d);//3 v+s
++create('_p',d);//3 V+s
++create('_p'+1,d);//3 W+s
+ att('name','q',getNextHighest);//3
+-='type';//3
++create('q',d);//3 v flash.display.DisplayObjectContainer
++create('q',d);//3 V flash
++w.attach('q','_p',d);//3 V
++att('name','q'+2,getNext);//3w
++create('q'+1,d);//3 w
++create('q'+1,d);//3 w flash
++w.attach('q','_p'+1,d);//3 W flash
++_qty//3z wer ty+s
++*/
++/*3
++v is_dual_mode_off MyClip
+ */
+ main();
+--- actionswf-1.orig/tests/as3/orig/MyClip/clip.as
++++ actionswf-1/tests/as3/orig/MyClip/clip.as
+@@ -56,6 +56,8 @@
+ 		label.text = 'Click';
+ 		label.selectable = false;
+ 
++		//3d label
++
+ 		// a 2/3 size format
+ 		var tf = new TextFormat();
+ 		tf.size = 32;
+@@ -69,8 +71,6 @@
+ 		onRollOut = onOut;
+ 		onPress = onClick;
+ 
+-		//3d label
+-
+ 		onEnterFrame = on_Enter_Frame;
+ 	}
+ 	//3x
+@@ -78,3 +78,7 @@
+ 	var a=false;var b=false;
+ //3}
+ new();
++/* more tests
++attach('q','_p',d);//3 V
++attach('q','_p'+1,d);//3 W
++*/
+--- /dev/null
++++ actionswf-1/tests/as3/orig/MyClip2/clip.as
+@@ -0,0 +1,11 @@
++/*3^
++//3a MyClip2 flash.display.Sprite
++	//3p
++	var b;
++	//3p
++	var c;
++	function new(a,aa){//3 f
++		b=a;c=aa;
++	}
++//3}
++*/
+--- actionswf-1.orig/tests/as3/osrc/a.oc
++++ actionswf-1/tests/as3/osrc/a.oc
+@@ -70,6 +70,8 @@ call actionf_sprite(presprite,#buf,"
+ 		label.text = 'Click';
+ 		label.selectable = false;
+ 
++		//3d label
++
+ 		// a 2/3 size format
+ 		var tf = new TextFormat();
+ 		tf.size = 32;
+@@ -83,8 +85,6 @@ call actionf_sprite(presprite,#buf,"
+ 		onRollOut = onOut;
+ 		onPress = onClick;
+ 
+-		//3d label
+-
+ 		onEnterFrame = on_Enter_Frame;
+ 	}
+ 	//3x
+@@ -92,10 +92,30 @@ call actionf_sprite(presprite,#buf,"
+ 	var a=false;var b=false;
+ //3}
+ new();
++/* more tests
++attach('q','_p',d);//3 V
++attach('q','_p'+1,d);//3 W
++*/
+ ",2)
+ sd sprite;set sprite swf_sprite_done(presprite)
+ call swf_exports_add(sprite,"MyClip")
+ 
++set presprite swf_sprite_new()
++call action_sprite(presprite,"/*3^
++//3a MyClip2 flash.display.Sprite
++	//3p
++	var b;
++	//3p
++	var c;
++	function new(a,aa){//3 f
++		b=a;c=aa;
++	}
++//3}
++*/
++")
++set sprite swf_sprite_done(presprite)
++call swf_exports_add(sprite,"MyClip2")
++
+ sd img
+ set img swf_jpeg("../a.jpg")
+ call swf_exports_add(img,"My_BitmapData")
+@@ -115,53 +135,91 @@ a Main
+ 		text.beginBitmapFill(texture,matrix,true);
+ 		text.lineTo(120, 0);text.lineTo(120, 80);text.lineTo(0, 80);
+ 		text.endFill();
+-		//3d text stage
+ 
+ 		attachMovie('MyClip','shape',getNextHighestDepth());
+ 		shape._x = (Stage.width - 100) / 2;
+ 		shape._y = (Stage.height - 100) / 2;
+-		//3d shape @
+ 
++		//more tests
++		var a=1;
++		attachMovie('MyClip2','shape2', getNextHighestDepth());shape2.b=a;shape2.c=a;
++		trace(\"shape2 b is this: \"+shape2.b);
+ 		//3n
+ 		Loader();
++		Loader();
++		if(a)
++			trace(\"okkkkkkkkkkkkkkk\");
++		var b=0;
++		if(!b)
++			trace(\"okkkkkkkkkkkkkkk2\");
++		var arcon=new Array(1,2,3);
++		/*3^
++		//dual mode
++		trace('dual mode here is visible only on as3');
++		*/
++		//3^trace('dual mode here is visible only on as3');
++		var c=new Object();//3_ MyClip
++		createEmptyMovieClip('solved_w'+1, getNextHighestDepth());
+ 	}
+ //3}
+ function Loader(){//3f
+ trace('the loader is working');
+ }
+ //3}
+-
+ /*more tests
++//3d text stage
++//3d shape @
+ //3i a.b.c
+ //3f s
+ //3f p
+ //3v shape Shape
++//3w shape Shape
+ 
++_q=new Array(q,w,2);//3 a+s
++q=new Array(q,w,2);//3
+ useHandCursor=_x;//3 b+s
++useHandCursor=x;//3
+ function ()()//3 e+e
++()//3
+ function dollar$_isok_at_as2(){//3 f+e
++function new//3
++function newq//3
++var _a;//3 gArray+s
++_alpha=_x;//3 h+s
++_alpha=x;//3
+ _leftPart='type';//3 j+s
++='type';//3
++(_)//3k+s
++(a)//3
+ begin(a);_x//3 l q+s
+ var texture=flash.display.BitmapData._loadBitmap('My_BitmapData');//3 m+s
++a= 'q'//3
++L_oader();//3 n+s
++Loader;//3
+ onEnterFrame=_fune;//3 o+s
+-_alpha=_x;//3 h+s
++onEnterFrame=q;//3
++var _z=new Object(//3 pq+s
+ line(_width,_y);line(_width,_height);line(_x,_height);//3 r q+s
+ _x()//3 s+e
+ _y()//3 s_+e
+-create('q',n,_x,_y,_width,_height);//3 t+s
+-attach('q','_p',d);//3 v+s
+-_qty//3z wer ty+s
+-
+-useHandCursor=x;//3
+-()//3
+-function new//3
+-a= 'q'//3
+-onEnterFrame=q;//3
+-_alpha=x;//3
+ _x//3
++create('q',n,_x,_y,_width,_height);//3 t+s
+ createTextField('label',1,0,16, 120, 48);//3
++attach('q','_p',d);//3 v+s
++create('_p',d);//3 V+s
++create('_p'+1,d);//3 W+s
+ att('name','q',getNextHighest);//3
+-='type';//3
++create('q',d);//3 v flash.display.DisplayObjectContainer
++create('q',d);//3 V flash
++w.attach('q','_p',d);//3 V
++att('name','q'+2,getNext);//3w
++create('q'+1,d);//3 w
++create('q'+1,d);//3 w flash
++w.attach('q','_p'+1,d);//3 W flash
++_qty//3z wer ty+s
++*/
++/*3
++v is_dual_mode_off MyClip
+ */
+ main();
+ ")
+@@ -169,3 +227,20 @@ main();
+ call swf_done()
+ 
+ call exit(0)
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
++
+--- /dev/null
++++ actionswf-1/tests/ffdec/a.0_1
+@@ -0,0 +1 @@
++easy_stop b !
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -144,9 +144,35 @@ while(true){
+ 	z=2;
+ 	break
+ }
++
++function indents(){
++	var p=new Array();
++	var i=0;
++	while(true){
++		p[i]=new Array();
++		i++;
++		if(i!=number_of_pillars)continue;
++		break;
++	}
++	return p;
++}
++
+ ")
+ #call actiond("for(a in b){c=1+c;}") will be ""b"" and here straight "b"
+-call action("return 1")
++call action("
++function easy_stop(ops){
++	var a=2;
++	while(true){
++		a++;
++		if(a==3){
++			return true;
++		}
++		if(shuffled.length)continue;
++		return false;
++	}
++}
++return 1
++")
+ 
+ sd id;set id swf_sprite_new()
+ call action_init_sprite(id,"var a=a")
+--- actionswf-1.orig/tests/ffdec/f
++++ actionswf-1/tests/ffdec/f
+@@ -25,7 +25,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 				fi
+ 				is_debug=x ffdec=${ffd} skip_alternative=x ../../oaalternative.sh a.swf && {
+ 					if [ -n "${wait}" ]; then read; fi
+-					#expect_obfuscation=./q   this is solved since ffdec_24.1.1_nightly3382
++					expect_obfuscation=./q \
+ 					is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "${q} ./a.out x x" || {
+ 						swfdump -D${1} a.swf.orig > 1
+ 						swfdump -D${1} a.swf > 2
+@@ -33,6 +33,10 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 						rm 1 2
+ 						exit 1
+ 					}
++					echo deofuscations
++					cat q
++					rm q
++					echo
+ 				} || exit 1
+ 				cat a.swf.log
+ 			}
+@@ -42,6 +46,8 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 
+ # for (( i=`pwd | grep -o / | wc -l`; i>0 ; i-- )) do qwe="${qwe}../"; done; ffdec=/home/bc/ffdec/j13/usr/bin/ffdec FFDEC_JARFILENAME=${qwe}home/bc/ffdec/j13/usr/share/java/ffdec/ffdec.jar ./f
+ 
++#while(true) 2 comparisons was solved since ffdec_24.1.1_nightly3382
++
+ # LD_LIBRARY_PATH=/home/bc/x86_64_lib ./ff
+ #LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src qq ./a.out 1 x x
+ #LD_LIBRARY_PATH=/home/bc/x86_64_lib/cross:../../src is_debug=x no_number_check=x ../../oaalternative.sh a.swf 'qq ./a.out 2 x x'
+--- actionswf-1.orig/tests/integ
++++ actionswf-1/tests/integ
+@@ -3,7 +3,7 @@ return_status() {
+ 	if [ -e ${at_folder}.expected ]; then
+ 		return 0
+ 	fi
+-	echo .expected comparisons only at https://launchpad.net/~colin-i/+archive/ubuntu/ppa
++	echo not doing .expected comparisons at this build
+ 	return 1
+ }
+ return_status

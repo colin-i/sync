@@ -1,0 +1,86 @@
+
+format elfobj64
+
+import "print_stdout" print_stdout
+^import "verbosep" verbosep
+
+^import "translate_one" translate_one 2
+^import "translate_two" translate_two 2
+import "translated_ratio" translated_ratio
+^import "openfl" openfl #full
+import "_postpone_char" _postpone_char
+
+^import "solver1" solver1 1
+^import "solver2" solver2 1
+^import "solver4" solver4 1
+^import "solver7" solver7 2
+^import "solver" solver 2
+import "_resolve" _resolve
+
+einclude "oaas.h" "oaas.oh"
+
+functionx line(ss oa)
+	callret translate_one(oa,"")
+end
+
+functionx startline(ss start,ss oa)
+	#at this function first can be syntax dependent of start string
+	ss result
+	set result translate_two(start,oa)
+	if result!=oa
+		return result
+	end
+
+	#or normal line
+	#if start was modified in a syntax, don't worry, this callret will return untranslated oa and not go in start because _one and _two letters are unique overall
+	callret translate_one(oa,start)
+end
+
+functionx ratio(ss ?print)
+	if print=(TRUE)
+		call print_stdout("Ratio: ")
+		call translated_ratio((TRUE))
+		call print_stdout("\n")
+	else
+		callret translated_ratio((FALSE))
+	end
+end
+
+functionx verbose(ss ?bol)
+	ss p;set p verbosep()
+	set p# bol
+end
+functionx flash_to_openfl(ss ?bol)
+	ss p;set p openfl()
+	set p# bol
+end
+functionx sep()
+	return (switch_char)
+end
+functionx postpone_char()
+	callret _postpone_char()
+end
+
+functionx solve1(ss value)
+	ss s
+	set s solver1(value)
+	callret solver(value,s)
+end
+functionx solve2(ss value)
+	ss s
+	set s solver2(value)
+	callret solver(value,s)
+end
+functionx solve4(ss value)
+	ss s
+	set s solver4(value)
+	callret solver(value,s)
+end
+functionx solve7(ss value,ss after)
+	ss s
+	set s solver7(value,after)
+	callret solver(value,s)
+end
+functionx resolve()
+	callret _resolve()
+end

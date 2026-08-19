@@ -1,0 +1,301 @@
+Format ElfObj64
+
+include "../include/prog.h" "../include/prog.oh"
+
+#multithread unsafe
+data file=fd_none;vdata fmem=NULL
+
+vstr fprintf_er="fprintf error"
+vstr file_write_er="File write error"
+vstr f_open_err="fopen error"
+vstr f_tell_er="ftell error"
+vstr f_size_er="f_size error"
+vstr f_open_rb="rb"
+
+importx "_open" open
+importx "_read" read
+importx "_write" write
+importx "_lseek" lseek
+#importx tell   can't find it
+importx "_close" close
+
+import "printEr" printEr
+
+import "mem_free" mem_free
+function file_get_content__resources_free()
+	if globalf.file!=(fd_none)
+		call file_close(#globalf.file)
+		if globalf.fmem!=(NULL)
+			call mem_free(#globalf.fmem)
+		endif
+	endif
+endfunction
+
+#close
+
+function file_close(sd p_file)
+    call close(p_file#)
+    set p_file# (fd_none)
+endfunction
+
+importx "fclose" fclose
+
+function f_close(sv p_file)
+	call fclose(p_file#)
+	set p_file# (NULL)
+endfunction
+
+importx "fprintf" fprintf
+
+importx "fwrite" fwrite # builtin
+^importx "ftell" ftell 1
+importx "fseek" fseek
+
+^importx "fopen" fopen 2
+importx "free" free
+
+#aftercallimport ebool
+
+import "error" error
+
+#file
+function f_open(ss path,ss format)
+	sd f;setcall f fopen(path,format)
+	if f=(NULL)
+		call error(globalf.f_open_err)
+	end
+	return f
+end
+#file
+function f_open_mem(ss path,ss format)
+	sd f;set f f_open_mem_ex(path,format)
+	call free(path)
+	return f
+endfunction
+#file
+function f_open_mem_ex(ss path,ss format)
+	sd f;setcall f fopen(path,format)
+	if f=(NULL)
+		call free(path)
+		call error(globalf.f_open_err)
+	endif
+	return f
+endfunction
+
+#file
+function file_open(ss filepath,sd ?flags)
+	sd ?file  ;#will int compare, sd will -1 on rax
+	sdu ?permission
+	sd ?creat_test;set creat_test flags;and creat_test (flag_O_CREAT);if creat_test!=0
+		set permission (flag_pmode);endif
+	SetCall file open(filepath,flags,permission)
+	sd ?er=fd_error #will minus 1 rightly with ocompiler
+	if file=er
+		call printEr("File: \"")
+		call printEr(filepath)
+		call error("\" cannot be opened")
+	EndIf
+	return file
+endfunction
+#offset
+function file_seek(sd ?file,sv ?off,sd ?method)
+	sv ?seekint
+	setcall seekint lseek(file,off,method) #Some devices are incapable of seeking and POSIX does not specify which devices must support lseek
+	#in the rest: a normal error will be when file is to large and seeking there
+	If seekint=-1
+		vstr seekerr="File seek error"
+		call error(seekerr)
+	endif
+	return seekint
+endfunction
+#offset
+function file__seek(sd ?file,sd ?method)
+	callret file_seek(file,0,method) #here return is what file_seek is returning
+endfunction
+#size
+function filesize(sd ?file)
+	sv ?len
+	set len file__seek(file,(SEEK_END))
+	call file__seek(file,(SEEK_SET))
+	return len
+endfunction
+
+#read
+^import "memalloc" memalloc 1
+#mem
+function file_get_content(ss filepath,sv p_size)  #size is a stack variable , but here is not like the other cases, here is on full
+	sd ?file
+	setcall file file_open(filepath,(_open_read))
+	set globalf.file file
+	sd mem; ss size ;#will size# char , and inc dec
+	set size filesize(file)
+	if p_size!=(NULL)
+		set p_size# size
+		setcall mem memalloc(size)
+	else
+		inc size
+		setcall mem memalloc(size)
+		dec size
+	end
+	set globalf.fmem mem
+	call read(file,mem,size)
+	if p_size=(NULL)
+		add size mem
+		set size# (Nullchar)
+	end
+	return mem
+endfunction
+#function file_read(sd file,sd mem,sd size)
+#    sd read_sz
+#    setcall read_sz read(file,mem,size)
+#    if read_sz!=size
+#        call error("Read length is different or error")
+#    endif
+#endfunction
+
+#write
+
+function file_write(sd ?file,sd buffer,svu ?size)
+	sv ?len
+	setcall len write(file,buffer,size)
+	if len=size
+		ret
+	endif
+	callg error(globalf.file_write_er)
+endfunction
+function file_write_mem(sd ?file,sd buffer,svu ?size)
+	sv ?len
+	setcall len write(file,buffer,size)
+	call free(buffer)
+	if len=size
+		ret
+	endif
+	callg error(globalf.file_write_er)
+endfunction
+
+function f_printf1(sd file,ss format,svu a1)
+	sd ?r;set r fprintf(file,format,a1)
+	if r=-1
+		callg error(globalf.fprintf_er)
+	endif
+endfunction
+function f_printf2(sd file,ss format,svu a1,svu a2)
+	sd ?r;set r fprintf(file,format,a1,a2)
+	if r=-1
+		callg error(globalf.fprintf_er)
+	endif
+endfunction
+
+function f_write(sd f,sd buf,sd sz)
+	sd r;set r fwrite(buf,sz,1,f)
+	if r!=1
+		callg error("fwrite error")
+	end
+endfunction
+
+function f_tell(sd f)
+	sd r;set r ftell(f)
+	if r=-1
+		call error(globalf.f_tell_er)
+	end
+	return r
+endfunction
+function f_tell_errors(sd f)
+	sd r;set r ftell(f)
+	if r!=-1
+		return r
+	end
+	call fclose(f)
+	callg error(globalf.f_tell_er)
+endfunction
+
+function f_size(sd path)
+	sd f;set f fopen(path,globalf.f_open_rb)
+	if f!=(NULL)
+		call fseek(f,0,(SEEK_END))
+		sd size
+		set size ftell(f)
+		call fclose(f)
+		if size!=-1
+			return size
+		end
+	end
+	callg error(globalf.f_size_er)
+end
+function f_size_errors(sd path)
+	sd f;set f fopen(path,globalf.f_open_rb)
+	if f!=(NULL)
+		call fseek(f,0,(SEEK_END))
+		sd size
+		set size ftell(f)
+		call fclose(f)
+		if size!=-1
+			return size
+		end
+	end
+	call free(f)
+	callg error(globalf.f_size_er)
+end
+
+import "file_resources_set" file_resources_set
+import "file_resources_free" file_resources_free
+function filepath_get_word(ss imagepath,sd ?offset,ss err)
+	sd ?file
+	setcall file file_open(imagepath,(_open_read))
+	call file_resources_set(file)
+	sv ?size
+	setcall size filesize(file)
+	sd ?offsetandword;set offsetandword offset
+	add offsetandword (WORD)
+	if size<offsetandword ##lseek is signed
+		call error(err)
+	endif
+	call lseek(file,offset,(SEEK_SET))
+	sw ?dim=0
+	call read(file,#dim,(WORD))
+	call file_resources_free()
+	return dim
+endfunction
+
+#file
+function dblsize_start(ss imagepath,sv p_size,ss p_ver)
+	sd ?file
+	setcall file file_open(imagepath,(_open_read))
+	call file_resources_set(file)
+	setcall p_size# filesize(file)
+	if p_size#<(dblsignature_major)  ##lseek is signed
+		call error("error at dblsize start")
+	end
+	charx sig_imp#3;ss sg^sig_imp
+	call read(file,sg,(dblsignature_major)) #if not with errors, like read() to be a macro and be inserted there?
+	add sg (dblsignature_prefix)
+	set p_ver# sg#
+	return file
+endfunction
+function dblsize_end(sd ?file,sv ?size,sd ?offset)
+	sd ?offsetandword;set offsetandword offset
+	add offsetandword (WORD)
+	if size<offsetandword ##lseek is working with off_t size, and offsetandword is small is controlled by us
+		call error("error at dblsize end")
+	endif
+	call lseek(file,offset,(SEEK_SET))
+	sw ?dim=0
+	call read(file,#dim,(WORD))
+	call file_resources_free()
+	return dim
+endfunction
+
+#size
+function dbl_dim(ss imagepath,sd ?off)
+	#format? ming newSWFDBLBitmap_fromInput
+	sv ?size;charx t#1
+	sd ?file;set file dblsize_start(imagepath,#size,#t)
+	if t=(l_low)
+		add off (dblsignature+dblsize+dblformat)
+	else
+		add off (dblsignature+dblsize16+dblformat)
+	end
+	callret dblsize_end(file,size,off)
+end
+
+entryraw globalf()
