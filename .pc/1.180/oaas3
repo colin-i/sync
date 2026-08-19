@@ -1,0 +1,918 @@
+#!/usr/bin/python3
+
+# break OAPATH target src_name
+# a1 a2a a2b a3 b1b b2b  splits_folder splits_format_ext splits_printf_ext
+# OACACHE from_diagnostics verbose main
+
+# skip_orig origf_name mirror_name
+# skip_src allow_untranslated
+# skip_comp  launcher compiler header  SERVER_PID server_extern server_compiler skip_connect_test sentinel  no_diagnostics only_diagnostics diag_json dump  no_confirm ffdec  no_clean
+
+# / / 3
+#   *   * /
+
+#import ctypes
+#import difflib
+#import itertools
+#import json
+#import os
+from pathlib import Path
+#import pdb
+#import re
+#import signal
+#import shutil
+#import socket
+#import subprocess
+import sys
+#import time
+#import xml.etree.ElementTree as ET
+
+if len(sys.argv)!=3:
+	print(f"Usage: {Path(sys.argv[0]).name} output_folder output_file")
+	exit(1)
+
+import os
+
+OAPATH=""
+if os.environ.get('OAPATH'):
+	OAPATH=os.environ.get('OAPATH')
+	#this is windows specific os.add_dll_directory(os.environ.get('OAPATH'))
+
+sentinel=os.environ.get('sentinel')
+import ctypes
+try: #in LD_LIBRARY_PATH
+	lib=ctypes.cdll.LoadLibrary(os.path.join(OAPATH,"liboaas.so"))
+except Exception:
+	try:
+		lib=ctypes.cdll.LoadLibrary(os.path.join(OAPATH,"liboaas.dll"))
+		if sentinel: #needed at wine
+			import _winapi
+			_orig_close_handle = _winapi.CloseHandle
+			def _safe_close_handle(h):
+				try:
+					_orig_close_handle(h)
+				except OSError:
+					print('sentinel')  # Wine gives bogus thread handles for native Unix children
+					pass
+					#return _winapi.WAIT_OBJECT_0  # pretend it finished
+			_winapi.CloseHandle = _safe_close_handle
+	except Exception:
+		lib = None
+		# print('no liboaas support')
+if lib:
+	try:
+		lib.line.argtypes = [ctypes.c_char_p]; lib.line.restype = ctypes.c_char_p
+		lib.startline.argtypes = [ctypes.c_char_p,ctypes.c_char_p]; lib.startline.restype = ctypes.c_char_p
+		lib.ratio.argtypes = [ctypes.c_char]; lib.ratio.restype = ctypes.c_char
+		#lib.dualmode_reset
+
+		lib.flash_to_openfl.argtypes = [ctypes.c_char]
+		lib.mainmodule_boolset.argtypes = [ctypes.c_char]
+		lib.verbose.argtypes = [ctypes.c_char]
+
+		lib.solve1.argtypes = [ctypes.c_char_p]; lib.solve1.restype = ctypes.c_char_p
+		lib.solve2.argtypes = [ctypes.c_char_p]; lib.solve2.restype = ctypes.c_char_p
+		lib.solve4.argtypes = [ctypes.c_char_p]; lib.solve4.restype = ctypes.c_char_p
+		lib.solve7.argtypes = [ctypes.c_char_p,ctypes.c_char_p]; lib.solve7.restype = ctypes.c_char_p
+
+		lib.dualmode.restype = ctypes.c_char
+		lib.firstline.restype = ctypes.c_char
+		lib.postpone_char.restype = ctypes.c_char
+		lib.resolve.restype = ctypes.c_char
+		lib.sep.restype = ctypes.c_char
+	except Exception:
+		print('lib oaas error')
+		exit(1)
+
+if os.environ.get('break'): import pdb; pdb.set_trace()
+
+dest=sys.argv[1]
+def get_module_insens(fl):
+	f=os.path.basename(os.path.dirname(fl))
+	f=f[0].upper() + f[1:]
+	return f
+def hx_exte(fl):
+	return get_module_insens(fl)+'.hx'
+def hx_ext(fl):
+	return os.path.join(dest,hx_exte(fl))
+out_file_name=sys.argv[2]
+
+def changeable(a,b,c): globals()[a + b] = c if os.environ.get(a + b) == None else os.environ.get(a + b)
+changeable('a','1','/')
+changeable('a','2a','/')
+changeable('a','2b','*')
+changeable('a','3','3')
+changeable('b','1b','*')
+changeable('b','2b','/')
+def premade_formats():
+	#environ or defaults at edor and src
+
+	splits_folder=os.environ.get('splits_folder')
+	if not splits_folder:
+		splits_folder='osrc'
+
+	splits_format_ext=os.environ.get('splits_format_ext')
+	if not splits_format_ext:
+		splits_format_ext='split'
+
+	#and here at src
+	splits_printf_ext=os.environ.get('splits_printf_ext')
+	if not splits_printf_ext:
+		splits_printf_ext='format'
+
+	def ext(a): return '' if a=='' else os.extsep+a     #notice: os.extsep is not directly connected with my edor and src, is like a guardian?
+	a=('' if splits_folder=='' else splits_folder+os.sep)
+
+	return (a+os.path.splitext(out_file_name)[0]+ext(splits_format_ext),a+out_file_name+ext(splits_printf_ext))
+def splits_data(orig=False,dirs=''):
+	splits_file, splits_mix = premade_formats()
+	#for filename in os.listdir(src):
+	with open(dirs+splits_file) as splits_file:
+		splits_file_data=splits_file.read()
+		files = splits_file_data.split('\x00')
+		files.pop() # Remove the last empty string
+		files_src = [str(Path(src_name)) + os.sep + str(Path(*Path(f).parts[1:])) for f in files]
+		if not orig:
+			return files_src
+	files_mirror = [str(Path(mirror_name)) + os.sep + str(Path(*Path(f).parts[1:])) for f in files]
+	with open(dirs+splits_mix) as splits_mix:
+		splits_mix_data=splits_mix.read()
+		texts = splits_mix_data.split('\x00')
+		if texts[-1]!=texts[-2]: #when last two are \0\0 is not the same like text\0
+			texts.pop()
+	return (files,files_mirror,files_src,texts)
+
+target=os.environ.get('target')
+if target:
+	if target!="html5":
+		print('target not available')
+		exit(1)
+
+src_name=os.environ.get('src_name')
+if not src_name:
+	src_name='src'
+
+import shutil
+
+skip_orig='skip_orig'
+if not os.environ.get(skip_orig):
+	origf_name=os.environ.get('origf')
+	if not origf_name:
+		origf_name='origf'
+	mirror_name=os.environ.get('mirror_name')
+	if not mirror_name:
+		mirror_name='mirror'
+
+	files,files_mirror,files_src,texts = splits_data(orig=True)
+
+	import difflib
+
+	for i, f in enumerate(files):
+		txt=texts[i]
+		if txt:
+			origf = None
+		else:
+			origf = Path(f)
+		mirror = Path(files_mirror[i])
+		src = Path(files_src[i])
+		if not mirror.exists():
+			# create parent folders
+			mirror.parent.mkdir(parents=True, exist_ok=True)
+			src.parent.mkdir(parents=True, exist_ok=True)
+
+			# create mirror/src copy
+			if origf:
+				shutil.copy(origf, mirror) # or copy2: Identical to copy() except that copy2() also attempts to preserve file metadata.
+				shutil.copy(origf, src)
+			else:
+				with open(mirror,"w") as fl:
+					fl.write(txt)
+				with open(src,"w") as fl:
+					fl.write(txt)
+		else:
+			old = mirror.read_text().splitlines(keepends=True)
+			if origf:
+				new = origf.read_text().splitlines(keepends=True)
+			else:
+				new = txt.splitlines(keepends=True)
+			out = src.read_text().splitlines(keepends=True)
+			matcher = difflib.SequenceMatcher(None, old, new)
+			offset = 0
+			#        old     new
+			for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+				if tag == "equal":
+					continue
+				print(tag)
+				print("old:", old[i1:i2])
+				print("new:", new[j1:j2])
+
+				i1 += offset
+				i2 += offset
+				if tag == "insert":
+					out[i1:i1] = new[j1:j2]
+					offset += (j2 - j1)
+					continue
+				if tag == "replace":
+					out[i1:i2] = new[j1:j2]
+					offset += (j2 - j1) - (i2 - i1)
+					continue
+				if tag == "delete":
+					del out[i1:i2]
+					offset -= (i2 - i1)
+					continue
+				print('?')
+				exit(1)
+			src.write_text(''.join(out))#os.linesep
+			mirror.write_text(''.join(new))
+
+terminations="\r\n"
+
+OACACHE=os.environ.get('OACACHE')
+if not OACACHE:
+	OACACHE="__oacache__"
+from_diagnostics='from_diagnostics'
+f_d=os.environ.get(from_diagnostics)
+
+import time
+def stop_server(s):
+	try:
+		pid = int(s)
+	except TypeError,ValueError:  #TypeError at exiting without a sever , ValueError at server_extern
+		return
+	if sys.platform == "win32":
+		_stop_windows(pid)
+	else:
+		_stop_posix(pid)
+def _stop_posix(pid):
+	import signal
+	try:
+		os.kill(pid, signal.SIGTERM)
+		os.kill(pid, 0)
+		time.sleep(1)
+		os.kill(pid, 0)
+		os.kill(pid, signal.SIGKILL)
+	except ProcessLookupError:
+		return
+	os.waitpid(pid, 0)
+def _stop_windows(pid):
+	PROCESS_TERMINATE = 0x0001
+	SYNCHRONIZE = 0x00100000
+	kernel32 = ctypes.windll.kernel32
+	handle = kernel32.OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, False, pid)
+	if not handle:
+		return  # no such process
+	try:
+		time.sleep(1)
+		kernel32.TerminateProcess(handle, 1)
+		kernel32.WaitForSingleObject(handle, 5000)  # wait up to 5s, ms
+	finally:
+		kernel32.CloseHandle(handle)
+
+def exiting_serv(s):
+	stop_server(s)
+	exit(1)
+def exiting():
+	exiting_serv(server_pid)
+
+verbose=os.environ.get('verbose')
+if verbose:
+	print(sys.argv[1]+' '+sys.argv[2])
+main=os.environ.get('main')
+if not main:
+	main='Main'
+
+skip_src='skip_src'
+if not os.environ.get(skip_src):
+	if lib:
+		if target:
+			lib.flash_to_openfl(True)
+		if verbose:
+			lib.verbose(True)
+
+	def exiting_verif():
+		exiting_serv(os.environ.get('SERVER_PID'))
+	allow_untranslated=os.environ.get('allow_untranslated')
+	def make_line(bf):
+		bf = bf.rstrip(terminations.encode()) #this is extra at inline comments
+		byts = bytes(bf)
+		if len(stored):
+			bf=lib.startline(bytes(stored),byts)
+			stored.clear()
+		else:
+			bf=lib.line(byts)
+		if not allow_untranslated:
+			if byts == bf:
+				r = lib.ratio(False)
+				if ord(r) !=  100: #can be blank closing comment
+					print("Untranslated. 'if not os.environ.get('allow_untranslated') failed")
+					exiting_verif()
+		return bf+os.linesep.encode()
+	def singleline():
+		bf=chars[:pos]
+		if lib:
+			dfile.write(make_line(bf))
+		else:
+			dfile.write(bf)
+
+	try:
+		os.mkdir(dest)
+	except FileExistsError:
+		pass
+
+
+	multiline_backjump=len(b1b.encode())+len(b2b.encode())
+
+	stored=bytearray()
+	multiline_backjump_start=len(a1.encode())+len(a3.encode())
+	singleline_backjump_start=multiline_backjump_start
+	multiline_backjump_start+=len(a2a.encode())
+	singleline_backjump_start+=len(a2b.encode())
+
+	was_multiline=False
+	dual_mode=False
+
+	files = splits_data()
+	for f in files:
+		if lib:
+			lib.mainmodule_boolset(get_module_insens(f)==main)
+		with open(f) as sfile:
+			text=sfile.readlines()
+		if not f_d:
+			with open(hx_ext(f),'ab') as dfile: #haxe will not do for .as
+				mode=0
+				for line in text:
+					chars = bytearray(len(line.encode())) #'utf-8'
+					pos = 0
+					for c in line:
+						ch=c.encode()
+						positions=len(ch)
+						for j in range(0,positions):
+							chars[pos]=ch[j]
+							pos+=1
+						if mode==0:
+							if c==a1:
+								mode=1
+							elif dual_mode:
+								if c==b1b:
+									mode=7
+						elif mode==1:
+							if c==a2a:
+								mode=2
+							elif c==a2b:
+								mode=3
+							else:
+								mode=0
+						elif mode==2 or mode==3:
+							if c==a3:
+								if mode==2:
+									xpos=singleline_backjump_start
+								else:
+									xpos=multiline_backjump_start
+									if lib:
+										lib.dualmode_reset() #here is the less intensive place to reset a one line dual mode, can also signal at startline if is mode 4 or 6 but is intensive
+								stored=chars[:pos-xpos]
+								mode*=2
+								pos=0    #notice: both //3 and /*3 will reset the line
+							else:
+								mode=0
+						elif mode==6:
+							if c==b1b:
+								mode=7
+						elif mode==7:
+							if c==b2b:
+								mode=0
+								pos-=multiline_backjump
+								singleline()
+								pos=0
+								was_multiline=True
+								dual_mode=False
+							elif dual_mode:
+								mode=0
+							else:
+								mode=6
+					if mode==4:
+						mode=0
+						singleline()
+					elif mode==6:
+						singleline()
+						if lib:
+							dual_mode=lib.dualmode() #c_char
+							if dual_mode[0]:
+								mode=0
+					else:
+						bf=chars[:pos]
+						if not was_multiline:
+							dfile.write(bf)
+						else:
+							bf=bf.rstrip(terminations.encode()) #was already added one separator
+							dfile.write(bf)
+							was_multiline=False
+				#here can test if multiline was closed
+		else:
+			mod = get_module_insens(f)
+			folder = Path(OACACHE)
+			file = folder / folder / mod
+			if file.exists():
+				lines = file.read_text().splitlines()
+				with open(hx_ext(f),'rb') as dfile:
+					out_text = dfile.readlines()
+				for line in lines:
+					#lib is because from_diagnostics tested that
+					line=int(line)
+					in_text=text[line]
+					parts=in_text.split((a1+a2a+a3))
+					if len(parts)!=2:
+						print('error at rerun')
+						exiting_verif()
+					stored = bytearray(parts[0].encode())
+					out_text[line]=make_line(parts[1].encode())
+				with open(hx_ext(f),'wb') as dfile:
+					dfile.writelines(out_text)
+				os.remove(file)
+	if lib:
+		lib.ratio(True)
+
+if not os.environ.get('skip_comp'):
+	import subprocess
+	def srun(a):
+		r=subprocess.run(a)
+		if r.returncode:
+			print('error')
+			exit(r.returncode)
+	compiler=os.environ.get('compiler')
+	if not target:
+		if not compiler:
+			compiler='haxe'
+
+		c_dir=os.getcwd() #haxe says no to abs path
+		dest_file=os.path.realpath(out_file_name)
+
+		try:
+			os.chdir(dest)
+		except FileNotFoundError:
+			print('cannot compile without dest') # if skip_src, and was not
+			exit(1)
+		server_pid=os.environ.get('SERVER_PID')
+		if not server_pid:
+			server_extern=os.environ.get('server_extern')
+			if not server_extern:
+				import socket
+				server_compiler=os.environ.get('server_compiler')
+				if not server_compiler:
+					server_compiler=compiler
+				server = subprocess.Popen([server_compiler, "--wait", "6000"])
+				server_pid=str(server.pid)
+				skip_connect_test=os.environ.get('skip_connect_test')
+				if skip_connect_test:
+					wait_some=int(skip_connect_test)
+					time.sleep(wait_some)
+				else:
+					wait_some=10  #wine is longer
+					while wait_some:
+						try:
+							with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+								s.settimeout(1)
+								if s.connect_ex(("127.0.0.1", 6000)) == 0:
+									break
+							#with socket.create_connection(("127.0.0.1", 6000),timeout=1): #timeout is at success
+							#	break
+						except: # OSError:
+							time.sleep(1)
+							wait_some-=1
+							continue
+					if not wait_some:
+						print('server error')
+						exiting()
+
+		baser=[compiler,'--connect','6000','-swf',dest_file,'-main',main,'-D','flash_strict']
+		#                                                                   this flag for _x to be error
+		launcher=os.environ.get('launcher')
+		if launcher:
+			baser.insert(0,launcher)
+
+		hd=os.environ.get('header')
+		if hd:
+			baser.extend(['-D','swf-header='+hd])
+			# -swf-header 960:640:60:f68712 -swf-version 15
+			#w:h:fps:rgb
+
+		import tempfile
+		def prun(a, capture_output=False):
+			if verbose:
+				print(a)
+			if not sentinel:
+				kwargs = {}
+				if capture_output:
+					kwargs['stderr'] = subprocess.PIPE
+				return subprocess.run(a,**kwargs)
+			else: #wine always Invalid handle and never reaches return
+				done_path = sentinel+".done"
+				if capture_output:
+					err_path = sentinel+".err"
+				else:
+					err_path = '0'
+				# a = ['/bin/sh', '/home/bc/a/whaxe', ...actual haxe args...]
+				# wrapper script expects: whaxe <done_path> <err_path> <haxe args...>
+				full_cmd = a[:2] + [done_path, err_path] + a[2:]
+				#whaxe, more at tests/as3/aw
+
+				#kwargs = {'stdin': subprocess.DEVNULL, 'stdout': subprocess.DEVNULL, 'stderr': subprocess.DEVNULL}
+				proc = subprocess.Popen(full_cmd) #, **kwargs)
+
+				#start = time.monotonic()
+				poll_interval=0.5
+				while not os.path.exists(done_path):
+					#if timeout is not None and time.monotonic() - start > timeout:
+					#	break
+					time.sleep(poll_interval)
+
+				#returncode = 0
+				#if os.path.exists(done_path):
+				with open(done_path) as f:
+					returncode = int(f.read()) #.strip() or "0")
+				os.remove(done_path)
+
+				result = subprocess.CompletedProcess(a, returncode)
+
+				if capture_output:
+					result.stderr = open(err_path).read() #if os.path.exists(err_path) else b""
+					os.remove(err_path)
+				return result
+		def crun(a,capture_output=False):
+			r=prun(a,capture_output=capture_output)
+			if r.returncode:
+				print('error')
+				exiting()
+			return r
+
+		o_d=os.environ.get('only_diagnostics')
+		if os.environ.get('no_diagnostics'):
+			crun(baser)
+			os.chdir(c_dir) #same like to other plus for diagnostics all cases
+		else:
+			if f_d:
+				f_d=int(f_d)
+			if not o_d and not f_d:
+				r=prun(baser)
+			if o_d or f_d or r.returncode:
+				def diags():
+					import json
+					import itertools
+
+					_id_counter = itertools.count(1)
+					diag_json=os.environ.get('diag_json')
+
+					def diag_request(file,mode,offset=0):
+						if not diag_json:
+							return file+'@'+str(offset)+'@'+mode
+						# Legacy "file@offset[@mode]" suffix -> JSON-RPC "display/..." method.
+						# Modes without an explicit @suffix (plain "file@offset") default to completion.
+						#_MODE_TO_METHOD = {
+						#    "":             "display/completion",     # file@offset          -> completion
+						#    "position":     "display/definition",     # file@offset@position -> goto definition
+						#    "usage":        "display/references",     # file@offset@usage    -> find references
+						#    "type":         "display/hover",          # file@offset@type     -> hover/type info
+						#    "signature":    "display/signatureHelp",
+						#    "diagnostics":  "display/diagnostics",    # usually file-only, offset ignored/0
+						#    "metadata":     "display/metadata",       # project-wide, no offset needed
+						#    "module-symbols": "display/moduleSymbols",
+						#}
+
+						# Diagnostics and metadata are project/file scoped, not offset scoped.
+						if mode == "diagnostics":
+							method="display/diagnostics"
+							params = {"file": file}
+						#elif method == "display/metadata":
+						#	params = {}
+						else:
+							method="display/definition"
+							params = {"file": file, "offset": offset}
+						request = {
+							"jsonrpc": "2.0",
+							"id": next(_id_counter),
+							"method": method,
+							"params": params,
+						}
+						return json.dumps(request)
+
+					baser.append('--display')
+					files=splits_data(dirs='../')
+
+					diagnostics=[]
+					for f in files:
+						baser.append(diag_request(hx_exte(f),'diagnostics'))
+						p=crun(baser,capture_output=True)
+						baser.pop()
+						result=json.loads(p.stderr)
+						if isinstance(result, dict):
+							result = result.get("result")
+							result = result["result"]  # dev build: unwrap the timestamp wrapper
+						# stable build: already the bare list
+						diagnostics.extend(result) #append wrong the type, error throw later
+					os.chdir(c_dir)
+
+					file_cache = {}
+					touched = set()
+					line_cache = {}
+					line_cache_last = {}
+
+					def save_line(module, line):
+						folder = Path(OACACHE)
+						folder.mkdir(exist_ok=True)
+						file = folder / module  # this is not + , on windows is backslash
+
+						if module not in line_cache:
+							if file.exists():
+								line_cache[module] = set(file.read_text().splitlines())
+							else:
+								line_cache[module] = set()
+							line_cache_last[module] = set()
+
+						cache = line_cache[module]
+						cache_last = line_cache_last[module]
+
+						line = str(line)
+
+						if not line in cache_last:
+							cache_last.add(line)
+
+							last = folder / folder
+							last.mkdir(exist_ok=True)
+							last_file = last / module
+							with open(last_file, "a", newline="") as fp: #newline="" good on wine else will be \r\r\n
+								fp.write(line + os.linesep)
+
+						if line in cache:
+							return #False
+
+						cache.add(line)
+						with open(file, "a", newline="") as fp:
+							fp.write(line + os.linesep)
+						return #True
+
+					import re
+					def diag():
+						pp=''
+						firstline=None
+						if kind==7:
+							# this is unstable: module=d["args"]["moduleType"]["name"]
+							#field=d["args"]["entries"][0]["fields"][0]["field"]
+							#module=os.path.splitext(field["pos"]["file"])[0]
+
+							positions=d["range"]["end"]
+							line=positions["line"]
+
+							value=d["args"]["entries"][0]["fields"][0]["field"]["name"]
+						else:
+							positions=d["range"]["start"]
+							line=positions["line"]
+							args=d["args"]
+							if kind==1:
+								if not args:
+									return None
+								value=args[0]["name"]
+							else:
+								value=args.split("\n")[0] #JSON doesn't use the host OS's line-ending convention.
+								if kind==2:
+									character=positions["character"]
+
+									src = Path(fullfilename).read_text(newline='') #encoding="utf-8" #newline for \r\n wine
+									lines = src.splitlines(keepends=True)
+									# get text before the target line
+									before = "".join(lines[:line])
+									# add characters in the target line
+									offset_chars = len(before) + character
+									# convert character offset -> UTF-8 byte offset
+									offset_bytes = len(src[:offset_chars].encode()) #"utf-8"
+
+									pp='('+str(line)+':'+str(character)+' at '+str(offset_bytes)+') to '
+
+									os.chdir(dest)
+									baser.append(diag_request(filename,'position',offset_bytes))
+									result=prun(baser,capture_output=True)
+									baser.pop()
+									os.chdir(c_dir)
+									#if not result.returncode: # must match ok
+									result = result.stderr
+									if not diag_json:
+										result = ET.fromstring(result).find('pos')
+										if result is not None: #else,example,TextFormatAlign
+											result=result.text
+											#lineparts=result.split(':') #windows... F:...
+											m = re.match(r'^(.+):(\d+):', result)
+											if m.group(1)==fullfilename: #is another file line else, also at first case
+												firstline=line
+												line=int(m.group(2))-1 # from human
+									else:
+										result = json.loads(result) #here are situations like addChild(label) where label is not going to createTextField yet
+										if not "error" in result:
+											result = result.get("result")  #same as before
+											result = result["result"]
+											if isinstance(result,list): #stage.addChild(text); without createEmptyMovieClip
+												if result: # 'Too many arguments' var arcon=new Array(1,2,3);
+													firstline=line
+													line=result[0]["range"]["start"]["line"]
+						return value,line,positions,pp,firstline
+
+					dump=os.environ.get('dump')
+					unresolved=False;resolved=False
+					tr_sep = a1 + a2a + a3
+
+					import xml.etree.ElementTree as ET
+
+					for file in diagnostics:
+						if dump:
+							print(json.dumps(file,indent=10))
+						fullfilename=file["file"]
+						filename=os.path.basename(fullfilename)
+						module=os.path.splitext(filename)[0]
+						print(module)
+						for d in file["diagnostics"]:
+							if d["severity"] == 1:
+								solved = None
+								kind=d["kind"]
+								if kind in [1,2,4,7]:
+									values=diag()
+									if values:
+										value,line,positions,pp,firstline=values
+										if verbose:
+											print(str(kind)+' '+pp+str(line)+' '+value+('' if not firstline else (' '+str(firstline))))
+										#now is like: fix one error will fix another 4
+										for f in files:
+											mod = get_module_insens(f)
+											if mod == module:
+												if not lib:
+													print('missing oaas lib')
+													exiting()
+
+												if f not in file_cache:
+													with open(f) as fp:
+														file_cache[f] = fp.readlines()
+												lines = file_cache[f]
+
+												if kind==4:
+													solved = lib.solve4(value.encode())
+												elif kind==2:
+													solved = lib.solve2(value.encode())
+													if solved: # it is no having ""
+														if lib.firstline()[0]:
+															if firstline: #at compare without exclamations is from if, not this case
+																line=firstline
+												elif kind==1:
+													solved = lib.solve1(value.encode())
+
+												linestr = lines[line]
+												if linestr[-1] in terminations:
+													linestr = linestr.rstrip(terminations)
+													has_term=True
+												else:
+													has_term=False
+
+												if kind==7:
+													solved = lib.solve7(value.encode(),linestr[positions["character"]:].encode())
+
+												if not solved:
+													if solved==None:
+														break
+													#this case is with the postpone_char. or normal
+													solved = lib.resolve()
+													part1, delim, part2 = linestr.partition(tr_sep)
+													if delim:
+														comparator = solved.decode()
+														sep=lib.sep().decode()
+														tokens = part2.split(sep)
+														n = lib.postpone_char().decode()
+														nn = len(n)
+														#c0 = comparator[0] # to compare less, like sw , sh
+														for i,token in enumerate(tokens):
+															token = token.lstrip()          # remove leading whitespace
+															if isinstance(solved, bytes):
+																against=token[0:nn] #token.startswith(n): # can be '_ val' , so, use startswith
+																if against == n:
+																	solved = comparator
+																	token = solved + token[nn:]
+																#elif against == c0: #this comparation was going with another case at next code
+																#	break #example at rect, else will be r x+r+r
+															tokens[i]=token
+														if not isinstance(solved, bytes):
+															save_line(module,line)
+															linestr = part1 + delim + sep.join(tokens)
+														#elif against == c0:
+														#	break #example at rect, else will be r+r+r
+												rslvd=True
+												if isinstance(solved, bytes):
+													solved = solved.decode()
+													save_line(module,line)
+													try:#still can be a line with markers from orig
+														part1, part2 = linestr.split(tr_sep) #will throw here
+														s1 = solved[1:]
+														s0 = solved[0]
+														sep=lib.sep().decode()
+														tokens = part2.split(sep)
+														#not_added=True
+														for i,token in enumerate(tokens):
+															if token[0] == s0:
+																if s1: # a case sw then sh, must combine them
+																	if not s1 in token[1:]:
+																		tokens[i] = token + s1
+																#not_added=False
+																rslvd=False
+																break
+														#if not_added:
+														if rslvd:
+															tokens.append(solved)
+														linestr = part1 + tr_sep + sep.join(tokens)
+													except:
+														linestr = linestr + tr_sep + solved
+												lines[line] = linestr + (os.linesep if has_term else "")
+												touched.add(f) #these are not rslvd? ok, but make that if s1 case
+
+												if rslvd: #can loop infinite without this if is alone
+													resolved=True
+												break
+								if not solved:
+									unresolved=True
+					if resolved:
+						for f in touched:
+							with open(f, "w", newline="") as fp: # , newline="" was already explained
+								fp.writelines(file_cache[f])
+						if o_d:
+							return
+						if unresolved:
+							os.environ[from_diagnostics] = '1'
+						else:
+							os.environ[from_diagnostics] = '0' #needed at src. Setting SetEnvironmentVariable(name, "") on Windows is documented to delete the variable
+							#so an int() is required
+
+						os.environ[skip_orig] = "1"
+						os.environ["SERVER_PID"] = server_pid if server_pid else '' # server_extern, then here = None is exception
+
+						if os.environ.get("no_execv"):
+							result = subprocess.run([sys.executable] + sys.argv)
+							sys.exit(result.returncode)
+						os.execv(sys.executable, [sys.executable] + sys.argv)
+						#print("never reached")
+					if unresolved:
+						print("diagnostics failed")
+						exiting()
+					if f_d: #still can be all ok after all diagnostics
+						baser.pop()
+						os.chdir(dest)
+						crun(baser)
+						os.chdir(c_dir)
+				diags()
+			else:
+				os.chdir(c_dir) #back for clean, and maybe ffdec is relative, dest_file is realpath
+
+		stop_server(server_pid)
+
+		if not os.environ.get('no_confirm') and not o_d: #only diagnostics is a dry run at haxe
+			#confirm is as3
+
+			dest_file_tmp=dest_file+'.tmp'
+			ffdec=os.environ.get('ffdec')
+			if not ffdec:
+				ffdec='ffdec'
+			srun([ffdec,'-decompress',dest_file,dest_file_tmp])
+			with open(dest_file_tmp,'rb') as file:
+				file.seek(8)
+				#rect
+				b=file.read(1)
+				n=b[0]>>3 # 0xff >> 1 is 0x7f
+				n=5+(n*4)
+				if n%8:
+					n=int(n/8)+1
+				else:
+					n=n/8
+				file.seek(n+3,1)
+				#tag
+				tag=file.read(2)
+				tg=tag[1]<<2
+				tg_low=tag[0]>>6
+				tg|=tg_low
+				if tg!=69:
+					print('no FileAttributes tag')
+					exit(1)
+				tg=tag[0]&0x3f
+				if tg==0x3f:
+					print('malformed FileAttributes tag')
+					exit(1)
+				#tag data
+				tg=file.read(1)
+				if (tg[0]&8)==0:
+					print('ActionScript3 bit is not set')
+					exit(1)
+
+			os.remove(dest_file_tmp)
+
+		if not os.environ.get('no_clean'):
+			files=splits_data() #if not files , are also at: orig src diagnostics
+			for f in files:
+				os.remove(hx_ext(f))
+			os.rmdir(dest)
+			shutil.rmtree(OACACHE, ignore_errors=True)
+
+	else:
+		if not compiler:
+			compiler='openfl'
+		srun([compiler,'build','html5'])
