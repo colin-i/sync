@@ -1,0 +1,296 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: sep, 06 2026 12:09:11 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- ocompiler-2.orig/Makefile
++++ ocompiler-2/Makefile
+@@ -5,7 +5,7 @@ TOPTARGETS := install-proj clean distcle
+ 
+ #                                                             || arch/fedora/suse
+ ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH 2>/dev/null || uname -m)
+-ARCH := $(patsubst i586,i386,$(ARCH))
++ARCH := $(patsubst i686,i386,$(ARCH))
+ 
+ ifeq ($(ARCH),i386)
+ 	conv_64=1
+@@ -30,7 +30,16 @@ $(TOPTARGETS): $(SUBDIRS)
+ install:
+ 	$(MAKE) all
+ 	$(MAKE) install-proj
+-$(SUBDIRS):
++src:
++	conv_64=${conv_64} $(MAKE) -C $@ $(MAKECMDGOALS)
++
++ounused: src
++	conv_64=${conv_64} $(MAKE) -C $@ $(MAKECMDGOALS)
++
++ostrip: ounused
++	conv_64=${conv_64} $(MAKE) -C $@ $(MAKECMDGOALS)
++
++otoc: ounused
+ 	conv_64=${conv_64} $(MAKE) -C $@ $(MAKECMDGOALS)
+ 
+ verify_comp_with_link:
+@@ -48,4 +57,3 @@ clean:
+ 
+ #phony only in this file not in subdirs, then can write extra for a PHONYTOPTARGETS
+ .PHONY: all install $(TOPTARGETS) $(SUBDIRS) verify_comp_with_link
+-.NOTPARALLEL:
+--- ocompiler-2.orig/cln
++++ ocompiler-2/cln
+@@ -1,2 +1,16 @@
+ 
+ make clean && git status
++
++#plans:
++
++#vars/fns/consts and usage locations in dbg sec for odbg
++#and or
++#={"a","b"}
++#~(page_sectionalignment-1)
++#function in code at execs
++#SizeofStackReserve against growramp?
++#at write when there is at 0x80.... or at exes it is a fixed virtual
++#there is 0x66 prefix for words and some movsw/movzw
++
++#info:
++#ocompiler.conf is not overwritten if modifying it locally, "any files under the /etc directory as conffile, so if your program only has conffiles there you do not need to specify them in debian/{package}.conffiles"
+--- ocompiler-2.orig/localtest
++++ ocompiler-2/localtest
+@@ -1 +1 @@
+-2-5+249
++2-5+250
+--- ocompiler-2.orig/o.html
++++ ocompiler-2/o.html
+@@ -22,7 +22,7 @@
+ 		color:green;
+ 	}
+ 	#selection_table td:not(.noborder) {
+-		border: 1px solid black;
++		border: 1px solid;
+ 	}
+ 	.noborder{}
+ 	sup-r{
+--- ocompiler-2.orig/readme.md
++++ ocompiler-2/readme.md
+@@ -1,11 +1,11 @@
+ # O Compiler
+ 
+ ## Install
+-On Ubuntu(amd64 i386)[xenial(i386) bionic focal jammy noble] from PPA.
++On Ubuntu(amd64 i386)[xenial(i386) bionic focal jammy noble resolute] from PPA.
+ ```sh
+ sudo add-apt-repository ppa:colin-i/ppa
+ ```
+-Or the *Manual installation step* from this [link](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6).\
++Or the *Manual installation step* from this [link](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6#manual-installation-step).\
+ Then:
+ ```sh
+ sudo apt-get install ocompiler
+@@ -50,8 +50,8 @@ On Windows, <i>.windows.zip</i> file fro
+ On linux distributions(x86_64), <i>.AppImage</i> file from [releases](https://github.com/colin-i/o/releases).
+ 
+ ## Info
+-Documentation is at [o.html](https://htmlpreview.github.io/?https://github.com/colin-i/o/blob/master/o.html).\
++Documentation(O syntax and X syntax) is at [o.html](https://htmlpreview.github.io/?https://github.com/colin-i/o/blob/master/o.html).\
+ [Preferences file](https://raw.githubusercontent.com/colin-i/o/master/ocompiler.conf).
+ 
+ ## Donations
+-The *Donations* section is [here](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6).
++The *Donations* section is [here](https://gist.github.com/colin-i/e324e85e0438ed71219673fbcc661da6#donations).
+--- ocompiler-2.orig/src/files/functions/argument/arg.oc
++++ ocompiler-2/src/files/functions/argument/arg.oc
+@@ -551,6 +551,13 @@ function getarg_colon(sd content,sd args
+ 			if pointer_size!=0
+ 				#runtime
+ 				or pointer2# (suffixbit)
++				if is_stack!=0 #here is the allday usage at runtime when pointing from mem and cannot move qword on dword
++					and location_part data2#
++					and location_part (datapointbit)
++					if location_part!=0
++						or pointer2# (datapointrememberbit)
++					end
++				end
+ 				add pointer2 (masksize) #note that here is not on nameoffset, is on data#3 value from temp
+ 				set pointer2# data#
+ 				sub pointer2# subtract_base
+--- ocompiler-2.orig/src/files/functions/argument/comwrite.oc
++++ ocompiler-2/src/files/functions/argument/comwrite.oc
+@@ -186,6 +186,14 @@ function writetake_offset(sd takeindex,s
+ 							set op (0x81)
+ 							set sz 6
+ 						endelse
++
++						sub entry (masksize)
++						sd tst=stackbit|datapointrememberbit
++						and tst entry#
++						if tst=(stackbit)
++							and entry# ~stackbit^stackrelativebit #more at set time
++						end
++
+ 						callret addtosec(#op,sz,ptrcodesec)
+ 					endif
+ 				endif
+--- ocompiler-2.orig/src/files/functions/commons/vars.oc
++++ ocompiler-2/src/files/functions/commons/vars.oc
+@@ -490,10 +490,10 @@ function tempdataadd(sv ptrdata)
+ 	sd err
+ 	sv original;set original ptrdata#
+ 	sv t%%ptr_tempdata
+-	setcall err addtosec(original,(location_and_mask),t)
++	setcall err addtosec(original,(location_and_mask+location),t) #+location for colon mix and runtime suffix, needing 2 offsets there
+ 	if err=(noerror)
+ 		call getcontplusReg(t,ptrdata)
+-		sub ptrdata# (location_and_mask)
++		sub ptrdata# (location_and_mask+location)               #same
+ 		call memtomem(ptrdata#,original,(location_and_mask))
+ 	endif
+ 	return err
+--- ocompiler-2.orig/src/files/headers/header.oh
++++ ocompiler-2/src/files/headers/header.oh
+@@ -18,6 +18,8 @@ Const datapointbit=0x08
+ 
+ #bit offset 4: 1 means is nobits
+ const expandbit=0x10
++	#if stackbit & suffixbit
++const datapointrememberbit=0x10
+ 
+ #bit offset 5: 1 means apply aftercall
+ const aftercallthrowbit=0x20
+@@ -47,7 +49,7 @@ const dummy_mask=0
+ const valueslongmask=datapointbit|pointbit
+ const stringslongmask=datapointbit|bigstringbit
+ const location_bits=stackbit|expandbit
+-const stack_location_bits=location_bits|stackrelativebit    #and expandbit? will be always 0 at stack, keep it clean from what we combine
++const stack_location_bits=location_bits|stackrelativebit    #expandbit since datapointrememberbit. was: will be always 0 at stack, keep it clean from what we combine
+ 
+ const location=dwsz
+ Const maskoffset=location
+--- ocompiler-2.orig/src/md
++++ ocompiler-2/src/md
+@@ -1,5 +1,5 @@
+ 
+-OFLAGS+=" function_name 1 nul_res_pref 1" make linkerflags= $@
++OFLAGS+=" function_name 1 nul_res_pref 1" make linkerflags="${linkerflags}" $@
+ 
+ #last working glibc linker: 2.36
+ #linker=/home/bc/arh/libc6-i386/lib32/ld-linux.so.2 make test
+--- ocompiler-2.orig/tests/.expected/template.o.txt
++++ ocompiler-2/tests/.expected/template.o.txt
+@@ -1,13 +1,13 @@
+ f0VMRgIBAQAAAAAAAAAAAAEAPgABAAAAAAAAAAAAAAAAAAAAAAAAAEIAAAAAAAAAAAAAAEAAAAAA
+ AEAACAAHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAEAAAABAAAAAwAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAJAAAAAAAAAAA
+-AAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAHAAAAAQAAAAYAAAAAAAAAAAAAAAAAAAAkBAAAAAAAAJ8B
+-AAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAADQAAAAgAAAADAAAAAAAAAAAAAAAAAAAAwwUA
++AAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAHAAAAAQAAAAYAAAAAAAAAAAAAAAAAAAAkBAAAAAAAAMEB
++AAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAADQAAAAgAAAADAAAAAAAAAAAAAAAAAAAA5QUA
+ AAAAAAAoAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAACIAAAACAAAAAAAAAAAAAAAAAAAA
+-AAAAAMMFAAAAAAAAqAAAAAAAAAAHAAAABAAAAAQAAAAAAAAAGAAAAAAAAAAqAAAABAAAAAAAAAAA
+-AAAAAAAAAAAAAABrBgAAAAAAABgAAAAAAAAABAAAAAEAAAAEAAAAAAAAABgAAAAAAAAANQAAAAQA
+-AAAAAAAAAAAAAAAAAAAAAAAAgwYAAAAAAACAAQAAAAAAAAQAAAACAAAABAAAAAAAAAAYAAAAAAAA
+-AEAAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAMIAAAAAAAASAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA
++AAAAAOUFAAAAAAAAqAAAAAAAAAAHAAAABAAAAAQAAAAAAAAAGAAAAAAAAAAqAAAABAAAAAAAAAAA
++AAAAAAAAAAAAAACNBgAAAAAAABgAAAAAAAAABAAAAAEAAAAEAAAAAAAAABgAAAAAAAAANQAAAAQA
++AAAAAAAAAAAAAAAAAAAAAAAApQYAAAAAAACAAQAAAAAAAAQAAAACAAAABAAAAAAAAAAYAAAAAAAA
++AEAAAAADAAAAAAAAAAAAAAAAAAAAAAAAACUIAAAAAAAASAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+@@ -21,18 +21,18 @@ GAAAAAAAAABIiQJIuhgAAAAAAAAASIsCSLogAAAA
+ SIl8JAhIiXQkEFNVSIvsSIvcSIHrIAAAAEi4CAAAAAAAAABIiUMYuAQAAABIuhgAAAAAAAAAiQK4
+ BAAAAEi6CAAAAAAAAACJAkjHwAQAAAC6EAAAAEgD00iJAkjHwAQAAAC6EAAAAEgD00gBAkjHwAQA
+ AABIuhAAAAAAAAAASIkCSMfABAAAAEi6EAAAAAAAAABIAQJIx8AEAAAASLoQAAAAAAAAAEgBAkjH
+-wAQAAABIuhAAAAAAAAAASAECuAQAAABIuhwAAAAAAAAASIsSSIPCEIkCSMfAAgAAALoYAAAASAPT
+-SIsSSIPCAEiJAkjHwAIAAAC6GAAAAEgD00iLEkiDwghIAQJIuhAAAAAAAAAASIsCSLoIAAAAAAAA
+-AEgBAroQAAAASAPTSIsCSLoIAAAAAAAAAEgBAki6CAAAAAAAAABIiwLJW1lIg8QwUcMAAAAAAAAA
+-AAAAAAAAAAAAAAAAAAAAAAABAAAAAwABAAAAAAAAAAAAAAAAAAAAAAAHAAAAAwACAAAAAAAAAAAA
+-AAAAAAAAAAANAAAAAwADAAAAAAAAAAAAAAAAAAAAAAATAAAAIgACAAAAAAAAAAAAAAAAAAAAAAAY
+-AAAAIgACAD8AAAAAAAAAAAAAAAAAAAAdAAAAEgACAEoAAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAEA
+-AAABAAAACAAAAAAAAAAKAAAAAAAAAAEAAAADAAAAIAAAAAAAAAAXAAAAAAAAAAEAAAADAAAAGAAA
+-AAAAAAAkAAAAAAAAAAEAAAADAAAAGAAAAAAAAAAxAAAAAAAAAAEAAAADAAAAIAAAAAAAAABrAAAA
+-AAAAAAEAAAABAAAACAAAAAAAAAB+AAAAAAAAAAEAAAABAAAAGAAAAAAAAACPAAAAAAAAAAEAAAAB
+-AAAACAAAAAAAAADGAAAAAAAAAAEAAAABAAAAEAAAAAAAAADaAAAAAAAAAAEAAAABAAAAEAAAAAAA
+-AADuAAAAAAAAAAEAAAABAAAAEAAAAAAAAAACAQAAAAAAAAEAAAABAAAAEAAAAAAAAAAUAQAAAAAA
+-AAEAAAABAAAAHAAAAAAAAABZAQAAAAAAAAEAAAABAAAAEAAAAAAAAABmAQAAAAAAAAEAAAABAAAA
+-CAAAAAAAAAB+AQAAAAAAAAEAAAABAAAACAAAAAAAAACLAQAAAAAAAAEAAAABAAAACAAAAAAAAAAA
+-LmRhdGEALnRleHQALmR0bmIAZmlsZQBsaW5lAG1haW4ALnN5bXRhYgAucmVsYS5kYXRhAC5yZWxh
+-LnRleHQALnN0cnRhYgA=
++wAQAAABIuhAAAAAAAAAASAECuAQAAABIuhwAAAAAAAAASIsSSIPCEIkCuhgAAABIA9NIixJIg8IQ
++iwK6GAAAAEgD00iLEkiDwhCJAkjHwAIAAAC6GAAAAEgD00iLEkiDwgBIiQJIx8ACAAAAuhgAAABI
++A9NIixJIg8IISAECSLoQAAAAAAAAAEiLAki6CAAAAAAAAABIAQK6EAAAAEgD00iLAki6CAAAAAAA
++AABIAQJIuggAAAAAAAAASIsCyVtZSIPEMFHDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAMA
++AQAAAAAAAAAAAAAAAAAAAAAABwAAAAMAAgAAAAAAAAAAAAAAAAAAAAAADQAAAAMAAwAAAAAAAAAA
++AAAAAAAAAAAAEwAAACIAAgAAAAAAAAAAAAAAAAAAAAAAGAAAACIAAgA/AAAAAAAAAAAAAAAAAAAA
++HQAAABIAAgBKAAAAAAAAAAAAAAAAAAAAHAAAAAAAAAABAAAAAQAAAAgAAAAAAAAACgAAAAAAAAAB
++AAAAAwAAACAAAAAAAAAAFwAAAAAAAAABAAAAAwAAABgAAAAAAAAAJAAAAAAAAAABAAAAAwAAABgA
++AAAAAAAAMQAAAAAAAAABAAAAAwAAACAAAAAAAAAAawAAAAAAAAABAAAAAQAAAAgAAAAAAAAAfgAA
++AAAAAAABAAAAAQAAABgAAAAAAAAAjwAAAAAAAAABAAAAAQAAAAgAAAAAAAAAxgAAAAAAAAABAAAA
++AQAAABAAAAAAAAAA2gAAAAAAAAABAAAAAQAAABAAAAAAAAAA7gAAAAAAAAABAAAAAQAAABAAAAAA
++AAAAAgEAAAAAAAABAAAAAQAAABAAAAAAAAAAFAEAAAAAAAABAAAAAQAAABwAAAAAAAAAewEAAAAA
++AAABAAAAAQAAABAAAAAAAAAAiAEAAAAAAAABAAAAAQAAAAgAAAAAAAAAoAEAAAAAAAABAAAAAQAA
++AAgAAAAAAAAArQEAAAAAAAABAAAAAQAAAAgAAAAAAAAAAC5kYXRhAC50ZXh0AC5kdG5iAGZpbGUA
++bGluZQBtYWluAC5zeW10YWIALnJlbGEuZGF0YQAucmVsYS50ZXh0AC5zdHJ0YWIA
+--- ocompiler-2.orig/tests/.expected/template.oc.x.txt
++++ ocompiler-2/tests/.expected/template.oc.x.txt
+@@ -14,7 +14,8 @@ bgABBAAAAG1haW4BAAAAYwArAAADAQAAADQfCgAB
+ AAMBAAAANB8KAAEABAAAAHRlc3QAAAEAAAB5ACsAAAMBAAAANB8KAAEABAAAAHRlc3QAAQQAAABt
+ YWluBAAAAHRlc3QAKwAAAwEAAAA0HwoAAQAEAAAAdGVzdAAABAAAAHRlc3QAKwAAAwEAAAA0HwIS
+ AAAAbm90IHRoaXMgcmlnaHQgbm93AhEAAABzZXQgYXV4IzpmaWxlLmEgNAoAAQAHAAAAYXV4ZGF0
+-YQEBBAAAAGZpbGUBAAAAYQBFAAADAQAAADQfCgABAAMAAABhdXgBAQQAAABmaWxlBAAAAHBhdGgA
+-RQAAAwEAAAAyHwoAAQADAAAAYXV4AQEEAAAAZmlsZQUAAABsaW5lcwArAAADAQAAADIfCgAAAAQA
+-AAB0ZXN0ACsCAAAABQAAAHRlc3QyAAoAAAAEAAAAdGVzdAArAgAAAAIAAABubgAJAAIAAAAEAAAA
+-dGVzdAAEAgAAADI4
++YQEBBAAAAGZpbGUBAAAAYQBFAAADAQAAADQfCgABAAMAAABhdXgBAQQAAABmaWxlAQAAAGEARQIA
++AQADAAAAYXV4AQEEAAAAZmlsZQEAAABhAAoAAQADAAAAYXV4AQEEAAAAZmlsZQQAAABwYXRoAEUA
++AAMBAAAAMh8KAAEAAwAAAGF1eAEBBAAAAGZpbGUFAAAAbGluZXMAKwAAAwEAAAAyHwoAAAAEAAAA
++dGVzdAArAgAAAAUAAAB0ZXN0MgAKAAAABAAAAHRlc3QAKwIAAAACAAAAbm4ACQACAAAABAAAAHRl
++c3QABAIAAAAyOA==
+--- /dev/null
++++ ocompiler-2/tests/eb
+@@ -0,0 +1,8 @@
++set -e
++a=${1}
++shift
++. ./xb $a
++./c1 $a || {
++	read -t $((60*60*24)) ans
++	. ./x $a
++}
+--- /dev/null
++++ ocompiler-2/tests/retests
+@@ -0,0 +1,5 @@
++#!/bin/bash
++./compile && \
++./c0
++
++# single with ./eb name, or ./db name , for c
+--- ocompiler-2.orig/tests/template.oc
++++ ocompiler-2/tests/template.oc
+@@ -40,6 +40,7 @@ add test:test 4
+ #set aux#:file.a 4
+ set auxdata#:file.a 4
+ 
++set aux#:file.a aux#:file.a
+ set aux#:file.path 2
+ add aux#:file.lines 2
+ add test test2
