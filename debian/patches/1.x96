@@ -1,0 +1,909 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: sep, 18 2026 04:25:14 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/cln
++++ edor-1/cln
+@@ -1,2 +1,2 @@
+ 
+-git clean -xdf -e .pc/ -e debian/patches/ -e arh/edor.jpg && git diff && echo git diff
++git clean -xdf -e .pc/ -e debian/patches/ -e arh/edor.jpg && ~/test/git/sts
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -18,7 +18,7 @@ yay -Sy edor
+ Or <i>.zst</i>(x86_64) or <i>.xz</i>(aarch64) file from [releases](https://github.com/colin-i/edor/releases).
+ \
+ \
+-On Fedora 42/43/44(x86_64 aarch64):
++On Fedora 43/44(x86_64 aarch64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install edor
+--- edor-1.orig/s/bar.c
++++ edor-1/s/bar.c
+@@ -192,13 +192,16 @@ static command_char wrt_simple(int f){
+ //same
+ static command_char wrt_split(char*filename){
+ 	if(split_write_init(filename)/*true*/){
+-		command_char a;
+-		int f=open_or_new(filename);
+-		if(f!=-1){
+-			a=wrt_simple_split(f);
+-			close(f);
+-		}else{
+-			default_error();a=0;
++		command_char a=command_false;
++		if(split_dir_prefix(filename)){
++			int f=open_or_new(filename);
++			if(f!=-1){
++				a=wrt_simple_split(f);
++				close(f);
++			}else{
++				default_error();
++			}
++			dir_prefix_free();
+ 		}
+ 		split_write_free();
+ 		return a;
+@@ -311,8 +314,8 @@ int open_or_new(char*dest){
+ 	else f=open(dest,O_WRONLY|O_TRUNC);
+ 	return f;
+ }
+-bool is_extension_ok(char*extension,char*filename){//also filename to save restore files in a simple way
+-	if(*extension!='\0'){//else all files
++bool is_extension_ok_full(char*extension,char*filename,bool no_ext){//also filename to save restore files in a simple way
++	if(*extension!='\0'){//else all files or none
+ 		char*pos=strrchr(filename,'.');
+ 		if(pos){//!=nullptr
+ 			pos++;
+@@ -320,7 +323,7 @@ bool is_extension_ok(char*extension,char
+ 		}
+ 		return false;
+ 	}
+-	return true;
++	return no_ext;
+ }
+ //command return
+ command_char saving_base(char*dest){
+--- edor-1.orig/s/base.h
++++ edor-1/s/base.h
+@@ -228,7 +228,7 @@ extern char*tit_delims_new;
+ //split
+ //main
+ split_char split_conditions(char*,bool);
+-bool split_grab(char**,size_t*);
++bool split_grab(char**,size_t*,char*);
+ void split_writeprefs(int);
+ void split_readprefs(int);
+ void split_freeprefs();
+@@ -253,8 +253,14 @@ extern char*split_outformatext;
+ extern char*split_outformatext_new;
+ extern char*escape_delims;
+ extern char*escape_delims_new;
++extern char*split_frameext;
++extern char*split_frameext_new;
++extern char*split_dboardext;
++extern char*split_dboardext_new;
+ //bar
+ #ifndef HAVE_MEMMEM
+ void *memmem(const void*,size_t,const void*,size_t);
+ #endif
++void dir_prefix_free();
++bool split_dir_prefix(char*);
+ swrite_char swrite(int,void*,unsigned int);
+--- edor-1.orig/s/da
++++ edor-1/s/da
+@@ -1,2 +1,2 @@
+ 
+-ASAN_OPTIONS=log_path=asan.log:log_exec_name=1:abort_on_error=1 ./edor $@
++ASAN_OPTIONS=log_path=asan.log:log_exec_name=1:abort_on_error=1 ~/e/edor-1/s/edor $@
+--- edor-1.orig/s/def.h
++++ edor-1/s/def.h
+@@ -13,8 +13,11 @@ extern size_t ln_term_sz;
+ extern size_t clue;
+ 
+ //bar
++//main,split
++bool is_extension_ok_full(char*,char*,bool);
++#define is_extension_ok(a,b) is_extension_ok_full(a,b,true)
+ //split
+-bool is_extension_ok(char*,char*);
++#define is_extension_ok_strict(a,b) is_extension_ok_full(a,b,false)
+ int open_or_new(char*);
+ swrite_char wwrite(int,char*,row_dword,swrite_char(*)(int,void*,row_dword));
+ 
+--- edor-1.orig/s/inc/string.h
++++ edor-1/s/inc/string.h
+@@ -40,23 +40,23 @@ int memcmp(const void*,const void*,size_
+ #endif
+ #endif
+ 
+-#if defined(is_bar_c)||defined(is_sep_c)
++#if defined(is_bar_c)||defined(is_split_c)
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-char*strrchr(const char*,int);
++#ifdef HAVE_MEMMEM   //hard to happen
++void *memmem(const void*,size_t,const void*,size_t);//this is provided in our split.c
++#endif
+ #ifdef __cplusplus
+ }
+ #endif
+ #endif
+ 
+-#if defined(is_bar_c)||defined(is_split_c)
++#if defined(is_bar_c)||defined(is_split_c)||defined(is_sep_c)
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+-#ifdef HAVE_MEMMEM   //hard to happen
+-void *memmem(const void*,size_t,const void*,size_t);//this is provided in our split.c
+-#endif
++char*strrchr(const char*,int);
+ #ifdef __cplusplus
+ }
+ #endif
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -200,6 +200,10 @@ static char*cutbuf;
+ static size_t cutbuf_sz;
+ static size_t cutbuf_spc;
+ static size_t cutbuf_r;
++static char*pastecutbuf;//accumulates bytes coming from a terminal-paste burst (see try_paste_burst)
++static size_t pastecutbuf_sz;
++static size_t pastecutbuf_spc;
++static size_t pastecutbuf_r;
+ static char*text_init_b;
+ static char*text_init_e;//is init? malloc to new : realloc. and to free or not to free.
+ static int _rb;static int _cb;
+@@ -1163,9 +1167,9 @@ static void refreshrowscond(WINDOW*w,siz
+ 	if(y!=ytext||x!=xtext)refreshpage(w);
+ 	else refreshrowsbot(w,(int)r,n!=0?getmaxy(w):(int)r+1);
+ }
+-static void pasted(size_t r,size_t x,WINDOW*w){
++static void pasted(size_t r,size_t x,WINDOW*w,size_t buf_r){
+ 	size_t z1=ytext;row_dword z2=xtext;size_t z3=r;
+-	size_t rws=cutbuf_r-1;
++	size_t rws=buf_r-1;
+ 	r+=rws;int maxy=getmaxy(w);
+ 	if(maxy<=r){ //to silence rpmbuild warning, unsigned
+ 		ytext+=r-maxy+1;
+@@ -1551,19 +1555,83 @@ bool paste(size_t y,row_dword x,row_dwor
+ 	}
+ 	return n==0;
+ }
+-static void past(WINDOW*w){
+-	if(cutbuf_sz!=0){
++#define past(w) past_full(w,cutbuf_sz,cutbuf,cutbuf_r)
++static void past_full(WINDOW*w,size_t buf_sz,char*buf,size_t buf_r){
++	if(buf_sz!=0){
+ 		int r=getcury(w);
+ 		size_t y;row_dword x;
+ 		fixed_yx(&y,&x,r,getcurx(w));
+ 		row_dword xe;
+-		if(paste(y,x,&xe,cutbuf,cutbuf_sz,cutbuf_r,true)/*true*/){
+-			pasted(y-ytext,xe,w);
++		if(paste(y,x,&xe,buf,buf_sz,buf_r,true)/*true*/){
++			pasted(y-ytext,xe,w,buf_r);
+ 			mod_set_off_wrap();
+ 			position(getcury(w),getcurx(w));
+ 		}
+ 	}
+ }
++
++//true if this byte is something we'd accumulate as pasted text: printable/8bit bytes, tab, or the enter key.
++//deliberately excludes ^A..^Z-style shortcuts, ESC, backspace/delete: those must never be swallowed into a paste burst.
++static bool paste_candidate(int c){
++	return (c>=32&&c<256&&c!=127)||c=='\t'||c==Char_Return;
++}
++static bool pastecutbuf_grow(size_t need){
++	if(pastecutbuf_spc<need){
++		size_t newspc=pastecutbuf_spc?pastecutbuf_spc*2:256;
++		if(newspc<need)newspc=need;
++		void*v=realloc(pastecutbuf,newspc);
++		if(v==nullptr)return false;
++		pastecutbuf=(char*)v;pastecutbuf_spc=newspc;
++	}
++	return true;
++}
++static bool pastecutbuf_putc(char ch){
++	if(pastecutbuf_grow(pastecutbuf_sz+1)==false)return false;
++	pastecutbuf[pastecutbuf_sz++]=ch;
++	return true;
++}
++static bool pastecutbuf_newline(void){
++	if(pastecutbuf_grow(pastecutbuf_sz+ln_term_sz)==false)return false;
++	memcpy(pastecutbuf+pastecutbuf_sz,ln_term,ln_term_sz);
++	pastecutbuf_sz+=ln_term_sz;
++	pastecutbuf_r++;
++	return true;
++}
++static bool pastecutbuf_push(int ch){
++	if(ch==Char_Return)return pastecutbuf_newline();
++	return pastecutbuf_putc((char)ch);
++}
++//c is the char that was just fetched (blocking) by the caller and is about to be dispatched to type().
++//if the terminal still has more bytes queued up *right now*(nodelay wgetch doesn't block), that is a strong
++//signal this came from a paste rather than a human keystroke(no human types with 0ms gaps for many chars).
++//returns true when it consumed a whole burst and applied it via paste()(same bulk path as Ctrl+Alt+V),
++//so the caller must NOT also dispatch c to type() in that case. returns false when c was a lone keystroke,
++//in which case nothing was consumed(no nodelay chars were pulled) and the caller proceeds exactly as before.
++static bool try_paste_burst(int c,WINDOW*w){
++	if(paste_candidate(c)==false)return false;
++	nodelay(w,true);
++	int z=wgetch(w);
++	if(z==ERR){//nothing queued up: this was a normal single keystroke, not a paste
++		nodelay(w,false);
++		return false;
++	}
++	pastecutbuf_sz=0;pastecutbuf_r=1;
++	bool ok=pastecutbuf_push(c);
++	if(ok){
++		if(paste_candidate(z))ok=pastecutbuf_push(z);
++		else{ungetch(z);}//odd, but let the next loop iteration deal with it normally
++	}
++	if(ok)for(;;){
++		int n=wgetch(w);//nodelay is still on
++		if(n==ERR)break;//no more bytes queued up right now: burst is done
++		if(paste_candidate(n)==false){ungetch(n);break;}//not text(arrow/ctrl/etc): stop, let it be handled normally next
++		if(pastecutbuf_push(n)==false){ok=false;break;}
++	}
++	nodelay(w,false);
++	if(ok)past_full(w,pastecutbuf_sz,pastecutbuf,pastecutbuf_r);
++	return true;
++}
++
+ void vis(char c,WINDOW*w){
+ 	visual(c);
+ 	wmove(w,getcury(w),getcurx(w));
+@@ -2194,7 +2262,7 @@ void pref_modify(char**pref_orig,char**p
+ 	if(*pref_buf){//!=nullptr
+ 		size_t len=strlen(*pref_buf);
+ 		if(len<cursor){
+-			char*newmem=(char*)malloc(cursor+1);
++			char*newmem=(char*)realloc(*pref_buf,cursor+1);
+ 			if(newmem)*pref_buf=newmem;//!=nullptr
+ 			else return;
+ 		}
+@@ -2294,6 +2362,7 @@ static bool loopin(WINDOW*w){
+ 			else if(z==(key_ocomp+A_to_a)){aftercall=aftercall_find();aftercall_draw(w);}//here will scan without asking about file extension or disable/enable but only if enable will show
+ 			else if(z==(key_actswf+A_to_a)){if(pref_change(w,&sdelimiter,&sdelimiter_new,true,key_actswf,A_to_a)/*true*/)return true;}//don't allow no size delimiters
+ 			else if(z==(key_actswf2+A_to_a)){if(pref_change(w,&split_outext,&split_outext_new,false,key_actswf2,A_to_a)/*true*/)return true;}
++			else if(z==(key_actswf3+A_to_a)){if(pref_change(w,&split_dboardext,&split_dboardext_new,false,key_actswf3,A_to_a)/*true*/)return true;}//change splits dashboard extension (oacd)
+ 			else if(z==key_whites+A_to_a){if(pref_change(w,&filewhites_extension,&filewhites_extension_new,false,key_whites,A_to_a)/*true*/)return true;}
+ 			else if(z==key_quit+A_to_a){
+ 				bool q;bool not_q=quit_from_key(w,&q);
+@@ -2308,15 +2377,22 @@ static bool loopin(WINDOW*w){
+ 				quick_pack(com_nr_restore,change_save_timeout)
+ 				if(command((char*)args,(show_key_struct){key_len,0})==command_resize)return true;
+ 				wmove(w,getcury(w),getcurx(w));
+-			}else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
+-			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
+-			else if(z==key_actswf2){if(pref_change(w,&split_outformatext,&split_outformatext_new,false,key_actswf2,0)/*true*/)return true;}
+-			else if(z==key_quit){
++			}else if(z==key_quit){
+ 				bool q;bool not_q=quit_from_key(w,&q);
+ 				if(!not_q/*false*/){
+ 					reload=2;
+ 					return q;
+ 				}
++			}else if(z==key_ocomp){if(pref_change(w,&ocode_extension,&ocode_extension_new,false,key_ocomp,0)/*true*/)return true;}
++			else if(z==key_actswf){if(pref_change(w,&esdelimiter,&esdelimiter_new,true,key_actswf,0)/*true*/)return true;}            //don't allow no size delimiters
++			else if(z==key_actswf2){if(pref_change(w,&split_outformatext,&split_outformatext_new,false,key_actswf2,0)/*true*/)return true;}
++			else if(z==key_len){
++				quick_pack(com_nr_color,change_color)
++				//If the color pair was previously initialized, the screen is refreshed and all occurrences of that color pair are changed to the new definition.
++				//anyway there are no colored selections
++				command((char*)args,(show_key_struct){key_len,A_to_a});//==command_false)
++				wmove(w,getcury(w),getcurx(w));
++				//else return true;
+ 			}else{
+ 				const char*s=keyname(z);
+ 				if(*s==Char_Ctrl){
+@@ -2325,6 +2401,7 @@ static bool loopin(WINDOW*w){
+ 				}
+ 			}
+ 		}else{
++			if(try_paste_burst(c,w))goto getchlabel;//c and whatever followed it immediately were a paste, already applied
+ 			const char*s=keyname(c);
+ 			if(*s==Char_Ctrl){//seems that all cases are ^ a letter \0
+ 				char chr=s[1];
+@@ -2389,6 +2466,8 @@ static bool loopin(WINDOW*w){
+ 					vis(c,w);
+ 				}else if(chr==key_actswf2){
+ 					if(pref_change(w,&split_out,&split_out_new,false,key_actswf2,A_to_a)/*true*/)return true;
++				}else if(chr==key_actswf3){//change splits frame extension (oacf)
++					if(pref_change(w,&split_frameext,&split_frameext_new,false,key_actswf3,A_to_a)/*true*/)return true;
+ 				}else if(chr==key_whites){
+ 					char c;
+ 					if(filewhites_flag/*true*/){filewhites_flag=false;c=orig_lowkey(key_whites);}
+@@ -2404,13 +2483,6 @@ static bool loopin(WINDOW*w){
+ 					quick_pack(com_nr_tab,change_tab_size)
+ 					if(command((char*)args,(show_key_struct){key_len,0})==command_false)wmove(w,getcury(w),getcurx(w));
+ 					else return true;
+-				}else if(chr==key_color){
+-					quick_pack(com_nr_color,change_color)
+-					//If the color pair was previously initialized, the screen is refreshed and all occurrences of that color pair are changed to the new definition.
+-					//anyway there are no colored selections
+-					command((char*)args,(show_key_struct){key_color,0});//==command_false)
+-					wmove(w,getcury(w),getcurx(w));
+-					//else return true;
+ 				}else type(c,w);//enter, tab, ^, unknown ctrls
+ 			}else{
+ 				if(strcmp(s,"KEY_F(1)")==0){
+@@ -2498,7 +2570,7 @@ static normalize_char normalize(char**c,
+ }
+ //same as normalize
+ static normalize_char normalize_split(char**c,size_t*s,size_t*r,char*argfile){
+-	if(argfile==nullptr||split_grab(c,s)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
++	if(argfile==nullptr||split_grab(c,s,argfile)/*true*/){//if at normalize will work also in open cutbufs but will error at explodes there(save cutbuf with explodes)
+ 		return normalize(c,s,r,&normalize_clue);
+ 	}
+ 	return normalize_err;
+@@ -2910,6 +2982,7 @@ static void proced(char*cutbuf_file,WIND
+ 				free(mapsel);//from here it is the interaction
+ 				writefilebuf(cutbuf_file);//only here can be modified than the initial state
+ 				undo_free();//when using undo
++				if(pastecutbuf)free(pastecutbuf);//!=nullptr
+ 			}
+ 		}
+ 	}
+@@ -3272,6 +3345,8 @@ static void inits_default(){
+ 	cutbuf=nullptr;
+ 	cutbuf_sz=0;
+ 	cutbuf_spc=0;
++	pastecutbuf=nullptr;
++	pastecutbuf_spc=0;
+ 	text_init_b=nullptr;
+ 	leftcontent=nullptr;
+ 	rightcontent=nullptr;
+--- edor-1.orig/s/main.sh
++++ edor-1/s/main.sh
+@@ -69,9 +69,9 @@ text="\ncommand mode: left,right,home,en
+ \nCtrl+a = enable/disable O language syntax; Alt+a = syntax rescan; Alt+A = change rule extension name (blank is all)\
+ \nCtrl+j = enable/disable OA split syntax; Alt+j = change delimiter; Alt+J = change view delimiter; Alt+Ctrl+j = change rule extension name for splits (blank is all)\
+ \n Ctrl+k = change mix folder (blank is mixless); Alt+k = change mix file ext (blank is no ext); Alt+K = change mix format file ext (blank is no ext); Alt+Ctrl+k = mix file chars to escape\
++\nCtrl+b = change splits frame extension (blank is no ext); Alt+b change splits dashboard extension (blank is no ext)\
+ \nCtrl+y = enable/disable spaces->tabs indents at read, tabs->spaces at write; Alt+y = change rule extension name (blank is all)\
+-\nCtrl+b = change selection color, short integers: foreground,background\
+-\nCtrl+x = change tab size; Alt+x = change save timeout in seconds (0 is default timeout)\
++\nCtrl+x = change tab size; Alt+x = change save timeout in seconds (0 is default timeout); Alt+X = change selection color, short integers: foreground,background\
+ \nCtrl+z = switch keys, applies to Ctrl and lower/upper Alt (example: az , +a becomes +z and +z becomes +a)\
+ \nCtrl+q = quit; Alt+q = quit and return EXIT_FAILURE; Alt+Q = Reload\
+ \nabcdefghijklmnopqrstuvwxyz\""
+@@ -141,7 +141,7 @@ _find_pos                 ocomp
+ i=98
+ while [ $i -lt 123 ]; do
+ 	case $i in
+-		98) find_pos color               $i 1;;     #b
++		98) find_pos actswf3             $i 1 1;;   #b
+ 		99) find_pos findword            $i 1 1;;   #c
+ 		100) find_pos indopt             $i 1;;     #d
+ 		101) find_pos mouse              $i 1;;     #e
+@@ -159,7 +159,7 @@ while [ $i -lt 123 ]; do
+ 		117) find_pos undo               $i 1 1;;   #u
+ 		118) find_pos visual             $i 1 1;;   #v
+ 		119) is_extern=x find_pos wrap   $i 1;;     #w
+-		120) find_pos len                $i 1 1;;   #x
++		120) find_pos len                $i 1 1 1;; #x
+ 		121) find_pos whites             $i 1 1;;   #y
+ 		122) find_pos swkey              $i 1;;     #z
+ 		*) wr2 ",${nothing}"; wr4 ",${nothing}";;
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -1,4 +1,3 @@
+-
+ #define is_split_c
+ #ifdef HAVE_MEMMEM //example at msys
+ #	ifndef _GNU_SOURCE //example on arm64
+@@ -64,6 +63,10 @@ char*split_outformatext;
+ char*split_outformatext_new;
+ char*escape_delims;
+ char*escape_delims_new;
++char*split_frameext;
++char*split_frameext_new;
++char*split_dboardext;
++char*split_dboardext_new;
+ 
+ //char*fulldelim;
+ //unsigned short fulldelim_size;
+@@ -81,11 +84,70 @@ static size_t split_out_size2;
+ 
+ static int split_out_file;
+ static int split_out_formatfile;
++static int split_out_dboardfile;//-1 when split_dboardext is "" (feature off)
++
++//directory basenames already written to split_out_dboardfile for the file currently
++//being split-written, so each one is listed once. reset in split_write_init, freed in
++//split_write_free.
++static char**dboard_dirs;
++static size_t dboard_dirs_count;
++static size_t dboard_dirs_cap;
++
++static char*split_out_root;
++static size_t split_out_root_len;
++static int*dboard_files;
+ 
+ static char last_escape_char;
+ static char*last_split_end;//init at split_write_init
+ static char last_escape_char_store;//no init required
+ 
++//directory part of the module file currently being read or written (e.g. "dir/" from
++//"dir/a.oac"), used so that filenames referenced *inside* the module (a.as, split
++//outputs, etc.) are resolved relative to the module file's own location instead of
++//the process cwd. each side owns it directly from the filename it already receives as
++//a parameter: split_grab() sets/frees it around the read, split_write_init()/
++//split_write_free() set/free it around the write. read and write never overlap in
++//time, so one variable safely serves both.
++static char*dir_prefix=nullptr;
++static size_t dir_prefix_len;
++
++static bool is_absolute_path(char*path){
++	if(*path==path_separator)return true;
++#ifdef MKDIR_1ARG //windows: also absolute if it starts with a drive letter, e.g. C:\ or C:/
++	if(path[0]!='\0'&&path[1]==':')return true;
++#endif
++	return false;
++}
++//fills *prefix/*prefix_len from filename's directory part (up to and including the
++//last path_separator). caller is responsible for freeing the previous value, if any,
++//before calling this again -- see dir_prefix's own free-after-use call sites.
++bool split_dir_prefix(char*filename){
++	char*sep=strrchr(filename,path_separator);
++	if(sep){
++		size_t len=sep-filename+1;
++		char*p=(char*)malloc(len+1);
++		if(p){
++			memcpy(p,filename,len);
++			p[len]='\0';
++			dir_prefix=p;dir_prefix_len=len;
++		}else{//alloc failed
++			return false;
++		}
++	}
++	return true;
++}
++//resolves 'name' against a given prefix when 'name' is relative and a prefix is set.
++static char* resolve_path_with_prefix(char*name){
++	if(!dir_prefix||is_absolute_path(name))return name;
++	size_t tlen=strlen(name);
++	char*full=(char*)malloc(dir_prefix_len+tlen+1);
++	if(full){
++		memcpy(full,dir_prefix,dir_prefix_len);
++		memcpy(full+dir_prefix_len,name,tlen+1);
++	}
++	return full;
++}
++
+ typedef struct{
+ 	int file;
+ 	off_t size;
+@@ -227,12 +289,18 @@ split_char split_conditions(char*filenam
+ 		if(is_extension_ok(split_extension,filename)/*true*/){
+ 			return split_conditions_out(filename,free_paths);
+ 		}
++		if(is_extension_ok_strict(split_dboardext,filename)/*true*/){//dashboard: .oac behaviour (respects splits_flag) but never mix.
++			return split_yes_mixless;//skip the split_out folder lookup entirely
++		}
++	}
++	if(is_extension_ok_strict(split_frameext,filename)/*true*/){//.oacf ignores splits_flag, always split-parsed.
++		return split_yes_mixless;//.oacf is subsplits-only, never mix: skip the split_out folder lookup entirely
+ 	}
+ 	return split_no;
+ }
+ 
+ //false on errors
+-bool split_grab(char**p_text,size_t*p_size){
++static bool split_grab_impl(char**p_text,size_t*p_size){
+ 	if(split_reminder_c!=split_err){
+ 		if(split_reminder_c!=split_no){// yes_mixless or yes_mix
+ 			char*text;size_t size;int cmp;char*next;
+@@ -286,7 +354,9 @@ bool split_grab(char**p_text,size_t*p_si
+ 
+ 						next=(char*)memchr(text,a,size);
+ 						*next='\0';
+-						int f=open(text,O_RDONLY);
++						char*path=resolve_path_with_prefix(text);
++						int f=path?open(path,O_RDONLY):-1;
++						if(dir_prefix&&path)free(path);
+ 						if(f==-1){split_error_free(files);return false;}
+ 						files[explodes].file=f;
+ 						off_t sz=lseek(f,0,(SEEK_END));
+@@ -366,6 +436,19 @@ bool split_grab(char**p_text,size_t*p_si
+ 	}
+ 	return false;
+ }
++void dir_prefix_free(){
++	if(dir_prefix){free(dir_prefix);dir_prefix=nullptr;}
++}
++//wrapper: owns dir_prefix for the read -- sets it from argfile right before the read,
++//frees it right after, on every exit path of split_grab_impl (success or failure).
++bool split_grab(char**p_text,size_t*p_size,char*argfile){
++	if(split_dir_prefix(argfile)){
++		bool r=split_grab_impl(p_text,p_size);
++		dir_prefix_free();
++		return r;
++	}
++	return false;
++}
+ 
+ void split_writeprefs(int f){//not bool because is last
+ 	bar_byte sz=strlen(sdelimiter);
+@@ -388,10 +471,20 @@ void split_writeprefs(int f){//not bool
+ 												if(write(f,split_outformatext,sz)==sz){
+ 													sz=strlen(escape_delims);
+ 													if(write(f,&sz,extlen_size)==extlen_size){
+-														#pragma GCC diagnostic push
+-														#pragma GCC diagnostic ignored "-Wunused-result"
+-														write(f,escape_delims,sz);
+-														#pragma GCC diagnostic pop
++														if(write(f,escape_delims,sz)==sz){
++															sz=strlen(split_frameext);
++															if(write(f,&sz,extlen_size)==extlen_size){
++																if(write(f,split_frameext,sz)==sz){
++																	sz=strlen(split_dboardext);
++																	if(write(f,&sz,extlen_size)==extlen_size){
++																		#pragma GCC diagnostic push
++																		#pragma GCC diagnostic ignored "-Wunused-result"
++																		write(f,split_dboardext,sz);
++																		#pragma GCC diagnostic pop
++																	}
++																}
++															}
++														}
+ 													}
+ 												}
+ 											}
+@@ -450,6 +543,24 @@ void split_readprefs(int f){//not bool b
+ 																					if(read(f,escape_delims_new,len)==len){
+ 																						escape_delims_new[len]='\0';
+ 																						escape_delims=escape_delims_new;
++																						if(read(f,&len,extlen_size)==extlen_size){
++																							split_frameext_new=(char*)malloc(len+1);
++																							if(split_frameext_new){//!=nullptr
++																								if(read(f,split_frameext_new,len)==len){
++																									split_frameext_new[len]='\0';
++																									split_frameext=split_frameext_new;
++																									if(read(f,&len,extlen_size)==extlen_size){
++																										split_dboardext_new=(char*)malloc(len+1);
++																										if(split_dboardext_new){//!=nullptr
++																											if(read(f,split_dboardext_new,len)==len){
++																												split_dboardext_new[len]='\0';
++																												split_dboardext=split_dboardext_new;
++																											}
++																										}
++																									}
++																								}
++																							}
++																						}
+ 																					}
+ 																				}
+ 																			}
+@@ -480,8 +591,54 @@ void split_freeprefs(){
+ 	if(split_outext_new)free(split_outext_new);//!=nullptr
+ 	if(split_outformatext_new)free(split_outformatext_new);//!=nullptr
+ 	if(escape_delims_new)free(escape_delims_new);//!=nullptr
++	if(split_frameext_new)free(split_frameext_new);//!=nullptr
++	if(split_dboardext_new)free(split_dboardext_new);//!=nullptr
+ }
+ 
++static bool ext_verify(char*remover,bar_byte outext_size,bar_byte outformatext_size,bar_byte dboardext_size,size_t*size,bool is_dash_frames){
++	size_t comparator[]={outext_size,outformatext_size,dboardext_size,strlen(split_frameext)};//size_t from outext size part
++
++	char*outext=split_outext;size_t sz=outext_size;//EX
++	if(remover!=split_out_path3){//will remove
++		size_t s=split_out_path1-remover;//.qw considering qw.
++		sz+=s;//.qwEX considering qw.EX
++		comparator[0]=sz;
++		outext=(char*)malloc(sz+1);//+null
++		if(!outext)return false;
++		s--;// qw
++		memcpy(outext,remover+1,s); //qw
++		outext[s]='.';s++; //qw.
++		memcpy(outext+s,split_outext,outext_size+1);//qw.EX\0
++	}
++
++	char*comparable[]={outext,split_outformatext,split_dboardext,split_frameext};
++
++	char n=2;
++	if(is_dash_frames){
++		n+=2;
++	}
++
++	for(char i=0;i<n-1;i++){
++		for(char j=i+1;j<n;j++){
++			if(comparator[i]==comparator[j]){
++				if(memcmp(comparable[i],comparable[j],comparator[i])==0){
++					if(remover!=split_out_path3)free(outext);
++					return false;
++				}
++			}
++		}
++	}
++	if(remover!=split_out_path3)free(outext);
++
++	comparator[0]=outext_size;
++	bar_byte max=0;
++	for(char i=0;i<n-1;i++){
++		if(comparator[i]>max)max=comparator[i];
++	}
++	*size+=1+max+1;//seems that is also working for 0
++	//can calculate more to reduce in function of remover but then need to calculate back, so, the charge is too big
++	return true;
++}
+ //true at ok
+ bool split_write_init(char*orig_filename){
+ //this is not full, more cases at first init
+@@ -492,7 +649,17 @@ bool split_write_init(char*orig_filename
+ 	//	memcpy(fulldelim,esdelimiter,s2);memcpy(fulldelim+s2,sdelimiter,sdelimiter_size);
+ 
+ 	if(split_reminder_c==split_yes_mix){
++		split_out_dboardfile=-1;
++
+ 		size_t ancestors_diff=split_out_path2-split_out_path4;//this appears when mix folder is below orig, ./q/a.oac but osrc is at ./osrc
++		bool is_dash_frames=*split_frameext!='\0'&&*split_dboardext!='\0';
++		if(ancestors_diff!=0&&is_dash_frames){
++			free(split_out_alloc1);free(split_out_alloc2);
++			//cannot puts and soft return in curses
++			//Splits are activated with dashboard/frames and the split_out folder was found in an ancestor folder instead of next to the source file. This combination isn't supported: move the split_out folder next to the source file, or turn off the dashboard extensions.");
++			return false;
++		}
++
+ 		split_out_path2=split_out_alloc1+(split_out_path2-split_out_alloc2);
+ 		split_out_path4+=split_out_size1;
+ 		do{
+@@ -516,47 +683,54 @@ bool split_write_init(char*orig_filename
+ 		}
+ 
+ 		size_t size=split_out_path1-split_out_path3;// +1 will be with the existent null
+-		bar_byte outext_size=strlen(split_outext)+1;//this from pref can also come 1 char size
+-		bar_byte outformatext_size=strlen(split_outformatext)+1;//this from pref can also come 1 char size
+-		size_t sizeplusoutext;
+-		if(outformatext_size>outext_size){
+-			sizeplusoutext=size+outformatext_size;
+-			//can calculate more to reduce in function of remover but then need to calculate back, so, the charge is too big
+-		}else{
+-			if(outformatext_size==outext_size){
+-				if(remover!=split_out_path3){//only when remover rule
+-					if(memcmp(split_outext,split_outformatext,outext_size)==0){//will be same file, is also working for a="" b=""
+-						free(split_out_alloc1);free(split_out_alloc2);
+-						return false;
+-					}
+-				}
+-			}
+-			sizeplusoutext=size+outext_size;
++		bar_byte outext_size=strlen(split_outext);
++		bar_byte outformatext_size=strlen(split_outformatext);
++		bar_byte dboardext_size=strlen(split_dboardext);
++
++		size_t sizeplusoutext=size;
++		if(!ext_verify(remover,outext_size,outformatext_size,dboardext_size,&sizeplusoutext,is_dash_frames)){
++			free(split_out_alloc1);free(split_out_alloc2);
++			return false;
+ 		}
+-		//if(outext_size!=1) again, a="" b="" is error
+-		sizeplusoutext++;
++
+ 		split_out_size2-=ancestors_diff;
+ 		char*a=(char*)realloc(split_out_alloc2,split_out_size2+sizeplusoutext);
+ 		if(a){//!=nullptr
+ 			memcpy(a+split_out_size2,split_out_path3,size);
+ 			char*b=a+split_out_size2+size;
+ 			char*c=b;
+-			if(outext_size!=1){
++			if(outext_size){//!=0
+ 				*b='.';b++;
+ 			}
+-			memcpy(b,split_outext,outext_size);//at "" is also good for null end char
++			memcpy(b,split_outext,outext_size+1);//at "" is also good for null end char
+ 			free(split_out_alloc1);
+ 			split_out_file=open_or_new(a);
+ 			if(split_out_file!=-1){
+ 				if(remover!=split_out_path3)c-=split_out_path1-remover;
+-				if(outformatext_size!=1){
++				if(outformatext_size){//!=0
+ 					*c='.';c++;
+ 				}
+-				memcpy(c,split_outformatext,outformatext_size);//format + null end
++				memcpy(c,split_outformatext,outformatext_size+1);//format + null end
+ 				split_out_formatfile=open_or_new(a);
+ 				if(split_out_formatfile!=-1){
+-					free(a);
+ 					last_split_end=nullptr;
++					if(is_dash_frames){//frameext is required, it's part of every entry's name
++						memcpy(c,split_dboardext,dboardext_size+1);//same slot as split_outformatext above, reused
++						split_out_dboardfile=open_or_new(a);
++						if(split_out_dboardfile==-1){
++							close(split_out_file);close(split_out_formatfile);
++							free(a);
++							return false;
++						}
++						dboard_dirs=nullptr;dboard_dirs_count=0;dboard_dirs_cap=0;
++
++						//stash the split_out root folder path (a[0..split_out_size2), incl. trailing
++						//path_separator) before 'a' gets reused/freed below: split_write_dboard needs
++						//it for the whole write session to build per-directory .oacf file paths.
++						split_out_root=a;
++						split_out_root_len=split_out_size2;
++						dboard_files=nullptr;
++					}else free(a);
+ 					return true;
+ 				}
+ 				close(split_out_file);
+@@ -574,6 +748,18 @@ void split_write_free(){
+ 	if(split_reminder_c==split_yes_mix){
+ 		close(split_out_file);
+ 		close(split_out_formatfile);
++		if(split_out_dboardfile!=-1){
++			close(split_out_dboardfile);
++			if(dboard_dirs){
++				for(size_t k=0;k<dboard_dirs_count;k++)free(dboard_dirs[k]);
++				free(dboard_dirs);
++			}
++			if(dboard_files){
++				for(size_t k=0;k<dboard_dirs_count;k++)close(dboard_files[k]);
++				free(dboard_files);
++			}
++			free(split_out_root);
++		}
+ 	}
+ }
+ 
+@@ -647,6 +833,77 @@ static swrite_char swwrite_if(int f,char
+ 	return swrite(f,buf,size);
+ }
+ 
++//writes '|||dirname.oacf|||'+ln_term to split_out_dboardfile for file's parent directory
++//(e.g. "orig/main/d.as" -> "main"), the first time that directory is seen for the file
++//currently being split, opening that directory's own "dirname.oacf" content file at the
++//same time. every call (first time or not) then appends this file's own entry to that
++//directory's .oacf file, as '|||../file|||' (the ".." undoes split_out being one folder
++//down from the source file -- see at split error dboard ancestor for why that must hold)
++//true if ok
++static bool split_write_dboard(char*file){
++	char*end=strrchr(file,path_separator);
++	if(!end)return true;//no directory component, nothing to index
++	char*start=end;
++	while(start!=file&&*(start-1)!=path_separator)start--;
++	size_t len=end-start;
++	if(len==0)return true;
++
++	size_t k;
++	bool found=false;
++	for(k=0;k<dboard_dirs_count;k++){
++		if(strlen(dboard_dirs[k])==len&&memcmp(dboard_dirs[k],start,len)==0){found=true;break;}
++	}
++
++	size_t frameext_len=strlen(split_frameext);//guaranteed non-empty: split_out_dboardfile only opens when split_frameext is set too
++	if(!found){
++		if(dboard_dirs_count==dboard_dirs_cap){
++			size_t newcap=dboard_dirs_cap?dboard_dirs_cap+8:8;//cannot think at overflow because there are many delimiters/modules/extensions involved
++			char**p=(char**)realloc(dboard_dirs,sizeof(char*)*newcap);
++			if(!p)return false;
++			dboard_dirs=p;
++			int*fp=(int*)realloc(dboard_files,sizeof(int)*newcap);
++			if(!fp)return false;
++			dboard_files=fp;
++			dboard_dirs_cap=newcap;
++		}
++		char*copy=(char*)malloc(len+1);
++		if(!copy)return false;
++		memcpy(copy,start,len);copy[len]='\0';
++
++		//"<split_out_root><dirname>.<frameext>" -- same folder as split_out_file/
++		//split_out_formatfile/split_out_dboardfile
++		char*oacfpath=(char*)malloc(split_out_root_len+len+1+frameext_len+1);
++		if(!oacfpath){free(copy);return false;}
++		memcpy(oacfpath,split_out_root,split_out_root_len);
++		memcpy(oacfpath+split_out_root_len,start,len);
++		oacfpath[split_out_root_len+len]='.';
++		memcpy(oacfpath+split_out_root_len+len+1,split_frameext,frameext_len+1);//frameext+null
++		int of=open_or_new(oacfpath);
++		free(oacfpath);
++		if(of==-1){free(copy);return false;}
++
++		k=dboard_dirs_count;
++		dboard_dirs[k]=copy;
++		dboard_files[k]=of;
++		dboard_dirs_count++;
++
++		if(write(split_out_dboardfile,sdelimiter,sdelimiter_size)!=sdelimiter_size)return false;
++		if((size_t)write(split_out_dboardfile,start,len)!=len)return false;
++		char dot='.';if(write(split_out_dboardfile,&dot,1)!=1)return false;
++		if((size_t)write(split_out_dboardfile,split_frameext,frameext_len)!=frameext_len)return false;
++		if(write(split_out_dboardfile,sdelimiter,sdelimiter_size)!=sdelimiter_size)return false;
++		if(write(split_out_dboardfile,ln_term,ln_term_sz)!=ln_term_sz)return false;
++	}
++
++	int of=dboard_files[k];
++	if(write(of,sdelimiter,sdelimiter_size)!=sdelimiter_size)return false;
++	char up[2]={'.','.'};if(write(of,up,2)!=2)return false;
++	char sep=path_separator;if(write(of,&sep,1)!=1)return false;
++	size_t filelen=strlen(file);
++	if((size_t)write(of,file,filelen)!=filelen)return false;
++	if(write(of,sdelimiter,sdelimiter_size)!=sdelimiter_size)return false;
++	return true;
++}
+ //true if ok
+ static bool split_write_split(char*file,size_t start,size_t end,row_dword size,bool*majorerror){
+ 	if(split_reminder_c==split_yes_mix){
+@@ -654,8 +911,15 @@ static bool split_write_split(char*file,
+ 		if((ssize_t)write(split_out_formatfile,file,sz)!=sz){
+ 			*majorerror=true;return false;
+ 		}
++		if(split_out_dboardfile!=-1){
++			if(!split_write_dboard(file)){
++				*majorerror=true;return false;
++			}
++		}
+ 	}
+-	int f=open_or_new(file);
++	char*path=resolve_path_with_prefix(file);
++	int f=path?open_or_new(path):-1;
++	if(dir_prefix&&path)free(path);
+ 	if(f!=-1){
+ 		for(size_t k=start;k<end;k++){
+ 			row*r=&rows[k];
+@@ -676,6 +940,18 @@ static bool split_write_orig(int orig_fi
+ 				return true;
+ 	*majorerror=true;return false;
+ }
++//esdelimiter is a run of identical chars ("///"), so when real content ends in the
++//same char (e.g. "*/" right before the closing "///"), memmem's leftmost match lands
++//one (or more) chars too early: it eats into content that should stay literal and
++//leaves the true last delimiter char behind to leak out as stray text. slide the match
++//to the rightmost position that still matches, so any extra leading delimiter-char
++//bytes fall back into content where they belong. ptr must already be a confirmed match.
++//CLOSING match only: do NOT use this on the opening match. there the ambiguous extra
++//slash(es) sit AFTER the delimiter (e.g. an absolute-path filename "///a/b/c"), so
++//sliding right would wrongly eat the filename's leading '/' into the delimiter.
++//also, (buf)+(bufsz) compare is justified because these lines are not with ->spc style, they are one after another
++#define split_macro(ptr,buf,bufsz) while((ptr)+1+esdelimiter_size<=(buf)+(bufsz)&&memcmp((ptr)+1,esdelimiter,esdelimiter_size)==0)(ptr)++
++
+ //null or error
+ const char* split_write(size_t*_index,int orig_file,row_dword*_off,bool*majorerror){
+ 	size_t i=*_index;
+@@ -694,6 +970,7 @@ const char* split_write(size_t*_index,in
+ 				unsigned int sz=rw->sz;
+ 				char*marker=(char*)memmem(content,sz,esdelimiter,esdelimiter_size);//fulldelim,fulldelim_size
+ 				if(marker){//!=nullptr
++					split_macro(marker,content,sz);
+ 					if(swwrite_if(orig_file,data,pointer-data,*_off)==swrite_ok){
+ 						unsigned int part=marker-content;
+ 						*_index=j;
+@@ -727,6 +1004,8 @@ void split_inits_default(){
+ 	split_outformatext_new=nullptr;
+ 	escape_delims_new=nullptr;
+ 	last_escape_char='\0';
++	split_frameext_new=nullptr;
++	split_dboardext_new=nullptr;
+ }
+ void split_inits(){
+ 	split_reminder_c=split_no;
+@@ -737,4 +1016,6 @@ void split_inits(){
+ 	split_outext=(char*)"";//was oc but the reason is at split_write_init at split_extension
+ 	split_outformatext=(char*)"split";
+ 	escape_delims=(char*)"\"'";
++	split_frameext=(char*)"oacf";
++	split_dboardext=(char*)"oacd";
+ }
