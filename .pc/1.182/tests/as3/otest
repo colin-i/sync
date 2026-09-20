@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+a=`pwd`
+cd ../..
+
+mkdir tmp
+
+items=$(make --no-print-directory -C oaas info)
+
+for it in $items; do
+	ln oaas/$it.oc tmp
+done
+ln oaas/main.oc tmp
+ln oaas/Makefile tmp
+ln oaas/oaas.oh tmp
+ln oaas/translate.oh tmp
+
+cd tmp
+ldprefer=1 linkerflags=' ' OFLAGS='nul_res_pref 1 x_file 1' make -j4
+cd $a
+OAPATH=../../tmp ./as
+rm -r ../../tmp

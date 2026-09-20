@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+a=`pwd`
+cd ../..
+
+mkdir tmp
+
+items=$(make --no-print-directory -C oad info)
+
+for it in $items; do
+	ln oad/$it.oc tmp
+done
+ln oad/main.oc tmp
+ln oad/Makefile tmp
+ln oad/cflags tmp
+ln oad/items tmp
+ln oad/common.oh tmp
+ln oad/oadbgdata.oh tmp
+ln oad/oadbgdatas.oh tmp
+ln oad/safe.oh tmp
+
+cd tmp
+ldprefer=1 linkerflags=' ' OFLAGSEXTRA='nul_res_pref 1 x_file 1' make -j4
+cd $a
+ldextra=/../tmp ./test
+rm -r ../../tmp
