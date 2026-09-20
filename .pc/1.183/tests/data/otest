@@ -1,0 +1,30 @@
+#!/bin/bash
+set -e
+a=`pwd`
+cd ../..
+
+mkdir tmp
+
+items=$(env -u MAKEFLAGS make --no-print-directory -C oad info)
+#       env............S required at launchpad deb wrappers to remove: make[2]: warning: ; and then: ln: failed to access 'oad/make[2]:.oc':
+#to test add a Makefile with .PHONY: t
+#                            t: ; ./otest
+#and run here: make t
+
+for it in $items; do
+	ln oad/$it.oc tmp
+done
+ln oad/main.oc tmp
+ln oad/Makefile tmp
+ln oad/cflags tmp
+ln oad/items tmp
+ln oad/common.oh tmp
+ln oad/oadbgdata.oh tmp
+ln oad/oadbgdatas.oh tmp
+ln oad/safe.oh tmp
+
+cd tmp
+ldprefer=1 linkerflags=' ' OFLAGSEXTRA='nul_res_pref 1 x_file 1' make -j4
+cd $a
+ldextra=/../tmp ./test
+rm -r ../../tmp
