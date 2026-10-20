@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: oct, 20 2026 04:51:56 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2752,11 +2752,12 @@ static void getfilebuf(char*cutbuf_file)
+ 					}else{
+ 						sz-=extlen_size+len;
+ 						if(read(f,&len,extlen_size)==extlen_size&&sz>=(size_t)(extlen_size+len)){//find string is stored next, so it is not lost on exit
++							size_t rsz;   // declared before the goto so it isn't jumped over
+ 							if(len!=0){
+ 								if(read(f,inputf,len)==len)cursorf=len;
+ 								else goto getfilebuf_done;
+ 							}
+-							size_t rsz=sz-extlen_size-len;
++							rsz=sz-extlen_size-len;
+ 							if(rsz!=0){
+ 								char*v=(char*)malloc(rsz);
+ 								if(v){//!=nullptr
+@@ -2767,7 +2768,7 @@ static void getfilebuf(char*cutbuf_file)
+ 									}else free(v);
+ 								}
+ 							}
+-							getfilebuf_done:
++							getfilebuf_done:; // note the ';'
+ 						}
+ 					}
+ 				}
