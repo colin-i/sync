@@ -1,0 +1,2930 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: oct, 21 2026 07:11:03 +0300
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- actionswf-1.orig/Makefile
++++ actionswf-1/Makefile
+@@ -38,12 +38,10 @@ clean:
+ install:
+ 	install -D oaalternative.sh $(DESTDIR)$(prefix)/bin/oaalternative.sh
+ 	install -D oaalternative.py $(DESTDIR)$(prefix)/bin/oaalternative.py
+-	install -D oaalternativer.py $(DESTDIR)$(prefix)/bin/oaalternativer.py
+ 	install -D oaas3 $(DESTDIR)$(prefix)/bin/oaas3
+ uninstall:
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.sh
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaalternative.py
+-	-rm -f $(DESTDIR)$(prefix)/bin/oaalternativer.py
+ 	-rm -f $(DESTDIR)$(prefix)/bin/oaas3
+ 
+ .PHONY: $(TOPTARGETS) $(MEDTARGETS) $(ALLDIRS)
+--- actionswf-1.orig/cln
++++ actionswf-1/cln
+@@ -7,7 +7,6 @@ cd example && make clean && cd ../csrc &
+ 
+ #trace(1,2) is error, use this.trace only
+ #breakpoint at web? add opcode (trace opcode, change .x or change .as file), rebuild, restart. or find a solution to change avm1.output_json_code at runtime
+-#a=eval('b').length;
+ 
+ #is
+ #"a=1; //dsfdsffsd
+--- actionswf-1.orig/csrc/Makefile
++++ actionswf-1/csrc/Makefile
+@@ -70,10 +70,15 @@ headers:
+ 	$(MAKE) -C ../include
+ 	$(MAKE) -C ../dev flags.h action_swf.h
+ 
++ifeq ($(testCfile),1)
++%.o: ${backsrc}%.c
++	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} ${backsrc}$*.c -o $@
++else
+ %.o: ${backsrc}%.oc | headers
+ 	${OCOMP} $< ${OFLAGS} include_sec 1
+ 	${OCONV} ${OCONVFLAGS} $<.x import
+ 	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} ${backsrc}$*.c -o $@
++endif
+ 
+ clean-obj:
+ 	-rm -f ${obs} ${eobs}
+--- actionswf-1.orig/dev/actionswf.h
++++ actionswf-1/dev/actionswf.h
+@@ -226,7 +226,7 @@ void swf_exports_done();
+ 
+ void action(char* ac);
+ actionswf_size_t actionf(char* buffer,char* format,...);
+-void actionsf(actionswf_size_t* psize,char** pbuffer,char* format,...);
++void actionsf(char** pbuffer,actionswf_size_t* psize,char* format,...);
+ void actiond(char* ac);
+ 
+ //action at sprite
+@@ -235,8 +235,8 @@ void action_sprite(int sprite,char* ac);
+ void action_init_sprite(int sprite,char* ac);
+ void actionf_sprite(int sprite,char* buffer,char* format,...);
+ void actionf_init_sprite(int sprite,char* buffer,char* format,...);
+-void actionsf_sprite(int sprite,actionswf_size_t* psize,char** pbuffer,char* format,...);
+-void actionsf_init_sprite(int sprite,actionswf_size_t* psize,char** pbuffer,char* format,...);
++void actionsf_sprite(int sprite,char** pbuffer,actionswf_size_t* psize,char* format,...);
++void actionsf_init_sprite(int sprite,char** pbuffer,actionswf_size_t* psize,char* format,...);
+ 
+ 
+ //tool
+--- actionswf-1.orig/example/example.oc
++++ actionswf-1/example/example.oc
+@@ -47,7 +47,7 @@ call swf_sprite_showframe(movie_preid)
+ 
+ sdu size
+ ss a_c=0
+-call actionsf_sprite(movie_preid,#size,#a_c,"var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move",(width),(height),(shape_lat))
++call actionsf_sprite(movie_preid,#a_c,#size,"var move=20;var width=%u;var height=%u;var lat=%u;var left=move;var top=move;var right=width-lat-move;var bottom=height-lat-move",(width),(height),(shape_lat))
+ 
+ call action_sprite(movie_preid,"
+ if(this._x>=right)_root.x_coef=_root.x_coef*-1;
+@@ -68,7 +68,7 @@ call swf_exports_done()
+ 
+ sd f;set f swf_font_basic("_sans")
+ char ButtonData_a="Toggle"
+-data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 24,24}
++data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 20,20}
+ vstr *^ButtonData_a
+ data ButtonData_c#1;set ButtonData_c f;data *=20
+ data *vert_off=-5
+@@ -83,7 +83,7 @@ if(_root.tog==1){
+ sd b;set b swf_button(150,50,#ButtonData)
+ call swf_placeobject(b,0)
+ 
+-call actionsf(#size,#a_c,"
++call actionsf(#a_c,#size,"
+ var x_coef=%u;
+ var y_coef=%u;
+ function test(){
+--- actionswf-1.orig/example/expected.c.swf.txt
++++ actionswf-1/example/expected.c.swf.txt
+@@ -1,15 +1,15 @@
+-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
+--- actionswf-1.orig/include/action.oh
++++ actionswf-1/include/action.oh
+@@ -17,6 +17,7 @@ const args_end=0xfeEEeeEE             #C
+ const whileblock_end=0xfdDDddDD       #1 FR
+ const block_else_end=0xfcCCccCC       #1
+ const member_end=0xfbBBbbBB           #M
++const doblock_end=0xfaAAaaAA          #1
+ 
+ const no_action=0
+ const call_action_left=0xf1011010     #1
+@@ -33,16 +34,20 @@ const for_three=0xfb0BB0b0            #F
+ const inter_for=0xfc0CC0c0            #FR
+ const ifElse_start=0xfd0DD0d0         #RG
+ const for=0xfe0EE0e0                  #1
++const do_start=0xfe0FF0f0             #1
+ const label=0xff0FF0f0                #L
+ 
+ const no_flag=0                        #code only
+ const consecutive_flag=0x80000000      #parse only
+ const skip_flag=0x80<<24               #code only
+ const brace_blocks_function=0x7fFFffFF #code only
++const do_continue_bit=0x10000000       #code only  pending continue in a do block
+ 
++#avoiding 0x80... and 0x10...
+ const normal_marker=0x41010202        #parse only
+ const if_marker=0x43030404            #I
+ const while_marker=0x45050606         #1
++const do_marker=0x45050707            #parse,code  do{}while loop type in cond_blocks
+ const function_marker=0x47070808      #F
+ const forin_marker=0x49090a0a         #code only
+ const forwhiletrue_marker=0x4b0b0c0c  #code only
+--- actionswf-1.orig/makewin
++++ actionswf-1/makewin
+@@ -2,35 +2,43 @@
+ ver=${1}
+ shift
+ 
+-cd src && \
+-./makewin${ver} $@ && \
+-cd ../dev && \
++cd ./dev && \
+ make && \
+-cd ../oad && \
+-./mw${ver}${s} $@ && \
+-cd ../oaas && \
+-./mw && \
+ cd .. && \
+-mkdir actionswf && \
+-mv src/actionswf.dll actionswf && \
+-mv oad/liboadbgdata.dll actionswf && \
+-mv oaas/liboaas.dll actionswf && \
+-ln ${depend_dll_path}/libzlib1.dll actionswf && \
+-cd src && \
+-./makewin${ver} clean && \
+-cd ../dev && \
+-make clean && \
+-cd ../oad && \
+-./mw clean && \
+-cd ../oaas && \
+-./mw clean && \
+-cd .. && \
+-cp oaalternative.sh actionswf && \
+-cp oaalternative.py actionswf && \
+-cp oaalternativer.py actionswf && \
+-cp oaas3 actionswf/oaas3.py && \
+-cp oaalternative.cmd actionswf && \
+-zip -r actionswf.zip actionswf && \
+-rm -r ./actionswf && \
+-\
+-unzip -l actionswf.zip
++if [ -z "${w1}" ]; then
++	cd src && \
++	./makewin${ver} $@ && \
++	cd ..
++fi && if [ -z "${w2}" ]; then
++	cd ./oad && \
++	./mw${ver}${s} $@ && \
++	cd ..
++fi && if [ -z "${w3}" ]; then
++	cd ./oaas && \
++	./mw && \
++	cd ..
++fi && if [ -z "${w4}" ]; then
++	mkdir actionswf && \
++	mv src/actionswf.dll actionswf && \
++	mv oad/liboadbgdata.dll actionswf && \
++	mv oaas/liboaas.dll actionswf && \
++	ln ${depend_dll_path}/libzlib1.dll actionswf && \
++	cd src && \
++	./makewin${ver} clean && \
++	cd ../dev && \
++	make clean && \
++	cd ../oad && \
++	./mw clean && \
++	cd ../oaas && \
++	./mw clean && \
++	cd .. && \
++	cp oaalternative.sh actionswf && \
++	cp oaalternative.py actionswf && \
++	cp oaas3 actionswf/oaas3.py && \
++	cp oaalternative.cmd actionswf && \
++	zip -r actionswf.zip actionswf && \
++	rm -r ./actionswf && \
++	\
++	unzip -l actionswf.zip && \
++	echo all good
++fi
+--- actionswf-1.orig/oaalternative.py
++++ actionswf-1/oaalternative.py
+@@ -1,100 +1,276 @@
+ #!/usr/bin/python3
+ 
++"""
++oaalternativer.py
++
++Generic text-manipulation helpers for editing JS-like function bodies embedded
++in a larger text blob. Built to do the following, for any function found by name:
++
++	1. Locate the function's `while( ... ) { ... }` block.
++	2. Inside that block, replace first `break[ loop];` with whatever code follows the
++		while-block (i.e. "what is outside the while code block").
++	3. Inside that block, find the first `if(!...) { ... }` block and:
++		- replace its body with `continue;`
++		- move the original body to right after the if-block's closing brace
++		 (so `if(!x){ return false; }` becomes `if(x){ continue; } return false;`)
++
++Works via brace/paren matching rather than fixed-format regex, so it isn't
++tied to the exact spacing/indentation of the example.
++"""
++
+ import os
+ import re
+ import sys
+ 
+-def transform_do_while(lines):
+-	verbose=os.environ.get("expect_obfuscation") or os.environ.get("is_debug")
+-	while_re = re.compile(r'^([\t ]*)while\s*\((.*)\)\s*;\s*$')
+-	tabs=3*' '
+-
+-	i = 0
+-	while i < len(lines):
+-		m = while_re.match(lines[i])
+-		if not m:
+-			i += 1
+-			continue
+-
+-		indent = m.group(1)
+-		condition = m.group(2).strip()
+-		while_line = i
+-
+-		# Find matching do by walking backwards and tracking braces
+-		level = 0
+-		do_line = None
+-		j = while_line - 1
+-		while j >= 0:
+-			line = lines[j]
+-			level += line.count('}')
+-			level -= line.count('{')
+-
+-			if level == 0 and re.match(r'^\s*do\b', line):
+-				do_line = j
+-				break
+-			j -= 1
+-
+-		if do_line is None:
+-			i += 1
+-			continue
+-
+-		# Find opening brace after do
+-		open_brace_line = do_line
+-		while open_brace_line < while_line and '{' not in lines[open_brace_line]:
+-			open_brace_line += 1
+-
+-		if open_brace_line == while_line:
+-			i += 1
+-			continue
+-
+-		# Find matching closing brace
+-		brace_level = 0
+-		close_brace_line = None
+-		j = open_brace_line
+-		while j < while_line:
+-			brace_level += lines[j].count('{')
+-			brace_level -= lines[j].count('}')
+-			if brace_level == 0:
+-				close_brace_line = j
+-				break
+-			j += 1
+-
+-		if close_brace_line is None:
+-			i += 1
+-			continue
+-
+-		# Extract body between braces
+-		body_lines = lines[open_brace_line + 1:close_brace_line]
+-
+-		replacement = []
+-		replacement.append(f"{indent}while(true){{\n")
+-		replacement.extend(body_lines)
+-		replacement.append(f"{indent}{tabs}if({condition})continue;\n")
+-		replacement.append(f"{indent}{tabs}break;\n")
+-		replacement.append(f"{indent}}}\n")
+-
+-		# Replace from do line through while line
+-		lines[do_line:while_line + 1] = replacement
+-
+-		i = do_line + len(replacement)
+-
+-		if verbose:
+-			print(while_line)
+-
+-	return lines
+-
+-def main():
+-	if len(sys.argv) != 2:
+-		print("no input file")
+-		sys.exit(1)
+-
+-	with open(sys.argv[1], "r", encoding="utf-8") as f:
+-		lines = f.readlines()
+-
+-	new_lines = transform_do_while(lines)
+ 
+-	with open(sys.argv[1], "w", encoding="utf-8") as f:
+-		f.writelines(new_lines)
++def find_matching_brace(text, open_index):
++	"""Given the index of a '{' return the index of its matching '}'."""
++	depth = 0
++	for i in range(open_index, len(text)):
++		if text[i] == '{':
++			depth += 1
++		elif text[i] == '}':
++			depth -= 1
++			if depth == 0:
++				return i
++	raise ValueError("No matching '}' found")
++
++def find_matching_paren(text, open_index):
++	"""Given the index of a '(' return the index of its matching ')'."""
++	depth = 0
++	for i in range(open_index, len(text)):
++		if text[i] == '(':
++			depth += 1
++		elif text[i] == ')':
++			depth -= 1
++			if depth == 0:
++				return i
++	raise ValueError("No matching ')' found")
++
++def extract_function(text, func_name):
++	"""Return (start, end) span of `function func_name(...) { ... }` including braces."""
++	pattern = re.compile(r'function\s+' + re.escape(func_name) + r'\s*\([^)]*\)\s*\{')
++	m = pattern.search(text)
++	if not m:
++		raise ValueError(f"Function '{func_name}' not found")
++	brace_open = m.end() - 1
++	brace_close = find_matching_brace(text, brace_open)
++	return m.start(), brace_close + 1
++
++def extract_while_block(func_text):
++	"""Locate the first while(...) { ... } inside func_text."""
++	m = re.search(r'while\s*\(', func_text)
++	if not m:
++		raise ValueError("No while(...) block found")
++	paren_open = m.end() - 1
++	paren_close = find_matching_paren(func_text, paren_open)
++	brace_open = func_text.index('{', paren_close)
++	brace_close = find_matching_brace(func_text, brace_open)
++	return {
++		'while_start': m.start(),
++		'brace_open': brace_open,
++		'brace_close': brace_close,
++	}
++
++BREAK_RE = re.compile(r'\bbreak(?:\s+([A-Za-z_$][\w$]*))?\s*;')
++
++def replace_break_with_after_text(func_text, while_info):
++	"""Replace first 'break;' or 'break <label>;' inside the while block with
++	the code that follows the while block, and MOVE that code (remove it from
++	its original spot). If the break was labeled, also remove the '<label>:'
++	that precedes the while."""
++	while_start = while_info['while_start']
++	block_start = while_info['brace_open']
++	block_end = while_info['brace_close']
++	inner = func_text[block_start + 1:block_end]
++
++	tail_start = block_end + 1
++	tail = func_text[tail_start:]
++	last_brace_idx = tail.rindex('}')  # function's own closing brace
++	after_while = tail[:last_brace_idx].strip()
++
++	# 1) copy the "outside" text into the first break (labeled or not)
++	m = BREAK_RE.search(inner)
++	if not m:
++		raise ValueError("No break; or break <label>; statement found")
++	label = m.group(1)
++	inner_new = inner[:m.start()] + after_while + inner[m.end():]
++
++	# 2) if labeled, drop the 'label:' sitting right above the while
++	before_while = func_text[:while_start]
++	if label:
++		before_while, n = re.subn(
++			r'\b' + re.escape(label) + r'\s*:\s*$', '', before_while
++		)
++		if n == 0:
++			raise ValueError(f"Label '{label}:' not found right above the while")
++
++	# 3) move it: remove the original text from after the while block,
++	#    keeping just the function's closing brace on its own line
++	new_tail = '\n' + tail[last_brace_idx:]
++
++	return (
++		before_while
++		+ func_text[while_start:block_start + 1]
++		+ inner_new
++		+ func_text[block_end:tail_start]
++		+ new_tail
++	)
++
++def find_if_not_block(text):
++	"""Find the first `if(!...) { ... }` block. Returns the exclamation
++	mark's index too, so it can be stripped."""
++	m = re.search(r'if\s*\(\s*!', text)
++	if not m:
++		raise ValueError("No if(!...) block found")
++	exclaim_index = text.index('!', m.start())
++	paren_open = text.index('(', m.start())
++	paren_close = find_matching_paren(text, paren_open)
++	brace_open = text.index('{', paren_close)
++	brace_close = find_matching_brace(text, brace_open)
++	return {
++		'exclaim_index': exclaim_index,
++		'brace_open': brace_open,
++		'brace_close': brace_close,
++	}
++
++def convert_if_block_to_continue(text, indent='      '):
++	"""
++	Turn:
++		if(!x) { <body> }
++	into:
++		if(x) { continue; } <body>
++	(drops the '!' and moves <body> to right after the block)
++	"""
++	info = find_if_not_block(text)
++	exclaim_index = info['exclaim_index']
++	brace_open = info['brace_open']
++	brace_close = info['brace_close']
++	body = text[brace_open + 1:brace_close].strip()
++
++	new_text = (
++		text[:exclaim_index]                          # up to (not including) '!'
++		+ text[exclaim_index + 1:brace_open + 1]       # rest of condition + '{'
++		+ f'\n{indent}   continue;\n{indent}'
++		+ text[brace_close:brace_close + 1]            # the '}'
++		+ f'\n{indent}' + body
++		+ text[brace_close + 1:]
++	)
++	return new_text
++
++def transform_function(source, func_name, do_break=True, do_not=True):
++	"""Apply the requested transformation(s) to `func_name` inside `source`
++	text and return the new full source text.
++
++	do_break -- apply the 'b' transform: break[ loop]; -> moved outside-the-while code
++	do_not   -- apply the '!' transform: if(!x){body} -> if(x){continue;} body
++	"""
++	start, end = extract_function(source, func_name)
++	func_text = source[start:end]
++
++	if do_break:
++		while_info = extract_while_block(func_text)
++		func_text = replace_break_with_after_text(func_text, while_info)
++
++	if do_not:
++		while_info = extract_while_block(func_text)  # re-locate (text may have changed)
++		while_block_text = func_text[while_info['brace_open']:while_info['brace_close'] + 1]
++		new_while_block_text = convert_if_block_to_continue(while_block_text)
++		func_text = (
++			func_text[:while_info['brace_open']]
++			+ new_while_block_text
++			+ func_text[while_info['brace_close'] + 1:]
++		)
++
++	return source[:start] + func_text + source[end:]
++
++def resolve_control_file(target_path, dbg_marker='.dbg'):
++	"""
++	Given the target source-file path like '../a.dbg/0_1' or '../a.dbg/4'
++	(this is the file that CONTAINS the JS-like text/functions to edit),
++	find the '.dbg' marker in the path and split it into:
++		base   = '../a'          (everything before '.dbg')
++		suffix = '0_1'  or '4'   (everything after '.dbg/')
++	and return (base, suffix, control_file) where
++	control_file = f'{base}.{suffix}' (e.g. '../a.0_1' or '../a.4') --
++	this is the file holding the transform instructions, e.g. 'easy_stop b !'.
++	"""
++	idx = target_path.find(dbg_marker)
++	if idx == -1:
++		raise ValueError(f"'{dbg_marker}' not found in path: {target_path}")
++
++	base = target_path[:idx]
++	remainder = target_path[idx + len(dbg_marker):]
++	suffix = remainder.lstrip('/\\')
++	if not suffix:
++		raise ValueError(f"No suffix found after '{dbg_marker}/' in: {target_path}")
++
++	control_file = f"{base}.{suffix}"
++	return base, suffix, control_file
++
++def parse_control_line(line):
++	"""
++	Parse a control-file line like:
++		easy_stop b !
++		easy_stop b
++		easy_stop !
++	Returns (func_name, do_break, do_not).
++	"""
++	tokens = line.split()
++	func_name = tokens[0]
++	flags = set(tokens[1:])
++	do_break = 'b' in flags
++	do_not = '!' in flags
++	return func_name, do_break, do_not
++
++def run(target_path):
++	"""Full CLI flow: target_path (sys.argv[1], e.g. '../a.dbg/0_1') is the
++	file holding the JS-like text/functions to transform. Its '.dbg' marker
++	is used to derive the control file (e.g. '../a.0_1') which holds lines
++	like 'easy_stop b !' describing what to do to which function. Applies
++	the requested transform(s) to each named function and writes the result
++	back to target_path in place."""
++	base, suffix, control_file = resolve_control_file(target_path)
++
++	if not os.path.isfile(control_file):
++		return
++
++	global verbose
++	verbose=os.environ.get("is_debug")
++
++	if not os.path.isfile(target_path):
++		raise FileNotFoundError(f"Target file not found: {target_path}")
++
++	with open(control_file) as f:
++		control_lines = [ln.strip() for ln in f if ln.strip()]
++
++	with open(target_path) as f:
++		source = f.read()
++
++	for line in control_lines:
++		func_name, do_break, do_not = parse_control_line(line)
++		if not do_break and not do_not:
++			error(f"Error: no 'b' or '!' flag on line '{line}'")
++		try:
++			source = transform_function(source, func_name, do_break=do_break, do_not=do_not)
++			info(f"Transformed '{func_name}' (b={do_break}, !={do_not})")
++		except ValueError as e:
++			error(f"Error: '{func_name}': {e}")
++
++	with open(target_path, 'w') as f:
++		f.write(source)
++
++	info(f"Updated: {target_path}")
++
++def info(a):
++	if verbose:
++		print(a)
++def error(a):
++	print(a)
++	sys.exit(1)
++
++if __name__ == '__main__':
++	if len(sys.argv) < 2:
++		error("no input file")
+ 
+-if __name__ == "__main__":
+-	main()
++	run(sys.argv[1])
+--- actionswf-1.orig/oaalternative.sh
++++ actionswf-1/oaalternative.sh
+@@ -3,7 +3,7 @@
+ #1 file.swf  2 what to call (ex: ./a.out ...) or nothing to skip part 2
+ #is_debug no_clean
+ #skip_ffdec ffdec
+-#skip_alternative no_number_check scripts skip_deobfuscation expect_obfuscation deobfuscator_launcher
++#skip_alternative no_number_check scripts skip_deobfuscation deobfuscator_launcher #expect_obfuscation
+ #ld_preload
+ 
+ if [ -z "${1}" ]; then echo file path required; exit 1; fi
+@@ -14,9 +14,9 @@ bname=`basename ${1}`
+ if [ -n "${scripts}" ]; then #this must be before the first cd
+ 	scripts=`readlink -f "${scripts}"`
+ fi
+-if [ -n "${expect_obfuscation}" ]; then #same, before first cd
+-	expect_obfuscation=`readlink -f "${expect_obfuscation}"`
+-fi
++#if [ -n "${expect_obfuscation}" ]; then #same, before first cd
++#	expect_obfuscation=`readlink -f "${expect_obfuscation}"`
++#fi
+ 
+ at_start=`pwd`
+ cd "${dname}" || exit 1
+@@ -47,12 +47,12 @@ if [ -z "${skip_ffdec}" ]; then
+ fi
+ if [ -z "${skip_alternative}" ]; then
+ 	if [ -z "${skip_deobfuscation}" ]; then # at readlink -f, all but the last component must exist
+-		deobfuscator=$(readlink -f "$(dirname "$0")"/oaalternative.py) #.py? to keep the compatibility with windows, else was oaalternativedeobf
++		deobfuscator_t=$(readlink -f "$(dirname "$0")"/oaalternative.py) #.py? to keep the compatibility with windows, else was oaalternativedeobf
+ 		#case "$deobfuscator" in
+ 		#	*.*) deobfuscator_t="${deobfuscator%.*}r.${deobfuscator##*.}" ;;
+ 		#	*)   deobfuscator_t="${deobfuscator}r" ;;
+ 		#esac
+-		deobfuscator_t="${deobfuscator%.py}r.py"
++		#deobfuscator_t="${deobfuscator%.py}r.py"
+ 	fi
+ 
+ 	mkdir -p "${out}" || exit 1
+@@ -68,19 +68,19 @@ if [ -z "${skip_alternative}" ]; then
+ 		if [ -z "${skip_deobfuscation}" ]; then
+ 			if [ -z "${deobfuscator_launcher}" ]; then #executable mode will not be represented in diff, but will be install -m0755 for /usr/bin
+ 				"${deobfuscator_t}" $2 || exit 1
+-				a=`"${deobfuscator}" $2` || exit 1
++				#a=`"${deobfuscator}" $2` || exit 1 #was for the do-while transform, now do-while is in the compiler
+ 			else #anyway deb test still need
+ 				"${deobfuscator_launcher}" "${deobfuscator_t}" $2 || exit 1
+-				a=`"${deobfuscator_launcher}" "${deobfuscator}" $2` || exit 1
+-			fi
+-			if [ -n "$a" ]; then
+-				if [ -n "${is_debug}" ]; then
+-					echo $a
+-				fi
+-				if [ -n "${expect_obfuscation}" ]; then
+-					echo "$a" >> "${expect_obfuscation}" #same reson like in doaction for not using a variable
+-				fi
++				#a=`"${deobfuscator_launcher}" "${deobfuscator}" $2` || exit 1
+ 			fi
++			#if [ -n "$a" ]; then
++			#	if [ -n "${is_debug}" ]; then
++			#		echo $a
++			#	fi
++			#	if [ -n "${expect_obfuscation}" ]; then
++			#		echo "$a" >> "${expect_obfuscation}" #same reson like in doaction for not using a variable
++			#	fi
++			#fi
+ 		fi
+ 		if [ -n "${is_debug}" ]; then
+ 			cat ${2}
+@@ -252,18 +252,19 @@ if [ -z "${skip_alternative}" ]; then
+ 	doaction 0 frame_ /DoAction.as 0 # ""
+ 	cd ..
+ 
+-	if [ -n "${expect_obfuscation}" ]; then
+-		if [ ! -e "${expect_obfuscation}" ]; then
+-			exit 1
+-		fi
+-		#rm "${expect_obfuscation}"
+-	fi
++	#if [ -n "${expect_obfuscation}" ]; then
++	#	if [ ! -e "${expect_obfuscation}" ]; then
++	#		exit 1
++	#	fi
++	#	#rm "${expect_obfuscation}"
++	#fi
+ fi
+ #part 2
+ if [ -n "${2}" ]; then
+ 	set -e #at alternative there are return 1 returns
+ 	mv ${v} "${bname}" "${bname}".orig
+ 	cd "${at_start}"
++	if [ -n "${is_debug}" ]; then echo LD_PRELOAD=${ld_preload} ${2}; fi
+ 	LD_PRELOAD=${ld_preload} ${2} || {
+ 		cd "${dname}"
+ 		if [ ! -e "${bname}" ]; then
+--- actionswf-1.orig/oaalternativer.py
++++ /dev/null
+@@ -1,271 +0,0 @@
+-#!/usr/bin/python3
+-
+-"""
+-oaalternativer.py
+-
+-Generic text-manipulation helpers for editing JS-like function bodies embedded
+-in a larger text blob. Built to do the following, for any function found by name:
+-
+-	1. Locate the function's `while( ... ) { ... }` block.
+-	2. Inside that block, replace first `break;` with whatever code follows the
+-		while-block (i.e. "what is outside the while code block").
+-	3. Inside that block, find the first `if(!...) { ... }` block and:
+-		- replace its body with `continue;`
+-		- move the original body to right after the if-block's closing brace
+-		 (so `if(!x){ return false; }` becomes `if(!x){ continue; } return false;`)
+-
+-Works via brace/paren matching rather than fixed-format regex, so it isn't
+-tied to the exact spacing/indentation of the example.
+-"""
+-
+-import os
+-import re
+-import sys
+-
+-
+-def find_matching_brace(text, open_index):
+-	"""Given the index of a '{' return the index of its matching '}'."""
+-	depth = 0
+-	for i in range(open_index, len(text)):
+-		if text[i] == '{':
+-			depth += 1
+-		elif text[i] == '}':
+-			depth -= 1
+-			if depth == 0:
+-				return i
+-	raise ValueError("No matching '}' found")
+-
+-
+-def find_matching_paren(text, open_index):
+-	"""Given the index of a '(' return the index of its matching ')'."""
+-	depth = 0
+-	for i in range(open_index, len(text)):
+-		if text[i] == '(':
+-			depth += 1
+-		elif text[i] == ')':
+-			depth -= 1
+-			if depth == 0:
+-				return i
+-	raise ValueError("No matching ')' found")
+-
+-
+-def extract_function(text, func_name):
+-	"""Return (start, end) span of `function func_name(...) { ... }` including braces."""
+-	pattern = re.compile(r'function\s+' + re.escape(func_name) + r'\s*\([^)]*\)\s*\{')
+-	m = pattern.search(text)
+-	if not m:
+-		raise ValueError(f"Function '{func_name}' not found")
+-	brace_open = m.end() - 1
+-	brace_close = find_matching_brace(text, brace_open)
+-	return m.start(), brace_close + 1
+-
+-
+-def extract_while_block(func_text):
+-	"""Locate the first while(...) { ... } inside func_text."""
+-	m = re.search(r'while\s*\(', func_text)
+-	if not m:
+-		raise ValueError("No while(...) block found")
+-	paren_open = m.end() - 1
+-	paren_close = find_matching_paren(func_text, paren_open)
+-	brace_open = func_text.index('{', paren_close)
+-	brace_close = find_matching_brace(func_text, brace_open)
+-	return {
+-		'while_start': m.start(),
+-		'brace_open': brace_open,
+-		'brace_close': brace_close,
+-	}
+-
+-
+-def replace_break_with_after_text(func_text, while_info):
+-	"""Replace first 'break;' inside the while block with the code that
+-	follows the while block (i.e. what's 'outside' it, up to the function's
+-	closing brace) -- and MOVE that code (remove it from its original spot)
+-	rather than just copying it."""
+-	block_start = while_info['brace_open']
+-	block_end = while_info['brace_close']
+-	inner = func_text[block_start + 1:block_end]
+-
+-	tail_start = block_end + 1
+-	tail = func_text[tail_start:]
+-	last_brace_idx = tail.rindex('}')  # function's own closing brace
+-	after_while_raw = tail[:last_brace_idx]
+-	after_while = after_while_raw.strip()
+-
+-	# 1) copy the "outside" text into first break;
+-	if not inner.count("break;"):
+-		raise ValueError("No break; statement found")
+-	inner_new = inner.replace('break;', after_while, 1)
+-
+-	# 2) move it: remove the original text from after the while block,
+-	#    keeping just the function's closing brace on its own line
+-	new_tail = '\n' + tail[last_brace_idx:]
+-
+-	new_func_text = (
+-		func_text[:block_start + 1] + inner_new + func_text[block_end:tail_start]
+-		+ new_tail
+-	)
+-	return new_func_text
+-
+-
+-def find_if_not_block(text):
+-	"""Find the first `if(!...) { ... }` block. Returns the exclamation
+-	mark's index too, so it can be stripped."""
+-	m = re.search(r'if\s*\(\s*!', text)
+-	if not m:
+-		raise ValueError("No if(!...) block found")
+-	exclaim_index = text.index('!', m.start())
+-	paren_open = text.index('(', m.start())
+-	paren_close = find_matching_paren(text, paren_open)
+-	brace_open = text.index('{', paren_close)
+-	brace_close = find_matching_brace(text, brace_open)
+-	return {
+-		'exclaim_index': exclaim_index,
+-		'brace_open': brace_open,
+-		'brace_close': brace_close,
+-	}
+-
+-
+-def convert_if_block_to_continue(text, indent='      '):
+-	"""
+-	Turn:
+-		if(!x) { <body> }
+-	into:
+-		if(x) { continue; } <body>
+-	(drops the '!' and moves <body> to right after the block)
+-	"""
+-	info = find_if_not_block(text)
+-	exclaim_index = info['exclaim_index']
+-	brace_open = info['brace_open']
+-	brace_close = info['brace_close']
+-	body = text[brace_open + 1:brace_close].strip()
+-
+-	new_text = (
+-		text[:exclaim_index]                          # up to (not including) '!'
+-		+ text[exclaim_index + 1:brace_open + 1]       # rest of condition + '{'
+-		+ f'\n{indent}   continue;\n{indent}'
+-		+ text[brace_close:brace_close + 1]            # the '}'
+-		+ f'\n{indent}' + body
+-		+ text[brace_close + 1:]
+-	)
+-	return new_text
+-
+-
+-def transform_function(source, func_name, do_break=True, do_not=True):
+-	"""Apply the requested transformation(s) to `func_name` inside `source`
+-	text and return the new full source text.
+-
+-	do_break -- apply the 'b' transform: break; -> moved outside-the-while code
+-	do_not   -- apply the '!' transform: if(!x){body} -> if(x){continue;} body
+-	"""
+-	start, end = extract_function(source, func_name)
+-	func_text = source[start:end]
+-
+-	if do_break:
+-		while_info = extract_while_block(func_text)
+-		func_text = replace_break_with_after_text(func_text, while_info)
+-
+-	if do_not:
+-		while_info = extract_while_block(func_text)  # re-locate (text may have changed)
+-		while_block_text = func_text[while_info['brace_open']:while_info['brace_close'] + 1]
+-		new_while_block_text = convert_if_block_to_continue(while_block_text)
+-		func_text = (
+-			func_text[:while_info['brace_open']]
+-			+ new_while_block_text
+-			+ func_text[while_info['brace_close'] + 1:]
+-		)
+-
+-	return source[:start] + func_text + source[end:]
+-
+-
+-def resolve_control_file(target_path, dbg_marker='.dbg'):
+-	"""
+-	Given the target source-file path like '../a.dbg/0_1' or '../a.dbg/4'
+-	(this is the file that CONTAINS the JS-like text/functions to edit),
+-	find the '.dbg' marker in the path and split it into:
+-		base   = '../a'          (everything before '.dbg')
+-		suffix = '0_1'  or '4'   (everything after '.dbg/')
+-	and return (base, suffix, control_file) where
+-	control_file = f'{base}.{suffix}' (e.g. '../a.0_1' or '../a.4') --
+-	this is the file holding the transform instructions, e.g. 'easy_stop b !'.
+-	"""
+-	idx = target_path.find(dbg_marker)
+-	if idx == -1:
+-		raise ValueError(f"'{dbg_marker}' not found in path: {target_path}")
+-
+-	base = target_path[:idx]
+-	remainder = target_path[idx + len(dbg_marker):]
+-	suffix = remainder.lstrip('/\\')
+-	if not suffix:
+-		raise ValueError(f"No suffix found after '{dbg_marker}/' in: {target_path}")
+-
+-	control_file = f"{base}.{suffix}"
+-	return base, suffix, control_file
+-
+-
+-def parse_control_line(line):
+-	"""
+-	Parse a control-file line like:
+-		easy_stop b !
+-		easy_stop b
+-		easy_stop !
+-	Returns (func_name, do_break, do_not).
+-	"""
+-	tokens = line.split()
+-	func_name = tokens[0]
+-	flags = set(tokens[1:])
+-	do_break = 'b' in flags
+-	do_not = '!' in flags
+-	return func_name, do_break, do_not
+-
+-
+-def run(target_path):
+-	"""Full CLI flow: target_path (sys.argv[1], e.g. '../a.dbg/0_1') is the
+-	file holding the JS-like text/functions to transform. Its '.dbg' marker
+-	is used to derive the control file (e.g. '../a.0_1') which holds lines
+-	like 'easy_stop b !' describing what to do to which function. Applies
+-	the requested transform(s) to each named function and writes the result
+-	back to target_path in place."""
+-	base, suffix, control_file = resolve_control_file(target_path)
+-
+-	if not os.path.isfile(control_file):
+-		return
+-
+-	global verbose
+-	verbose=os.environ.get("is_debug")
+-
+-	if not os.path.isfile(target_path):
+-		raise FileNotFoundError(f"Target file not found: {target_path}")
+-
+-	with open(control_file) as f:
+-		control_lines = [ln.strip() for ln in f if ln.strip()]
+-
+-	with open(target_path) as f:
+-		source = f.read()
+-
+-	for line in control_lines:
+-		func_name, do_break, do_not = parse_control_line(line)
+-		if not do_break and not do_not:
+-			error(f"Error: no 'b' or '!' flag on line '{line}'")
+-		try:
+-			source = transform_function(source, func_name, do_break=do_break, do_not=do_not)
+-			info(f"Transformed '{func_name}' (b={do_break}, !={do_not})")
+-		except ValueError as e:
+-			error(f"Error: '{func_name}': {e}")
+-
+-	with open(target_path, 'w') as f:
+-		f.write(source)
+-
+-	info(f"Updated: {target_path}")
+-
+-def info(a):
+-	if verbose:
+-		print(a)
+-def error(a):
+-	print(a)
+-	sys.exit(1)
+-
+-if __name__ == '__main__':
+-	if len(sys.argv) < 2:
+-		error("no input file")
+-
+-	run(sys.argv[1])
+--- actionswf-1.orig/oaas.html
++++ actionswf-1/oaas.html
+@@ -84,7 +84,7 @@
+ 	<tr><td class="blue">u</td>          <td class="red">name</td><td class="com">...:Array&lt;<span class="red">name</span>&gt;...</td></tr>
+ 	<tr><td>v</td><td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com">var <span class="red">name</span>=new <span class="red">class</span>();</td></tr>
+ 	<tr><td>w</td><td class="red"><table><tr><td>name</td><td>class</td></tr></table></td><td class="com">var <span class="red">name</span>=new <span class="red">class</span>();<span class="red">name</span>.name='<span class="red">name</span>';</td></tr>
+-	<tr><td class="blue" colspan=2 rowspan=2>v <span class="green">or</span> V</td>       <td class="com">var <span class="blue">name</span>=new <span class="blue">class</span>(<span class="blue">a</span>,<span class="blue">10</span>,<span class="blue">True</span>);<span class="green">[[</span><span class="blue">parent/stage.</span><span class="green">]</span>addChild(<span class="blue">name</span>);<span class="green">]</span></td><td class="com"><span class="green">[</span><span class="blue">parent.</span><span class="green">]</span>attachMovie(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>,<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth())<span class="yellow">;</span>...name.a<span class="yellow">=</span><span class="blue">a</span><span class="yellow">;</span>...name.b<span class="yellow">=</span><span class="blue">10</span><span class="yellow">;</span>...name.c<span class="yellow">=</span><span class="blue">True</span><span class="yellow">;</span></td></tr>
++	<tr><td class="blue" colspan=2 rowspan=2>v <span class="green">or</span> V</td>       <td class="com">var <span class="blue">name</span><span class="green">/</span>_<span class="blue">undefined</span>=new <span class="blue">class</span>(<span class="blue">a</span>,<span class="blue">10</span>,<span class="blue">True</span>);<span class="green">[[</span><span class="blue">parent/stage.</span><span class="green">]</span>addChild(<span class="blue">name</span><span class="green">/</span>_<span class="blue">undefined</span>);<span class="green">]</span></td><td class="com"><span class="green">[</span><span class="blue">parent.</span><span class="green">]</span>attachMovie(<span class="yellow">'</span><span class="blue">class</span><span class="yellow">'</span>,<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span><span class="green">/</span><span class="blue">undefined</span>,getNextHighestDepth())<span class="yellow">;</span>...name.a<span class="yellow">=</span><span class="blue">a</span><span class="yellow">;</span>...name.b<span class="yellow">=</span><span class="blue">10</span><span class="yellow">;</span>...name.c<span class="yellow">=</span><span class="blue">True</span><span class="yellow">;</span></td></tr>
+ 	<tr>                                                                                  <td class="com">var <span class="blue">name</span>=new flash.display.DisplayObjectContainer();...</td><td class="com">...createEmptyMovieClip(<span class="yellow">'</span><span class="blue">name</span><span class="yellow">'</span>,getNextHighestDepth());</td></tr>
+ 	<tr><td class="blue">v <span class="green">or</span> V</td><td class="red">class</td> <td class="com">var <span class="blue">name</span>=new <span class="red">class</span>();...</td><td class="com">...</td></tr>
+ 	<tr><td class="blue" colspan=2>w <span class="green">or</span> W</td>                 <td class="com">...</td><td class="com">...</td></tr>
+--- actionswf-1.orig/oaas/Makefile
++++ actionswf-1/oaas/Makefile
+@@ -92,12 +92,17 @@ ${exte}: ${obs}
+ 	$(AR) cr ${exte} $^
+ #                      | is good if adding prerequisite like 'headers' but want to exclude them from $^
+ 
++ifeq ($(testCfile),1)
++%.o: %.c
++	$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c
++else
+ %.o: %.oc
+ 	${OCOMP} $< ${OFLAGS} include_sec 1
+ 	if [ -z "${ldprefer}" ]; then \
+ 		${OCONV} ${OCONVFLAGS} $<.x import;\
+ 		$(CC) ${model} -c -w -fPIC ${compilerflags} ${EXTRA_CFLAGS} $*.c;\
+ 	fi
++endif
+ %.h: %.ohi
+ 	${OCOMP} $< x_file 2 logfile 0 include_sec 1
+ 	${OCONV} $<.x
+--- actionswf-1.orig/oaas/solve.oc
++++ actionswf-1/oaas/solve.oc
+@@ -25,7 +25,9 @@ importx "strstr" strstr
+ ^import "mouseup_string_get" mouseup_string_get 1
+ ^import "rollover_string_get" rollover_string_get 1
+ ^import "rollout_string_get" rollout_string_get 1
++#
+ ^import "addChild_string_p" addChild_string_p
++^import "attachMovie_string_get" attachMovie_string_get 1
+ ^import "getChildByName_string_p" getChildByName_string_p
+ ^import "new_string_p" new_string_p
+ 
+@@ -234,11 +236,12 @@ function solver7(ss value,ss after)
+ 		call sprintf(#globals.outvalue,"%c",(childcast_char))
+ 		return #globals.outvalue
+ 	end
+-	char var_string="attachMovie"^
+-	set c strncmp(value,#var_string,\.var_string)
++	ss ?z
++	set cursor attachMovie_string_get(#z)
++	set c strncmp(value,cursor,z)
+ 	if c=0
+ 		set globals.stored_char solver7_var(after)
+-		callret solver_endb(value,\.var_string)
++		callret solver_endb(value,z)
+ 	end
+ 	char bfil_string="begin"^
+ 	set c strncmp(value,#bfil_string,\.bfil_string)
+@@ -319,7 +322,6 @@ function solver7(ss value,ss after)
+ 		end
+ 		return (NULL)
+ 	end
+-	ss ?z
+ 	set cursor on_string_get(#z)
+ 	set c strncmp(value,cursor,z)
+ 	if c=0
+--- actionswf-1.orig/oaas/translate.oc
++++ actionswf-1/oaas/translate.oc
+@@ -19,6 +19,7 @@ char mouseup_string="MouseUp"^
+ char rollover_string="RollOver"^
+ char rollout_string="RollOut"^
+ #
++char attachMovie="attachMovie"^
+ vstr getChildByName="getChildByName"
+ vstr graphics="graphics."
+ 
+@@ -41,6 +42,7 @@ importx "strrchr" strrchr
+ ^import "dotbackafter" dotbackafter 2
+ ^import "equalafter" equalafter 1
+ ^import "equalon" equalon 1
++import "mem_reverse" mem_reverse
+ import "object_com" object_com
+ import "object_make" object_make
+ ^import "parecafter" parecafter 1
+@@ -99,6 +101,10 @@ end
+ function addChild_string_p()
+ 	return globalt.addChild
+ end
++function attachMovie_string_get(ss z)
++	set z# \globalt.attachMovie
++	return #globalt.attachMovie
++end
+ function getChildByName_string_p()
+ 	return globalt.getChildByName
+ end
+@@ -1314,12 +1320,12 @@ function translate_var_full(ss start,ss
+ 				if pointer=oa ##else is translate_one
+ 					#v class
+ 					ss afterindents;ss atarguments;ss cls
+-					set cls translate_var_helper(start,#afterindents,#atarguments,#pointer)
++					ss cursor
++					set cls translate_var_helper(start,#afterindents,#atarguments,#pointer,#cursor)
+ 					if cls!=start
+ 						ss ?store;set store afterindents#;set afterindents# (Nullchar)
+ 						sd ?len
+ 						!xor len len ## o problem
+-						ss cursor
+ 						set cursor translate_leftright_full(globalt.var_translate,start,#globalt.blank,cls,oa,globalt.a_page_switch,#len)
+ 						if cursor!=#globalt.blank
+ 							callret translate_var_by_type(type,cursor,len,cls,pointer,afterindents,store,atarguments,"VarCreateClass","VarCreateClassNamed","VarCreateClassAdded","VarCreateClassAddedNamed",start)
+@@ -1338,46 +1344,67 @@ function translate_var_full(ss start,ss
+ end
+ function translate_var_simple(ss indents,ss ?type)
+ 	ss cls;ss afterindents;ss atarguments;ss delim
+-	set cls translate_var_helper(indents,#afterindents,#atarguments,#delim)
++	ss cursor
++	set cls translate_var_helper(indents,#afterindents,#atarguments,#delim,#cursor)
+ 	if cls!=indents
+-		ss cursor
++		ss ?atta;set atta mem_reverse(afterindents,cursor,#globalt.attachMovie,\globalt.attachMovie)
+ 		ss ?store
+ 		sd ?len
+-		ss name
+-		set name quotafter(delim)
+-		if name!=delim ##going on attachMovie
+-			set cursor quoton(name)
+-			if cursor!=cls
+-				set store afterindents#;set afterindents# (Nullchar)
+-				set cursor# (Nullchar)
+-				set len snprintf(globalt.a_page_switch,(a_page_size),"%svar %s=new %s(",indents,name,cls)
+-				if len>0
+-					if len<(a_page_size)
+-						inc cursor
+-						ss pointer
+-						set pointer semicolafter(cursor)
+-						if pointer!=cursor
+-							ss args
+-							set args translate_var_arguments(pointer,globalt.a_page_switch,#len)
+-							if args=pointer
+-								return indents
+-							end
++		if atta!=(FALSE)
++			ss name
++			set name quotafter(delim)
++			if name!=delim
++				set cursor quoton(name)
++				if cursor=cls
++					return indents
++				end
++			else
++				set name commaafter(delim)
++				if name=delim
++					return indents
++				end
++				set name spcfull(name)
++				set cursor commaon(name)
++				if cursor=name
++					return indents
++				end
++				char und="undefined"^
++				sd ?c;set c strncmp(name,#und,\.und)
++				if c!=0
++					return indents
++				end
++				dec name
++				set name# (_)
++			end
++			set store afterindents#;set afterindents# (Nullchar)
++			set cursor# (Nullchar)
++			set len snprintf(globalt.a_page_switch,(a_page_size),"%svar %s=new %s(",indents,name,cls)
++			if len>0
++				if len<(a_page_size)
++					ss pointer
++					inc cursor
++					set pointer semicolafter(cursor)
++					if pointer!=cursor
++						ss args
++						set args translate_var_arguments(pointer,globalt.a_page_switch,#len)
++						if args=pointer
++							return indents
+ 						end
+-						sd ?size=a_page_size
+-						sub size len
+-						if size>=3
+-							set pointer globalt.a_page_switch
+-							add pointer len
+-							set pointer# (Closeparenthesis)
+-							inc pointer
+-							set pointer# (Semicolon)
+-
+-							inc pointer
+-							set pointer# (Nullchar)
+-							add len 2
++					end
++					sd ?size=a_page_size
++					sub size len
++					if size>=3
++						set pointer globalt.a_page_switch
++						add pointer len
++						set pointer# (Closeparenthesis)
++						inc pointer
++						set pointer# (Semicolon)
++
++						inc pointer
++						set pointer# (Nullchar)
++						add len 2
+ 
+-							callret translate_var_by_type(type,globalt.a_page_switch,len,name,cursor,afterindents,store,atarguments,"VarAttach","VarAttachNamed","VarAttachAdded","VarAttachAddedNamed",indents)
+-						end
++						callret translate_var_by_type(type,globalt.a_page_switch,len,name,cursor,afterindents,store,atarguments,"VarAttach","VarAttachNamed","VarAttachAdded","VarAttachAddedNamed",indents)
+ 					end
+ 				end
+ 			end
+@@ -1436,21 +1463,26 @@ function translate_var_by_type(ss ?type,
+ 	end
+ 	return start
+ end
+-function translate_var_helper(ss indents,sv p_afterindents,sv p_atarguments,sv p_cursor)
++function translate_var_helper(ss indents,sv p_afterindents,sv p_atarguments,sv p_cursor,sv p_pointer)
+ 	ss cursor;set cursor spcfull(indents)
+ 	set p_afterindents# cursor
+ 	ss cls
+ 	inc cursor
+-	set cls quoton(cursor)
+-	if cls!=cursor
+-		set p_atarguments# cls
+-		inc cls
+-		set cursor quoton(cls)
+-		if cursor!=cls
+-			set cursor# (Nullchar)
+-			inc cursor
+-			set p_cursor# cursor
+-			return cls
++	ss pointer;set pointer pareoon(cursor)
++	if pointer!=cursor
++		set p_pointer# pointer
++		#inc pointer , (' will not work like that
++		set cls quoton(pointer)
++		if cls!=pointer
++			set p_atarguments# cls
++			inc cls
++			set cursor quoton(cls)
++			if cursor!=cls
++				set cursor# (Nullchar)
++				inc cursor
++				set p_cursor# cursor
++				return cls
++			end
+ 		end
+ 	end
+ 	return indents
+--- actionswf-1.orig/oaas/util.oc
++++ actionswf-1/oaas/util.oc
+@@ -301,6 +301,22 @@ function strchr_reverse(ss s,ss ?c)
+ 		end
+ 	end
+ end
++function mem_reverse(ss start,ss end,ss s,ss ?sz)
++	ss a;set a s
++	add s sz
++	while end!=start
++		dec end
++		dec s
++		if end#!=s#
++			return (FALSE)
++		end
++		dec sz
++		if sz=0
++			return (TRUE)
++		end
++	end
++	return (FALSE)
++end
+ 
+ function var_advance(ss cursor,sv out)
+ 	ss ?a
+--- actionswf-1.orig/oaas3
++++ actionswf-1/oaas3
+@@ -1,12 +1,12 @@
+ #!/usr/bin/python3
+ 
+-# break OAPATH target src_name
++# break OAPATH target proj_compiler src_name
+ # a1 a2a a2b a3 b1b b2b  splits_folder splits_format_ext splits_printf_ext
+ # OACACHE from_diagnostics verbose main
+ 
+ # skip_orig origf_name mirror_name
+ # skip_src allow_untranslated
+-# skip_comp  launcher compiler html5_compiler header  SERVER_PID server_extern server_compiler skip_connect_test sentinel  no_diagnostics only_diagnostics diag_json dump  no_confirm ffdec  no_clean
++# skip_comp  launcher compiler proj_args header  SERVER_PID server_extern server_compiler skip_connect_test sentinel  no_diagnostics only_diagnostics diag_json dump  no_confirm ffdec  no_clean
+ 
+ # a1 a2a a3 b1b b2b
+ # /  /   3
+@@ -21,6 +21,7 @@
+ from pathlib import Path
+ #import pdb
+ #import re
++#import shlex
+ #import signal
+ #import shutil
+ #import socket
+@@ -145,9 +146,46 @@ def splits_data(orig=False,dirs=''):
+ 			texts.pop()
+ 	return (files,files_mirror,files_src,texts)
+ 
++import re
++import subprocess
+ target=os.environ.get('target')
+ if target:
+-	if target!="html5":
++	proj_compiler=os.environ.get('proj_compiler')
++	if not proj_compiler:
++		proj_compiler='openfl'
++	def get_openfl_targets():
++		out = subprocess.run(
++			[proj_compiler, "help", "build"],
++			capture_output=True, text=True
++		)
++		text = out.stdout + out.stderr
++
++		# strip ANSI color codes, in case the output is colored
++		text = re.sub(r"\x1b\[[0-9;]*m", "", text)
++
++		targets = []
++		in_section = False
++
++		for line in text.splitlines():
++			stripped = line.strip()
++
++			if stripped in ("Targets:", "Target Aliases:"):
++				in_section = True
++				continue
++
++			# any other "Something:" header ends the sections
++			if in_section and re.match(r"^[A-Za-z ]+:$", stripped):
++				in_section = False
++				continue
++
++			if in_section and " -- " in stripped:
++				names = stripped.split(" -- ", 1)[0]
++				for name in names.split("/"):
++					name = name.strip()
++					if name and name not in targets:
++						targets.append(name)
++		return targets
++	if target not in get_openfl_targets():
+ 		print('target not available')
+ 		exit(1)
+ 
+@@ -457,7 +495,6 @@ if not os.environ.get(skip_src):
+ 		lib.ratio(True)
+ 
+ if not os.environ.get('skip_comp'):
+-	import subprocess
+ 	def srun(a):
+ 		r=subprocess.run(a)
+ 		if r.returncode:
+@@ -567,17 +604,18 @@ if not os.environ.get('skip_comp'):
+ 			print('error')
+ 			exiting()
+ 		return r
+-
++	import shlex
+ 	def build():
+ 		#the real, output-producing build. diagnostics themselves (the '--display' queries below) always stay on haxe/baser regardless of target
+-		if target=='html5':
+-			html5_compiler=os.environ.get('html5_compiler')
+-			if not html5_compiler:
+-				html5_compiler='openfl'
++		if target:
++			proj_args=os.environ.get('proj_args')
+ 			cur=os.getcwd()
+ 			os.chdir(c_dir) #openfl expects project.xml at the original invocation dir, not dest
+ 			try:
+-				return prun([html5_compiler,'build','html5'])
++				if proj_args:
++					return prun([proj_compiler,'build',target,*shlex.split(proj_args)]) #counting also ""
++				else:
++					return prun([proj_compiler,'build',target])
+ 			finally:
+ 				os.chdir(cur)
+ 		return prun(baser)
+@@ -603,7 +641,7 @@ if not os.environ.get('skip_comp'):
+ 				import json
+ 				import itertools
+ 
+-				if target=='html5':
++				if target in ['html5','electron']:
+ 					baser.extend(['-D','html5']) #so #if html5 / #else / #end resolves correctly for diagnostics queries
+ 
+ 				_id_counter = itertools.count(1)
+@@ -711,7 +749,6 @@ if not os.environ.get('skip_comp'):
+ 						fp.write(line + os.linesep)
+ 					return #True
+ 
+-				import re
+ 				def diag():
+ 					pp=''
+ 					firstline=None
+@@ -954,7 +991,7 @@ if not os.environ.get('skip_comp'):
+ 
+ 	stop_server(server_pid)
+ 
+-	if not os.environ.get('no_confirm') and not o_d and target!='html5': #only diagnostics is a dry run at haxe; ffdec/swf check doesn't apply to html5 output
++	if not os.environ.get('no_confirm') and not o_d and not target: #only diagnostics is a dry run at haxe; ffdec/swf check doesn't apply to html5 output
+ 		#confirm is as3
+ 
+ 		dest_file_tmp=dest_file+'.tmp'
+@@ -997,10 +1034,10 @@ if not os.environ.get('skip_comp'):
+ 		files=splits_data() #if not files , are also at: orig src diagnostics
+ 		removed=set()
+ 		for f in files:
+-			target=hx_ext(f)
+-			if target in removed: #several .as files can share one Main.hx
++			mdl=hx_ext(f)
++			if mdl in removed: #several .as files can share one Main.hx
+ 				continue
+-			removed.add(target)
+-			os.remove(target)
++			removed.add(mdl)
++			os.remove(mdl)
+ 		os.rmdir(dest)
+ 		shutil.rmtree(OACACHE, ignore_errors=True)
+--- actionswf-1.orig/python/actionswf/_action.py
++++ actionswf-1/python/actionswf/_action.py
+@@ -5,27 +5,31 @@ def init(lib):
+ 	lib.action.argtypes = [ ctypes.c_char_p ]
+ 	lib.actionf.argtypes = [ ctypes.c_char_p, ctypes.c_char_p ]
+ 	lib.actionf.restype = ctypes.c_size_t
+-	lib.actionsf.argtypes = [ ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p ]
++	lib.actionsf.argtypes = [ ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p ]
+ 	lib.actiond.argtypes = [ ctypes.c_char_p ]
+ 
+ 	lib.action_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p ]
+ 	lib.action_init_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p ]
+ 	lib.actionf_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p ]
+ 	lib.actionf_init_sprite.argtypes = [ ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p ]
+-	lib.actionsf_sprite.argtypes = [ ctypes.c_int, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p ]
+-	lib.actionsf_init_sprite.argtypes = [ ctypes.c_int, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p ]
++	lib.actionsf_sprite.argtypes = [ ctypes.c_int, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p ]
++	lib.actionsf_init_sprite.argtypes = [ ctypes.c_int, ctypes.POINTER(ctypes.c_char_p), ctypes.POINTER(ctypes.c_size_t), ctypes.c_char_p ]
+ 
+ 	lib.actions_free.argtypes = [ ctypes.c_char_p ]
+ 
+ 	global _lib
+ 	_lib=lib
+ 
++def _flatten(args):
++	#this is like python min/max
++	return args[0] if (len(args) == 1 and isinstance(args[0], (list, tuple))) else args
++
+ def action(ac):
+ 	_lib.action(ac.encode('utf-8'))
+-def actionf(*args, buffer, format): #You must place the variadic ones first in the function definition  #call this like this: (buffer=b, format="...", *[b'a',1])
+-	return _lib.actionf(buffer, format.encode('utf-8'), *args) #buffer example: (ctypes.c_char * 10)()       #string args can go like this: b'a_string'
+-def actionsf(*args, psize, pbuffer, format):
+-	_lib.actionsf(psize, pbuffer, format.encode('utf-8'), *args)
++def actionf(buffer, format, *args): # ... ,b'a',1 or ,*[b'a',1] or ,[b'a',1]
++	return _lib.actionf(buffer, format.encode('utf-8'), *_flatten(args)) #buffer example: (ctypes.c_char * 10)()
++def actionsf(pbuffer, psize, format, *args):
++	_lib.actionsf(pbuffer, psize, format.encode('utf-8'), *_flatten(args))
+ def actiond(ac):
+ 	_lib.actiond(ac.encode('utf-8'))
+ 
+@@ -33,14 +37,14 @@ def action_sprite(sprite, ac):
+ 	_lib.action_sprite(sprite, ac.encode('utf-8'))
+ def action_init_sprite(sprite, ac):
+ 	_lib.action_init_sprite(sprite, ac.encode('utf-8'))
+-def actionf_sprite(*args, sprite, buffer, format):
+-	_lib.actionf_sprite(sprite, buffer, format.encode('utf-8'), *args)
+-def actionf_init_sprite(*args, sprite, buffer, format):
+-	_lib.actionf_init_sprite(sprite, buffer, format.encode('utf-8'), *args)
+-def actionsf_sprite(*args, sprite, psize, pbuffer, format):
+-	_lib.actionsf_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
+-def actionsf_init_sprite(*args, sprite, psize, pbuffer, format):
+-	_lib.actionsf_init_sprite(sprite, psize, pbuffer, format.encode('utf-8'), *args)
++def actionf_sprite(sprite, buffer, format, *args):
++	_lib.actionf_sprite(sprite, buffer, format.encode('utf-8'), *_flatten(args))
++def actionf_init_sprite(sprite, buffer, format, *args):
++	_lib.actionf_init_sprite(sprite, buffer, format.encode('utf-8'), *_flatten(args))
++def actionsf_sprite(sprite, pbuffer, psize, format, *args):
++	_lib.actionsf_sprite(sprite, pbuffer, psize, format.encode('utf-8'), *_flatten(args))
++def actionsf_init_sprite(sprite, pbuffer, psize, format, *args):
++	_lib.actionsf_init_sprite(sprite, pbuffer, psize, format.encode('utf-8'), *_flatten(args))
+ 
+ def actions_free(buffer):
+ 	_lib.actions_free(buffer)
+--- actionswf-1.orig/python/actionswf/_swf.py
++++ actionswf-1/python/actionswf/_swf.py
+@@ -3,45 +3,43 @@ import ctypes
+ 
+ 
+ class ButtonData(ctypes.Structure):
+-	pass
+-ButtonData._fields_ = [("def_fill", ctypes.c_uint)
+-				,("def_line_sz", ctypes.c_int)
+-				,("def_line", ctypes.c_uint)
+-
+-				,("ov_fill", ctypes.c_uint)
+-				,("ov_line_sz", ctypes.c_int)
+-				,("ov_line", ctypes.c_uint)
+-
+-				,("dn_fill", ctypes.c_uint)
+-				,("dn_line_sz", ctypes.c_int)
+-				,("dn_line", ctypes.c_uint)
+-
+-				,("xcurve", ctypes.c_int)
+-				,("ycurve", ctypes.c_int)
+-
+-				,("text", ctypes.c_char_p)
+-				,("font_id", ctypes.c_int)
+-				,("font_height", ctypes.c_int)
+-				,("font_vertical_offset", ctypes.c_int)
+-				,("font_color", ctypes.c_int)
++	_pack_ = 4
++	_fields_ = [("def_fill", ctypes.c_uint)
++			,("def_line_sz", ctypes.c_int)
++			,("def_line", ctypes.c_uint)
++
++			,("ov_fill", ctypes.c_uint)
++			,("ov_line_sz", ctypes.c_int)
++			,("ov_line", ctypes.c_uint)
++
++			,("dn_fill", ctypes.c_uint)
++			,("dn_line_sz", ctypes.c_int)
++			,("dn_line", ctypes.c_uint)
++
++			,("xcurve", ctypes.c_int)
++			,("ycurve", ctypes.c_int)
++
++			,("text", ctypes.c_char_p)
++			,("font_id", ctypes.c_int)
++			,("font_height", ctypes.c_int)
++			,("font_vertical_offset", ctypes.c_int)
++			,("font_color", ctypes.c_int)
+ 
+-				,("actions", ctypes.c_char_p)]
+-ButtonData._pack_ = 4
++			,("actions", ctypes.c_char_p)]
+ 
+ class EditText(ctypes.Structure):
+-	pass
+-EditText._fields_ = [("fontid", ctypes.c_int)
+-				,("font_height", ctypes.c_int)
+-				,("fontclassname", ctypes.c_char_p)
+-				,("rgba", ctypes.c_int)
+-				,("maxlength", ctypes.c_int)
+-				,("initialtext", ctypes.c_char_p)
+-				,("layout_align", ctypes.c_char)
+-				,("layout_leftmargin", ctypes.c_int)
+-				,("layout_rightmargin", ctypes.c_int)
+-				,("layout_indent", ctypes.c_int)
+-				,("layout_leading", ctypes.c_int)]
+-EditText._pack_ = 4
++	_pack_ = 4
++	_fields_ = [("fontid", ctypes.c_int)
++			,("font_height", ctypes.c_int)
++			,("fontclassname", ctypes.c_char_p)
++			,("rgba", ctypes.c_int)
++			,("maxlength", ctypes.c_int)
++			,("initialtext", ctypes.c_char_p)
++			,("layout_align", ctypes.c_char)
++			,("layout_leftmargin", ctypes.c_int)
++			,("layout_rightmargin", ctypes.c_int)
++			,("layout_indent", ctypes.c_int)
++			,("layout_leading", ctypes.c_int)]
+ 
+ def init(lib):
+ 	lib.swf_button.argtypes = [ctypes.c_int,ctypes.c_int,ctypes.POINTER(ButtonData)] #lib.swf_button.restype = c_int #https://docs.python.org/3/library/ctypes.html: By default functions are assumed to return the C int type.
+--- actionswf-1.orig/src/action.e.oc
++++ actionswf-1/src/action.e.oc
+@@ -37,11 +37,11 @@ functionXv actionf(ss buffer) # ,ss form
+ 	%>
+ 	return ret
+ endfunction
+-functionXv actionsf(svu psize,sv pbuffer)
+-	%<pbuffer
++functionXv actionsf(sv pbuffer,svu psize)
++	%<psize
+ 	!sv the_va_list=:
+-	!add the_va_list #pbuffer
+-	callg actionsf_va(psize,pbuffer,the_va_list)
++	!add the_va_list #psize
++	callg actionsf_va(pbuffer,psize,the_va_list)
+ 	%>
+ endfunction
+ #see at part_done functionXv actionf_init(ss buffer,ss *format)
+@@ -79,28 +79,28 @@ functionXv actionf_sprite(sd ?sprite,ss
+ 	%<buffer
+ 	!sv the_va_list=:
+ 	!add the_va_list #buffer
+-	callg actionsf_sprite_va(sprite,(xlog_ainit_false),(NULL),#buffer,the_va_list)
++	callg actionsf_sprite_va(sprite,(xlog_ainit_false),#buffer,(NULL),the_va_list)
+ 	%>
+ endfunction
+ functionXv actionf_init_sprite(sd ?sprite,ss buffer)
+ 	%<buffer
+ 	!sv the_va_list=:
+ 	!add the_va_list #buffer
+-	callg actionsf_sprite_va(sprite,(xlog_ainit_true),(NULL),#buffer,the_va_list)
++	callg actionsf_sprite_va(sprite,(xlog_ainit_true),#buffer,(NULL),the_va_list)
+ 	%>
+ end
+-functionXv actionsf_sprite(sd ?sprite,svu psize,sv pbuffer)
+-	%<pbuffer
++functionXv actionsf_sprite(sd ?sprite,sv pbuffer,svu psize)
++	%<psize
+ 	!sv the_va_list=:
+-	!add the_va_list #pbuffer
+-	callg actionsf_sprite_va(sprite,(xlog_ainit_false),psize,pbuffer,the_va_list)
++	!add the_va_list #psize
++	callg actionsf_sprite_va(sprite,(xlog_ainit_false),pbuffer,psize,the_va_list)
+ 	%>
+ endfunction
+-functionXv actionsf_init_sprite(sd ?sprite,svu psize,sv pbuffer)
+-	%<pbuffer
++functionXv actionsf_init_sprite(sd ?sprite,sv pbuffer,svu psize)
++	%<psize
+ 	!sv the_va_list=:
+-	!add the_va_list #pbuffer
+-	callg actionsf_sprite_va(sprite,(xlog_ainit_true),psize,pbuffer,the_va_list)
++	!add the_va_list #psize
++	callg actionsf_sprite_va(sprite,(xlog_ainit_true),pbuffer,psize,the_va_list)
+ 	%>
+ end
+ 
+--- actionswf-1.orig/src/actioncode.oc
++++ actionswf-1/src/actioncode.oc
+@@ -433,6 +433,12 @@ function action__code_row_ex(sdu codepoi
+ 		end
+ 		return codepointer
+ 	endif
++	if attrib=(doblock_end)
++		add codepointer (DWORD)
++		set codepointer action_code_do_end(codepointer)
++		call debug_xlog(codepointer)
++		return codepointer
++	end
+ 	if attrib=(whileblock_end)
+ 		call brace_blocks_remove_write_jump()
+ 		add codepointer (DWORD)
+@@ -669,6 +675,11 @@ function action_code_write_conditions(sd
+ 			call add_while_top_off((forwhiletrue_marker))
+ 		end
+ 		#here must set marker for xlog to know if is & or +
++	elseif cond=(do_start)
++		add codepointer (DWORD)
++		call add_while_top_off((do_marker)) #start offset = back-jump target
++		call debug_xlog(codepointer)
++		return codepointer
+ 	elseif cond=(ActionIf)
+ 		add codepointer (DWORD)
+ 		set infinite_guard codepointer
+@@ -792,7 +803,19 @@ function action_code_continue()
+ 		sub c_blocks (DWORD)
+ 		if c_blocks#=(top_marker)
+ 			#the loop type and to the offset to jump from here
+-			sub c_blocks (2*DWORD)
++			sub c_blocks (DWORD)
++
++			if c_blocks#=(do_marker) #continue lands on the do condition, forward jump
++				sd c_block;set c_block prepare_space_for_break()
++				call add_dummy_jump()
++				set c_block# swf_actionblock_get_size()
++				sub c_block# (WORD)
++				or c_block# (do_continue_bit)
++				call brace_blocks_counter_inc()
++				ret
++			end
++
++			sub c_blocks (DWORD)
+ 			sd off_to_jump;set off_to_jump c_blocks#
+ 			#
+ 			call add_dummy_jump()
+@@ -803,6 +826,50 @@ function action_code_continue()
+ 	call error("Continue without a loop error")
+ endfunction
+ 
++import "write_forward_offset_jump" write_forward_offset_jump
++#codepointer is right after doblock_end: condition tokens follow
++function action_code_do_end(sd codepointer)
++	sd base;set base cond_blocks_at_index(0)
++	sd b;set b cond_blocks_noerror()
++	#continues land here, at the condition
++	sd ?c
++	whiletrue
++		if b=base
++			call error("do block is broken")
++		end
++		sub b (DWORD)
++		set c b#
++		if c=(top_marker);break;end
++		and c (do_continue_bit)
++		if c!=0
++			set c b#
++			xor c (do_continue_bit)
++			call write_forward_offset_jump(c)
++		end
++	end
++	sd pointer;set pointer b
++	sub b (2*DWORD)
++	sd ?start;set start b#
++	#condition true: jump back
++	set codepointer action_code_right_util(codepointer)
++	call write_ifjump()
++	call resolve_back_jump(start)
++	#breaks land after the ActionIf
++	whiletrue
++		call brace_blocks_counter_dec()
++		set b cond_blocks_noerror()
++		if b=pointer;break;end
++		set c b#
++		and c (do_continue_bit)
++		if c=0
++			call write_forward_offset_jump(b#)
++		end
++	end
++	call brace_blocks_counter_dec()#type
++	call brace_blocks_counter_dec()#start
++	return codepointer
++end
++
+ function action_code_else_add()
+     #write dummy jump
+     call actionrecordheader((ActionJump),(actionjump_contentsize))
+@@ -828,6 +895,7 @@ function action_code_conditions_end(sd c
+ 	return codepointer
+ endfunction
+ 
++^import "action_member_loop_left_onstack" action_member_loop_left_onstack 1
+ #codepointer
+ function action_code_write_function(sd codepointer)
+ 	sd keeper
+@@ -845,6 +913,13 @@ function action_code_write_function(sd c
+ 	endif
+ 	ss ?want_return=FALSE
+ 	setcall codepointer action_code_write_function_call(codepointer,#want_return)
++	if codepointer#=(args_end)
++		add codepointer (DWORD)
++		set codepointer action_member_loop_left_onstack(codepointer)
++		set codepointer action_code_right(codepointer)
++		call action_one((ActionSetMember))
++		return codepointer
++	end
+ 	if want_return=(FALSE)  #can be modified inside
+ 		call action_one((ActionPop))
+ 	endif
+@@ -1106,6 +1181,7 @@ function action_code_right_util_ex(sd co
+ 	return codepointer
+ endfunction
+ 
++^import "action_member_loop_right_onstack" action_member_loop_right_onstack 1
+ #codepointer
+ function action_code_right_number(sd codepointer)
+ 	if codepointer#=(parenthesis_start)
+@@ -1113,7 +1189,12 @@ function action_code_right_number(sd cod
+ 		callret action_code_right_util(codepointer)
+ 	endif
+ 	if codepointer#=(call_action_right)
+-		callret action_code_write_function_call(codepointer,(TRUE))
++		set codepointer action_code_write_function_call(codepointer,(TRUE))
++		if codepointer#=(args_end)
++			add codepointer (DWORD)
++			set codepointer action_member_loop_right_onstack(codepointer)
++		end
++		return codepointer
+ 	endif
+ 	sd ?attrib;sd var
+ 	set attrib codepointer#
+--- actionswf-1.orig/src/actionparse.oc
++++ actionswf-1/src/actionparse.oc
+@@ -18,6 +18,7 @@ char operations_base="+-*/%&|^<>?"
+ #                     + - * / % & | ^ < > ? ( ! = e1e2
+ char operations_full={0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} #here can go another way but for the sack of zero safe init, even is zero init also at c, and at our language with null res pref
+ char parse_pack_chars={Equals,0,0,0} #but parse_pack_chars[0] is hardcoded this way, a tradeoff with c
++char member_delims=".["
+ 
+ const swapdata_max=0x400
+ 
+@@ -55,8 +56,7 @@ import "is_numeric" is_numeric
+ 
+ #strpbrk
+ function action_code_membersplit(ss ac)
+-	char delims=".["
+-	callret strpbrk(ac,#delims) #pointer
++	callret strpbrk(ac,#globalp.member_delims) #pointer
+ endfunction
+ 
+ function brace_blocks_counter()
+@@ -232,6 +232,14 @@ function action_parse_conditions(ss ac,s
+         set p_flags# (while_marker)
+         return pointer
+ 	endif
++	#do
++	set pointer str_expression_at_start(ac,"do")
++	if pointer!=ac
++		call action_code_set((do_start))
++		set p_flags# (do_marker)
++		set p_for_detected# 1 #no parenthesis expression after do
++		return pointer
++	end
+     #for
+         setcall pointer str_expression_at_start(ac,"for")
+         if pointer=ac;return pointer;endif
+@@ -338,7 +346,7 @@ endfunction
+ function else_verify(ss ac,sd ?else_index)
+ 	#this condition for: else >expression< placing in else{} block will demonstrate, and don't compare unsigned, else index can go -1
+ 	if globalp.counter>else_index
+-		call brace_blocks_remove_parse()
++		set ac brace_blocks_remove_parse(ac)
+ 	endif
+ 	#opened else index same with current index: return at else
+ 	if else_index=globalp.counter
+@@ -626,6 +634,11 @@ function action_parse_loop(ss ac,ss p_op
+ 	add end2 \globalp.operations_full-2
+ 	sss end=-1
+ 	add end end2
++	ss ?saved_end;set saved_end end#
++	ss ?saved_end2;set saved_end2 end2#
++	#is set here at start
++	set end# endtype1
++	set end2# endtype2
+     #
+     whiletrue
+ 		set ac spaces(ac) #ffdec
+@@ -635,16 +648,19 @@ function action_parse_loop(ss ac,ss p_op
+ 			call action_code_set((parenthesis_start))
+ 			inc ac
+ 			setcall ac action_code_row_parse_tool(ac,(Closeparenthesis))
++			#set end# endtype1
++			#set end2# endtype2
+ 			#0 is the marker after op set; used at strings; and logicalAnd logicalOr shr and sar are not needing 0 but it's faster for strings
+ 			set ac spaces(ac) #ffdec
+ 			set op ac#;set ac# 0
+ 			set was_parenthesis 1
+ 		endif
+ 		#set end: is static variable and can be mod again inside previous function
+-		set end# endtype1
+-		set end2# endtype2
+-		#
++		#set end# endtype1
++		#set end2# endtype2
+ 		if was_parenthesis=0
++			set end# endtype1
++			set end2# endtype2
+ 			!xor op op  ##or go with sv p_op to clean inside the function but then will pe problems at .c
+ 			setcall ac action_code_take_main(ac,#op,#globalp.operations_full)
+ 			if op=(ifElse_sign)
+@@ -652,7 +668,10 @@ function action_parse_loop(ss ac,ss p_op
+ 				call action_code_set((ifElse_start))
+ 				set p_ifElse_bool# (TRUE)
+ 				setcall ac action_code_row_parse_tool(ac,(Colon))
+-				callret action_code_row_parse_tool_util(ac,p_op,endtype1,endtype2)
++				set ac action_code_row_parse_tool_util(ac,p_op,endtype1,endtype2)
++				set end# saved_end
++				set end2# saved_end2
++				return ac
+ 			endif
+ 		endif
+ 		#
+@@ -664,10 +683,16 @@ function action_parse_loop(ss ac,ss p_op
+ 				if p_op!=0
+ 					set p_op# op
+ 				endif
++				set end# saved_end
++				set end2# saved_end2
+ 				return ac
+ 			endif
+ 			setcall bl action_parse_utilEndTypes(op,p_op,endtype1,endtype2)
+-			if bl=(TRUE);return ac;endif
++			if bl=(TRUE)
++				set end# saved_end
++				set end2# saved_end2
++				return ac
++			endif
+ 			sd ?x;setcall x action_parse_take_action(op,ac)
+ 			call action_code_set(x)
+ 		endelse
+@@ -771,6 +796,15 @@ function action_code_take_main(ss ac,ss
+ 	ss cursor;set cursor pointer
+ 	setcall pointer action_code_parse_new_or_call(cursor,(call_action_right),ac)
+ 	if pointer!=cursor
++		whiletrue
++			if pointer#!=(Period)
++				if pointer#!=(Openingbracket)
++					break
++				end
++			end
++			set pointer action_code_call_member_tail(pointer,delims)
++			break
++		end
+ 		if excla=(TRUE)
+ 			call action_code_set((ActionNot))
+ 		end
+@@ -946,13 +980,18 @@ function numeric_code_orConstruction(ss
+ 	return (TRUE)
+ endfunction
+ function action_code_member(ss pointer,sd full)
+-	vstr delims=".["
+-	char sqbrace_start=Openingbracket
+-	char sqbrace_end=Closingbracket
+ 	call action_code_set_pointer(pointer) #owner?
+ 	sd pos
+-	setcall pos strcspn(pointer,delims)
++	setcall pos strcspn(pointer,#globalp.member_delims)
+ 	add pointer pos
++	callg action_code_member_body(pointer,full)
++end
++#same as action_code_member, minus the owner segment: used right after a call, whose
++#return value is already the object sitting on the stack (a().b, a().b=x, a()[i], a()[i]=x, ...)
++function action_code_member_body(ss pointer,sd full)
++	char sqbrace_start=Openingbracket
++	char sqbrace_end=Closingbracket
++	sd pos
+ 	sd p_currentnr
+ 	if full!=0
+ 		setcall p_currentnr action_code_values_index()
+@@ -969,7 +1008,7 @@ function action_code_member(ss pointer,s
+ 			set pointer# 0
+ 			inc pointer
+ 		end
+-		setcall pos strcspn(pointer,delims)
++		setcall pos strcspn(pointer,#globalp.member_delims)
+ 		if pos!=0
+ 		#0 is at second+ multi-dimensional arrays levels ]. or when simply want to end
+ 			call action_code_set_pointer(pointer)
+@@ -984,6 +1023,30 @@ function action_code_member(ss pointer,s
+ 	call action_code_set_pointer((no_pointer))
+ 	callg action_code_set((member_end)) #to compare square brackets on same field with pointers
+ endfunction
++#pointer - pointer is right after a call's closing ')' and is a '.' or '[' : continue reading
++#the member/bracket chain applied to the call's own return value (already the object on the stack)
++#and emit it as a GetMember chain; used from expression context, e.g. b=c().d;
++function action_code_call_member_tail(ss pointer,ss delims)
++	ss tail;set tail pointer
++	sd pos
++	set pos strcspn(tail,delims)
++	add pointer pos
++	while pointer#=(Openingbracket)
++		setcall pointer brackets_test(pointer)
++		setcall pos strcspn(pointer,delims)
++		add pointer pos
++	endwhile
++	call memtrailstrict(pointer)
++
++	#sentinel: args_end can never legitimately follow a call's own args_end, so this is
++	#unambiguous, unlike reusing ActionGetMember (which is also the legitimate first token of the *next* statement)
++	call action_code_set((args_end))
++	ss ?save;set save pointer#
++	set pointer# (Nullchar)
++	call action_code_member_body(tail,0)
++	set pointer# save
++	return pointer
++end
+ 
+ 
+ #condition
+@@ -1112,7 +1175,7 @@ function brace_blocks_remove_parse_else(
+ 		callg action_code_set(else_number)
+ 	endif
+ endfunction
+-function brace_blocks_remove_parse() #else is at brace_blocks_remove_parse_else
++function brace_blocks_remove_parse(ss ac) #else is at brace_blocks_remove_parse_else
+ 	sd p_type
+ 	sd ?type
+ 	sd consecutive=consecutive_flag
+@@ -1124,12 +1187,37 @@ function brace_blocks_remove_parse() #el
+ 		if type!=(normal_marker)
+ 			if type=(while_marker) #including fors
+ 				call action_code_set((whileblock_end))
++			elseif type=(do_marker) #braced or not, the tail follows the body
++				set ac do_while_tail(ac)
+ 			else #if_marker function_marker
+ 				call action_code_set(type) #block_end
+ 			endelse
+ 		endif
+ 	endwhile
++	return ac
+ endfunction
++#pointer, ac is right after the do body: while ( condition ) ;
++function do_while_tail(ss ac)
++	ss p
++	set ac spaces(ac)
++	set p str_expression_at_start(ac,"while")
++	if p=ac
++		call error("expecting 'while' after do block")
++	end
++	#set p spaces(p) #is at str_expression_at_start
++	if p#!=(Openparenthesis)
++		call error("open parenthesis sign expected at do-while")
++	end
++	inc p
++	call action_code_set((doblock_end))
++	set p action_code_row_parse_tool(p,(Closeparenthesis))
++	set p spaces(p)
++	if p#!=(Semicolon)
++		call error("expecting ';' after do while")
++	end
++	inc p
++	return p
++end
+ #type
+ function type_consecutive(sd ?type,sd p_consecutive)
+ 	and p_consecutive# type
+@@ -1325,13 +1413,42 @@ function action_code_parse_leftfunction(
+         return pointer
+     endif
+     #a call
++	ss start;set start ac
+ 	setcall ac action_code_parse_new_or_call(ac,(call_action_left),ac)
++	if ac=start
++		return ac
++	end
++	if ac#=(Period)
++		callret action_code_parse_call_assign(ac)
++	end
++	if ac#=(Openingbracket)
++		callret action_code_parse_call_assign(ac)
++	end
++
+ 	char end=Semicolon
+     if ac#=end
+         inc ac
+     endif
+     return ac
+ endfunction
++#pointer - pointer is right after a call's closing ')' and is a '.' or '[' : the call's own
++#return value is the assignment target's object, e.g. a().e=1; or a()[i]=x;
++function action_code_parse_call_assign(ss pointer)
++	ss tail;set tail pointer
++	char delims="="
++	sd pos
++	set pos strcspn(tail,#delims)
++	add pointer pos
++	if pointer#!=(Equals)
++		call error("expecting = after a call member target")
++	end
++	set pointer# (Nullchar)
++	inc pointer
++	call action_code_set((args_end)) #sentinel: see action_code_call_member_tail for why this, not ActionSetMember
++	call action_code_member_body(tail,0)
++	set pointer spaces(pointer)
++	callret action_parse_right(pointer,(Semicolon))
++end
+ import "part_of_variable" part_of_variable
+ #pointer
+ function action_code_parse_new_or_call(ss ac,sd ?type,ss cursor)
+@@ -1361,7 +1478,7 @@ function action_code_parse_new_or_call(s
+ 	return ac
+ endfunction
+ #pointer
+-function action_code_parse_function_detected(ss start,ss last_dot,ss pointer,sd type)
++function action_code_parse_function_detected(ss start,ss last_dot,ss pointer,sd ?type)
+     #function mark
+     call action_code_set(type)
+     set pointer# 0
+--- actionswf-1.orig/src/actionutil.oc
++++ actionswf-1/src/actionutil.oc
+@@ -306,11 +306,16 @@ end
+ import "action_get_one" action_get_one
+ #the position where the mathpointer reachs
+ function action_member_loop_left(sv mathpointer)  #set, ex get_member_pointer, let the string
++	#at first is something
+ 	sd name
+ 	set name action_code_get_pointer(#mathpointer)
+ 	call action_get_one(name)
+-
+-	#at first is something
++	callret action_member_loop_left_onstack(mathpointer)
++end
++#same as action_member_loop_left, but the object is already on the stack (right after a call)
++#instead of coming from a named variable. Leaves [object,lastMemberNameOrKey] on the stack.
++function action_member_loop_left_onstack(sv mathpointer)
++	sd name
+ 	if mathpointer#!=(no_pointer)
+ 		set name action_code_get_pointer(#mathpointer)
+ 		call action_push((ap_Constant8),name)
+@@ -318,7 +323,6 @@ function action_member_loop_left(sv math
+ 		add mathpointer :+DWORD  #to pass the pointer   + square_bracket_start
+ 		setcall mathpointer action_code_right_util(mathpointer)
+ 	end
+-
+ 	whiletrue
+ 		if mathpointer#=(no_pointer)
+ 			add mathpointer :  #to pass the pointer
+@@ -343,6 +347,13 @@ function action_member_loop_right(sv mat
+ 	sd name
+ 	set name action_code_get_pointer(#mathpointer)
+ 	call action_get_one(name)
++	callret action_member_loop_right_onstack(mathpointer)
++end
++#same as action_member_loop_right, but the object is already on the stack (right after a call)
++#instead of coming from a named variable. The first segment can be a bracket too (eval("")[0]),
++#so this is not special at all vs. later segments - just hand the whole chain to the shared loop.
++function action_member_loop_right_onstack(sv mathpointer)
++	sd name
+ 	whiletrue # member_end can be right from the start at CallMethod
+ 		if mathpointer#!=(no_pointer)
+ 			set name action_code_get_pointer(#mathpointer)
+@@ -439,7 +450,7 @@ function action_format_wrap(sv %the_va_l
+ 	base globalu.jmp_data;call ebase(globalu.jmp_data)
+ 	callret action_format((NULL),the_va_list)
+ end
+-function actions_format(svu psize,sv pbuf,sv %the_va_list)
++function actions_format(sv pbuf,svu psize,sv %the_va_list)
+ 	ss buf
+ 	set buf pbuf#
+ 	if psize=(NULL)
+--- actionswf-1.orig/src/character.oc
++++ actionswf-1/src/character.oc
+@@ -268,8 +268,8 @@ function swf_shape_simple(sd ?width,sd ?
+ 	sv ?test
+ 	set test lineheight;mult test 2;if test>^width;call error("lineheight value against width is too high for shape");endif
+ 	set test lineheight;mult test 2;if test>^height;call error("lineheight value against height is too high for shape");endif
+-	set test wd;divu test 2;if xcurve>^wd;call error("xcurve value is too high for shape");endif #even if will -1 curves in this function, cannot let signed, the comp will have no logic
+-	set test hg;divu test 2;if ycurve>^hg;call error("ycurve value is too high for shape");endif
++	set test wd;divu test 2;if xcurve>^test;call error("xcurve value is too high for shape");endif #even if will -1 curves in this function, cannot let signed, the comp will have no logic
++	set test hg;divu test 2;if ycurve>^test;call error("ycurve value is too high for shape");endif
+ 	sd ?lineheight_hf;set lineheight_hf lineheight;div lineheight_hf 2
+ 
+ 	sd ?width_variable
+--- actionswf-1.orig/src/local.oc
++++ actionswf-1/src/local.oc
+@@ -700,26 +700,26 @@ function action_local(ss ac)
+ 	end
+ end
+ import "actions_format" actions_format
+-function actionsf_local(svu psize,sv pbuffer,sv %the_va_list)
++function actionsf_local(sv pbuffer,svu psize,sv %the_va_list)
+ 	call is_ainit((xlog_ainit_false))
+ 	sd alt_ac;set alt_ac alt_action(pbuffer,0)
+ 	if alt_ac!=(NULL)
+ 		call debug_base(0)
+ 		if pbuffer=alt_ac
+-			call actions_format(psize,pbuffer,the_va_list)
++			call actions_format(pbuffer,psize,the_va_list)
+ 		else
+ 			call action_base(alt_ac)
+ 			call file_get_content__resources_free()
+ 		end
+ 	end
+ end
+-function actionsf_sprite_local(sd sprite,svu psize,sv pbuffer,sv %the_va_list)
++function actionsf_sprite_local(sd sprite,sv pbuffer,svu psize,sv %the_va_list)
+ 	sd alt_ac;set alt_ac alt_action(pbuffer,sprite) #this to trick alt action that if will return the same thing, will return a not null thing
+ 	if alt_ac!=(NULL)
+ 		call debug_base(sprite)
+ 		call swf_actionblock_change(sprite)
+ 		if pbuffer=alt_ac
+-			call actions_format(psize,pbuffer,the_va_list)
++			call actions_format(pbuffer,psize,the_va_list)
+ 		else
+ 			call action_base(alt_ac)
+ 			call file_get_content__resources_free()
+@@ -732,20 +732,20 @@ import "action_format" action_format
+ function actionf_va(ss buffer,sv %the_va_list)
+ 	base globalz.jmp_data;call ebase(globalz.jmp_data)
+ 	if buffer!=(NULL)
+-		callg actionsf_local((NULL),#buffer,the_va_list)
++		callg actionsf_local(#buffer,(NULL),the_va_list)
+ 		#return is not important
+ 	else #here to find the size
+ 		callret action_format((NULL),the_va_list) #this at actionf_sprite is same, sprite will be extra argument, let NULL there be guardian
+ 	end
+ end
+-function actionsf_va(svu psize,sv pbuffer,sv %the_va_list)
++function actionsf_va(sv pbuffer,svu psize,sv %the_va_list)
+ 	base globalz.jmp_data;call ebase(globalz.jmp_data)
+-	callg actionsf_local(psize,pbuffer,the_va_list)
++	callg actionsf_local(pbuffer,psize,the_va_list)
+ end
+-function actionsf_sprite_va(sd ?sprite,ss ?ainit,svu psize,sv pbuffer,sv %the_va_list)
++function actionsf_sprite_va(sd ?sprite,ss ?ainit,sv pbuffer,svu psize,sv %the_va_list)
+ 	base globalz.jmp_data;call ebase(globalz.jmp_data)
+ 	call is_ainit(ainit)
+-	callg actionsf_sprite_local(sprite,psize,pbuffer,the_va_list)
++	callg actionsf_sprite_local(sprite,pbuffer,psize,the_va_list)
+ end
+ 
+ entryraw globalz()
+--- actionswf-1.orig/tests/.expected/a.swf.log
++++ actionswf-1/tests/.expected/a.swf.log
+@@ -1,6 +1,6 @@
+ 0
+ 0
+-115
++128
+ 
+ /*
+ debug_x
+@@ -116,6 +116,19 @@ function gotos()
+ 	§§goto(addr0002);
+ }
+ 
++//after call members
++a().b=1;
++a.b().c=1;
++a=b().c;
++a=b.c().d;
++a=eval("")[0];
++
++//do-while
++a=1;do{a=a+1;trace(a);}while(a<5);
++a=1;do a=a+1;while(a<5);trace(a);
++a=1;do{trace(a);if(a>2){a=a+2;continue;}a=a+1;}while(a<6);
++a=1;do{if(a>2)break;a=a+1;}while(a<6);trace(a);
++
+ *5,9\0009{
+ *1,5,%
+ *1}
+@@ -188,7 +201,21 @@ function gotos()
+ *2,5,%
+ *1+9/
+ *1~,2
+-*1}
++*2}
++*2^0,7,@^0,7,
++*1^0,7,^0,2,@^0,7,
++*1^0^0,9,@^0,2,,
++*1^0^0,9,^0,2,@^0,2,,
++*1^0^0^0,B,@,5,,
++*3^0,7,|/^0^0,4,,5,,^0,2,,^0,2,,5,,2$2D/
++*1^0,7,|/^0^0,4,,5,,^0,2,,5,,2$26/^0,2,,
++*1^0,7,|/^0,2,,^0,2,,5,,,2/^0^0,4,,5,,,2+17/^0^0,4,,5,,&12^0,2,,5,,2$59/
++*1^0,7,|/^0,2,,5,,,2/,2!+5/^0^0,4,,5,,^0,2,,5,,2$40&26/^0,2,,
++0
++0
++1
++var a=1+2
++*1^0,C,,
+ 2
+ 0
+ 1
+--- actionswf-1.orig/tests/.expected/a.swf.txt
++++ actionswf-1/tests/.expected/a.swf.txt
+@@ -1,39 +1,47 @@
+-RldTCKsIAABoABQAAAUAAAACAQBDAgUGB+4JAQABACYDiAgAAQAwMDAxMACWCQAAYgAAdGhpcwAc
++RldTCGAKAABoABQAAAUAAAACAQBDAgUGB+4JAQABACYDiAgAAQAwMDAxMACWCQAAYgAAdGhpcwAc
+ lgcAAHZhbHVlAE5HJgAAAP8OeQAAAAEAiAQAAQAxAJsMAFZlaGljbGUAAAAjAJYFAAcJAAAAF5YJ
+ AABhAAB0aGlzAByWBwAAdmFsdWUATkcmlgkAAFZlaGljbGUAHJYYAABjYXJTeW1ib2wABwIAAAAA
+-T2JqZWN0AByWDwAAcmVnaXN0ZXJDbGFzcwBSFwAODgEAAQBjYXJTeW1ib2wAPwPLBwAAiIAAGAB0
+-aGlzAGEAQXJyYXkAYgBjAGQAZQBxAGYAZwBoAG4AT2JqZWN0AGNsYXNzMQBwcm90b3R5cGUAZnVu
+-YzEAQVNTZXRQcm9wRmxhZ3MAY2xhc3MyAF9fcHJvdG9fXwBjb25zdHJ1Y3RvcgBmdW5jMgBjbGFz
+-czMAIAAwMDAwMACbCQBmbgABAGEAEgCWBQAHAAAAABeWBQAHAgAAAD6WBwAHAAAAAAgAHJYCAAgA
+-TpYMAABnZXRWZXJzaW9uAFIXlgIACAAclgIACABOlgQACAAIABxPlg4ACAEHAQAAAAcBAAAACAJA
+-HZYMAAgDB/7///8HAgAAAEeWBQAHAgAAAAuWBQAHAgAAAAyWBQAHAgAAAA2WBQAHAgAAAD+WBQAH
+-AgAAAGCWBQAHAgAAAGGWBQAHAgAAAGKWBQAHAgAAAEiWBQAHAgAAAGeWBQAHAgAAAEmWBQAHAgAA
+-AEkSlgUABwIAAABnEpYFAAcCAAAASBKWBQAHAgAAAGOWBQAHAgAAAGSWBQAHAgAAAGWWBQAHAgAA
+-ABCWBQAHAgAAABESnQIADQCWBQAHAgAAAJkCAAgAlgUABwMAAAA8lgsACAQGMzPzPzMzMzM8lgQA
+-CAUIARyWBQAHAAAAAE48lgQACAYIBzyWBwAICAcCAAAAHZYCAAgJQZYCAAgJOxeWAgAIAByWAgAI
+-CDoXlgIACAqbBQAAAAAPAJYFAAcBAAAAF5YCAAgBQR2WCgAAaQAHAAAAAAgKPTyWCgAHAgAAAAcC
+-AAAASRKdAgAQAJYDAABqAEGWBQAHCQAAAD6WCgAHAgAAAAcCAAAASRKdAgAMAJYDAABrAEGZAgAH
+-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
+--- actionswf-1.orig/tests/.expected/a.swf.x.txt
++++ actionswf-1/tests/.expected/a.swf.x.txt
+@@ -1,4 +1,4 @@
+-aAsAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
++WAwAAAAAAABmdW5jdGlvbiBmbgBhAHtyZXR1cm4gMgB9dGhpcwB0aGlzAGdldFZlcnNpb24AKTt0
+ aGlzAHRoaXMAdGhpcwB0aGlzAGEAbmV3IEFycmF5ADEAO3ZhciBiACgtMgAweDIAMgAyADIAMgAy
+ ADIAMgAyADIAPTIAPTIAPTIAPTIAPDIAPjIAPj4yACYyAHwyADIAMwAAdmFyIGMAMS4yAHZhciBk
+ AGEAMAAAdmFyIGUAJ3EAAGYAMgB2YXIgZwBkZWxldGUgZwBkZWxldGUgdGhpcwBmAGgAZnVuY3Rp
+@@ -49,82 +49,107 @@ NzgxMjUAZnVuY3Rpb24gbgBhAGIAe3RyYWNlAGEA
+ IE9iamVjdAApO2EAdmFsdWUAMgBhdHRhY2hNb3ZpZQAnY2FyU3ltYm9sAAAnZmFzdENhcl9tYwAA
+ MQBhAGZ1bmN0aW9uIGdvdG9zACl7aWYoYQB7aWYoYgB7wqfCp2dvdG8AYWRkcjAwMDEAO31hZGRy
+ MDAwMjpyZXR1cm4gMgB9ZWxzZSBpZihiAHthZGRyMDAwMTpyZXR1cm4gMQB9wqfCp2dvdG8AYWRk
+-cjAwMDIAO30AAAAAAAAAAAAAAAAAvA8AADAwA/MKAAAAAAAAAA0AAAAAAAAAAAAAAAAAAAA+AAAA
+-BwAAAAIAAAD/////CAgHRxAQAfEkAAAAAAAAAO7u7v4aAAAAAAAAAB8AAAAAAAAAAAAAAAAAAAC7
+-u7v7TwAAADEAAAAAAAAANgAAAAAAAAA7AAAAAAAAAAAAAAAAAAAAu7u7+xwAAABAAAAAAAAAAP//
+-//8dAAAARQAAAAAAAABAQAT0SwAAAAAAAAAHAAAAAQAAAP/////u7u7+AAAAAAAAAAA8AAAAWAAA
+-AAAAAACAgAj4BwAAAP7///9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAABwAAAAIAAAANAAAA
+-BwAAAAIAAAA/AAAABwAAAAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIAAABiAAAABwAAAAIAAABw
+-cAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kAAAAAAAAABwAAAAIA
+-AABwcAf3SQAAABIAAAAHAAAAAgAAAHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH90gAAAASAAAABwAA
+-AAIAAABjAAAABwAAAAIAAABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAABwAAAAIAAAARAAAA
+-BwAAAAIAAADQ0A39BwAAAAIAAAD/////BwAAAAMAAAD//////////zwAAACZAAAAAAAAAAYAAAAz
+-M/M/MzMzM/////88AAAAowAAAAAAAABOAAAApQAAAAAAAAAAAAAAAAAAAFBQBfUHAAAAAAAAAP//
+-//8AAAAAAAAAALu7u/v/////PAAAAK4AAAAAAAAACAAAALEAAAAAAAAA/////x0AAAC0AAAAAAAA
+-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
+-AAAAAAAAAAAAAAAAAAAAu7u7+/////8=
++cjAwMDIAO31hACkAYgAxAGEAYgApAGMAMQBhAGIAKQBjAGEAYgBjACkAZABhAGV2YWwAIgAAADAA
++AGEAMQBkb3thAGEAMQB0cmFjZQBhADt9d2hpbGUoYQA1ADthADEAZG8gYQBhADEAd2hpbGUoYQA1
++ADt0cmFjZQBhADthADEAZG97dHJhY2UAYQA7aWYoYQAyAHthAGEAMgBjb250aW51ZTt9YQBhADEA
++fXdoaWxlKGEANgA7YQAxAGRve2lmKGEAMgBicmVhazthAGEAMQB9d2hpbGUoYQA2ADt0cmFjZQBh
++ADsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBQAADAwA/MKAAAAAAAAAA0AAAAAAAAA
++AAAAAAAAAAA+AAAABwAAAAIAAAD/////CAgHRxAQAfEkAAAAAAAAAO7u7v4aAAAAAAAAAB8AAAAA
++AAAAAAAAAAAAAAC7u7v7TwAAADEAAAAAAAAANgAAAAAAAAA7AAAAAAAAAAAAAAAAAAAAu7u7+xwA
++AABAAAAAAAAAAP////8dAAAARQAAAAAAAABAQAT0SwAAAAAAAAAHAAAAAQAAAP/////u7u7+AAAA
++AAAAAAA8AAAAWAAAAAAAAACAgAj4BwAAAP7///9HAAAABwAAAAIAAAALAAAABwAAAAIAAAAMAAAA
++BwAAAAIAAAANAAAABwAAAAIAAAA/AAAABwAAAAIAAABgAAAABwAAAAIAAABhAAAABwAAAAIAAABi
++AAAABwAAAAIAAABwcAf3SAAAAAAAAAAHAAAAAgAAAHBwB/dnAAAAAAAAAAcAAAACAAAAcHAH90kA
++AAAAAAAABwAAAAIAAABwcAf3SQAAABIAAAAHAAAAAgAAAHBwB/dnAAAAEgAAAAcAAAACAAAAcHAH
++90gAAAASAAAABwAAAAIAAABjAAAABwAAAAIAAABkAAAABwAAAAIAAABlAAAABwAAAAIAAAAQAAAA
++BwAAAAIAAAARAAAABwAAAAIAAADQ0A39BwAAAAIAAAD/////BwAAAAMAAAD//////////zwAAACZ
++AAAAAAAAAAYAAAAzM/M/MzMzM/////88AAAAowAAAAAAAABOAAAApQAAAAAAAAAAAAAAAAAAAFBQ
++BfUHAAAAAAAAAP////8AAAAAAAAAALu7u/v/////PAAAAK4AAAAAAAAACAAAALEAAAAAAAAA////
++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
++AFIGAAAAAAAARwAAAAYAAAAAAACAAAAAAP/////u7u7+EBAB8QAAAAAAAAAAbgYAAAAAAAAGAAAA
++AAAIAAAAAAD/////7u7u/jAwA/N/CgAAAAAAAIEKAAAAAAAAgwoAAAAAAAAAAAAAAAAAABAQAfEA
++AAAAAAAAAIYKAAAAAAAAHAAAAIwKAAAAAAAARwAAAAgAAACPCgAAAAAAAEcAAAAcAAAAkgoAAAAA
++AAD/////7u7u/ggIB0cQEAHxlQoAAAAAAAAGAAAA////f///////////BgAAAP//////////////
++/+7u7v4AAAAAAAAAADwAAACkCgAAAAAAAEBABPSqCgAAAAAAAO7u7v4AAAAAAAAAAE8AAACzCgAA
++AAAAALUKAAAAAAAAAAAAAAAAAAC7u7v7BwAAAAIAAAD/////EBAB8b0KAAAAAAAAHAAAAOQKAAAA
++AAAA/////wcAAAABAAAA/////wgAAADWCgAAAAAAAP////8IAAAAygoAAAAAAAD/////7u7u/gAA
++AAAAAAAAMDAD8+8KAAAAAAAAAAAAAAAAAACdAAAAHAAAAPoKAAAAAAAA/////50AAAAcAAAAAAsA
++AAAAAAD/////EBAB8QAAAAAAAAAAAwsAAAAAAAAcAAAADAsAAAAAAAD/////7u7u/gQEA0Pw8A//
++AgAAAD4AAAAHAAAAAgAAAP////8EBANDDg4NTZ0AAAAcAAAAMgsAAAAAAAD/////8PAP/wEAAAA+
++AAAABwAAAAEAAAD/////BAQDQ8zMzPwBAAAAEBAB8QAAAAAAAAAASAsAAAAAAAAcAAAAUQsAAAAA
++AAD/////7u7u/ggIB0cQEAHxXAsAAAAAAADu7u7+AAAAAAAAAADu7u7+YAsAAAAAAAAAAAAAAAAA
++ALu7u/sHAAAAAQAAAP////8QEAHxZgsAAAAAAADu7u7+ZAsAAAAAAAAAAAAAAAAAALu7u/vu7u7+
++agsAAAAAAAAAAAAAAAAAALu7u/sHAAAAAQAAAP////8dAAAAbgsAAAAAAAAgIALycAsAAAAAAADu
++7u7+AAAAAAAAAADu7u7+dAsAAAAAAAAAAAAAAAAAALu7u/v/////HQAAAHYLAAAAAAAAICAC8noL
++AAAAAAAA7u7u/ngLAAAAAAAAAAAAAAAAAAC7u7v77u7u/n4LAAAAAAAAAAAAAAAAAAC7u7v7////
++/x0AAACACwAAAAAAACAgAvKCCwAAAAAAAAgAAACICwAAAAAAAP/////u7u7+AAAAAAAAAADu7u7+
++AAAAAAAAAABQUAX1BwAAAAAAAAD/////AAAAAAAAAAC7u7v7/////x0AAACOCwAAAAAAAAcAAAAB
++AAAA//////DwD/4dAAAAlQsAAAAAAAAcAAAAlwsAAAAAAABHAAAABwAAAAEAAAD/////EBAB8QAA
++AAAAAAAAmwsAAAAAAAAcAAAAoQsAAAAAAAD/////7u7u/qqqqvocAAAAqwsAAAAAAABwcAf3SAAA
++AAAAAAAHAAAABQAAAP////8dAAAAsAsAAAAAAAAHAAAAAQAAAP/////w8A/+HQAAALcLAAAAAAAA
++HAAAALkLAAAAAAAARwAAAAcAAAABAAAA/////6qqqvocAAAAwwsAAAAAAABwcAf3SAAAAAAAAAAH
++AAAABQAAAP////8QEAHxAAAAAAAAAADICwAAAAAAABwAAADOCwAAAAAAAP/////u7u7+HQAAANEL
++AAAAAAAABwAAAAEAAAD/////8PAP/hAQAfEAAAAAAAAAANgLAAAAAAAAHAAAAN4LAAAAAAAA////
++/+7u7v6dAAAAHAAAAOQLAAAAAAAAcHAH92cAAAAAAAAABwAAAAIAAAD/////HQAAAOkLAAAAAAAA
++HAAAAOsLAAAAAAAARwAAAAcAAAACAAAA/////6CgCvoEBANDHQAAAPkLAAAAAAAAHAAAAPsLAAAA
++AAAARwAAAAcAAAABAAAA/////6qqqvocAAAABgwAAAAAAABwcAf3SAAAAAAAAAAHAAAABgAAAP//
++//8dAAAACwwAAAAAAAAHAAAAAQAAAP/////w8A/+nQAAABwAAAAVDAAAAAAAAHBwB/dnAAAAAAAA
++AAcAAAACAAAA/////5CQCfkEBANDHQAAAB8MAAAAAAAAHAAAACEMAAAAAAAARwAAAAcAAAABAAAA
++/////6qqqvocAAAALAwAAAAAAABwcAf3SAAAAAAAAAAHAAAABgAAAP////8QEAHxAAAAAAAAAAAx
++DAAAAAAAABwAAAA3DAAAAAAAAP/////u7u7+/////zAAAAAAAAAAdmFyIGEAMQAyAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAKAAAADwAAAAFAAAAAAAAAAcAAAABAAAARwAA
++AAcAAAACAAAA//////////8sAAAAAAAAAHRyYWNlACdiAAB0aGlzAHZhbHVlAAAAAAAAAAAAAAAA
++AAAAAAAAAAAAAAAAUAAAABAQAfEAAAAAAAAAAAEAAAAAAAAACAAAAAgAAAAAAAAARwAAAE4AAAAL
++AAAAAAAAABAAAAAAAAAAAAAAAAAAAAC7u7v7/////+7u7v7/////ZAAAAAAAAABmdW5jdGlvbiBW
++ZWhpY2xlACl7dHJhY2UAJ2EAAHRoaXMAdmFsdWUAfU9iamVjdAByZWdpc3RlckNsYXNzACdjYXJT
++eW1ib2wAAFZlaGljbGUAAAAAAAAAAAAAAAAAAAAAAAAArAAAADAwA/MKAAAAAAAAAAAAAAAAAAAA
++EBAB8QAAAAAAAAAAFAAAAAAAAAAIAAAAGwAAAAAAAABHAAAATgAAAB4AAAAAAAAAIwAAAAAAAAAA
++AAAAAAAAALu7u/v/////7u7u/ggIB0cQEAHxMQAAAAAAAAAcAAAASwAAAAAAAAD/////CAAAAEAA
++AAAAAAAA/////+7u7v4qAAAAAAAAAAAAAAAAAAAAu7u7+/////8=
+--- actionswf-1.orig/tests/.expected/a.swf.xx.txt
++++ actionswf-1/tests/.expected/a.swf.xx.txt
+@@ -3,15 +3,18 @@ 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
+--- actionswf-1.orig/tests/.expected/as3/Main.hx
++++ actionswf-1/tests/.expected/as3/Main.hx
+@@ -61,6 +61,9 @@ class Main{
+ 		var esd=stage.getChildByName('shape2');
+ 		cast(esd,flash.display.DisplayObjectContainer).addChild(qwer);
+ 
++		//attach undefined
++		var _undefined=new flash.display.Shape();stage.addChild(_undefined);
++
+ 		//on
+ 		stage.addEventListener(flash.events.MouseEvent.MOUSE_DOWN,function(e){
+ 			trace('this is from on mouse down');
+@@ -71,6 +74,7 @@ class Main{
+ 
+ 		
+ 
++
+ 	}
+ }
+ class Loader{public function new(){
+--- actionswf-1.orig/tests/a.c
++++ actionswf-1/tests/a.c
+@@ -49,7 +49,8 @@ int main(int argc,char**argv){
+ 	swf_new_ex(s,0x80,0x80,0x050607,2,f);
+ 	char*a=text("./aoc/a");
+ 	size_t sz;char*b=0;
+-	actionsf(&sz,&b,a,1,"a");
++	actionsf(&b,&sz,a,1,"a");
++	actionsf(&b,&sz,"var a=%u+%u",1,2);
+ 	free(b);free(a);
+ 	int presprite=swf_sprite_new();
+ 	action_sprite(presprite,"trace('b'+this.value)");
+--- actionswf-1.orig/tests/a.oc
++++ actionswf-1/tests/a.oc
+@@ -41,7 +41,8 @@ call swf_new_ex("a.swf",0x80,0x80,0x0506
+ 
+ ss buf;set buf text("./aoc/a")
+ sd sz;sd bf=0
+-call actionsf(#sz,#bf,buf,1,"a")
++call actionsf(#bf,#sz,buf,1,"a")
++call actionsf(#bf,#sz,"var a=%u+%u",1,2)
+ call free(bf)
+ 
+ sd presprite;set presprite swf_sprite_new()
+--- actionswf-1.orig/tests/a.py
++++ actionswf-1/tests/a.py
+@@ -20,7 +20,8 @@ actionswf.new_ex("a.swf",0x80,0x80,0x050
+ format=text("./aoc/a")
+ size=actionswf.ActionSize()
+ buffer=actionswf.ActionBuffer()
+-actionswf.actionsf(psize=actionswf.Ref(size),pbuffer=actionswf.Ref(buffer),format=format,*[1,b'a'])
++actionswf.actionsf(actionswf.Ref(buffer),actionswf.Ref(size),format,1,b'a')
++actionswf.actionsf(actionswf.Ref(buffer),actionswf.Ref(size),"var a=%u+%u",[1,2])
+ actionswf.actions_free(buffer)
+ presprite=actionswf.sprite_new()
+ actionswf.action_sprite(presprite,"trace('b'+this.value)")
+--- actionswf-1.orig/tests/aoc/a
++++ actionswf-1/tests/aoc/a
+@@ -112,3 +112,16 @@ function gotos()
+ 	}
+ 	§§goto(addr0002);
+ }
++
++//after call members
++a().b=1;
++a.b().c=1;
++a=b().c;
++a=b.c().d;
++a=eval("")[0];
++
++//do-while
++a=1;do{a=a+1;trace(a);}while(a<5);
++a=1;do a=a+1;while(a<5);trace(a);
++a=1;do{trace(a);if(a>2){a=a+2;continue;}a=a+1;}while(a<6);
++a=1;do{if(a>2)break;a=a+1;}while(a<6);trace(a);
+--- actionswf-1.orig/tests/apy
++++ actionswf-1/tests/apy
+@@ -1,6 +1,7 @@
+ 
+ if [ -n "$1" ]; then break=x; fi
+ export PYTHONPATH=../python
++ld_preload=$(gcc -print-file-name=libasan.so)
+ if [ -n "${arm}" ]; then
+ #using: minimal lib stdlib libffi , problems with actionswf map? going to qemu
+ #	using: zlib1g libexpat1
+@@ -15,5 +16,5 @@ else
+ 		export LD_LIBRARY_PATH=../src
+ 	fi
+ fi
+-break=${break} $p || exit 1
+-break=${break} $p x
++LD_PRELOAD=${ld_preload} break=${break} $p || exit 1
++LD_PRELOAD=${ld_preload} break=${break} $p x
+--- actionswf-1.orig/tests/apyl
++++ actionswf-1/tests/apyl
+@@ -1 +1 @@
+-LD_PRELOAD=$(gcc -print-file-name=libasan.so) ./apy
++ld_preload=$(gcc -print-file-name=libasan.so) ./apy
+--- actionswf-1.orig/tests/as3/br
++++ actionswf-1/tests/as3/br
+@@ -3,8 +3,8 @@ a=`hax --version`
+ echo $a
+ LD_PRELOAD=$(gcc -print-file-name=libasan.so):$(gcc -print-file-name=libubsan.so)
+ if [ $a = '5.0.0-preview.1' ]; then
+-	RUN__SHELL=/bin/bash ffdec=~/ffdec/bin/ffdec LD_PRELOAD=${LD_PRELOAD} compiler=hax skip_connect_test=3 diag_json=x ./b
++	RUN__SHELL=/bin/bash ffdec=./ffde LD_PRELOAD=${LD_PRELOAD} compiler=hax skip_connect_test=3 diag_json=x ./b
+ else
+-	RUN__SHELL=/bin/bash ffdec=~/ffdec/bin/ffdec LD_PRELOAD=${LD_PRELOAD} compiler=hax ./b
++	RUN__SHELL=/bin/bash ffdec=./ffde LD_PRELOAD=${LD_PRELOAD} compiler=hax ./b
+ 	#for 'read'
+ fi
+--- /dev/null
++++ actionswf-1/tests/as3/ffde
+@@ -0,0 +1,3 @@
++#!/bin/bash
++unset LD_PRELOAD
++exec ~/ffdec/bin/ffdec "$@"
+--- actionswf-1.orig/tests/as3/h
++++ actionswf-1/tests/as3/h
+@@ -1,2 +1,2 @@
+ 
+-target=html5 ./arlf
++proj_compiler=openf target=html5 ./arf
+--- actionswf-1.orig/tests/as3/orig/Main/root.as
++++ actionswf-1/tests/as3/orig/Main/root.as
+@@ -61,6 +61,9 @@ a Main*/
+ 		var esd=this['shape2'];
+ 		//3dqwer esd
+ 
++		//attach undefined
++		attachMovie('flash.display.Shape',undefined,getNextHighestDepth());
++
+ 		//on
+ 		onMouseDown=function(){
+ 			trace('this is from on mouse down');
+@@ -71,6 +74,7 @@ a Main*/
+ 
+ 		//3!!as2 only
+ 		trace('only in as2');//3!!
++		trace('only in as2, one line');//3!
+ 	}
+ //3}
+ function Loader(){//3f
+@@ -123,17 +127,17 @@ create('q',n,_x,_y,_width,_height);//3 t
+ createTextField('label',1,0,16, 120, 48);//3
+ _q=new Array(q,w,2);//3 u+s
+ q=new Array(q,w,2);//3
+-attach('q','_p',d);//3 v+s
++attachMovie('q','_p',d);//3 v+s
+ create('_p',d);//3 V+s
+ create('_p'+1,d);//3 W+s
+-att('name','q',getNextHighest);//3
++attachMovie('name','q',getNextHighest);//3
+ create('q',d);//3 v flash.display.DisplayObjectContainer
+ create('q',d);//3 V flash
+-w.attach('q','_p',d);//3 V
+-att('name','q'+2,getNext);//3w
++w.attachMovie('q','_p',d);//3 V
++var q=attachMovie('name','q'+2,getNext);//3w
+ create('q'+1,d);//3 w
+ create('q'+1,d);//3 w flash
+-w.attach('q','_p'+1,d);//3 W flash
++w.attachMovie('q','_p'+1,d);//3 W flash
+ _//3 x+s
+ _qtyty//3z wer ty+s
+ */
+--- actionswf-1.orig/tests/as3/orig/MyClip/clip.as
++++ actionswf-1/tests/as3/orig/MyClip/clip.as
+@@ -79,6 +79,6 @@
+ //3}
+ new();
+ /* more tests
+-attach('q','_p',d);//3 V
+-attach('q','_p'+1,d);//3 W
++attachMovie('q','_p',d);//3 V
++attachMovie('q','_p'+1,d);//3 W
+ */
+--- actionswf-1.orig/tests/as3/osrc/a.oc
++++ actionswf-1/tests/as3/osrc/a.oc
+@@ -92,8 +92,8 @@ call actionf_sprite(presprite,#buf,"
+ //3}
+ new();
+ /* more tests
+-attach('q','_p',d);//3 V
+-attach('q','_p'+1,d);//3 W
++attachMovie('q','_p',d);//3 V
++attachMovie('q','_p'+1,d);//3 W
+ */
+ ",2)
+ sd sprite;set sprite swf_sprite_done(presprite)
+@@ -182,6 +182,9 @@ a Main*/
+ 		var esd=this['shape2'];
+ 		//3dqwer esd
+ 
++		//attach undefined
++		attachMovie('flash.display.Shape',undefined,getNextHighestDepth());
++
+ 		//on
+ 		onMouseDown=function(){
+ 			trace('this is from on mouse down');
+@@ -192,6 +195,7 @@ a Main*/
+ 
+ 		//3!!as2 only
+ 		trace('only in as2');//3!!
++		trace('only in as2, one line');//3!
+ 	}
+ //3}
+ function Loader(){//3f
+@@ -244,17 +248,17 @@ create('q',n,_x,_y,_width,_height);//3 t
+ createTextField('label',1,0,16, 120, 48);//3
+ _q=new Array(q,w,2);//3 u+s
+ q=new Array(q,w,2);//3
+-attach('q','_p',d);//3 v+s
++attachMovie('q','_p',d);//3 v+s
+ create('_p',d);//3 V+s
+ create('_p'+1,d);//3 W+s
+-att('name','q',getNextHighest);//3
++attachMovie('name','q',getNextHighest);//3
+ create('q',d);//3 v flash.display.DisplayObjectContainer
+ create('q',d);//3 V flash
+-w.attach('q','_p',d);//3 V
+-att('name','q'+2,getNext);//3w
++w.attachMovie('q','_p',d);//3 V
++var q=attachMovie('name','q'+2,getNext);//3w
+ create('q'+1,d);//3 w
+ create('q'+1,d);//3 w flash
+-w.attach('q','_p'+1,d);//3 W flash
++w.attachMovie('q','_p'+1,d);//3 W flash
+ _//3 x+s
+ _qtyty//3z wer ty+s
+ */
+--- actionswf-1.orig/tests/data/b
++++ actionswf-1/tests/data/b
+@@ -1,4 +1,4 @@
+ cd ../../oad && \
+ ./md${local} && \
+ cd ../tests/data && \
+-./test
++./test${datalocal}
+--- actionswf-1.orig/tests/ffdec/a.0_1
++++ actionswf-1/tests/ffdec/a.0_1
+@@ -1 +1,2 @@
+-easy_stop b !
+\ No newline at end of file
++easy_stop b !
++stop b !
+\ No newline at end of file
+--- actionswf-1.orig/tests/ffdec/a.oc
++++ actionswf-1/tests/ffdec/a.oc
+@@ -30,7 +30,7 @@ call swf_new_ex("a.swf",0x80,0x80,0x0011
+ 
+ sd fo;set fo swf_font_basic("_sans")
+ char ButtonData_a="Submit"
+-data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 24,24}
++data ButtonData={0x11FF11ff,10,0x11FF1188, 0xaa1122ff,10,0xaa112288, 0x1122FFff,10,0x1122FF88, 20,20}
+ vstr *^ButtonData_a
+ data ButtonData_c#1;set ButtonData_c fo;data *=20
+ data vert_off=-5
+@@ -148,12 +148,10 @@ while(true){
+ function indents(){
+ 	var p=new Array();
+ 	var i=0;
+-	while(true){
++	do{
+ 		p[i]=new Array();
+ 		i++;
+-		if(i!=number_of_pillars)continue;
+-		break;
+-	}
++	}while(i!=number_of_pillars);
+ 	return p;
+ }
+ 
+@@ -171,6 +169,18 @@ function easy_stop(ops){
+ 		return false;
+ 	}
+ }
++function stop(){
++	b=1;
++	while(true){
++		c=2;
++		do{
++			if(a())return true;
++			p=3;
++		}while(q);
++		if(w)continue;
++		return false;
++	}
++}
+ return 1
+ ")
+ 
+--- actionswf-1.orig/tests/ffdec/f
++++ actionswf-1/tests/ffdec/f
+@@ -25,7 +25,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 				fi
+ 				is_debug=x ffdec=${ffd} skip_alternative=x ../../oaalternative.sh a.swf && {
+ 					if [ -n "${wait}" ]; then read; fi
+-					expect_obfuscation=./q \
++					#expect_obfuscation=./q
+ 					is_debug=x no_number_check=x LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${_L} skip_ffdec=x ${bashdbg} ../../oaalternative.sh a.swf "${q} ./a.out x x" || {
+ 						swfdump -D${1} a.swf.orig > 1
+ 						swfdump -D${1} a.swf > 2
+@@ -33,10 +33,7 @@ ${OCOMP} a.oc inplace_reloc 0 logfile 0
+ 						rm 1 2
+ 						exit 1
+ 					}
+-					echo deofuscations
+-					cat q
+-					rm q
+-					echo
++					#echo deofuscations;cat q;rm q;echo
+ 				} || exit 1
+ 				cat a.swf.log
+ 			}
+--- actionswf-1.orig/version.h
++++ actionswf-1/version.h
+@@ -1 +1 @@
+-static unsigned char version[]="\0\0\0\0\0\0<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"> <rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"> <dc:description>actionswf 1-183 flashixy.com</dc:description> </rdf:Description> </rdf:RDF>";
++static unsigned char version[]="\0\0\0\0\0\0<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"> <rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"> <dc:description>actionswf 1-184 flashixy.com</dc:description> </rdf:Description> </rdf:RDF>";
+--- actionswf-1.orig/version.oh
++++ actionswf-1/version.oh
+@@ -1 +1 @@
+-char version="\0\0\0\0\0\0<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"> <rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"> <dc:description>actionswf 1-183 flashixy.com</dc:description> </rdf:Description> </rdf:RDF>"
++char version="\0\0\0\0\0\0<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"> <rdf:Description rdf:about=\"\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"> <dc:description>actionswf 1-184 flashixy.com</dc:description> </rdf:Description> </rdf:RDF>"
+--- actionswf-1.orig/x.html
++++ actionswf-1/x.html
+@@ -52,10 +52,11 @@
+ <table>
+ 	<tr><td class="green">2</td></tr>
+ 	<tr><td class="green">F</td></tr>
+-	<tr><td>call_action_left</td><td class="green">C</td></tr>
++	<tr><td>call_action_left</td><td class="green">C</td><td class="red">{</td><td>args_end</td><td class="green">ML</td><td class="red">}</td></tr>
+ 	<tr><td class="green" rowspan=2>If</td><td class="red" rowspan=2>{</td><td rowspan=2>else_marker</td><td class="green">If</td>  <td class="red">}</td></tr>
+ 	<tr>                                                                                              <td class="green">{1}</td><td>block_else_end</td><td>number_of_elses</td></tr>
+ 	<tr><td>while_marker</td><td class="green">RG<sup-r>c</sup-r></td><td class="green">{1}</td><td>whileblock_end</td></tr>
++	<tr><td>do_start</td><td class="green">{1}</td><td>doblock_end</td><td class="green">RG</td></tr>
+ 	<tr><td class="green">FR</td></tr>
+ 	<tr><td>break_flag</td></tr>
+ 	<tr><td>continue_flag</td></tr>
+@@ -102,8 +103,12 @@
+ 
+ <br>Table M: <!-- action_code_member<>action_member_loop -->
+ <table>
+-	<tr><td class="blue" rowspan=2>owner</td><td class="green" rowspan=2>MS</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
+-	<tr>                                                                                                        <td class="blue">no_pointer</td><td>member_end</td></tr>
++	<tr><td class="blue">owner</td><td class="green">ML</td>
++</table>
++<br>Table ML:
++<table>
++	<tr><td class="green" rowspan=2>MS</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
++	<tr>                                                                   <td class="blue">no_pointer</td><td>member_end</td></tr>
+ </table>
+ <br>Table MS: <!-- same -->
+ <table>
+@@ -112,8 +117,12 @@
+ </table>
+ <br>Table MC: <!-- same -->
+ <table>
+-	<tr><td class="blue" rowspan=2>owner</td><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
+-	<tr>                                                                     <td class="blue">no_pointer</td><td>member_end</td></tr>
++	<tr><td class="blue">owner</td><td class="green">MR</td>
++</table>
++<br>Table MR:
++<table>
++	<tr><td class="red" rowspan=2>{</td><td class="green">MS</td>       <td class="red">}</td></tr>
++	<tr>                           <td class="blue">no_pointer</td><td>member_end</td></tr>
+ </table>
+ 
+ <br>Table O: <!-- get_operations<>in RG loop -->
+@@ -170,7 +179,7 @@
+ 	<tr><td>ap_Integer</td><td>number</td></tr>
+ 	<tr><td>ap_Double</td><td>scanf1</td><td>scanf2</td></tr>
+ 	<tr><td>ap_Constant8</td><td class="blue">string</td></tr>
+-	<tr><td>call_action_right</td><td class="green">C</td></tr>
++	<tr><td>call_action_right</td><td class="green">C</td><td class="red">{</td><td>args_end</td><td class="green">MR</td><td class="red">}</td></tr>
+ 	<tr><td>parenthesis_start</td><td class="green">RG</td><td>math_end</td></tr>
+ </table>
+ 
+@@ -180,4 +189,4 @@
+ 	<tr><td>ActionGetMember</td><td class="green">M</td></tr>
+ </table>
+ 
+-<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members MemberS MembersCall Operation OperationCompare Right RIght RiGht RigHt RighT</div>
++<br><div class="green">1 2 Call <sup-r>c</sup-r> Function If Left Members MemberS MembersCall MembersLeft MembersRight Operation OperationCompare Right RIght RiGht RigHt RighT</div>
