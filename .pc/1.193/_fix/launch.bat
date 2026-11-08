@@ -1,4 +1,0 @@
-
-
-PATH=%GSTREAMER_SDK_ROOT_X86%bin;%PATH%
-ostream.exe
