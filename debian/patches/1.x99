@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: nov, 20 2026 17:12:40 +0200
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/readme.md
++++ edor-1/readme.md
+@@ -18,7 +18,7 @@ yay -Sy edor
+ Or <i>.zst</i>(x86_64) or <i>.xz</i>(aarch64) file from [releases](https://github.com/colin-i/edor/releases).
+ \
+ \
+-On Fedora 43/44(x86_64 aarch64):
++On Fedora 43/44/45(x86_64 aarch64):
+ ```sh
+ sudo dnf copr enable colin/project
+ sudo dnf install edor
+@@ -31,9 +31,9 @@ zypper addrepo https://download.opensuse
+ ```
+ For openSUSE Leap:
+ ```sh
+-zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.0/home:costin.repo
++zypper addrepo https://download.opensuse.org/repositories/home:costin/openSUSE_Leap_16.1/home:costin.repo
+ ```
+-Replace *16.0*(x86_64 aarch64) with *15.6*(x86_64/i586 aarch64) if needed.\
++Replace *16.1*(x86_64 aarch64) with *16.0*(x86_64 aarch64) or *15.6*(x86_64/i586 aarch64) if needed.\
+ And:
+ ```sh
+ zypper refresh
+--- edor-1.orig/s/split.c
++++ edor-1/s/split.c
+@@ -290,9 +290,9 @@ split_char split_conditions(char*filenam
+ 		if(is_extension_ok(split_extension,filename)/*true*/){
+ 			return split_conditions_out(filename,free_paths,false);
+ 		}
+-		if(is_extension_ok_strict(split_dboardext,filename)/*true*/){//dashboard: .oac behaviour (respects splits_flag) but never mix.
+-			return split_yes_mixless;//skip the split_out folder lookup entirely
+-		}
++	}
++	if(is_extension_ok_strict(split_dboardext,filename)/*true*/){//dashboard(.oacd): ignores splits_flag, but never mix.
++		return split_yes_mixless;//skip the split_out folder lookup entirely
+ 	}
+ 	if(is_extension_ok_strict(split_frameext,filename)/*true*/){//.oacf ignores splits_flag, always split-parsed.
+ 		return split_conditions_out(filename,free_paths,true);
