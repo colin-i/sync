@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bc <bc@ubuntu>
+Date: nov, 23 2026 04:24:16 +0200
+Subject: [PATCH] <short summary of the patch>
+
+TODO: Put a short summary on the line above and replace this paragraph
+with a longer explanation of this change. Complete the meta-information
+with other relevant fields (see below for details). To make it easier, the
+information below has been extracted from the changelog. Adjust it or drop
+it.
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout https://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: (upstream|backport|vendor|other), (<patch-url>|commit:<commit-id>)
+Bug: <upstream-bugtracker-url>
+Bug-<Vendor>: <vendor-bugtracker-url>
+Forwarded: (no|not-needed|<patch-forwarded-url>)
+Applied-Upstream: <version>, (<commit-url>|commit:<commid-id>)
+Reviewed-By: <name and email of someone who approved/reviewed the patch>
+
+--- edor-1.orig/s/main.c
++++ edor-1/s/main.c
+@@ -2639,7 +2639,7 @@ static bool grab_input(size_t*text_sz){
+ 	FILE* tty=freopen("/dev/tty","r",stdin);
+ 	if(tty)//!=nullptr
+ 		return false;
+-	return true;//it was a problem at input, not sure if was here, anyway here is easy to force with sudo chmod 600 /dev/tty
++	return !save_and_exit;//save-exit has no curses UI that needs a controlling terminal
+ }
+ 
+ static void getkeys(char kp){
+@@ -3290,8 +3290,13 @@ static void action_go(int argc,char**arg
+ 	}
+ 	if(ok!=normalize_err){
+ 		if(save_and_exit){
+-			if(!textfile)puts("no file for save and exit");
+-			else saving();
++			if(!textfile){
++				puts("no file for save and exit");
++				user_return=EXIT_FAILURE;
++			}else if(saving()!=command_ok){
++				puts("save failed");
++				user_return=EXIT_FAILURE;
++			}
+ 		}else{
+ 			WINDOW*w1=initscr();
+ 			if(w1){//!=nullptr
+@@ -3331,6 +3336,9 @@ static void action_go(int argc,char**arg
+ 				if(clue!=no_clue)printf("last row where was an error at split write was: " protocol "\n",clue);
+ 			}
+ 		}
++	}else if(save_and_exit){
++		puts("failed to load file for save and exit");
++		user_return=EXIT_FAILURE;
+ 	}
+ 	if(text_init_b){//!=nullptr
+ 		if(rows){//!=nullptr
